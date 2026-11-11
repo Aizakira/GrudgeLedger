@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.4.2
+GRUDGE LEDGER — 0.4.3
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -154,6 +154,16 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+CHOIX DE POLICE 0.4.3
+Dans Réglages (/gl settings), cocher « Police classique (plus lisible) » pour
+utiliser l'écriture native du chat dans les titres, les noms et les notes du
+journal. Décocher rétablit la calligraphie grimoire. Les tailles, couleurs des
+relations, notes et brouillons sont conservés. Le choix s'applique immédiatement
+et reste sauvegardé pour le compte. Les fenêtres ouvertes ensuite le respectent.
+Le style grimoire reste le choix initial. Aucun fichier de police ajouté.
+Après installation de cette mise à jour, /reload suffit ; les changements de
+police suivants se font directement depuis les réglages.
 
 ÉCRITURE DE GRIMOIRE 0.4.1
 Les titres, noms dans l’index et fiches utilisent les familles calligraphiques

@@ -59,8 +59,22 @@ local function identityIcons(row, record)
 end
 local function subdued(text) return "|cff5c4029" .. text .. "|r" end
 local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
+local journalFonts = {}
+local function journalFont(region, decorative, size)
+    journalFonts[region] = { decorative, size }
+    local r, g, b, a = GL.Safe(region.GetTextColor, region)
+    local spacing = GL.Safe(region.GetSpacing, region)
+    region:SetFontObject(GL.Settings().readableFont and "ChatFontNormal" or decorative)
+    if GL.Settings().readableFont then
+        local path, _, flags = region:GetFont()
+        if path then region:SetFont(path, size, flags) end
+    end
+    if r then region:SetTextColor(r, g, b, a) end
+    if spacing then region:SetSpacing(spacing) end
+end
 local function label(parent, text, size, x, y, width)
     local f = parent:CreateFontString(nil, "OVERLAY", size == "large" and "Fancy18Font" or "GameFontHighlight")
+    if size == "large" then journalFont(f, "Fancy18Font", 18) end
     f:SetPoint("TOPLEFT", x, y)
     f:SetJustifyH("LEFT")
     GL.Safe(f.SetJustifyV, f, "TOP")
@@ -135,7 +149,8 @@ local function styleInput(edit, multiline, paper)
         texture:SetAllPoints(fill)
         texture:SetTexture(media .. "JournalPaper")
     end
-    edit:SetFontObject(paper and multiline and "QuestFont_Large" or "ChatFontNormal")
+    if paper and multiline then journalFont(edit, "QuestFont_Large", 15)
+    else edit:SetFontObject("ChatFontNormal") end
     edit:SetTextColor(unpack(paper and theme.ink or theme.paper))
     GL.Safe(edit.SetJustifyV, edit, multiline and "TOP" or "MIDDLE")
     edit:SetTextInsets(8, 8, 5, 5)
@@ -530,6 +545,8 @@ local function renderDetail()
         ledger.detailText:SetText(table.concat(lines, "\n"))
     end
     ledger.detailBody:SetHeight(math.max(300, ledger.detailText:GetStringHeight() + 12))
+    ledger.detailScroll:SetVerticalScroll(math.min(ledger.detailScroll:GetVerticalScroll(),
+        math.max(0, ledger.detailBody:GetHeight() - ledger.detailScroll:GetHeight())))
 end
 
 local function enableRecognition()
@@ -551,7 +568,7 @@ end
 
 local function showSettings()
     if not settingsWindow then
-        local f = window("GrudgeLedgerSettings", "Grudge Ledger — Réglages", 450, 530)
+        local f = window("GrudgeLedgerSettings", "Grudge Ledger — Réglages", 450, 563)
         settingsWindow = f
         f.checks = {}
         local options = {
@@ -560,6 +577,7 @@ local function showSettings()
             { "sounds", "Sons des alertes" }, { "pvpTracking", "Historique PvP automatique" },
             { "groupTracking", "Historique des groupes" },
             { "socialTracking", "Avis via mes émotes" },
+            { "readableFont", "Police classique (plus lisible)" },
         }
         for i, option in ipairs(options) do
             local key = option[1]
@@ -570,8 +588,8 @@ local function showSettings()
             check:SetScript("OnClick", function(self) GL.SetSetting(key, self:GetChecked() and true or false) end)
             f.checks[key] = check
         end
-        label(f, "Les noms flottants seuls ne portent pas les marqueurs. Active le repérage pour afficher les barres, icônes et couleurs.", nil, 20, -325, 405)
-        f.plateStatus = label(f, "", nil, 20, -365, 405)
+        label(f, "Les noms flottants seuls ne portent pas les marqueurs. Active le repérage pour afficher les barres, icônes et couleurs.", nil, 20, -358, 405)
+        f.plateStatus = label(f, "", nil, 20, -398, 405)
         function f:UpdatePlateStatus()
             local function status(key)
                 local value = GL.Clean(GL.Safe((C_CVar and C_CVar.GetCVar) or GetCVar, key), "string")
@@ -579,9 +597,9 @@ local function showSettings()
             end
             self.plateStatus:SetText("Alliés : " .. status("nameplateShowFriendlyPlayers") .. " • Ennemis : " .. status("nameplateShowEnemies"))
         end
-        button(f, "Activer le repérage (icônes + couleurs)", 20, -393, 405, enableRecognition)
-        label(f, "Alertes amicales : plus de 10 min d'absence, hors groupe. Les icônes restent affichées en groupe.", nil, 20, -434, 405)
-        button(f, "Diagnostic", 20, -480, 405, showDiagnostic)
+        button(f, "Activer le repérage (icônes + couleurs)", 20, -426, 405, enableRecognition)
+        label(f, "Alertes amicales : plus de 10 min d'absence, hors groupe. Les icônes restent affichées en groupe.", nil, 20, -467, 405)
+        button(f, "Diagnostic", 20, -513, 405, showDiagnostic)
     end
     for key, check in pairs(settingsWindow.checks) do check:SetChecked(GL.Settings()[key]) end
     settingsWindow:UpdatePlateStatus()
@@ -605,7 +623,7 @@ local function buildLedger()
     f.title:ClearAllPoints()
     f.title:SetPoint("TOPLEFT", 78, -19)
     f.title:SetSize(540, 30)
-    f.title:SetFontObject("Fancy24Font")
+    journalFont(f.title, "Fancy24Font", 24)
     label(f, "Journal des rencontres et des rancunes", nil, 79, -51, 330):SetTextColor(unpack(theme.muted))
     button(f, "Guildes", 702, -29, 91, function() GL.ShowGuilds() end)
     button(f, "Réglages", 805, -29, 108, showSettings)
@@ -667,7 +685,7 @@ local function buildLedger()
         row.relationIcon:SetPoint("TOPLEFT", 8, -2)
         row.relationIcon:SetSize(19, 19)
         row.name = label(row, "", nil, 31, -3, 216)
-        row.name:SetFontObject("Fancy16Font")
+        journalFont(row.name, "Fancy16Font", 16)
         row.name:SetHeight(18)
         GL.Safe(row.name.SetWordWrap, row.name, false)
         GL.Safe(row.name.SetMaxLines, row.name, 1)
@@ -704,7 +722,7 @@ local function buildLedger()
     f.detailTitle = label(f, "", "large", 350, -116, 554)
     f.detailTitle:SetHeight(27)
     GL.Safe(f.detailTitle.SetWordWrap, f.detailTitle, false)
-    f.detailTitle:SetFontObject("Fancy24Font")
+    journalFont(f.detailTitle, "Fancy24Font", 24)
     f.detailIcon = f:CreateTexture(nil, "ARTWORK")
     f.detailIcon:SetPoint("TOPLEFT", 350, -151)
     f.detailIcon:SetSize(32, 32)
@@ -752,7 +770,7 @@ local function buildLedger()
     f.detailBody = CreateFrame("Frame", nil, f.detailScroll)
     f.detailBody:SetSize(539, 337)
     f.detailText = label(f.detailBody, "", nil, 0, 0, 529)
-    f.detailText:SetFontObject("QuestFont_Large")
+    journalFont(f.detailText, "QuestFont_Large", 15)
     f.detailText:SetTextColor(unpack(theme.ink))
     f.detailText:SetSpacing(4)
     f.detailScroll:SetScrollChild(f.detailBody)
@@ -1035,6 +1053,9 @@ GL.On("CHANGED", refresh)
 GL.On("CHANGED", refreshGuilds)
 GL.On("CHANGED", refreshCorrections)
 GL.On("SETTINGS", function()
+    for region, fonts in pairs(journalFonts) do journalFont(region, fonts[1], fonts[2]) end
+    refresh()
+    if noteWindow then noteWindow.edit:GetScript("OnTextChanged")(noteWindow.edit) end
     if minimapButton and not minimapButton.dragging then positionMinimap() end
     if settingsWindow then for key, check in pairs(settingsWindow.checks) do check:SetChecked(GL.Settings()[key]) end end
 end)

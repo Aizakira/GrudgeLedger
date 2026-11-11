@@ -42,6 +42,7 @@ function methods:SetHeight(h) self.height = h end
 function methods:GetWidth() return self.width or 100 end
 function methods:GetHeight() return self.height or 100 end
 function methods:SetScript(event, fn) self.scripts[event] = fn end
+function methods:GetScript(event) return self.scripts[event] end
 function methods:SetText(text)
     self.text = tostring(text or "")
     if self.fontString then self.fontString:SetText(self.text) end

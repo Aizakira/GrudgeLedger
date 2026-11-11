@@ -39,7 +39,7 @@ function methods:SetAllPoints(relative)
     self:SetPoint("TOPLEFT", relative, "TOPLEFT", 0, 0)
     self:SetPoint("BOTTOMRIGHT", relative, "BOTTOMRIGHT", 0, 0)
 end
-function methods:SetFontObject(value) self.qaFontObject = value end
+function methods:SetFontObject(value) self.qaFontObject, self.qaFont, self.qaFontSize, self.qaFontFlags = value, nil, nil, nil end
 function methods:SetFont(path, size, flags) self.qaFont, self.qaFontSize, self.qaFontFlags = path, size, flags return true end
 function methods:GetFont() return self.qaFont or "Fonts\\FRIZQT__.TTF", self.qaFontSize or QA_FontSize(self.qaFontObject), self.qaFontFlags or "" end
 function methods:SetJustifyH(value) self.qaJustifyH = value end
@@ -178,6 +178,8 @@ end
 QA = { mock = mock, records = records, selected = record }
 function QA.capture(name)
     hideWindows()
+    GL.SetSetting("readableFont", name:find("%-readable") ~= nil)
+    name = name:gsub("%-readable", "")
     UIParent:SetSize(1920, 1080)
     if name == "journal" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" then
         if name:find("^journal%-small") then UIParent:SetSize(1024, 600) end
