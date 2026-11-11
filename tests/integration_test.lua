@@ -118,11 +118,15 @@ assert(mock.cvars.nameplateShowFriendlyPlayers == 1 and mock.cvars.nameplateShow
 assert(redName and redName[1] == 1 and redName[2] == 0.25 and redName[3] == 0.2,
     "a same-faction enemy must be red on the actual displayed nameplate font")
 -- A targeted kiss marks a party member as a friend: keep the heart, suppress only the toast.
+GrudgeLedgerNearbyAlert:Hide() -- end the previous enemy-alert scenario
+mock.units.target = { name = "New", surname = "Companion", guid = "Player-1-companion" }
+mock.units.nameplate1 = mock.units.target
+mock.Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+opponent = GL.Identity("target")
 mock.units.party1 = mock.units.nameplate1
 GetNumGroupMembers = function() return 2 end
 UnitInParty = function(unit) return UnitIsUnit(unit, "party1") end
 UnitIsVisible = function(unit) return UnitExists(unit) end
-GL.SetReaction(opponent, "neutral")
 mock.SetCombat(true) -- this fixture's world nameplate is not protected
 hooks.PerformEmote("KISS")
 assert(GL.Relation(GL.Get(opponent)) == "friend" and GL.Get(opponent).reputation == 1)

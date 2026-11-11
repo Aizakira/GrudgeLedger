@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.2.6", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.2.7", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -102,6 +102,24 @@ end
 local function normalize(record)
     record.notes = type(record.notes) == "table" and record.notes or {}
     record.history = type(record.history) == "table" and record.history or {}
+    if record.reaction and not record.reactionSource then
+        record.reactionSource = "manual"
+        for i = #record.history, 1, -1 do
+            local event = record.history[i]
+            if type(event) == "table" and event.kind == "reaction" then
+                record.reaction, record.reactionSource = event.reaction, "manual"
+                break
+            elseif type(event) == "table" and event.kind == "reputation" then
+                if event.source == "emote" then record.reactionSource = "emote"
+                else
+                    local score = GL.Clean(event.reputation, "number")
+                    if score then record.reaction = score > 0 and "friend" or score <= -10 and "enemy" or score < 0 and "warning" or "neutral" end
+                    record.reactionSource = "manual"
+                    break
+                end
+            end
+        end
+    end
     record.pvp = type(record.pvp) == "table" and record.pvp or {}
     for _, field in ipairs({ "kills", "deaths", "probableKills", "probableDeaths", "aggressions", "probableAggressions" }) do
         record.pvp[field] = tonumber(record.pvp[field]) or 0
@@ -148,7 +166,9 @@ local function merge(provisional, record)
     for _, field in ipairs({ "kills", "deaths", "probableKills", "probableDeaths", "aggressions", "probableAggressions" }) do
         record.pvp[field] = record.pvp[field] + (provisional.pvp[field] or 0)
     end
-    record.reaction = record.reaction or provisional.reaction
+    if not record.reaction or (record.reactionSource == "emote" and provisional.reaction and provisional.reactionSource == "manual") then
+        record.reaction, record.reactionSource, record.reputation = provisional.reaction, provisional.reactionSource, provisional.reputation
+    end
     record.reputation = record.reputation or provisional.reputation
     record.groupCount = record.groupCount + (provisional.groupCount or 0)
     record.firstSeen = math.min(record.firstSeen or GL.Now(), provisional.firstSeen or GL.Now())
@@ -215,12 +235,14 @@ function GL.RecordSeen(identity)
 end
 local function effectiveRelation(record)
     if not record then return "neutral", "neutral" end
-    if record.reaction == "friend" or record.reaction == "enemy" or record.reaction == "neutral" or record.reaction == "warning" then return record.reaction, "manual" end
+    local opinion = record.reaction == "friend" or record.reaction == "enemy" or record.reaction == "neutral" or record.reaction == "warning"
+    if opinion and record.reactionSource ~= "emote" then return record.reaction, "manual" end
     local pvp = record.pvp or {}
     if (pvp.deaths or 0) + (pvp.probableDeaths or 0) > 0 then return "enemy", "pvp" end
     local rule = GL.GetGuildRule(record)
     if rule and rule.reaction == "enemy" then return "enemy", "guild" end
     if (pvp.aggressions or 0) + (pvp.probableAggressions or 0) > 0 then return "warning", "pvp" end
+    if opinion then return record.reaction, "emote" end
     if rule then return rule.reaction, "guild" end
     return "neutral", "neutral"
 end
@@ -265,8 +287,9 @@ function GL.SetReaction(identity, reaction)
     if reactionScores[reaction] == nil then return nil end
     local record = GL.Remember(identity)
     if not record then return nil end
-    if record.reaction ~= reaction or record.reputation ~= reactionScores[reaction] then
+    if record.reaction ~= reaction or record.reputation ~= reactionScores[reaction] or record.reactionSource ~= "manual" then
         record.reaction = reaction
+        record.reactionSource = "manual"
         record.reputation = reactionScores[reaction]
         history(record, "reaction", { reaction = reaction })
         GL.Emit("CHANGED", record)
@@ -282,7 +305,10 @@ function GL.AdjustReputation(identity, delta, reason, source)
     local before = record.reputation or reactionScores[GL.Relation(record)] or 0
     record.reputation = math.max(-100, math.min(100, before + delta))
     local score = record.reputation
-    record.reaction = score > 0 and "friend" or score <= -10 and "enemy" or score < 0 and "warning" or "neutral"
+    if source ~= "emote" or not record.reaction or record.reactionSource ~= "manual" then
+        record.reaction = score > 0 and "friend" or score <= -10 and "enemy" or score < 0 and "warning" or "neutral"
+        record.reactionSource = source == "emote" and "emote" or "manual"
+    end
     history(record, "reputation", { delta = score - before, reputation = score,
         evidence = GL.Clean(reason, "string"), source = GL.Clean(source, "string") or "manual" })
     GL.Emit("CHANGED", record)

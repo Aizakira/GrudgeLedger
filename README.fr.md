@@ -29,7 +29,7 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.2.6.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.2.7.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -61,9 +61,11 @@ Les actions concernent le joueur ciblé. Le [guide complet](GrudgeLedger/README.
 
 Prévu pour **Forever, interface 16001** ; développé avec le client **1.60.1.70862**. Les versions Retail, Classic et les autres serveurs ne sont pas validés. Les marqueurs nécessitent des barres de noms visibles et respectent les limites de portée du jeu. Ce n'est ni un radar couvrant toute la zone, ni un détecteur de furtivité.
 
-Forever peut masquer le journal de combat. Les déductions PvP ne sont donc pas infaillibles : elles sont indiquées comme probables, les situations ambiguës sont ignorées et vous pouvez corriger l'historique. Vos classements explicites restent prioritaires. La détection des duels dépend elle aussi des signaux disponibles.
+Forever peut masquer le journal de combat. L'addon consulte aussi son récapitulatif natif de mort, avec jusqu'à deux secondes d'attente. Il enregistre plusieurs agresseurs par GUID : le coup fatal explicite est confirmé, les autres participations à l'attaque mortelle sont probables. Sans preuve exploitable, seuls des adversaires en combat qui vous ciblaient récemment peuvent être retenus comme participants probables ; les simples passants sont exclus. Les compteurs sont individuels : trois participants à un même décès ne signifient pas trois morts du personnage. Les déductions peuvent être corrigées et la couverture reste limitée par les données fournies par le jeu. Les anciens décès manqués ne sont pas reconstitués automatiquement.
 
-Treize scripts de tests automatisés, dont 45 scénarios de suivi PvP, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
+Les boutons et avis manuels conservent leur priorité, même après une emote. Les gestes seuls ne verrouillent plus le classement : un `/spit` ne bloque pas le passage en ennemi après une mort PvP. La détection des duels dépend des signaux disponibles.
+
+Treize scripts de tests automatisés, dont 69 scénarios de suivi PvP, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
 
 ## Chacun son livre
 
@@ -85,7 +87,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.2.6.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.2.7.zip GrudgeLedger
 ```
 
 ## Licence et crédits

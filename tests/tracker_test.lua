@@ -4,6 +4,7 @@ local passed = 0
 
 local function fixture(saved)
     now, groupSize, honor, secret = 1000, 0, 0, {}
+    C_DeathRecap, C_NamePlate, C_CombatLog = nil, nil, nil
     unitData = { player = { guid = "Player-1-self", name = "Testeur", surname = "Exemple", dead = false, isPlayer = true, health = 1000, maxHealth = 1000 } }
     local function unit(token)
         if unitData[token] then return unitData[token] end
@@ -87,6 +88,18 @@ local function cle(kind, src, dst, overkill, sourceFlags)
     else args[12], args[13], args[14], args[15], args[16] = 1, "Sort", 1, 300, overkill end
     T.OnCombatLog(unpack(args, 1, kind == "SWING_DAMAGE" and 13 or 16))
 end
+local function recapRow(source, overkill, timestamp, kind)
+    return { event = kind or "SPELL_DAMAGE", timestamp = timestamp or now, amount = 300,
+        sourceGUID = source.guid, sourceName = source.name .. (source.surname and " " .. source.surname or ""),
+        sourceFlags = 64, overkill = overkill == nil and -1 or overkill }
+end
+local function recapAPI(rows)
+    C_DeathRecap = { GetRecapEvents = function(...)
+        assert(select("#", ...) == 0, "Forever GetRecapEvents takes no arguments")
+        return rows
+    end }
+    return rows
+end
 local function test(name, fn)
     fixture()
     local ok, err = pcall(fn)
@@ -110,12 +123,14 @@ test("manual friend remains friend after inferred death", function()
     assert(GL.Relation(GL.Get(GL.Identity("target"))) == "friend")
 end)
 
-test("ambiguous multiple enemies are not blamed", function()
+test("multiple recent attackers share one probable fatal encounter", function()
     start()
     unitData.nameplate1 = opponent("second")
     T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
     T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 0 and count() == 0)
+    assert(total("probableDeaths") == 2 and total("deaths") == 0 and count() == 2)
+    T.HandleEvent("PLAYER_DEAD")
+    assert(total("probableDeaths") == 2, "duplicate death events must not repeat the batch")
 end)
 
 test("NPC pressure prevents mixed PvE guess", function()
@@ -391,12 +406,12 @@ test("one recent attacker plus health loss records probable aggression once", fu
     assert(total("probableAggressions") == 1)
 end)
 
-test("health loss under multiple attackers remains unattributed", function()
+test("health loss under multiple targeting attackers records probable participation", function()
     start()
     unitData.nameplate1 = opponent("second") T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
     now = now + 1 unitData.player.health = 900 T.Poll()
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 0)
+    assert(total("probableAggressions") == 2 and total("aggressions") == 0)
 end)
 
 test("a dead opponent cannot explain a fresh health drop", function()
@@ -538,6 +553,304 @@ test("manual friend survives confirmed and probable attacks", function()
     local identity = GL.Identity("target") GL.SetReaction(identity, "friend")
     cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
     assert(GL.Relation(GL.Get(identity)) == "friend")
+end)
+
+test("three attackers exclude a merely selected passerby and share one death id", function()
+    local first = start(opponent("one", "Alex", "Alpha"))
+    unitData.focus = first -- another token for the same person must not count twice
+    unitData.nameplate1 = opponent("two", "Alex", "Beta")
+    unitData.nameplate2 = opponent("three", "Alex", "Gamma")
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate2")
+    local passerby = opponent("passerby") passerby.target = nil
+    unitData.target = passerby
+    T.HandleEvent("PLAYER_TARGET_CHANGED")
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("probableAggressions") == 3 and GL.Get("guid:" .. passerby.guid) == nil)
+    unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
+    T.HandleEvent("PLAYER_DEAD") T.Poll()
+    assert(count() == 3 and total("probableDeaths") == 3 and total("deaths") == 0)
+    local deathId
+    for _, record in pairs(GL.db.players) do
+        assert(record.pvp.probableAggressions == 1 and record.pvp.probableDeaths == 1)
+        for _, event in ipairs(record.history) do
+            if event.kind == "death" then
+                assert(event.confidence == "probable" and event.evidence:find("Participation probable", 1, true))
+                deathId = deathId or event.eventId
+                assert(event.eventId == deathId, "three participants are one fatal encounter")
+            end
+        end
+    end
+end)
+
+test("new arrivals cannot join a pending health-loss inference", function()
+    local first = start()
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    unitData.nameplate1 = opponent("late")
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    now = now + 1 T.Poll()
+    assert(total("probableAggressions") == 1 and GL.Get("guid:" .. first.guid))
+    assert(GL.Get(GL.Identity("nameplate1")) == nil)
+end)
+
+test("pending death snapshots exclude players seen after death", function()
+    local first = start()
+    recapAPI({})
+    unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
+    assert(count() == 0, "give native recap its bounded delivery window")
+    unitData.target = opponent("late")
+    T.HandleEvent("PLAYER_TARGET_CHANGED")
+    T.HandleEvent("PLAYER_DEAD")
+    now = now + 2 T.Poll()
+    assert(total("probableDeaths") == 1 and GL.Get("guid:" .. first.guid))
+    assert(GL.Get(GL.Identity("target")) == nil)
+end)
+
+test("GUID promotion does not duplicate aggression or fatal participation", function()
+    local e = opponent("promoted") local guid = e.guid e.guid = nil
+    start(e)
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    e.guid = guid
+    unitData.nameplate1 = e T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    now = now + 1 T.Poll()
+    T.HandleEvent("PLAYER_DEAD")
+    assert(count() == 1 and total("probableDeaths") == 1)
+    assert(total("probableAggressions") <= 1, "promotion cannot duplicate a health-loss observation")
+end)
+
+test("explicit nonlethal damager replaces targeting-only death candidates", function()
+    local selected = start(opponent("selected"))
+    local attacker = opponent("actual")
+    cle("SPELL_DAMAGE", attacker, unitData.player, -1, 64)
+    T.HandleEvent("PLAYER_DEAD")
+    local record = GL.Get("guid:" .. attacker.guid)
+    assert(record and record.pvp.aggressions == 1 and record.pvp.probableDeaths == 1)
+    assert(GL.Get("guid:" .. selected.guid) == nil and total("deaths") == 0)
+end)
+
+test("public recap identifies three unseen attackers and only the lethal source", function()
+    local a, b, c = opponent("recapA"), opponent("recapB"), opponent("recapC")
+    recapAPI({ recapRow(a), recapRow(a), recapRow(b), recapRow(c, 0) })
+    unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
+    T.HandleEvent("PLAYER_DEAD") T.Poll()
+    assert(count() == 3 and total("aggressions") == 3)
+    assert(total("deaths") == 1 and total("probableDeaths") == 2)
+    assert(GL.Get("guid:" .. c.guid).pvp.deaths == 1)
+    local batch
+    for _, record in pairs(GL.db.players) do
+        for _, event in ipairs(record.history) do
+            if event.kind == "death" then batch = batch or event.eventId assert(batch == event.eventId) end
+        end
+    end
+    now = now + 3 T.Poll()
+    assert(total("aggressions") == 3 and total("deaths") + total("probableDeaths") == 3)
+end)
+
+test("fractional recap timestamps are valid health-damage evidence", function()
+    local e = opponent("fractional-time")
+    recapAPI({ recapRow(e, 0, now - 0.375) })
+    T.HandleEvent("PLAYER_DEAD")
+    assert(total("deaths") == 1 and total("aggressions") == 1)
+end)
+
+test("delayed recap supersedes frozen guesses before the timeout", function()
+    local guess = start()
+    local rows = recapAPI({})
+    T.HandleEvent("PLAYER_DEAD")
+    assert(count() == 0)
+    now = now + 1
+    local actual = opponent("delayed") rows[1] = recapRow(actual, 0)
+    T.Poll()
+    assert(total("deaths") == 1 and total("probableDeaths") == 0)
+    assert(GL.Get("guid:" .. actual.guid) and GL.Get("guid:" .. guess.guid) == nil)
+end)
+
+test("delayed recap retains the frozen full identity after its unit disappears", function()
+    local e = start(opponent("snapshot", "Alex", "Family"))
+    local rows = recapAPI({})
+    T.HandleEvent("PLAYER_DEAD")
+    unitData.target = nil now = now + 1
+    rows[1] = recapRow(e, 0) rows[1].sourceName = "Alex-SomeRealm"
+    T.Poll()
+    local record = GL.Get("guid:" .. e.guid)
+    assert(record and record.name == "Alex" and record.surname == "Family")
+end)
+
+test("Given-Realm recap names never invent a Forever surname or merge GUIDs", function()
+    local a, b = opponent("alexA"), opponent("alexB")
+    local first, second = recapRow(a), recapRow(b, 0)
+    first.sourceName, second.sourceName = "Alex-RealmOne", "Alex-RealmTwo"
+    recapAPI({ first, second }) T.HandleEvent("PLAYER_DEAD")
+    assert(count() == 2)
+    for _, record in pairs(GL.db.players) do
+        assert(record.name == "Alex" and record.fullName == "Alex" and record.surname == nil)
+    end
+end)
+
+test("a previous recap cannot be reused for a rapidly following death", function()
+    local a = opponent("previous")
+    recapAPI({ recapRow(a, 0) }) T.HandleEvent("PLAYER_DEAD")
+    assert(total("deaths") == 1)
+    T.HandleEvent("PLAYER_ALIVE")
+    now = now + 1 local b = start(opponent("next"))
+    T.HandleEvent("PLAYER_DEAD")
+    now = now + 2 T.Poll()
+    assert(GL.Get("guid:" .. a.guid).pvp.deaths == 1)
+    assert(GL.Get("guid:" .. b.guid).pvp.probableDeaths == 1 and total("deaths") == 1)
+end)
+
+test("stale future or unavailable recap never fabricates a death", function()
+    for _, age in ipairs({ -12, -3, 2, math.huge }) do
+        fixture()
+        recapAPI({ recapRow(opponent("wrong-time"), 0, now + age) })
+        T.HandleEvent("PLAYER_DEAD") now = now + 2 T.Poll()
+        assert(count() == 0, "invalid recap time " .. tostring(age))
+    end
+    fixture() local e = start()
+    C_DeathRecap = { GetRecapEvents = function() error("temporarily unavailable") end }
+    T.HandleEvent("PLAYER_DEAD") now = now + 2 T.Poll()
+    assert(GL.Get("guid:" .. e.guid).pvp.probableDeaths == 1 and total("deaths") == 0)
+end)
+
+test("secret recap fields and collections are safely unavailable", function()
+    for _, field in ipairs({ "event", "timestamp", "amount", "sourceGUID", "sourceName", "sourceFlags" }) do
+        fixture()
+        local row = recapRow(opponent("secret-recap"), 0) row[field] = secret
+        recapAPI({ row })
+        T.HandleEvent("PLAYER_DEAD") now = now + 2 T.Poll()
+        assert(count() == 0, "secret " .. field .. " must not identify an attacker")
+    end
+    for _, collection in ipairs({ "row", "all" }) do
+        fixture() recapAPI(collection == "all" and secret or { secret })
+        T.HandleEvent("PLAYER_DEAD") now = now + 2 T.Poll()
+        assert(count() == 0)
+    end
+end)
+
+test("recap flags require a finite nonnegative 32-bit integer hostile flag", function()
+    for _, flags in ipairs({ 64.5, -64, math.huge, 4294967360, 0, 16 }) do
+        fixture()
+        local row = recapRow(opponent("bad-flags"), 0) row.sourceFlags = flags
+        recapAPI({ row }) T.HandleEvent("PLAYER_DEAD") now = now + 2 T.Poll()
+        assert(count() == 0, "invalid or nonhostile flags " .. tostring(flags))
+    end
+end)
+
+test("recap resource durability healing and zero damage cannot be fatal proof", function()
+    for _, event in ipairs({ "SPELL_LEECH", "SPELL_PERIODIC_LEECH", "SPELL_DRAIN", "SPELL_PERIODIC_DRAIN",
+        "SPELL_ENERGIZE", "SPELL_PERIODIC_ENERGIZE", "SPELL_DURABILITY_DAMAGE", "SPELL_DURABILITY_DAMAGE_ALL", "SPELL_HEAL" }) do
+        fixture() recapAPI({ recapRow(opponent("resource"), 0, now, event) })
+        T.HandleEvent("PLAYER_DEAD") now = now + 2 T.Poll()
+        assert(count() == 0, event)
+    end
+    for _, amount in ipairs({ 0, -10, math.huge }) do
+        fixture()
+        local row = recapRow(opponent("not-damage"), 0) row.amount = amount
+        recapAPI({ row }) T.HandleEvent("PLAYER_DEAD") now = now + 2 T.Poll()
+        assert(count() == 0)
+    end
+end)
+
+test("fatal NPC recap preserves player aggression without attributing PvP death", function()
+    local e = start()
+    local npc = { guid = "Creature-1-wolf", name = "Loup" }
+    recapAPI({ recapRow(e), recapRow(npc, 0) })
+    T.HandleEvent("PLAYER_DEAD")
+    assert(total("aggressions") == 1 and count() == 1)
+    assert(total("probableDeaths") == 0 and total("deaths") == 0)
+    fixture() recapAPI({ recapRow(npc, 0) }) T.HandleEvent("PLAYER_DEAD")
+    assert(count() == 0, "a PvE-only recap never creates a player record")
+end)
+
+test("explicit CLE fatal source stays primary and recap cannot duplicate aggression", function()
+    local a = start(opponent("cle")) local b = opponent("recap")
+    local rows = recapAPI({})
+    cle("SPELL_DAMAGE", a, unitData.player, -1, 64)
+    cle("SPELL_DAMAGE", a, unitData.player, 0, 64)
+    T.HandleEvent("PLAYER_DEAD")
+    rows[1], rows[2] = recapRow(a), recapRow(b, 0)
+    T.Poll()
+    assert(GL.Get("guid:" .. a.guid).pvp.deaths == 1)
+    assert(GL.Get("guid:" .. b.guid).pvp.probableDeaths == 1 and total("deaths") == 1)
+    assert(total("aggressions") == 2, "CLE and recap report the same aggression once")
+    cle("SPELL_DAMAGE", a, unitData.player, 0, 64) T.HandleEvent("PLAYER_DEAD")
+    assert(total("deaths") + total("probableDeaths") == 2 and total("aggressions") == 2)
+end)
+
+test("world seed observes existing plates when combat starts after login", function()
+    unitData.nameplate1, unitData.nameplate2 = opponent("seed1"), opponent("seed2")
+    C_NamePlate = { GetNamePlates = function()
+        return { { namePlateUnitToken = "nameplate1" }, { UnitFrame = { unit = "nameplate2" } } }
+    end }
+    T.HandleEvent("PLAYER_ENTERING_WORLD")
+    assert(count() == 0)
+    T.HandleEvent("PLAYER_REGEN_DISABLED") T.HandleEvent("PLAYER_DEAD")
+    assert(total("probableDeaths") == 2)
+end)
+
+test("reload while in combat seeds visible attackers without a new regen event", function()
+    local saved = GL.db fixture(saved)
+    unitData.player.combat = true unitData.nameplate1 = opponent("reload")
+    C_NamePlate = { GetNamePlates = function() return { { namePlateUnitToken = "nameplate1" } } end }
+    T.HandleEvent("PLAYER_ENTERING_WORLD") T.HandleEvent("PLAYER_DEAD")
+    assert(total("probableDeaths") == 1)
+end)
+
+test("resurrection and world changes cancel a pending death batch", function()
+    for _, event in ipairs({ "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }) do
+        fixture() local e = start() local rows = recapAPI({})
+        unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
+        unitData.player.dead = false T.HandleEvent(event)
+        rows[1] = recapRow(e, 0)
+        now = now + 2 T.Poll()
+        assert(count() == 0, event .. " must cancel the old pending death")
+    end
+end)
+
+test("ghost alive event does not rearm but real resurrection permits a new batch", function()
+    local a = start() recapAPI({})
+    unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
+    T.HandleEvent("PLAYER_ALIVE")
+    unitData.target = opponent("after-ghost")
+    T.HandleEvent("PLAYER_TARGET_CHANGED") T.HandleEvent("PLAYER_DEAD")
+    now = now + 2 T.Poll()
+    assert(total("probableDeaths") == 1 and GL.Get("guid:" .. a.guid))
+    unitData.player.dead = false T.HandleEvent("PLAYER_UNGHOST")
+    local b = start(opponent("resurrected")) T.HandleEvent("PLAYER_DEAD")
+    now = now + 2 T.Poll()
+    assert(total("probableDeaths") == 2 and GL.Get("guid:" .. b.guid))
+end)
+
+test("reload while already dead cannot blame newly visible attackers", function()
+    unitData.player.dead, unitData.player.combat = true, true
+    unitData.nameplate1 = opponent("corpse-view")
+    C_NamePlate = { GetNamePlates = function() return { { namePlateUnitToken = "nameplate1" } } end }
+    recapAPI({ recapRow(unitData.nameplate1, 0) })
+    T.HandleEvent("PLAYER_ENTERING_WORLD") T.HandleEvent("PLAYER_DEAD") T.Poll()
+    assert(count() == 0)
+end)
+
+test("manual opinions override fatal inference but guild friendship does not", function()
+    for _, manual in ipairs({ "friend", "neutral" }) do
+        fixture() start() local id = GL.Identity("target") GL.SetReaction(id, manual)
+        T.HandleEvent("PLAYER_DEAD")
+        assert(GL.Relation(GL.Get(id)) == manual and GL.Get(id).pvp.probableDeaths == 1)
+    end
+    fixture() start() local id = GL.Identity("target") id.guild, id.realm = "Friendly Guild", "Forever"
+    GL.Remember(id) GL.SetGuildReaction(id, "friend")
+    T.HandleEvent("PLAYER_DEAD")
+    assert(GL.Relation(GL.Get(id)) == "enemy" and GL.RelationSource(GL.Get(id)) == "pvp")
+end)
+
+test("tracking opt-out and duel start discard delayed native evidence", function()
+    for _, mode in ipairs({ "disabled", "duel" }) do
+        fixture() local e = start() local rows = recapAPI({})
+        T.HandleEvent("PLAYER_DEAD")
+        if mode == "disabled" then GL.SetSetting("pvpTracking", false) else T.HandleEvent("DUEL_REQUESTED") end
+        rows[1] = recapRow(e, 0) now = now + 2 T.Poll()
+        assert(count() == 0)
+    end
 end)
 
 print("PASS: " .. passed .. " tracker scenarios (actual Core.lua + Tracker.lua).")

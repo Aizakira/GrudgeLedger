@@ -1,4 +1,4 @@
-Grudge Ledger — 0.2.6
+Grudge Ledger — 0.2.7
 Distributed under the GNU General Public License, version 3 (see LICENSE).
 
 Menu integration and nameplate/tooltip lifecycle techniques are adapted from
@@ -27,3 +27,9 @@ Warcraft client. No Blizzard media files are redistributed in this package.
 World of Warcraft is a trademark of Blizzard Entertainment.
 
 No personal player database or guild list is distributed with this addon.
+
+Forever death-recap fields were checked against Blizzard's public API documentation
+and the client observations documented by GudaAddons/HeadHunter. The reader and
+validation logic here are independently implemented; no HeadHunter files are bundled.
+https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/DeathRecapDocumentation.lua
+https://github.com/GudaAddons/HeadHunter/blob/main/Detection/ForeverDeaths.lua

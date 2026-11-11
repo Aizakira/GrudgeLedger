@@ -27,7 +27,7 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 
 ## Install
 
-1. Download **`GrudgeLedger-0.2.6.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.2.7.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -55,9 +55,11 @@ See the [full usage guide](GrudgeLedger/README.txt) for neutral status, prioriti
 
 Targets **Forever interface 16001**; development used client **1.60.1.70862**. Retail, Classic and other private-server clients are not validated. Nameplate markers require visible nameplates and obey the client's range and visibility rules. This is not a whole-zone radar or a stealth detector.
 
-Forever may hide combat-log information. Inference from observed units, health and honor is imperfect: probable events are separated from confirmed ones, ambiguous cases are skipped and the journal offers corrections. Your explicit classifications take precedence. Duel detection also depends on the available client signals.
+Forever may hide combat-log information. The addon also reads its public death recap, waiting up to two seconds for delayed data. Multiple attackers are recorded by GUID: an explicit lethal hit is confirmed, while other participants in the fatal attack remain probable. Without usable direct evidence, recent hostile PvP combatants actually targeting you may be recorded as probable participants; bystanders are excluded. Counters belong to each person's record: three participants in one death do not mean three player deaths. Inferences can be corrected and coverage is limited by the data the client exposes. Previously missed deaths are not reconstructed automatically.
 
-The existing offline suite covers thirteen test scripts, including 45 PvP tracking scenarios. These tests simulate WoW APIs; they do not replace actual gameplay testing. This remains an early version, and bug reports are welcome.
+Explicit buttons and manual opinions retain priority, including after an emote. Gestures alone no longer pin a relationship: `/spit` cannot keep a killer at caution when a PvP death is subsequently recorded. Duel detection still depends on the available client signals.
+
+The existing offline suite covers thirteen test scripts, including 69 PvP tracking scenarios. These tests simulate WoW APIs; they do not replace actual gameplay testing. This remains an early version, and bug reports are welcome.
 
 ## Your journal stays yours
 
@@ -77,7 +79,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.2.6.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.2.7.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

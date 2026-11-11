@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.2.6
+GRUDGE LEDGER — 0.2.7
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -77,14 +77,27 @@ Seules vos demandes d'emotes sont observées : les emotes reçues ne modifient p
 votre journal. Cela enregistre votre intention, pas la réaction de l'autre joueur.
 La camaraderie est bornée de -100 à +100 : positive = ami, 0 = neutre,
 -1 à -9 = méfiance, -10 ou moins = ennemi. Les boutons directs changent le
-classement immédiatement. Votre classement explicite reste prioritaire sur les
-déductions automatiques ; les nouveaux combats restent néanmoins dans l'historique.
+classement immédiatement. Les boutons et avis manuels restent prioritaires, même
+après une emote. Les gestes seuls ne verrouillent pas le classement : un /spit
+ne peut pas empêcher le passage en ennemi après un décès PvP. Les compteurs PvP
+restent séparés de la camaraderie personnelle.
 
-Forever peut masquer le journal de combat. Les déductions à partir des unités,
-des pertes de vie et de l'honneur sont indiquées PROBABLES et séparées des faits
-confirmés. Une cible proche ou un gain d'honneur seuls ne suffisent pas à attribuer
-une agression ou un coup fatal. Les cas ambigus sont laissés sans attribution.
-Une agression n'est comptée qu'une fois par adversaire et par combat.
+Forever peut masquer le journal de combat. Après un décès, l'addon consulte aussi
+le récapitulatif natif de mort et attend au plus deux secondes s'il arrive en
+retard. Les sources de dégâts accessibles sont enregistrées par GUID, même sans
+avoir ciblé ces adversaires. Un coup fatal explicite est confirmé. Les autres
+participants à l'attaque mortelle sont marqués ennemis avec une participation
+PROBABLE, pas comme auteurs de plusieurs coups fatals. Chaque fiche compte une
+participation maximum au même décès. Un PNJ identifié comme source fatale ne
+transforme pas les agresseurs joueurs en tueurs.
+Sans récapitulatif exploitable, les adversaires PvP en combat qui vous ciblaient
+réellement juste avant le décès peuvent être enregistrés comme participants
+probables, y compris à plusieurs. Une baisse de santé peut également produire
+des agressions probables. Les simples passants sont exclus ; les situations
+ambiguës ou les données indisponibles peuvent toujours empêcher une attribution.
+Une agression n'est comptée qu'une fois par adversaire et par combat. Les preuves
+restent consultables et corrigeables. Les anciens décès manqués ne sont pas
+reconstitués automatiquement après une mise à jour.
 
 GUILDES
 Le menu du joueur et la fenêtre Guildes permettent de classer une guilde entière
@@ -124,6 +137,14 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+SUIVI DES ATTAQUES MULTIPLES 0.2.7
+Ajout du récapitulatif de mort public de Forever, avec contrôle de fraîcheur,
+données secrètes ignorées et déduplication. Suppression du blocage de toutes les
+attributions lorsqu'il y avait plusieurs attaquants. Reprise des plaques déjà
+visibles et du suivi après un rechargement en combat. Les noms Given-Realm ne
+sont plus interprétés comme prénom + patronyme. Un avis issu de /spit ne bloque
+plus le classement automatique PvP ; les vrais choix manuels sont conservés.
 
 MARQUEURS ET NOMS NATIFS 0.2.6
 Correction de l'ancrage lorsque Threat Plates masque son propre texte et laisse

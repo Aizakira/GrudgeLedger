@@ -405,7 +405,7 @@ local function renderDetail()
         local guildRule = GL.GetGuildRule(record)
         local faction, race, class = identityLabels(record)
         local lines = {
-            relationNames[relation] .. " — " .. (({ manual = "choix personnel", pvp = "historique PvP", guild = "avis hérité de la guilde", neutral = "aucun avis" })[GL.RelationSource(record)] or "classement automatique"),
+            relationNames[relation] .. " — " .. (({ manual = "choix personnel", emote = "gestes envoyés", pvp = "historique PvP", guild = "avis hérité de la guilde", neutral = "aucun avis" })[GL.RelationSource(record)] or "classement automatique"),
             "Faction : " .. plain(faction),
             "Race : " .. plain(race) .. " — Classe : " .. plain(class),
             "Réputation personnelle : " .. (record.reputation ~= nil and tostring(record.reputation) or "aucun avis"),
