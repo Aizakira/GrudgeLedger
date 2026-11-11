@@ -95,6 +95,11 @@ Partager le dossier de l'addon ou son ZIP ne partage pas vos notes. Il n'y a ni 
 
 ## Participer ou modifier
 
+Les contributions sont bienvenues via un fork et une pull request. **@Aizakira
+valide les changements avant intégration ; les versions officielles restent
+publiées manuellement.** Le [guide de contribution](CONTRIBUTING.md) explique
+les tests obligatoires et le fonctionnement de la revue.
+
 Les issues et pull requests en français ou en anglais sont bienvenues. Pour un bug, précisez les versions de l'addon et du client, les étapes, le résultat attendu et le résultat observé. Masquez les informations personnelles des captures. Pour le code, privilégiez les changements ciblés et lancez les tests existants.
 
 Python 3.11 est nécessaire uniquement pour les tests de développement :

@@ -89,6 +89,10 @@ Never upload your `WTF` folder or SavedVariables when reporting an issue. The op
 
 ## Development and contributions
 
+Contributions are welcome through forks and pull requests. **@Aizakira approves
+changes before integration; official releases remain manual.** See the
+[contribution and review policy](CONTRIBUTING.md) for the required checks and review process.
+
 Python 3.11 and the pinned test dependency are only needed for development, not to play:
 
 ```sh
