@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.4.0
+GRUDGE LEDGER — 0.4.1
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -137,6 +137,14 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+ÉCRITURE DE GRIMOIRE 0.4.1
+Les titres, noms dans l’index et fiches utilisent les familles calligraphiques
+natives de WoW (Morpheus pour l’alphabet latin). La lecture et la saisie des notes
+utilisent QuestFont_Large à 15 pixels. Les boutons, filtres et petites indications
+gardent leur police compacte. Les variantes natives prennent en charge les autres
+alphabets ; aucun fichier de police ni addon supplémentaire n’est nécessaire.
+Un /reload suffit à appliquer ce changement.
 
 LIVRE OUVERT ET LISIBILITÉ 0.4.0
 Deux pages de parchemin vieilli, une couverture en cuir cousu et des ferrures

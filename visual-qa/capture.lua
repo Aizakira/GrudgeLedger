@@ -50,9 +50,10 @@ function methods:SetMaxLines(value) self.qaMaxLines = value end
 function methods:SetSpacing(value) self.qaSpacing = value end
 function methods:GetSpacing() return self.qaSpacing or 0 end
 function methods:SetTextInsets(...) self.qaInsets = { ... } end
-function methods:GetStringHeight() return QA_TextHeight(self:GetText(), self.width or 400, self.qaFontSize or QA_FontSize(self.qaFontObject), self.qaSpacing or 0) end
-function methods:GetStringWidth() return QA_TextWidth(self:GetText(), self.qaFontSize or QA_FontSize(self.qaFontObject)) end
-function methods:GetNumLines() return QA_TextLines(self:GetText(), self.width or 400, self.qaFontSize or QA_FontSize(self.qaFontObject)) end
+local function serif(region) return not not tostring(region.qaFontObject):find("Large") or not not tostring(region.qaFontObject):find("Fancy") end
+function methods:GetStringHeight() return QA_TextHeight(self:GetText(), self.width or 400, self.qaFontSize or QA_FontSize(self.qaFontObject), self.qaSpacing or 0, serif(self)) end
+function methods:GetStringWidth() return QA_TextWidth(self:GetText(), self.qaFontSize or QA_FontSize(self.qaFontObject), serif(self)) end
+function methods:GetNumLines() return QA_TextLines(self:GetText(), self.width or 400, self.qaFontSize or QA_FontSize(self.qaFontObject), serif(self)) end
 function methods:SetColorTexture(...) self.qaFill = { ... } end
 function methods:SetTexture(value) self.texture = value end
 function methods:SetVertexColor(...) self.qaTint = { ... } end

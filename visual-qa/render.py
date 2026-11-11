@@ -32,6 +32,7 @@ def fontsize(obj):
     obj = str(obj or "")
     fancy = re.search(r"Fancy(\d+)Font", obj)
     if fancy: return int(fancy.group(1))
+    if obj == "QuestFont_Large": return 15
     if "Huge" in obj: return 20
     if "Large" in obj: return 16
     if "Small" in obj: return 10
@@ -66,8 +67,9 @@ def wrap(text, width, size, title=False, wordwrap=True):
     return result or [""]
 
 
-def textheight(text, width, size, spacing=0):
-    return len(wrap(text, width, size)) * (size + 2) + max(0, len(wrap(text, width, size)) - 1) * spacing
+def textheight(text, width, size, spacing=0, title=False):
+    count = len(wrap(text, width, size, title))
+    return count * (size + 2) + max(0, count - 1) * spacing
 
 
 def convert(value):
@@ -140,7 +142,8 @@ class Layout:
             return ((eq[0][1] - eq[0][0] * length) if eq else default), length
         x, w = solve(equations[0], w, pb[0])
         if r["kind"] == "FontString" and r.get("height") is None:
-            lines = wrap(r.get("text"), w / max(scale, .01), size, wordwrap=r.get("wordWrap", True))
+            title = any(style in str(r.get("fontObject") or r.get("template") or "") for style in ("Large", "Fancy"))
+            lines = wrap(r.get("text"), w / max(scale, .01), size, title, wordwrap=r.get("wordWrap", True))
             if r.get("maxLines"): lines = lines[:int(r["maxLines"])]
             h = (len(lines) * (size + 2) + max(0, len(lines) - 1) * r.get("spacing", 0)) * scale
         y, h = solve(equations[1], h, pb[1])
@@ -353,8 +356,8 @@ def main():
     g=lua.globals();g.TEST_ROOT=ADDON.as_posix();g.TEST_WORK=WORK.as_posix()
     g.QA_FontSize=fontsize
     g.QA_TextHeight=textheight
-    g.QA_TextWidth=lambda text,size: font(size).getlength(plaintext(text))
-    g.QA_TextLines=lambda text,width,size: len(wrap(text,width,size))
+    g.QA_TextWidth=lambda text,size,title=False: font(size,title).getlength(plaintext(text))
+    g.QA_TextLines=lambda text,width,size,title=False: len(wrap(text,width,size,title))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
     views=["journal","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
     images, report, snapshots=[],{},{}
