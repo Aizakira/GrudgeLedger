@@ -1,0 +1,17 @@
+# Local journals and account data must never enter the repository.
+WTF/
+SavedVariables/
+GrudgeLedger.lua
+GrudgeLedger.lua.bak
+*.bak
+
+# Development tools and generated output.
+test-runtime/
+.venv/
+__pycache__/
+*.pyc
+visual-qa/renders/
+*.zip
+dist/
+.env
+.env.*

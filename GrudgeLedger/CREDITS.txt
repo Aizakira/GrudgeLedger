@@ -1,0 +1,25 @@
+Grudge Ledger — 0.2.1
+Distributed under the GNU General Public License, version 3 (see LICENSE).
+
+Menu integration and nameplate/tooltip lifecycle techniques are adapted from
+Worth Remembering by Kyle (maliceftw), licensed under GPLv3:
+https://github.com/kk-on-gh/WorthRemembering
+https://www.curseforge.com/wow/addons/worth-remembering
+Attributions for adapted portions are retained in source file headers.
+
+The PvP inference module is independently implemented. Its approach was informed
+by Grudgebook's documented use of observable units, targets and honor signals:
+https://www.curseforge.com/wow/addons/grudgebook
+Grudgebook's addon files are not bundled and it is not a runtime dependency.
+
+The red grimoire medallion (Media/LedgerIcon.tga) was generated for this addon
+using OpenAI's built-in image generation tool. Its borderless book variant
+(Media/LedgerBook.tga) was edited with the same tool for the native minimap button.
+Both were converted to uncompressed 256x256 RGBA TGA textures and are included
+under the same GPLv3 distribution terms. The minimap's frame uses native client
+textures and the standard LibDBIcon button dimensions, with no library dependency.
+Other icons and sounds are referenced from the player's installed World of
+Warcraft client. No Blizzard media files are redistributed in this package.
+World of Warcraft is a trademark of Blizzard Entertainment.
+
+No personal player database or guild list is distributed with this addon.

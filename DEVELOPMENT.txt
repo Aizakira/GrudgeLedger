@@ -1,0 +1,18 @@
+Grudge Ledger 0.2.1 — sources et tests
+
+Le dossier GrudgeLedger est le seul dossier à installer dans Interface/AddOns.
+Les tests utilisent Lua 5.1 via Lupa, sans lancer WoW.
+Depuis ce dossier :
+  python -m pip install --target test-runtime -r requirements-test.txt
+  python tests/run_tests.py
+
+Le runtime de test ne fait pas partie de l’addon.
+Aucune donnée SavedVariables n’est incluse.
+Les noms et identifiants des tests sont des exemples simulés.
+Les icônes, clics, sons et API effectives doivent aussi être vérifiés dans WoW.
+
+Revue visuelle facultative hors jeu (Windows, polices Arial/Georgia) :
+  python -m pip install Pillow==12.1.1
+  python visual-qa/render.py
+Le rendu provient des cadres Lua réels exécutés avec des API simulées.
+Polices/textures natives approximées ; exemples fictifs, aucune capture du jeu.
