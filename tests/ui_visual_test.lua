@@ -172,12 +172,12 @@ for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
     end
     local row = ledger.rows[1]
     local names = { friend = "Ami", warning = "Méfiance", enemy = "Ennemi", neutral = "Neutre" }
-    local icons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy" }
+    local icons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy", neutral = "RelationNeutral" }
     assert(row.relation:GetText() == names[relation] and row.relation.wordWrap == false and row.relation.maxLines == 1)
     assert(row.name:GetText() == GL.Get(identity.key).fullName, "relation has its own icon and label, not a cryptic name prefix")
-    assert(row.relationIcon:IsShown() == (relation ~= "neutral"))
-    assert(icons[relation] and row.relationIcon.texture:find(icons[relation], 1, true) or relation == "neutral" and not row.relationIcon.texture,
-        "recycled rows must update or clear the previous relation icon")
+    assert(row.relationIcon:IsShown() and row.relationIcon.texture:find(icons[relation], 1, true),
+        "every known relation has its own icon, including neutral recycled rows")
+    assert(ledger.detailIcon.texture:find(icons[relation], 1, true), "detail and index share the same relationship icon")
     assert(row.identity.anchor[2] + row.identity:GetWidth() < row.relation.anchor[2]
         and row.relation.anchor[2] + row.relation:GetWidth() < row:GetWidth(), "identity and explicit relation labels cannot overlap")
     assert((luminance(row.bg.color) + 0.05) / (luminance(row.name.color) + 0.05) >= 4.5,

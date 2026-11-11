@@ -7,8 +7,9 @@ GL.Display = D
 
 local styles = {
     friend = { label = "Ami", priority = 1, color = { 0.25, 1, 0.45 }, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationFriend" },
-    warning = { label = "Agression", priority = 2, color = { 1, 0.6, 0.1 }, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationWarning" },
+    warning = { label = "Méfiance", priority = 2, color = { 1, 0.6, 0.1 }, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationWarning" },
     enemy = { label = "Ennemi", priority = 3, color = { 1, 0.25, 0.2 }, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationEnemy" },
+    neutral = { label = "Neutre", priority = 0, color = { 0.8, 0.8, 0.8 }, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationNeutral" },
 }
 local visible, markers, lastAlert, pendingNames = {}, {}, {}, {}
 local guildBursts = {}
@@ -179,7 +180,7 @@ local function updateMarker(entry)
     end
     entry.recordKey, entry.relation, entry.guildKey = record and record.key, relation, guildKey
     local style = relation and styles[relation]
-    if not style or not GL.Settings().markers then
+    if not style or GL.IsGroupOnly(record) or not GL.Settings().markers then
         if marker and (not marker.owner or marker.owner == entry) then hideMarker(marker) end
         return
     end
@@ -204,7 +205,7 @@ local function updateMarker(entry)
     marker.icon:SetVertexColor(1, 1, 1)
     if GL.RelationConfidence(record) == "probable" then marker.probable:Show() else marker.probable:Hide() end
     marker.frame:Show()
-    if GL.Settings().nameColor and font and canChange(font) then
+    if relation ~= "neutral" and GL.Settings().nameColor and font and canChange(font) then
         if marker.font ~= font then restoreName(marker) end
         local current = colorOf(font)
         if current and not sameColor(current, marker.appliedColor) then marker.baseColor = current end
@@ -295,6 +296,7 @@ alert = function(identity, unit)
     local record = GL.Get(identity)
     if not record then return end
     local relation = GL.Relation(record)
+    if relation == "neutral" then return end -- Known neutrals have a marker, never a proximity alert.
     if relation == "friend" then
         local fresh = newFriendEncounter(record, unit)
         if not fresh or isGroupmate(record, unit) then return end

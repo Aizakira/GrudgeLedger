@@ -1,4 +1,4 @@
-Grudge Ledger — 0.4.1
+Grudge Ledger — 0.4.2
 Distributed under the GNU General Public License, version 3 (see LICENSE).
 
 Menu integration and nameplate/tooltip lifecycle techniques are adapted from
@@ -47,3 +47,7 @@ The open journal surface (Media/JournalBookSurface.tga, 1024x1024, displayed at
 It combines aged parchment, stitched red leather and brass corners. All labels
 and controls remain native Lua UI elements; no text is baked into the artwork.
 It is distributed under the same GPLv3 terms; no Overlord artwork is included.
+
+The neutral silver medallion (Media/RelationNeutral.tga, 128x128 RGBA) was
+generated using OpenAI's built-in image tool for 0.4.2 and is distributed
+under the same GPLv3 terms. It identifies known neutral contacts.

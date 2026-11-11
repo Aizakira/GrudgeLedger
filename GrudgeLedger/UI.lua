@@ -10,7 +10,7 @@ local relationNames = { friend = "Ami", warning = "Méfiance", enemy = "Ennemi",
 local factionNames = { Alliance = "Alliance", Horde = "Horde", Neutral = "Neutre" }
 local colors = { friend = { 0.48, 0.86, 0.56 }, warning = { 0.97, 0.76, 0.39 }, enemy = { 0.98, 0.55, 0.50 }, neutral = { 0.79, 0.74, 0.65 } }
 local inkColors = { friend = { 0.10, 0.34, 0.15 }, warning = { 0.50, 0.22, 0.03 }, enemy = { 0.57, 0.12, 0.11 }, neutral = { 0.34, 0.27, 0.20 } }
-local relationIcons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy" }
+local relationIcons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy", neutral = "RelationNeutral" }
 local media = "Interface\\AddOns\\GrudgeLedger\\Media\\"
 local pvpNames = { kill = "Victoire", death = "Mort", aggression = "Agression" }
 local theme = { paper = { 0.94, 0.87, 0.72 }, muted = { 0.73, 0.64, 0.51 }, gold = { 0.52, 0.38, 0.20 },
@@ -502,6 +502,7 @@ local function renderDetail()
         local details = {
             "", "|cff653c20REPÈRES|r",
             "Réputation personnelle : " .. (record.reputation ~= nil and tostring(record.reputation) or "aucun avis"),
+            subdued("PvP : mort −10 · agression −1 · victoire +1 (sans créer d'amitié)."),
             "Guilde : " .. plain(record.guild or "aucune guilde connue"),
             guildRule and guildRule.note and guildRule.note ~= "" and "Note de guilde : " .. plain(guildRule.note) or "",
             subdued("Dernier lieu : " .. plain(record.lastZone or "inconnu")),

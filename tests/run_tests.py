@@ -10,6 +10,7 @@ addon = work / "GrudgeLedger"
 for name, expected_width, expected_height, transparent in (
     ("LedgerIcon.tga", 256, 256, True), ("LedgerBook.tga", 256, 256, True),
     ("RelationFriend.tga", 128, 128, True), ("RelationWarning.tga", 128, 128, True), ("RelationEnemy.tga", 128, 128, True),
+    ("RelationNeutral.tga", 128, 128, True),
     ("JournalIllustration.tga", 512, 256, True), ("JournalPaper.tga", 512, 512, False),
     ("JournalBookSurface.tga", 1024, 1024, True),
 ):
@@ -28,7 +29,7 @@ for name, expected_width, expected_height, transparent in (
     else:
         assert all(a == 255 for a in alpha), "reading parchment must remain opaque"
     assert any(alpha), "artwork must not be empty"
-print("PASS artwork: eight uncompressed RGBA TGAs, correct dimensions, cutout alpha and opaque reading paper", flush=True)
+print("PASS artwork: nine uncompressed RGBA TGAs, correct dimensions, cutout alpha and opaque reading paper", flush=True)
 compiler = LuaRuntime(unpack_returned_tuples=True)
 files = list(addon.glob("*.lua"))
 for file in files:

@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.4.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.4.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -99,6 +99,31 @@ function GL.Identity(unit)
     return identity
 end
 
+local function scoreRelation(score)
+    return score > 0 and "friend" or score <= -10 and "enemy" or score < 0 and "warning" or "neutral"
+end
+local function refreshReputation(record)
+    if record.reaction and record.reactionSource ~= "emote" then return end
+    -- ponytail: replay social deltas only on changes/load, never on nameplate ticks.
+    -- If histories become very large, cache this subtotal with a versioned migration.
+    local social = 0
+    for _, event in ipairs(record.history or {}) do
+        if type(event) == "table" and event.kind == "reputation" and event.source == "emote" then
+            local delta = GL.Clean(event.delta, "number")
+            if delta and delta == delta and math.abs(delta) < math.huge then social = social + delta end
+        end
+    end
+    local pvp = record.pvp
+    local balance = (pvp.kills or 0) + (pvp.probableKills or 0)
+        - 10 * ((pvp.deaths or 0) + (pvp.probableDeaths or 0))
+        - (pvp.aggressions or 0) - (pvp.probableAggressions or 0)
+    -- Friendly gestures cannot conceal an unsettled attack; victories repay one
+    -- point at a time but cannot by themselves make an opponent a friend.
+    local score = balance < 0 and math.min(0, social) + balance
+        or social < 0 and math.min(0, social + balance) or social
+    record.reputation = math.max(-100, math.min(100, score))
+    if record.reactionSource == "emote" then record.reaction = scoreRelation(record.reputation) end
+end
 local function normalize(record)
     record.notes = type(record.notes) == "table" and record.notes or {}
     record.history = type(record.history) == "table" and record.history or {}
@@ -125,6 +150,7 @@ local function normalize(record)
         record.pvp[field] = tonumber(record.pvp[field]) or 0
     end
     record.groupCount = tonumber(record.groupCount) or 0
+    refreshReputation(record)
     return record
 end
 
@@ -174,6 +200,7 @@ local function merge(provisional, record)
     record.firstSeen = math.min(record.firstSeen or GL.Now(), provisional.firstSeen or GL.Now())
     table.sort(record.notes, function(a, b) return (a.time or 0) < (b.time or 0) end)
     table.sort(record.history, function(a, b) return (a.time or 0) < (b.time or 0) end)
+    refreshReputation(record)
 end
 
 function GL.Remember(identity)
@@ -238,10 +265,12 @@ local function effectiveRelation(record)
     local opinion = record.reaction == "friend" or record.reaction == "enemy" or record.reaction == "neutral" or record.reaction == "warning"
     if opinion and record.reactionSource ~= "emote" then return record.reaction, "manual" end
     local pvp = record.pvp or {}
-    if (pvp.deaths or 0) + (pvp.probableDeaths or 0) > 0 then return "enemy", "pvp" end
+    if (pvp.deaths or 0) + (pvp.probableDeaths or 0) > 0 and (record.reputation or 0) < 0 then
+        return record.reputation <= -10 and "enemy" or "warning", "pvp"
+    end
     local rule = GL.GetGuildRule(record)
     if rule and rule.reaction == "enemy" then return "enemy", "guild" end
-    if (pvp.aggressions or 0) + (pvp.probableAggressions or 0) > 0 then return "warning", "pvp" end
+    if (pvp.aggressions or 0) + (pvp.probableAggressions or 0) > 0 and (record.reputation or 0) < 0 then return "warning", "pvp" end
     if opinion then return record.reaction, "emote" end
     if rule then return rule.reaction, "guild" end
     return "neutral", "neutral"
@@ -260,7 +289,8 @@ end
 function GL.RelationConfidence(record)
     local relation, source = effectiveRelation(record)
     if source ~= "pvp" then return nil end
-    local confirmed = relation == "enemy" and record.pvp.deaths or record.pvp.aggressions
+    local confirmed = (record.pvp.deaths or 0) + (record.pvp.probableDeaths or 0) > 0
+        and record.pvp.deaths or record.pvp.aggressions
     return (confirmed or 0) > 0 and "confirmed" or "probable"
 end
 local function history(record, kind, extra)
@@ -312,6 +342,14 @@ function GL.AdjustReputation(identity, delta, reason, source)
     local record = GL.Remember(identity)
     if not record then return nil end
     local before = record.reputation or reactionScores[GL.Relation(record)] or 0
+    if source == "emote" and (not record.reaction or record.reactionSource == "emote") then
+        record.reactionSource = "emote"
+        history(record, "reputation", { delta = delta, source = "emote", evidence = GL.Clean(reason, "string") })
+        refreshReputation(record)
+        record.history[#record.history].reputation = record.reputation
+        GL.Emit("CHANGED", record)
+        return record
+    end
     record.reputation = math.max(-100, math.min(100, before + delta))
     local score = record.reputation
     if source ~= "emote" or not record.reaction or record.reactionSource ~= "manual" then
@@ -348,7 +386,7 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId)
     end
     local field = pvpFields[kind][confidence]
     record.pvp[field] = record.pvp[field] + 1
-    if kind == "death" and not record.reaction then record.reputation = math.max(-100, math.min(-10, (record.reputation or 0) - 10)) end
+    refreshReputation(record)
     history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId })
     GL.Emit("CHANGED", record)
     return record
@@ -362,7 +400,7 @@ function GL.RecordAggression(identity, confidence, evidence, eventId)
     end
     local field = pvpFields.aggression[confidence]
     record.pvp[field] = record.pvp[field] + 1
-    if not record.reaction then record.reputation = math.max(-100, math.min(-1, (record.reputation or 0) - 1)) end
+    refreshReputation(record)
     history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId })
     GL.Emit("CHANGED", record)
     return record
@@ -379,11 +417,7 @@ function GL.VoidPvP(identity, event)
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
     record.pvp[field] = math.max(0, (record.pvp[field] or 0) - 1)
-    if not record.reaction then
-        local pvp = record.pvp
-        record.reputation = math.max(-100, -10 * (pvp.deaths + pvp.probableDeaths)
-            - pvp.aggressions - pvp.probableAggressions)
-    end
+    refreshReputation(record)
     GL.Emit("CHANGED", record)
     return true
 end

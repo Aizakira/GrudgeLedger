@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.4.1
+GRUDGE LEDGER — 0.4.2
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -39,6 +39,8 @@ une ancienne valeur connue. Notes et classements restent conservés.
 MARQUEURS ET ALERTES
 Cœur vert : ami. Œil orange : méfiance/agression.
 Cœur brisé rouge : ennemi/rancune forte, notamment après une mort PvP.
+Médaillon gris : personne connue devenue neutre. Aucun popup ni son pour les
+neutres ; les inconnus et les anciennes fiches de groupe seules ne sont pas marqués.
 Un petit « ? » accompagne les marqueurs fondés uniquement sur une déduction
 PvP. Une mort probable reste signalée comme telle, même si une agression était
 confirmée. Le « ? » disparaît après correction ou confirmation pertinente.
@@ -64,6 +66,21 @@ Les membres d'une même guilde aperçus dans les six secondes sont regroupés
 dans une alerte, avec leur nombre observé. Son clic ouvre la première fiche.
 Les alertes individuelles et les agressions personnelles gardent la priorité.
 Cliquer une alerte ouvre la fiche ; elle ne change jamais automatiquement la cible.
+
+SOLDE DE RANCUNE 0.4.2
+Le classement automatique utilise les événements actifs : mort -10, agression -1,
+victoire +1. Les événements probables restent explicitement signalés ; une victoire
+confirmée ne confirme pas une ancienne mort probable. Les gestes négatifs s'ajoutent
+au solde. Exemple : une mort, un geste négatif et deux victoires donnent -9.
+À -10 ou moins après une mort, le classement est Ennemi (rouge). De -9 à -1,
+il reste Méfiance (orange), avec l'alerte de proximité. À 0, il devient Neutre.
+Les gestes amicaux ne cachent pas une dette PvP encore négative. Les victoires
+remboursent progressivement la dette sans créer d'amitié à elles seules.
+Les classements et avis manuels gardent leur priorité : ils ne sont pas effacés
+par les victoires. Les notes et l'historique restent conservés. À la mise à jour,
+les fiches automatiques sont recalculées à partir des compteurs et gestes existants.
+Annuler un événement recalcule son effet ; /reload ne compte jamais deux fois.
+La limite affichée de -100 ne supprime pas la dette réelle au-delà de ce seuil.
 
 CAMARADERIE ET HISTORIQUE
 Les gestes amicals que vous envoyez à un joueur ciblé (/kiss, /wink, /hug, /wave,
