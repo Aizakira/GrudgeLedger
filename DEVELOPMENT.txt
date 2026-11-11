@@ -36,16 +36,27 @@ Les tests ne prétendent pas simuler le moteur natif : ils modélisent les noms
 à partir de la géométrie carte/curseur, avec une latence de rendu de 1/2 images.
 Une réussite locale valide le protocole, pas la disponibilité du moteur WoW.
 
-19 scripts de tests, dont 73 cas du détecteur druide : API absentes/protégées,
+20 scripts de tests, dont 79 cas du détecteur druide : API absentes/protégées,
 cache trompeur, correspondance exacte et ambiguïtés, propriétaire d'un familier,
 relecture absente, échelles et dimensions différentes, timeout, interruptions,
 erreur à chaque mutation et restauration (y compris un setter sans effet),
 exclusion mutuelle, persistance bornée et absence d'identités dans le rapport.
 Le masque TGA de 8x8 pixels est contrôlé : transparent, sans image tierce.
 
+Retour réel 70888 : arrêt en préparation, sauvegarde de la minimap, 0 point lu.
+Cause identifiée en 0.5.4 : GetMaskTexture n'existe pas sur Minimap ; notre double
+de test l'inventait. Le double reproduit désormais cette absence. Un post-hook
+observe SetMaskTexture, sans appel au chargement. Sans observation, refus avant
+toute mutation. Changer puis restaurer l'option de rotation réapplique le masque
+via l'interface native Forever. Les tests couvrent aussi ce rattrapage, le hook
+refusé, les valeurs protégées et les masques personnalisés (chemin ou FileDataID).
+L'observation confirme un appel accepté, pas le rendu réel du masque : seul le
+client permet de vérifier ce rendu et la disponibilité des lectures natives.
+
 Sources primaires consultées (lecture uniquement, code réimplémenté ici) :
 - API Forever : https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/MinimapDocumentation.lua
 - API minimap : https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/MinimapFrameAPIDocumentation.lua
+- Masque natif Forever : https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_Minimap/Camelot/Minimap.lua
 - Changelog de l'auteur NodeSight 2.0.4 : https://www.curseforge.com/wow/addons/node-sight/files/9552010
 - Méthode publique : https://github.com/Krelock/NodeSight/blob/5c70c870447c9dfa83612a5fa0eba2698d04fb51/NodeSight.lua
   NodeSight est All Rights Reserved : aucun code, asset ni bibliothèque de cet

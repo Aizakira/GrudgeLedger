@@ -48,6 +48,16 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## Correctif 0.5.4 : préparation de l'essai druide
+
+Le test appelait `Minimap:GetMaskTexture()`, absent des API Forever. La simulation
+fournissait cette fonction à tort. L'addon observe désormais les appels natifs à
+`SetMaskTexture` et restitue le masque exact, sans deviner un masque par défaut.
+Si aucun masque n'a été observé depuis le chargement, rien n'est modifié : changer
+l'option de rotation de la minimap puis remettre sa valeur initiale avant de retenter.
+Le rapport distingue les étapes de préparation. Un `/reload` charge le correctif.
+Cela corrige la préparation ; **la lecture des joueurs reste à démontrer en jeu**.
+
 ## Nouveautés 0.5.3 : gestes et historique lisible
 
 Les boutons **Bisou / Crachat** utilisent la cible sélectionnée comme les commandes
@@ -92,7 +102,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.5.3.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.5.4.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -139,7 +149,7 @@ de minimap pour isoler l'essai.
 Le test exige deux lectures du nom témoin avec des contrôles vides avant, entre
 et après. La grille bornée de 225 positions peut manquer un point ; un faible
 nombre d'images par seconde peut limiter l'essai. **Le radar continu, les alertes
-lointaines et le pistage automatique en félin ne sont pas activés.** Les 73 cas
+lointaines et le pistage automatique en félin ne sont pas activés.** Les 79 cas
 automatisés vérifient le protocole et la restauration ; il faut encore valider la
 lecture native dans Forever. Aucune autorisation spécifique de Blizzard n'a été
 obtenue. Voir [l'enquête et ses sources primaires](DEVELOPMENT.txt) et les
@@ -153,7 +163,7 @@ Forever peut masquer le journal de combat. L'addon consulte aussi son récapitul
 
 Les boutons Ami/Méfiance/Ennemi et les avis manuels conservent leur priorité, même après une emote. Les gestes seuls ne verrouillent plus le classement : un `/spit` ne bloque pas le passage en ennemi après une mort PvP. La détection des duels dépend des signaux disponibles.
 
-Dix-neuf scripts de tests automatisés, dont 77 scénarios de suivi et 73 cas du détecteur druide, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
+Vingt scripts de tests automatisés, dont 77 scénarios de suivi et 79 cas du détecteur druide, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
 
 ## Chacun son livre
 

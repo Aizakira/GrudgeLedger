@@ -16,13 +16,14 @@ local function run(mode, expected, options)
     local original = { { "TOPRIGHT", env.UIParent, "TOPRIGHT", -12, -20 },
         { "BOTTOMLEFT", env.UIParent, "BOTTOMLEFT", 5, 6 } }
     local anchors = { original[1], original[2] }
-    local alpha, mask, clicks, wheel = 0.73, "original-mask", true, false
+    local initialMask = options.mask or "original-mask"
+    local alpha, mask, clicks, wheel = 0.73, initialMask, true, false
     local scale, width, height = options.scale or 0.8, options.width or 180, options.height or 180
     local center, cursor = { 0, 0 }, { 800, 450 }
     local function mutation(method)
         mutations = mutations + 1
         calls[method] = (calls[method] or 0) + 1
-        if options.fail == method and calls[method] == 1 then error("private Élodie failure") end
+        if not flags.initializing and options.fail == method and calls[method] == 1 then error("private Élodie failure") end
         if options.restoreFail == method and flags.restoring then error("private restore failure") end
     end
     env.Minimap = map
@@ -33,7 +34,7 @@ local function run(mode, expected, options)
     map.GetHeight = function() return height end
     map.GetZoom = function() return flags.zoom or 1 end
     map.GetAlpha = function() return alpha end
-    map.GetMaskTexture = function() return mask end
+    -- Forever's Minimap supports SetMaskTexture, but has no GetMaskTexture.
     map.GetNumPoints = function() return #anchors end
     map.GetPoint = function(_, i) return unpack(anchors[i]) end
     map.GetCenter = function() return center[1] + (options.rounding or 0), center[2] end
@@ -48,6 +49,15 @@ local function run(mode, expected, options)
     end
     map.SetAlpha = function(_, value) mutation("SetAlpha"); if not (options.silentRestore and flags.restoring) then alpha = value end end
     map.SetMaskTexture = function(_, value) mutation("SetMaskTexture"); mask = value end
+    env.hooksecurefunc = function(object, method, hook)
+        assert(object == map and method == "SetMaskTexture")
+        if mode == "hook-failure" then error("private hook failure") end
+        local originalMethod = object[method]
+        object[method] = function(...)
+            originalMethod(...)
+            hook(...)
+        end
+    end
     map.SetMouseClickEnabled = function(_, value) mutation("SetMouseClickEnabled"); clicks = value end
     map.EnableMouseWheel = function(_, value) mutation("EnableMouseWheel"); wheel = value end
     env.GetCursorPosition = function() return flags.secretCursor and secret or cursor[1], cursor[2] end
@@ -120,9 +130,25 @@ local function run(mode, expected, options)
     assert(loadstring(source, "DruidRadar.lua")); setfenv(assert(loadstring(source)), env)()
     assert(mutations == 0 and not scripts.OnUpdate and #messages == 0, "dormant at login")
     assert(not GL.db.druidRadarTests and not GL.DruidRadarActive())
+    -- The game's skin (or another addon) sets its mask after our observer loads.
+    if mode ~= "unknown-mask" and mode ~= "observe-later" then
+        flags.initializing = true
+        map:SetMaskTexture(initialMask)
+        flags.initializing = nil
+        mutations, calls = 0, {}
+    end
     local slash = env.SlashCmdList.GRUDGELEDGERDRUIDRADAR
     slash(""); slash("rapport")
     assert(mutations == 0 and not GL.db.druidRadarTests, "help/report are read-only")
+    if mode == "observe-later" then
+        slash("test")
+        assert(GL.db.druidRadarTests[1].code == "mask" and mutations == 0)
+        map:SetMaskTexture(initialMask)
+        mutations, calls, GL.db.druidRadarTests = 0, {}, nil
+    elseif mode == "secret-mask" then
+        map:SetMaskTexture(secret)
+        mutations, calls = 0, {}
+    end
     if mode == "class" then flags.class = "HUNTER" end
     if mode == "form" then flags.form = 5 end
     for _, key in ipairs({ "tracking", "combat", "dead", "instance", "moving", "focus", "hidden", "protected", "look", "click", "legacy", "secretCursor", "clamp" }) do
@@ -156,7 +182,7 @@ local function run(mode, expected, options)
             if mode == "late-combat" then flags.combat = true end
             if mode == "late-move" then flags.moving = true end
             if mode == "late-click" then flags.click = true end
-            if mode == "late-mask" then mask = "changed-by-other-addon" end
+            if mode == "late-mask" then map:SetMaskTexture("changed-by-other-addon") end
             if mode == "stop" or options.restoreFail or options.silentRestore then flags.restoring = true; slash("stop") end
             if options.event then assert(events[options.event]); scripts.OnEvent(nil, options.event) end
         end
@@ -168,6 +194,10 @@ local function run(mode, expected, options)
     assert(saved.code == expected, mode .. ": expected " .. expected .. " got " .. saved.code .. " at " .. saved.phase)
     assert(saved.build == "70888" and saved.time == 12345 and saved.points <= 225)
     assert(saved.seconds >= 0 and saved.seconds <= 12.2, "bounded duration")
+    if mode == "unknown-mask" or mode == "hook-failure" or mode == "secret-mask" then
+        assert(mutations == 0 and saved.reads == 0 and saved.points == 0, "unknown restoration state must never mutate the map")
+        assert(saved.check == "sauvegarde : observation de SetMaskTexture", "precise failure stage")
+    end
     for k, v in pairs(saved) do
         assert(type(v) == "number" or type(v) == "string", "only scalar diagnostic fields")
         assert(not tostring(v):find("Élodie", 1, true) and not tostring(v):find("private", 1, true))
@@ -178,7 +208,7 @@ local function run(mode, expected, options)
     assert(n == (mode == "duplicate" and 2 or 1), "no automatic player creation")
     if expected == "positive" then assert(saved.known == (mode == "duplicate" and 0 or 1) and hits == 2 and saved.texts == 2) end
     if not options.restoreFail and not options.silentRestore then
-        assert(alpha == 0.73 and mask == "original-mask" and clicks and not wheel, mode .. ": all map properties restored")
+        assert(alpha == 0.73 and mask == (mode == "secret-mask" and secret or initialMask) and clicks and not wheel, mode .. ": all map properties restored")
         assert(#anchors == #original, mode .. ": anchors restored")
         for i, anchor in ipairs(original) do for j = 1, 5 do assert(anchors[i][j] == anchor[j], mode .. ": original point restored") end end
     else
@@ -205,9 +235,12 @@ for mode, expected in pairs({ working = "positive", ["tracking-filter"] = "posit
     dead = "dead", instance = "instance", moving = "moving", focus = "focus", hidden = "map", protected = "map",
     look = "mouse", click = "mouse", legacy = "busy", secretCursor = "api", clamp = "map", target = "target", surname = "target",
     conflict = "conflict", missing = "api", ["missing-tooltip"] = "api", ["cursor-move"] = "mouse", ["late-secret"] = "api",
+    ["unknown-mask"] = "mask", ["hook-failure"] = "api", ["secret-mask"] = "mask", ["observe-later"] = "positive",
     ["late-focus"] = "focus", zoom = "map", resize = "map", rescale = "map", ["late-combat"] = "combat",
     ["late-move"] = "moving", ["late-click"] = "mouse", ["late-mask"] = "map", stop = "stopped" }) do run(mode, expected) end
 for _, scale in ipairs({ 0.5, 1, 1.5 }) do run("working", "positive", { scale = scale, latency = 2, width = 240, height = 180, dotX = 48, dotY = -36, rounding = 0.04 }) end
+run("working", "positive", { mask = 12345 }) -- FileDataID masks survive unchanged.
+run("working", "positive", { mask = "Interface\\AddOns\\CustomMap\\SquareMask" })
 run("empty", "timeout", { delta = 1 / 20 })
 run("hidden-driver", "timeout")
 run("silent-restore-failure", "restored", { silentRestore = true })

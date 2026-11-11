@@ -46,6 +46,16 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.5.4: fix the druid experiment's preparation failure
+
+The experiment called `Minimap:GetMaskTexture()`, which Forever does not expose.
+The test double incorrectly supplied that method. The addon now observes native
+`SetMaskTexture` calls and restores their exact asset; it never guesses a default
+mask. If no mask has been observed since load, the test stops before any mutation:
+change the minimap rotation setting and return it to its initial value, then retry.
+The report now distinguishes the preparation steps. A `/reload` loads this fix.
+This fixes preparation, **not proof that native player detection works**.
+
 ## 0.5.3: targeted gesture requests and readable history
 
 Kiss/spit buttons now use the selected unit as the native commands do, instead of
@@ -82,7 +92,7 @@ outcome, failure stage and counters. Do not run another minimap scanner alongsid
 A positive result requires two matching full-name reads with blank controls
 before, between and after. The bounded 225-point grid can miss a dot; low frame
 rates can time out. **This does not yet enable a continuous radar, distant-threat
-alerts or automatic tracking in cat form.** The 73 automated experiment cases
+alerts or automatic tracking in cat form.** The 79 automated experiment cases
 test our protocol and restoration logic; only live tests can verify native reads.
 There is no specific Blizzard approval for this use. See the [investigation and
 primary sources](DEVELOPMENT.txt) and [in-game test instructions](GrudgeLedger/README.txt).
@@ -111,7 +121,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 ## Install
 
-1. Download **`GrudgeLedger-0.5.3.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.5.4.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -168,7 +178,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.3.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.4.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.
