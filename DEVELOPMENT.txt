@@ -1,4 +1,4 @@
-Grudge Ledger 0.3.1 — sources et tests
+Grudge Ledger 0.4.0 — sources et tests
 
 Le dossier GrudgeLedger est le seul dossier à installer dans Interface/AddOns.
 Les tests utilisent Lua 5.1 via Lupa, sans lancer WoW.
@@ -17,8 +17,8 @@ Revue visuelle facultative hors jeu (Windows, polices Arial/Georgia) :
 Le rendu provient des cadres Lua réels exécutés avec des API simulées.
 Polices/textures natives approximées ; exemples fictifs, aucune capture du jeu.
 
-Le renderer vérifie 16 vues : états rempli, filtré, vide, petit écran, bas de
-défilement, texture de parchemin absente, fenêtres secondaires, minimap et alertes. Il échoue si un contrôle
+Le renderer vérifie 17 vues : états rempli, filtré, vide, petit écran, bas de
+défilement, texture du livre absente, toutes les textures de parchemin absentes, fenêtres secondaires, minimap et alertes. Il échoue si un contrôle
 se chevauche, dépasse la fenêtre ou si le texte dépasse sa région. Le workflow
 Windows exécute aussi cette vérification. Ces mesures ne remplacent pas une
 revue esthétique ni un essai dans le client réel.

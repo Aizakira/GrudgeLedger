@@ -30,6 +30,8 @@ POINTS = {"TOPLEFT": (0, 0), "TOP": (.5, 0), "TOPRIGHT": (1, 0),
 
 def fontsize(obj):
     obj = str(obj or "")
+    fancy = re.search(r"Fancy(\d+)Font", obj)
+    if fancy: return int(fancy.group(1))
     if "Huge" in obj: return 20
     if "Large" in obj: return 16
     if "Small" in obj: return 10
@@ -232,7 +234,8 @@ def render(name, frames, root):
             draw.line((x+w*.2,y+h*.72,x+w*.8,y+h*.25),fill=(85,90,65,255),width=12)
             draw.text((x+w*.46,y+h*.04),"N",font=font(12),fill=(235,211,143,255))
             draw.ellipse((x+w*.47,y+h*.47,x+w*.53,y+h*.53),fill=(221,202,115,255))
-        missing_paper = name == "journal-no-paper" and "JournalPaper" in (r.get("texture") or "")
+        texture_name = r.get("texture") or ""
+        missing_paper = (name == "journal-no-paper" and any(asset in texture_name for asset in ("JournalPaper", "JournalBookSurface"))) or (name == "journal-no-book" and "JournalBookSurface" in texture_name)
         tex = None if missing_paper else actual_texture(r.get("texture"))
         if tex:
             coords = r.get("texCoord")
@@ -258,7 +261,7 @@ def render(name, frames, root):
         if r.get("text") and not r.get("fontString"):
             region_scale = lay.scale(r["id"])
             size = (r.get("fontSize") or fontsize(r.get("fontObject") or r.get("template"))) * region_scale
-            title = "Large" in str(r.get("fontObject") or r.get("template") or "")
+            title = any(style in str(r.get("fontObject") or r.get("template") or "") for style in ("Large", "Fancy"))
             f = font(size/region_scale,title)
             inset = r.get("insets") or [0,0,0,0]
             if isinstance(inset,dict): inset=list(inset.values())
@@ -353,7 +356,7 @@ def main():
     g.QA_TextWidth=lambda text,size: font(size).getlength(plaintext(text))
     g.QA_TextLines=lambda text,width,size: len(wrap(text,width,size))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
-    views=["journal","journal-no-paper","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
+    views=["journal","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
     images, report, snapshots=[],{},{}
     for name in views:
         root=g.QA.capture(name)

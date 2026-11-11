@@ -97,7 +97,7 @@ assert(ledger.actions[1].enabled == false and ledger.actions[1].disabledFont == 
 assert(ledger.actions[1].normalFont ~= ledger.actions[1].disabledFont and ledger.actions[1].normalTexture ~= ledger.actions[1].disabledTexture,
     "native button states retain separate disabled font and background")
 assert(ledger.actions[1].fontString:GetText() == "Ami", "native Button text remains attached to custom caption")
-assert(ledger.actions[1].fontString.color[1] == 0.52, "empty-state captions visibly reflect disabled state")
+assert(ledger.actions[1].fontString.color[1] == 0.50, "empty-state captions visibly reflect disabled state on the light page")
 for _, control in pairs(ledger.reactions) do assert(not control.selection:IsShown()) end
 local identity = GL.Identity("target")
 GL.SetReaction(identity, "friend")
@@ -111,9 +111,21 @@ local inactiveColor = ledger.filters.enemy.normalSurface.color
 assert(selectedColor[1] ~= inactiveColor[1], "active filter has a visible fill")
 assert(ledger.detailText:GetText():find("|cff653c20NOTES PERSONNELLES|r", 1, true), "section headings use dark ink on parchment")
 assert(ledger.detailText:GetText():find("|cff5c4029Dernier lieu", 1, true), "secondary metadata stays readable on parchment")
-assert(ledger.paper.texture:find("JournalPaper", 1, true) and ledger.illustration.texture:find("JournalIllustration", 1, true))
-near(ledger.illustration:GetWidth() / ledger.illustration:GetHeight(), 2)
-assert(ledger.illustration:GetWidth() <= 144, "header decoration must leave room for controls")
+assert(ledger.bookSurface.texture:find("JournalBookSurface", 1, true) and ledger.bookSurface.allPoints == ledger)
+assert(ledger.closeButton.anchor[3] == -29 and ledger.total.anchor[3] == -51,
+    "close and count stay on the calm leather band, away from metal corners and lower stitching")
+assert(ledger.total.anchor[2] >= 450 and ledger.total.anchor[2] + ledger.total:GetWidth() <= 685)
+for _, controls in ipairs({ ledger.filters, ledger.factions, ledger.rows }) do
+    for _, control in pairs(controls) do
+        assert(control.anchor[2] >= 36 and control.anchor[2] + control:GetWidth() <= 292, "index controls respect the worn page margins")
+    end
+end
+for _, control in ipairs(ledger.actions) do
+    assert(control.anchor[2] + control:GetWidth() <= 904, "right-hand controls stay clear of the rough outer edge")
+end
+for _, region in ipairs({ ledger.outerBorder, ledger.cover, ledger.innerBorder, ledger.grain, ledger.header, ledger.headerFill, ledger.headerLine }) do
+    assert(not region:IsShown(), "old opaque chrome cannot cover the open-book artwork or protrude through its corners")
+end
 for _, region in ipairs({ ledger.detailTitle, ledger.detailStatus, ledger.detailIdentity, ledger.detailScroll }) do
     assert(region.anchor[2] >= ledger.paper.anchor[2] and region.anchor[2] + region:GetWidth() < ledger.paper.anchor[2] + ledger.paper:GetWidth())
     assert(-region.anchor[3] + region:GetHeight() < -ledger.paper.anchor[3] + ledger.paper:GetHeight(), "reading content stays inside the page")
@@ -139,12 +151,14 @@ local function solidFallback(texture)
     error("paper texture has no independent, matching solid fallback")
 end
 local function checkPage(frame)
-    local fill = solidFallback(frame.paper)
-    assert((luminance(fill.color) + 0.05) / (luminance(frame.detailText.color) + 0.05) >= 4.5,
-        "dark page text remains readable without the parchment image")
+    for _, fill in ipairs({ frame.paper, frame.indexPaper }) do
+        assert(fill.drawLayer == frame.bookSurface.drawLayer and fill.sublevel < frame.bookSurface.sublevel)
+        assert((luminance(fill.color) + 0.05) / (luminance(frame.detailText.color) + 0.05) >= 4.5,
+            "both pages remain readable without the open-book image")
+    end
     for _, child in ipairs(frame.children) do
-        if child ~= fill and child.drawLayer == "BACKGROUND" and child.color then
-            assert(child.sublevel < fill.sublevel, "leather, lining and borders must be below the reading page")
+        if child ~= frame.paper and child ~= frame.indexPaper and child.drawLayer == "BACKGROUND" and child.color then
+            assert(child.sublevel < frame.paper.sublevel, "leather, lining and borders must be below the reading page")
         end
     end
 end
@@ -166,13 +180,26 @@ for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
         "recycled rows must update or clear the previous relation icon")
     assert(row.identity.anchor[2] + row.identity:GetWidth() < row.relation.anchor[2]
         and row.relation.anchor[2] + row.relation:GetWidth() < row:GetWidth(), "identity and explicit relation labels cannot overlap")
-    assert((luminance(row.name.color) + 0.05) / (luminance(row.bg.color) + 0.05) >= 4.5,
-        "subdued relation text stays readable on the selected index row")
-    assert((luminance(row.relation.color) + 0.05) / (luminance(row.bg.color) + 0.05) >= 4.5)
+    assert((luminance(row.bg.color) + 0.05) / (luminance(row.name.color) + 0.05) >= 4.5,
+        "relation ink stays readable on the selected ochre index row")
+    assert((luminance(row.bg.color) + 0.05) / (luminance(row.relation.color) + 0.05) >= 4.5)
+    readable(row.name.color) readable(row.identity.color) readable(row.relation.color)
+end
+for _, controls in ipairs({ ledger.filters, ledger.factions, ledger.reactions }) do
+    for _, control in pairs(controls) do
+        local textL, fillL = luminance(control.caption.color), luminance(control.normalSurface.color)
+        assert((math.max(textL, fillL) + 0.05) / (math.min(textL, fillL) + 0.05) >= 4.5,
+            "active burgundy and inactive parchment controls both preserve readable text")
+    end
+end
+for i = 6, #ledger.actions do
+    local control = ledger.actions[i]
+    assert(-control.anchor[3] > -ledger.detailScroll.anchor[3] + ledger.detailScroll:GetHeight(), "secondary actions follow the reading area")
+    assert(-control.anchor[3] + control:GetHeight() < -ledger.paper.anchor[3] + ledger.paper:GetHeight(), "secondary actions stay on the page")
 end
 ledger.search:SetText("No matching person")
 for _, control in pairs(ledger.reactions) do assert(not control.selection:IsShown() and not control.enabled) end
-assert(ledger.actions[1].fontString.color[1] == 0.52, "clearing selection restores the disabled appearance")
+assert(ledger.actions[1].fontString.color[1] == 0.50, "clearing selection restores the disabled appearance")
 GL.ShowLedger(identity.key)
 assert(ledger.detailText:GetText():find("NOTES PERSONNELLES", 1, true) < ledger.detailText:GetText():find("HISTORIQUE RÉCENT", 1, true))
 UIParent:SetSize(800, 600) ledger:Hide() ledger:Show()
@@ -202,7 +229,7 @@ function modernMethods:SetAllPoints(region) self.allPoints = region or self.pare
 -- Reproduce a session where the new parchment is unavailable but the book loads.
 function modernMethods:SetTexture(value)
     self.texture, self.requestedTexture, self.color = value, value, nil
-    if type(value) == "string" and value:find("JournalPaper", 1, true) then self.texture = nil end
+    if type(value) == "string" and (value:find("JournalPaper", 1, true) or value:find("JournalBookSurface", 1, true)) then self.texture = nil end
 end
 function modernMethods:SetPoint(...) self.anchor = { ... } end
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
@@ -228,7 +255,7 @@ for _, region in ipairs(modernMock.frames) do
     end
 end
 assert(missingPaperCount == 8, "main, note, guild windows and note editor all keep their solid fills")
-assert(GrudgeLedgerWindow.illustration.texture and not GrudgeLedgerWindow.paper.texture)
+assert(not GrudgeLedgerWindow.bookSurface.texture and GrudgeLedgerWindow.paper.color and GrudgeLedgerWindow.indexPaper.color)
 checkPage(GrudgeLedgerWindow)
 assert(#GrudgeLedger.errors == 0)
 print("PASS visual UI: native minimap frame with small borderless artwork (legacy/compartment), shape/size/scale-aware rim, unclipped parent, one drag commit, resize/visibility, selected rows and headings.")

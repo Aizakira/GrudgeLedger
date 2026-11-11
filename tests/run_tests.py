@@ -11,6 +11,7 @@ for name, expected_width, expected_height, transparent in (
     ("LedgerIcon.tga", 256, 256, True), ("LedgerBook.tga", 256, 256, True),
     ("RelationFriend.tga", 128, 128, True), ("RelationWarning.tga", 128, 128, True), ("RelationEnemy.tga", 128, 128, True),
     ("JournalIllustration.tga", 512, 256, True), ("JournalPaper.tga", 512, 512, False),
+    ("JournalBookSurface.tga", 1024, 1024, True),
 ):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")
@@ -21,11 +22,13 @@ for name, expected_width, expected_height, transparent in (
     assert len(texture) >= pixels + width * height * 4
     alpha = texture[pixels + 3:pixels + width * height * 4:4]
     if transparent:
-        assert all(alpha[y * width + x] == 0 for x in (0, width - 1) for y in (0, height - 1)), "artwork corners must be transparent"
+        # The resampled book retains its generated alpha (up to 3/255 at corners).
+        corner_limit = 3 if name == "JournalBookSurface.tga" else 0
+        assert all(alpha[y * width + x] <= corner_limit for x in (0, width - 1) for y in (0, height - 1)), "artwork corners must be transparent"
     else:
         assert all(a == 255 for a in alpha), "reading parchment must remain opaque"
     assert any(alpha), "artwork must not be empty"
-print("PASS artwork: seven uncompressed RGBA TGAs, correct dimensions, cutout alpha and opaque reading paper", flush=True)
+print("PASS artwork: eight uncompressed RGBA TGAs, correct dimensions, cutout alpha and opaque reading paper", flush=True)
 compiler = LuaRuntime(unpack_returned_tuples=True)
 files = list(addon.glob("*.lua"))
 for file in files:

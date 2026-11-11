@@ -1,4 +1,4 @@
-Grudge Ledger — 0.3.1
+Grudge Ledger — 0.4.0
 Distributed under the GNU General Public License, version 3 (see LICENSE).
 
 Menu integration and nameplate/tooltip lifecycle techniques are adapted from
@@ -41,3 +41,9 @@ quiet parchment (Media/JournalPaper.tga, 512x512) were originally generated with
 OpenAI's built-in image tool, then converted to uncompressed RGBA TGA. They are
 distributed under the same GPLv3 terms. The illustration has a transparent
 background; the reading paper is opaque. No text is baked into either asset.
+
+The open journal surface (Media/JournalBookSurface.tga, 1024x1024, displayed at
+960x700) was generated and refined with OpenAI's built-in image tool for 0.4.0.
+It combines aged parchment, stitched red leather and brass corners. All labels
+and controls remain native Lua UI elements; no text is baked into the artwork.
+It is distributed under the same GPLv3 terms; no Overlord artwork is included.

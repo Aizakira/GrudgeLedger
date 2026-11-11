@@ -30,11 +30,11 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 ![Aperçu hors jeu du journal sur parchemin, avec des personnages fictifs](docs/journal.png)
 
-Le journal associe un index sombre à une page de parchemin, une encre brune et une illustration originale de livre ouvert. La direction artistique s'inspire d'Overlord, sans reprendre ses dessins. Les notes passent en premier et le classement actif reste visible au-dessus des actions. Cet aperçu provient du véritable agencement Lua, simulé hors jeu avec des personnages fictifs ; les polices et icônes natives sont approximées.
+Le journal est un livre ouvert : deux pages de parchemin vieilli, du cuir rouge cousu, des tranches de feuilles et de fines ferrures. L’index conserve les icônes et les libellés de relation, avec une encre sombre lisible. Le classement et la prise de notes restent en haut ; les actions moins fréquentes passent au pied de la page. L’inspiration vient d’Overlord, avec des illustrations originales. Cet aperçu provient du véritable agencement Lua, simulé hors jeu avec des personnages fictifs ; les polices et icônes natives sont approximées.
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.3.1.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.4.0.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -70,7 +70,7 @@ Forever peut masquer le journal de combat. L'addon consulte aussi son récapitul
 
 Les boutons et avis manuels conservent leur priorité, même après une emote. Les gestes seuls ne verrouillent plus le classement : un `/spit` ne bloque pas le passage en ennemi après une mort PvP. La détection des duels dépend des signaux disponibles.
 
-Treize scripts de tests automatisés, dont 69 scénarios de suivi PvP, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
+Treize scripts de tests automatisés, dont 71 scénarios de suivi, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
 
 ## Chacun son livre
 
@@ -92,7 +92,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.3.1.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.4.0.zip GrudgeLedger
 ```
 
 ## Licence et crédits
