@@ -18,6 +18,7 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 
 - **Right-click actions:** a compact “Grudge Ledger” submenu on supported player portraits and chat names. Mark a friend, caution or enemy, give a positive/negative opinion, add a note or open their record.
 - **Visible reminders:** green hearts for friends, orange watchful eyes for caution and red broken hearts for enemies on visible player nameplates; optional name coloring and tooltip notes.
+- **Faction filters and character details:** combine friends/caution/enemies with Alliance or Horde, with a count of the matching people. Race and class appear under each name and in the selected record, with native icons when available. Unknown factions have their own filter; older records fill in on the next observed encounter. Race never determines faction.
 - **PvP memory:** records observed aggression and deaths. Inferred events are explicitly marked as probable and can be corrected without erasing your personal notes.
 - **Friendly and unfriendly gestures:** your own targeted emotes can adjust camaraderie, including toward the opposing faction. Repeated emotes are rate-limited.
 - **Guild opinions:** mark an entire guild, with individual exceptions.
@@ -26,7 +27,7 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 
 ## Install
 
-1. Download **`GrudgeLedger-0.2.4.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.2.5.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -56,7 +57,7 @@ Targets **Forever interface 16001**; development used client **1.60.1.70862**. R
 
 Forever may hide combat-log information. Inference from observed units, health and honor is imperfect: probable events are separated from confirmed ones, ambiguous cases are skipped and the journal offers corrections. Your explicit classifications take precedence. Duel detection also depends on the available client signals.
 
-The existing offline suite covers twelve test scripts, including 45 PvP tracking scenarios. These tests simulate WoW APIs; they do not replace actual gameplay testing. This remains an early version, and bug reports are welcome.
+The existing offline suite covers thirteen test scripts, including 45 PvP tracking scenarios. These tests simulate WoW APIs; they do not replace actual gameplay testing. This remains an early version, and bug reports are welcome.
 
 ## Your journal stays yours
 
@@ -76,7 +77,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.2.4.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.2.5.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

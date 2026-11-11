@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.2.4", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.2.5", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -80,8 +80,12 @@ function GL.Identity(unit)
     if guid and mine and guid == mine then return nil end
     local identity = GL.IdentityFromName(name, surname, guid)
     if not identity then return nil end
-    local _, class = GL.Safe(UnitClass, unit)
-    identity.class = GL.Clean(class, "string")
+    local className, class = GL.Safe(UnitClass, unit)
+    identity.class, identity.className = cleanName(class), cleanName(className)
+    local raceName, race = GL.Safe(UnitRace, unit)
+    identity.race, identity.raceName = cleanName(race), cleanName(raceName)
+    local sex = GL.Safe(UnitSex, unit)
+    identity.sex = (sex == 2 or sex == 3) and sex or nil
     identity.faction = GL.Clean(GL.Safe(UnitFactionGroup, unit), "string")
     identity.level = GL.Clean(GL.Safe(UnitLevel, unit), "number")
     if type(GetGuildInfo) == "function" then
@@ -118,6 +122,16 @@ function GL.Get(identity)
 end
 
 local function merge(provisional, record)
+    for _, field in ipairs({ "class", "race" }) do
+        if record[field] == nil and provisional[field] ~= nil then
+            record[field], record[field .. "Name"] = provisional[field], provisional[field .. "Name"]
+        elseif record[field] == provisional[field] and record[field .. "Name"] == nil then
+            record[field .. "Name"] = provisional[field .. "Name"]
+        end
+    end
+    for _, field in ipairs({ "faction", "sex" }) do
+        if record[field] == nil then record[field] = provisional[field] end
+    end
     if type(provisional.friendPresence) == "table" then
         record.friendPresence = type(record.friendPresence) == "table" and record.friendPresence or {}
         for character, seen in pairs(provisional.friendPresence) do
@@ -168,9 +182,15 @@ function GL.Remember(identity)
         if clean[field] then record[field] = clean[field] end
     end
     record.fullName = record.name .. (record.surname and " " .. record.surname or "")
-    for _, field in ipairs({ "class", "faction" }) do
-        record[field] = GL.Clean(identity[field], "string") or record[field]
+    for _, field in ipairs({ "class", "race" }) do
+        local value = cleanName(identity[field])
+        local name = cleanName(identity[field .. "Name"])
+        if value and value ~= record[field] then record[field], record[field .. "Name"] = value, nil end
+        if name and (not record[field] or value == record[field]) then record[field .. "Name"] = name end
     end
+    record.faction = cleanName(identity.faction) or record.faction
+    local sex = GL.Clean(identity.sex, "number")
+    if sex == 2 or sex == 3 then record.sex = sex end
     record.level = GL.Clean(identity.level, "number") or record.level
     record.realm = cleanName(identity.realm) or record.realm
     if identity.guildKnown then record.guild = cleanName(identity.guild)

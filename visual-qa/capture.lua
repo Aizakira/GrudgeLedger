@@ -145,6 +145,9 @@ local records = {}
 for i, v in ipairs(examples) do
     local id = GL.IdentityFromName(v[1], v[2], "Player-1-qa" .. i)
     id.guild, id.realm, id.guildKnown = v[4], "Forever", true
+    id.faction = i % 2 == 0 and "Alliance" or "Horde"
+    id.class, id.className = "SHAMAN", "Chaman"
+    id.race, id.raceName, id.sex = i % 2 == 0 and "Dwarf" or "Orc", i % 2 == 0 and "Nain" or "Orc", 2
     records[i] = GL.SetReaction(id, v[3])
 end
 GL.SetGuildReaction("Les Veilleurs de l'Aube", "friend", "Bons compagnons, fiables et patients.")
@@ -175,6 +178,11 @@ QA = { mock = mock, records = records, selected = record }
 function QA.capture(name)
     hideWindows()
     if name == "journal" then GL.ShowLedger(record.key) return GrudgeLedgerWindow
+    elseif name == "journal-horde-friends" then
+        GL.ShowLedger(records[1].key)
+        GrudgeLedgerWindow.filters.friend.scripts.OnClick()
+        GrudgeLedgerWindow.factions.Horde.scripts.OnClick()
+        return GrudgeLedgerWindow
     elseif name == "journal-empty" then GL.ShowLedger() GrudgeLedgerWindow.search:SetText("Aucune correspondance QA") return GrudgeLedgerWindow
     elseif name == "guilds" then GL.ShowGuilds(record) return GrudgeLedgerGuilds
     elseif name == "note" then GL.EditNote(record) GrudgeLedgerNote.edit:SetText("Une bonne équipe au monastère.\n\nJoueur patient, consignes claires et partage équitable du butin. À retrouver pour une prochaine sortie.") return GrudgeLedgerNote

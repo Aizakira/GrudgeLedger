@@ -20,6 +20,7 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 - **Un menu au clic droit** sur les portraits et noms du chat pris en charge : Ami, Méfiance, Ennemi, avis positif ou négatif, note et fiche personnelle.
 - **Des repères visuels** sur les barres de noms visibles : cœur vert pour les amis, œil orange pour la méfiance, cœur brisé rouge pour les ennemis. La coloration supplémentaire des noms est facultative.
+- **Des filtres de faction et des identités détaillées** : combiner Amis, Méfiance ou Ennemis avec Alliance ou Horde, avec le nombre de personnes correspondantes. Race et classe apparaissent sous chaque nom et dans la fiche, avec leurs icônes natives lorsqu’elles sont disponibles. Les factions inconnues ont leur filtre ; les anciennes fiches se complètent à la prochaine rencontre observée. La race ne détermine jamais la faction.
 - **Un historique PvP** des agressions et des morts observées, avec distinction entre faits confirmés et déductions probables. Une attribution erronée peut être corrigée.
 - **La camaraderie par les emotes** que vous envoyez à un joueur ciblé, y compris de l'autre faction. Les répétitions sont limitées pour éviter de gonfler les scores.
 - **Des avis sur des guildes entières**, avec des exceptions individuelles.
@@ -28,7 +29,7 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.2.4.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.2.5.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -62,7 +63,7 @@ Prévu pour **Forever, interface 16001** ; développé avec le client **1.60.1.7
 
 Forever peut masquer le journal de combat. Les déductions PvP ne sont donc pas infaillibles : elles sont indiquées comme probables, les situations ambiguës sont ignorées et vous pouvez corriger l'historique. Vos classements explicites restent prioritaires. La détection des duels dépend elle aussi des signaux disponibles.
 
-Douze scripts de tests automatisés, dont 45 scénarios de suivi PvP, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
+Treize scripts de tests automatisés, dont 45 scénarios de suivi PvP, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
 
 ## Chacun son livre
 
@@ -84,7 +85,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.2.4.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.2.5.zip GrudgeLedger
 ```
 
 ## Licence et crédits

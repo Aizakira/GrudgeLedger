@@ -331,7 +331,7 @@ def main():
     g.QA_TextWidth=lambda text,size: font(size).getlength(plaintext(text))
     g.QA_TextLines=lambda text,width,size: len(wrap(text,width,size))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
-    views=["journal","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
+    views=["journal","journal-horde-friends","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
     images, report, snapshots=[],{},{}
     for name in views:
         root=g.QA.capture(name)

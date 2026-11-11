@@ -3,9 +3,11 @@ local GL = GrudgeLedger
 local ledger, noteWindow, settingsWindow, minimapButton, guildWindow
 local correctionWindow, diagnosticWindow
 local selectedKey, filter, offset = nil, "all", 0
+local factionFilter = "all"
 local drafts = {}
 local guildDrafts = {}
 local relationNames = { friend = "Ami", warning = "Méfiance", enemy = "Ennemi", neutral = "Neutre" }
+local factionNames = { Alliance = "Alliance", Horde = "Horde", Neutral = "Neutre" }
 local colors = { friend = { 0.3, 0.95, 0.55 }, warning = { 1, 0.62, 0.12 }, enemy = { 1, 0.3, 0.3 }, neutral = { 0.75, 0.75, 0.75 } }
 local pvpNames = { kill = "Victoire", death = "Mort", aggression = "Agression" }
 local theme = { paper = { 0.91, 0.86, 0.74 }, muted = { 0.65, 0.59, 0.48 }, gold = { 0.48, 0.35, 0.18 },
@@ -20,6 +22,37 @@ local function surface(parent, color, inset)
 end
 
 local function plain(text) return tostring(text or ""):gsub("|", "||") end
+local function identityLabels(record)
+    local classes = record.sex == 3 and LOCALIZED_CLASS_NAMES_FEMALE or LOCALIZED_CLASS_NAMES_MALE
+    return factionNames[record.faction] or "Faction inconnue", record.raceName or record.race or "Race inconnue",
+        record.className or (classes and classes[record.class]) or record.class or "Classe inconnue"
+end
+local function identityAtlas(texture, atlas)
+    texture:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+    texture:SetTexCoord(0, 1, 0, 1)
+    GL.Safe(texture.SetVertexColor, texture, 1, 1, 1)
+    if atlas and GL.Safe(C_Texture and C_Texture.GetAtlasInfo, atlas) then
+        return pcall(texture.SetAtlas, texture, atlas)
+    end
+    return false
+end
+
+local function identityIcons(row, record)
+    local class = GL.Clean(record.class, "string")
+    local atlas = class and GL.Safe(GetClassAtlas, (class:gsub("[A-Z]", string.lower)))
+    if not identityAtlas(row.classIcon, atlas) then
+        local coords = class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
+        if type(coords) == "table" and #coords == 4 then
+            row.classIcon:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")
+            row.classIcon:SetTexCoord(unpack(coords))
+        end
+    end
+    local race = GL.Clean(record.race, "string")
+    local sex = record.sex == 2 and "male" or record.sex == 3 and "female"
+    -- ponytail: race atlas names vary across clients; use only an atlas the client
+    -- confirms, otherwise keep '?' and the race label. Add verified aliases if needed.
+    identityAtlas(row.raceIcon, race and sex and ("raceicon128-" .. (race:gsub("[A-Z]", string.lower)) .. "-" .. sex))
+end
 local function subdued(text) return "|cffa6967a" .. text .. "|r" end
 local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
 local function label(parent, text, size, x, y, width)
@@ -365,8 +398,11 @@ local function renderDetail()
         ledger.detailTitle:SetTextColor(c[1], c[2], c[3])
         local pvp = record.pvp or {}
         local guildRule = GL.GetGuildRule(record)
+        local faction, race, class = identityLabels(record)
         local lines = {
             relationNames[relation] .. " — " .. (({ manual = "choix personnel", pvp = "historique PvP", guild = "avis hérité de la guilde", neutral = "aucun avis" })[GL.RelationSource(record)] or "classement automatique"),
+            "Faction : " .. plain(faction),
+            "Race : " .. plain(race) .. " — Classe : " .. plain(class),
             "Réputation personnelle : " .. (record.reputation ~= nil and tostring(record.reputation) or "aucun avis"),
             "Guilde : " .. plain(record.guild or "aucune guilde connue"),
             guildRule and guildRule.note and guildRule.note ~= "" and "Note de guilde : " .. plain(guildRule.note) or "",
@@ -493,11 +529,16 @@ local function buildLedger()
         local value = option[2]
         f.filters[value] = button(f, option[1], 16 + (i - 1) * 65, -140, 61, function() filter, offset = value, 0 refresh() end)
     end
+    f.factions = {}
+    for i, option in ipairs({ { "Toutes", "all" }, { "Alliance", "Alliance" }, { "Horde", "Horde" }, { "Inconnue", "unknown" } }) do
+        local value = option[2]
+        f.factions[value] = button(f, option[1], 16 + (i - 1) * 65, -172, 61, function() factionFilter, offset = value, 0 refresh() end)
+    end
     f.rows = {}
-    for i = 1, 11 do
+    for i = 1, 8 do
         local row = CreateFrame("Button", nil, f)
-        row:SetPoint("TOPLEFT", 16, -174 - (i - 1) * 31)
-        row:SetSize(254, 29)
+        row:SetPoint("TOPLEFT", 16, -206 - (i - 1) * 38)
+        row:SetSize(254, 36)
         row.bg = row:CreateTexture(nil, "BACKGROUND")
         row.bg:SetAllPoints()
         row.bg:SetColorTexture(theme.red[1], theme.red[2], theme.red[3], 1)
@@ -510,18 +551,30 @@ local function buildLedger()
         hover:SetAllPoints()
         hover:SetColorTexture(0.57, 0.39, 0.18, 0.16)
         row:SetHighlightTexture(hover)
-        row.name = label(row, "", nil, 8, -7, 237)
+        row.name = label(row, "", nil, 8, -2, 237)
         row.name:SetHeight(18)
         GL.Safe(row.name.SetWordWrap, row.name, false)
         GL.Safe(row.name.SetMaxLines, row.name, 1)
+        row.raceIcon = row:CreateTexture(nil, "ARTWORK")
+        row.raceIcon:SetPoint("TOPLEFT", 8, -19)
+        row.raceIcon:SetSize(15, 15)
+        row.classIcon = row:CreateTexture(nil, "ARTWORK")
+        row.classIcon:SetPoint("TOPLEFT", 26, -19)
+        row.classIcon:SetSize(15, 15)
+        row.identity = label(row, "", nil, 46, -20, 199)
+        row.identity:SetFontObject("GameFontHighlightSmall")
+        row.identity:SetTextColor(unpack(theme.muted))
+        row.identity:SetHeight(14)
+        GL.Safe(row.identity.SetWordWrap, row.identity, false)
+        GL.Safe(row.identity.SetMaxLines, row.identity, 1)
         row:SetScript("OnClick", function(self) selectedKey = self.key f.detailScroll:SetVerticalScroll(0) refresh() end)
         f.rows[i] = row
     end
-    button(f, "Précédent", 16, -522, 115, function() offset = math.max(0, offset - 11) refresh() end)
-    f.next = button(f, "Suivant", 144, -522, 115, function() offset = offset + 11 refresh() end)
+    button(f, "Précédent", 16, -522, 115, function() offset = math.max(0, offset - #f.rows) refresh() end)
+    f.next = button(f, "Suivant", 144, -522, 115, function() offset = offset + #f.rows refresh() end)
     f.total = label(f, "", nil, 16, -558, 270)
     f.total:SetTextColor(unpack(theme.muted))
-    f.empty = label(f, "Aucune personne ici.\n\nAjoute un joueur avec « Ajouter la cible » ou utilise le clic droit sur son portrait.", nil, 27, -193, 232)
+    f.empty = label(f, "Aucune personne ici.\n\nChange les filtres ou ajoute un joueur avec « Ajouter la cible » ou le clic droit sur son portrait.", nil, 27, -220, 232)
     f.empty:SetTextColor(unpack(theme.muted))
     f.detailTitle = label(f, "", "large", 294, -58, 506)
     f.detailTitle:SetHeight(25)
@@ -564,16 +617,25 @@ end
 refresh = function()
     if not ledger or not ledger:IsShown() or not GL.db then return end
     local text = (ledger.search:GetText() or ""):lower()
+    local selected = currentRecord()
+    selectedKey = selected and selected.key
     local records = {}
+    local selectionVisible = false
     for _, record in pairs(GL.db.players) do
         local name = (record.fullName or record.name or record.key):lower()
-        if (filter == "all" or GL.Relation(record) == filter) and name:find(text, 1, true) then records[#records + 1] = record end
+        local matchesFaction = factionFilter == "all" or record.faction == factionFilter
+            or (factionFilter == "unknown" and not factionNames[record.faction])
+        if matchesFaction and (filter == "all" or GL.Relation(record) == filter) and name:find(text, 1, true) then
+            records[#records + 1] = record
+            if selectedKey == record.key then selectionVisible = true end
+        end
     end
+    if not selectionVisible then selectedKey = nil end
     table.sort(records, function(a, b)
         if (a.lastSeen or 0) ~= (b.lastSeen or 0) then return (a.lastSeen or 0) > (b.lastSeen or 0) end
         return (a.fullName or a.name or a.key) < (b.fullName or b.name or b.key)
     end)
-    offset = math.min(offset, math.max(0, math.floor((#records - 1) / 11) * 11))
+    offset = math.min(offset, math.max(0, math.floor((#records - 1) / #ledger.rows) * #ledger.rows))
     for i, row in ipairs(ledger.rows) do
         local record = records[offset + i]
         if record then
@@ -582,18 +644,25 @@ refresh = function()
             local color = colors[relation]
             row.name:SetText((relation == "friend" and "+ " or relation == "warning" and "? " or relation == "enemy" and "! " or "  ") .. plain(record.fullName or record.name or record.key))
             row.name:SetTextColor(color[1], color[2], color[3])
+            local faction, race, class = identityLabels(record)
+            row.identity:SetText(plain(faction .. " · " .. race .. " · " .. class))
+            identityIcons(row, record)
             row.bg:SetAlpha(selectedKey == record.key and 1 or 0.35)
             if selectedKey == record.key then row.selection:Show() else row.selection:Hide() end
             row:Show()
         else row.key = nil row:Hide() end
     end
-    ledger.total:SetText(tostring(#records) .. " personne(s) — " .. (relationNames[filter] or "Tous"))
+    ledger.total:SetText(tostring(#records) .. " personne(s) · " .. (relationNames[filter] or "Tous") .. " · " .. (factionNames[factionFilter] or (factionFilter == "unknown" and "Inconnue" or "Toutes")))
     if #records == 0 then ledger.empty:Show() else ledger.empty:Hide() end
     for value, control in pairs(ledger.filters) do
         local c = value == filter and theme.red or theme.panel
         control.normalSurface:SetColorTexture(c[1], c[2], c[3], 1)
     end
-    ledger.next:SetEnabled(offset + 11 < #records)
+    for value, control in pairs(ledger.factions) do
+        local c = value == factionFilter and theme.red or theme.panel
+        control.normalSurface:SetColorTexture(c[1], c[2], c[3], 1)
+    end
+    ledger.next:SetEnabled(offset + #ledger.rows < #records)
     renderDetail()
 end
 
@@ -603,7 +672,7 @@ function GL.ShowLedger(key)
     if key then
         local record = GL.Get(key)
         selectedKey = record and record.key or nil
-        filter, offset = "all", 0
+        filter, factionFilter, offset = "all", "all", 0
         ledger.search:SetText("")
         ledger.detailScroll:SetVerticalScroll(0)
     end

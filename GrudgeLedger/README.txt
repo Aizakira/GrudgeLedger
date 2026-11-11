@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.2.4
+GRUDGE LEDGER — 0.2.5
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -21,6 +21,20 @@ La fiche réunit les notes, les groupes partagés, les agressions et les morts P
 « Corriger le PvP » permet d'annuler un événement attribué à tort. Ses effets
 disparaissent des compteurs et du classement automatique ; il reste marqué
 « annulé » dans l'historique. Les notes et les choix personnels sont conservés.
+
+FILTRES, RACE ET CLASSE
+Dans le journal, choisir une relation (Tous, Amis, Méfiance, Ennemis), puis une
+faction (Toutes, Alliance, Horde, Inconnue). Les deux filtres et la recherche se
+combinent ; le compteur indique le nombre de fiches correspondantes. Une faction
+Neutre fournie par le jeu reste connue et apparaît dans Toutes.
+Chaque ligne affiche la faction, la race et la classe. Les icônes natives de race
+et de classe sont utilisées si le client les fournit ; sinon un point
+d'interrogation reste accompagné du libellé connu. La fiche affiche les libellés
+complets. La liste conserve huit personnes par page pour rester compacte.
+Les informations viennent du jeu, sans déduire la faction ni interdire de
+combinaisons race/classe. Une ancienne fiche sans race se complète lors d'une
+prochaine observation. Une information cachée ou indisponible ne remplace pas
+une ancienne valeur connue. Notes et classements restent conservés.
 
 MARQUEURS ET ALERTES
 Cœur vert : ami. Œil orange : méfiance/agression.
@@ -110,6 +124,12 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+FILTRES ET IDENTITÉS 0.2.5
+Filtres de faction cumulables avec les relations, compteur de sélection, race
+et classe avec icônes natives. Les observations partielles et les fusions de
+fiches conservent des libellés cohérents. Une sélection masquée par les filtres
+cesse d’être active ; une fiche identifiée plus précisément reste sélectionnée.
 
 RENCONTRES ET ICÔNES 0.2.4
 Les alertes amicales suivent désormais le temps sans présence observée, au lieu
