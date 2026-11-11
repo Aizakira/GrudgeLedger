@@ -39,6 +39,33 @@ assert(legacy.notes[1].text == "Keep this note" and legacy.history[3].reputation
 GL.InitDB()
 assert(legacy.reputation == -9)
 
+-- A later Neutral click used to pin this same outstanding debt at zero.
+legacy.reaction, legacy.reactionSource, legacy.reputation = "neutral", "manual", 0
+table.insert(legacy.history, {kind="reaction", reaction="neutral"})
+GL.InitDB()
+assert(legacy.reputation == -9 and GL.Relation(legacy) == "warning" and legacy.reactionSource == "automatic")
+assert(GL.RelationConfidence(legacy) == "probable" and #legacy.history == 5)
+assert(legacy.history[5].reaction == "neutral" and legacy.history[3].reputation == -11 and legacy.notes[1].text == "Keep this note")
+GL.InitDB()
+GL.SetReaction(legacy, "neutral")
+assert(legacy.reputation == -9 and #legacy.history == 5, "reload and repeated automatic action cannot reset debt or duplicate history")
+GL.RecordPvP(legacy, "kill", "confirmed", "Direct", "migrated-kill")
+assert(legacy.reputation == -8 and GL.Relation(legacy) == "warning")
+assert(GL.VoidPvP(legacy, legacy.history[#legacy.history]) and legacy.reputation == -9)
+GL.SetReaction(legacy, "friend")
+GL.SetReaction(legacy, "neutral")
+assert(legacy.reputation == -9 and GL.Relation(legacy) == "warning")
+assert(legacy.history[#legacy.history].source == "automatic", "returning to automatic is recorded honestly")
+GL.AdjustReputation(legacy, -1, "SPIT", "emote")
+assert(legacy.reputation == -10 and GL.Relation(legacy) == "enemy", "gestures keep working after automatic migration")
+
+-- A genuine zero reached with a manual opinion remains an explicit choice.
+local zero = GL.SetReaction(GL.IdentityFromName("Manual", "Zero", "Player-1-manual-zero"), "warning")
+GL.AdjustReputation(zero, 1, "Opinion", "manual")
+GL.RecordPvP(zero, "death", "confirmed", "Direct", "manual-zero-death")
+GL.InitDB()
+assert(zero.reputation == 0 and GL.Relation(zero) == "neutral" and zero.reactionSource == "manual")
+
 -- Positive gestures do not hide outstanding PvP danger; corrections restore them.
 local friendly = GL.IdentityFromName("Gestures", "Balance", "Player-1-gestures-balance")
 local f = GL.AdjustReputation(friendly, 1, "KISS", "emote")

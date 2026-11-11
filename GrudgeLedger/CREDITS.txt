@@ -1,4 +1,4 @@
-Grudge Ledger — 0.4.3
+Grudge Ledger — 0.4.4
 Distributed under the GNU General Public License, version 3 (see LICENSE).
 
 Menu integration and nameplate/tooltip lifecycle techniques are adapted from

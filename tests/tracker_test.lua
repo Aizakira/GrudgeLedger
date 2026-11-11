@@ -856,11 +856,14 @@ test("reload while already dead cannot blame newly visible attackers", function(
 end)
 
 test("manual opinions override fatal inference but guild friendship does not", function()
-    for _, manual in ipairs({ "friend", "neutral" }) do
+    for _, manual in ipairs({ "friend", "warning" }) do
         fixture() start() local id = GL.Identity("target") GL.SetReaction(id, manual)
         T.HandleEvent("PLAYER_DEAD")
         assert(GL.Relation(GL.Get(id)) == manual and GL.Get(id).pvp.probableDeaths == 1)
     end
+    fixture() start() local automatic = GL.SetReaction(GL.Identity("target"), "neutral")
+    T.HandleEvent("PLAYER_DEAD")
+    assert(GL.Relation(automatic) == "enemy" and automatic.reputation == -10)
     fixture() start() local id = GL.Identity("target") id.guild, id.realm = "Friendly Guild", "Forever"
     GL.Remember(id) GL.SetGuildReaction(id, "friend")
     T.HandleEvent("PLAYER_DEAD")

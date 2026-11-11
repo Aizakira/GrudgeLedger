@@ -50,7 +50,7 @@ local function onMenu(_, root, data)
     if not captured.guild and not GL.Clean(data.unit, "string") and known then captured.guild, captured.realm = known.guild, known.realm end
     root:CreateDivider()
     root = root:CreateButton("Grudge Ledger")
-    for _, choice in ipairs({ { "Ami", "friend" }, { "Méfiance", "warning" }, { "Ennemi", "enemy" }, { "Neutre", "neutral" } }) do
+    for _, choice in ipairs({ { "Ami", "friend" }, { "Méfiance", "warning" }, { "Ennemi", "enemy" }, { "Automatique", "neutral" } }) do
         local relation = choice[2]
         root:CreateButton(choice[1], function() GL.SetReaction(captured, relation) end)
     end

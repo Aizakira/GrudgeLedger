@@ -480,7 +480,8 @@ local function renderDetail()
     for _, b in ipairs(ledger.actions) do b:SetEnabled(record ~= nil) end
     ledger.guildButton:SetEnabled(record ~= nil and record.guild ~= nil)
     for reaction, control in pairs(ledger.reactions) do
-        local active = record and GL.Relation(record) == reaction
+        local active = record and (record.reactionSource == "automatic" and reaction == "neutral"
+            or record.reactionSource ~= "automatic" and GL.Relation(record) == reaction)
         local color = active and theme.red or theme.paper
         control.normalSurface:SetColorTexture(unpack(color))
         control.normalSurface:SetAlpha(active and 1 or 0.35)
@@ -494,13 +495,13 @@ local function renderDetail()
         ledger.detailStatus:SetText("Sélectionne une personne dans l'index.")
         ledger.detailStatus:SetTextColor(unpack(theme.inkMuted))
         ledger.detailIdentity:SetText("Rencontres, alliances et vieilles rancunes.")
-        ledger.detailText:SetText("Tu peux aussi sélectionner un joueur, puis utiliser « Ajouter la cible ».\n\nLe clic droit sur son portrait ou son nom dans le chat donne accès à Ami, Méfiance, Ennemi, Neutre et aux avis +1 / -1.")
+        ledger.detailText:SetText("Tu peux aussi sélectionner un joueur, puis utiliser « Ajouter la cible ».\n\nLe clic droit sur son portrait ou son nom dans le chat donne accès à Ami, Méfiance, Ennemi, Automatique et aux avis +1 / -1.")
     else
         local relation = GL.Relation(record)
         local c = inkColors[relation]
         ledger.detailTitle:SetText(plain(record.fullName or record.name or record.key))
         ledger.detailIcon:SetTexture(relationIcons[relation] and media .. relationIcons[relation] or GL.icon)
-        ledger.detailStatus:SetText(relationNames[relation] .. " — " .. (({ manual = "choix personnel", emote = "gestes envoyés", pvp = "historique PvP", guild = "avis hérité de la guilde", neutral = "aucun avis" })[GL.RelationSource(record)] or "classement automatique"))
+        ledger.detailStatus:SetText(relationNames[relation] .. " — " .. (({ manual = "choix personnel", emote = "gestes envoyés", pvp = "historique PvP", guild = "avis hérité de la guilde", automatic = "solde automatique", neutral = "aucun avis" })[GL.RelationSource(record)] or "classement automatique"))
         ledger.detailStatus:SetTextColor(c[1], c[2], c[3])
         local pvp = record.pvp or {}
         local guildRule = GL.GetGuildRule(record)
@@ -536,7 +537,7 @@ local function renderDetail()
             local e = history[i]
             local kind = ({ kill = "Victoire", death = "Mort", aggression = "Agression", reputation = "Avis", grouped = "Groupe partagé", group = "Groupe partagé", reaction = "Classement", note = "Note ajoutée" })[e.kind] or plain(e.kind)
             local confidence = e.confidence == "probable" and " (probable)" or e.confidence == "confirmed" and " (confirmé)" or ""
-            local opinion = e.reaction and " : " .. (relationNames[e.reaction] or plain(e.reaction)) or ""
+            local opinion = e.reaction and " : " .. (e.source == "automatic" and "Automatique" or relationNames[e.reaction] or plain(e.reaction)) or ""
             local zone = e.zone and " — " .. plain(e.zone) or ""
             local delta = type(e.delta) == "number" and " (" .. (e.delta >= 0 and "+" or "") .. tostring(e.delta) .. ")" or ""
             lines[#lines + 1] = stamp(e.time) .. " — " .. kind .. confidence .. (e.voided and " — annulé" or "") .. delta .. opinion .. zone
@@ -735,7 +736,7 @@ local function buildLedger()
     f.detailIdentity:SetHeight(17)
     GL.Safe(f.detailIdentity.SetWordWrap, f.detailIdentity, false)
     f.actions, f.reactions = {}, {}
-    for i, option in ipairs({ { "Ami", "friend" }, { "Méfiance", "warning" }, { "Ennemi", "enemy" }, { "Neutre", "neutral" } }) do
+    for i, option in ipairs({ { "Ami", "friend" }, { "Méfiance", "warning" }, { "Ennemi", "enemy" }, { "Automatique", "neutral" } }) do
         local value = option[2]
         local control = button(f, option[1], 350 + (i - 1) * 92, -203, 86, function()
             local record = currentRecord()
@@ -774,7 +775,7 @@ local function buildLedger()
     f.detailText:SetTextColor(unpack(theme.ink))
     f.detailText:SetSpacing(4)
     f.detailScroll:SetScrollChild(f.detailBody)
-    local hint = label(f, "Ton choix personnel reste prioritaire.", nil, 350, -605, 554)
+    local hint = label(f, "Automatique suit le solde ; les autres choix restent prioritaires.", nil, 350, -605, 554)
     hint:SetFontObject("GameFontHighlightSmall")
     hint:SetHeight(15)
     hint:SetTextColor(unpack(theme.inkMuted))
@@ -1076,7 +1077,7 @@ SlashCmdList.GRUDGELEDGER = function(message)
         local identity = GL.Identity("target")
         if not identity or not identity.guild then GL.Print("Sélectionne un joueur dont la guilde est connue.") return end
         GL.SetGuildReaction(identity, reaction)
-    elseif command == "+" or command == "-" or command == "ami" or command == "ennemi" or command == "neutre"
+    elseif command == "+" or command == "-" or command == "ami" or command == "ennemi" or command == "neutre" or command == "auto" or command == "automatique"
         or command == "mefiance" or command == "méfiance" or command == "note" then
         local identity = GL.Identity("target")
         if not identity then GL.Print("Sélectionne un joueur pour cette action.") return end
@@ -1089,9 +1090,9 @@ SlashCmdList.GRUDGELEDGER = function(message)
                 if not ok then GL.Print(err or "Impossible d'ajouter cette note.") end
             end
         else
-            GL.SetReaction(identity, ({ ami = "friend", ennemi = "enemy", neutre = "neutral", mefiance = "warning", ["méfiance"] = "warning" })[command])
+            GL.SetReaction(identity, ({ ami = "friend", ennemi = "enemy", neutre = "neutral", auto = "neutral", automatique = "neutral", mefiance = "warning", ["méfiance"] = "warning" })[command])
         end
     elseif command == "" then
         if ledger and ledger:IsShown() then ledger:Hide() else GL.ShowLedger() end
-    else GL.Print("Commandes : /gl, /gl + [raison], /gl - [raison], /gl ami|ennemi|neutre|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl settings, /gl debug") end
+    else GL.Print("Commandes : /gl, /gl + [raison], /gl - [raison], /gl ami|ennemi|auto|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl settings, /gl debug") end
 end

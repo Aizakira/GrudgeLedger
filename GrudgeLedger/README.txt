@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.4.3
+GRUDGE LEDGER — 0.4.4
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -10,7 +10,7 @@ Aucune dépendance à ces deux addons n'est nécessaire.
 UTILISATION
 Clic droit sur le portrait d'un joueur ou son nom dans le chat, puis survoler
 « Grudge Ledger » : les actions s'ouvrent dans un sous-menu natif du jeu.
-Choisir Ami, Méfiance, Ennemi, Neutre, un avis +1/-1, une note ou sa fiche.
+Choisir Ami, Méfiance, Ennemi, Automatique, un avis +1/-1, une note ou sa fiche.
 Les actions sur la guilde sont regroupées dans son sous-menu « Guilde ».
 Le bouton livre de la minimap ouvre le journal. La recherche est facultative.
 Le bouton livre se place sur le bord de la minimap, en tenant compte de sa
@@ -67,6 +67,19 @@ dans une alerte, avec leur nombre observé. Son clic ouvre la première fiche.
 Les alertes individuelles et les agressions personnelles gardent la priorité.
 Cliquer une alerte ouvre la fiche ; elle ne change jamais automatiquement la cible.
 
+RETOUR AU CALCUL AUTOMATIQUE 0.4.4
+L'ancien bouton personnel « Neutre » remettait le score à zéro et le verrouillait,
+même avec une dette PvP encore négative. Il devient « Automatique » dans le
+journal et le menu du joueur. /gl auto fait la même chose ; /gl neutre reste un
+alias compatible. Ce choix recalcule le solde à partir des rencontres PvP et
+des gestes enregistrés, sans effacer l'historique ni les notes.
+Les anciennes fiches verrouillées par « Neutre » repassent automatiquement à ce
+calcul au chargement. Exemple : une mort (-10), un geste négatif (-1) et deux
+victoires (+2) redonnent -9, donc Méfiance orange, pas Neutre.
+Un vrai zéro obtenu par un avis manuel +1/-1 reste un choix personnel ; les
+classements Ami, Méfiance et Ennemi restent prioritaires. Les règles de guilde
+restent distinctes. « Automatique » n'impose donc jamais une couleur neutre.
+
 SOLDE DE RANCUNE 0.4.2
 Le classement automatique utilise les événements actifs : mort -10, agression -1,
 victoire +1. Les événements probables restent explicitement signalés ; une victoire
@@ -76,7 +89,7 @@ au solde. Exemple : une mort, un geste négatif et deux victoires donnent -9.
 il reste Méfiance (orange), avec l'alerte de proximité. À 0, il devient Neutre.
 Les gestes amicaux ne cachent pas une dette PvP encore négative. Les victoires
 remboursent progressivement la dette sans créer d'amitié à elles seules.
-Les classements et avis manuels gardent leur priorité : ils ne sont pas effacés
+Les classements Ami/Méfiance/Ennemi et avis manuels gardent leur priorité : ils ne sont pas effacés
 par les victoires. Les notes et l'historique restent conservés. À la mise à jour,
 les fiches automatiques sont recalculées à partir des compteurs et gestes existants.
 Annuler un événement recalcule son effet ; /reload ne compte jamais deux fois.
@@ -94,7 +107,7 @@ Seules vos demandes d'emotes sont observées : les emotes reçues ne modifient p
 votre journal. Cela enregistre votre intention, pas la réaction de l'autre joueur.
 La camaraderie est bornée de -100 à +100 : positive = ami, 0 = neutre,
 -1 à -9 = méfiance, -10 ou moins = ennemi. Les boutons directs changent le
-classement immédiatement. Les boutons et avis manuels restent prioritaires, même
+classement immédiatement. Ami/Méfiance/Ennemi et les avis manuels restent prioritaires, même
 après une emote. Les gestes seuls ne verrouillent pas le classement : un /spit
 ne peut pas empêcher le passage en ennemi après un décès PvP. Les compteurs PvP
 restent séparés de la camaraderie personnelle.
@@ -131,7 +144,8 @@ COMMANDES (FACULTATIVES, UTILISABLES DANS UNE MACRO)
 /gl ami                     classe immédiatement la cible comme amie
 /gl mefiance                classe la cible en orange
 /gl ennemi                  classe la cible en rouge
-/gl neutre                  retire son marquage personnel sans perdre l'historique
+/gl auto                    revient au solde automatique, sans effacer la dette
+/gl neutre                  alias de /gl auto
 /gl note Super donjon !     ajoute une note sur la cible
 /gl note                    ouvre l'éditeur de note pour la cible
 /gl guilde mefiance         classe la guilde du joueur ciblé
@@ -275,7 +289,7 @@ Les tests automatisés Lua 5.1 et les relectures croisées couvrent les menus,
 identités, classements, sauvegardes, marqueurs, sons, emotes, groupes et PvP.
 Ils n'exécutent pas le client WoW : le rendu et les API effectives de Forever
 doivent aussi être vérifiés en jeu. Aucun contrôle du jeu n'a été automatisé.
-Protocole conseillé : classer une cible amie puis neutre, ajouter une note,
+Protocole conseillé : classer une cible amie puis automatique, ajouter une note,
 tester une emote, classer une guilde avec une exception personnelle, recharger
 puis vérifier la conservation. Tester ensuite le PvP en conditions contrôlées.
 

@@ -354,7 +354,8 @@ assert(warningMarker.children[3].shown, "removing confirmed death leaves only pr
 GL.SetReaction(warning, "warning")
 assert(not warningMarker.children[3].shown, "manual choices never display inferred uncertainty")
 GL.SetReaction(warning, "neutral")
-assert(warningMarker.shown and warningMarker.children[2].texture:find("RelationNeutral") and not warningMarker.children[3].shown)
+assert(warningMarker.shown and warningMarker.children[2].texture:find("RelationWarning") and warningMarker.children[3].shown,
+    "automatic restores outstanding aggression and its uncertainty instead of hiding it behind neutral")
 warningRecord.reaction = nil
 GL.InitDB()
 D.Refresh()

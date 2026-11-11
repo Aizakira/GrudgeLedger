@@ -1,4 +1,4 @@
-Grudge Ledger 0.4.3 — sources et tests
+Grudge Ledger 0.4.4 — sources et tests
 
 Le dossier GrudgeLedger est le seul dossier à installer dans Interface/AddOns.
 Les tests utilisent Lua 5.1 via Lupa, sans lancer WoW.

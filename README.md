@@ -36,13 +36,15 @@ In **Settings** (`/gl settings`), enable **“Police classique (plus lisible)”
 
 ## Grudge balance
 
-Automatic records count **−10 per death, −1 per aggression and +1 per victory**. Negative gestures add to that balance: one death, one negative gesture and two victories leave **−9**, still **caution (orange)** with nearby alerts. Victories alone never create friendship; friendly gestures do not hide outstanding negative PvP debt. Explicit classifications and manual opinions stay authoritative. Existing automatic records are recalculated without deleting notes, counters or history.
+Automatic records count **−10 per death, −1 per aggression and +1 per victory**. Negative gestures add to that balance: one death, one negative gesture and two victories leave **−9**, still **caution (orange)** with nearby alerts. Victories alone never create friendship; friendly gestures do not hide outstanding negative PvP debt. Explicit Friend/Caution/Enemy classifications and manual opinions stay authoritative. Existing automatic records are recalculated without deleting notes, counters or history.
+
+The personal **“Neutre” button is now “Automatique”**: it restores scoring from PvP encounters and gestures instead of forcing zero. Legacy records pinned by that button are repaired on load; an outstanding −9 stays orange. A genuine zero reached through manual +1/−1 opinions remains a personal choice. Notes, counters and history are preserved. Guild rules remain separate.
 
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 ## Install
 
-1. Download **`GrudgeLedger-0.4.3.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.4.4.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -56,6 +58,7 @@ For visible icons and colors, click **“Activer le repérage (icônes + couleur
 | --- | --- |
 | `/gl` | Open or close the journal |
 | `/gl ami` / `/gl mefiance` / `/gl ennemi` | Mark your selected player as friend / caution / enemy |
+| `/gl auto` (or `/gl neutre`) | Restore automatic scoring without erasing outstanding PvP debt |
 | `/gl + Great dungeon!` | Add a positive opinion and note about the selected player |
 | `/gl - Unpleasant encounter` | Add a negative opinion and note |
 | `/gl note` | Open the note editor for your selected player |
@@ -72,7 +75,7 @@ Targets **Forever interface 16001**; development used client **1.60.1.70862**. R
 
 Forever may hide combat-log information. The addon also reads its public death recap, waiting up to two seconds for delayed data. Multiple attackers are recorded by GUID: an explicit lethal hit is confirmed, while other participants in the fatal attack remain probable. Without usable direct evidence, recent hostile PvP combatants actually targeting you may be recorded as probable participants; bystanders are excluded. Counters belong to each person's record: three participants in one death do not mean three player deaths. Inferences can be corrected and coverage is limited by the data the client exposes. Previously missed deaths are not reconstructed automatically.
 
-Explicit buttons and manual opinions retain priority, including after an emote. Gestures alone no longer pin a relationship: `/spit` cannot keep a killer at caution when a PvP death is subsequently recorded. Duel detection still depends on the available client signals.
+Explicit Friend/Caution/Enemy buttons and manual opinions retain priority, including after an emote. Gestures alone no longer pin a relationship: `/spit` cannot keep a killer at caution when a PvP death is subsequently recorded. Duel detection still depends on the available client signals.
 
 The existing offline suite covers fifteen test scripts, including 71 tracking scenarios. These tests simulate WoW APIs; they do not replace actual gameplay testing. This remains an early version, and bug reports are welcome.
 
@@ -94,7 +97,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.4.3.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.4.4.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.
