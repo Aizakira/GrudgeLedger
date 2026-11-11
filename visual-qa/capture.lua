@@ -181,7 +181,7 @@ function QA.capture(name)
     GL.SetSetting("readableFont", name:find("%-readable") ~= nil)
     name = name:gsub("%-readable", "")
     UIParent:SetSize(1920, 1080)
-    if name == "journal" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" then
+    if name == "journal" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" then
         if name:find("^journal%-small") then UIParent:SetSize(1024, 600) end
         GL.ShowLedger(record.key)
         GrudgeLedgerWindow.search:SetText("")

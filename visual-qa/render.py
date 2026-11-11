@@ -213,10 +213,12 @@ def render(name, frames, root):
     margin, banner = 22, 34
     # Minimap controls may deliberately extend beyond the map disc.
     if name.startswith("minimap"): margin = 48
-    canvas = Image.new("RGBA", (math.ceil(rb[2] + margin*2), math.ceil(rb[3] + margin*2 + banner)), (20,21,23,255))
+    transparent = name == "journal-transparent"
+    canvas = Image.new("RGBA", (math.ceil(rb[2] + margin*2), math.ceil(rb[3] + margin*2 + banner)), (0,0,0,0) if transparent else (20,21,23,255))
     offsetx, offsety = margin - rb[0], margin + banner - rb[1]
     heading = ImageDraw.Draw(canvas)
-    heading.text((12,10), "SIMULATION HORS JEU  /  " + name.upper(), font=font(11), fill=(183,174,155,255))
+    if not transparent:
+        heading.text((12,10), "SIMULATION HORS JEU  /  " + name.upper(), font=font(11), fill=(183,174,155,255))
     layers = {"BACKGROUND":0,"BORDER":1,"ARTWORK":2,"OVERLAY":3,"HIGHLIGHT":4}
     minimap_button = next((r["id"] for r in frames if r.get("name") == "GrudgeLedgerMinimapButton"), None)
     regions = [r for r in frames if (lay.descendant(r["id"], root) or
@@ -347,7 +349,27 @@ def render(name, frames, root):
                 sd.rounded_rectangle((x,y,x+5,y+h),radius=2,fill=(46,37,29,255))
                 th=max(18,h*h/ch);top=y+min(h-th,r.get("vertical",0)/max(1,ch-h)*(h-th))
                 sd.rounded_rectangle((x,top,x+5,top+th),radius=2,fill=(129,98,51,255))
-    canvas.convert("RGB").save(OUT/(name+".png"))
+    if transparent:
+        left, top, right, bottom = margin, margin+banner, margin+round(rb[2]), margin+banner+round(rb[3])
+        alpha = canvas.getchannel("A")
+        for box in ((0,0,canvas.width,top), (0,bottom,canvas.width,canvas.height), (0,top,left,bottom), (right,top,canvas.width,bottom)):
+            assert alpha.crop(box).getextrema()[1] == 0, "journal has a rectangular shadow outside the book"
+        for point in ((left,top), (right-1,top), (left,bottom-1), (right-1,bottom-1)):
+            assert alpha.getpixel(point) <= 3, "journal backing covers a transparent artwork corner"
+        canvas.crop((left,top,right,bottom)).save(OUT/(name+".png"))
+        # A light checkerboard exposes dark halos that a dark preview would hide.
+        checker = Image.new("RGBA", canvas.size, (190,190,182,255))
+        draw = ImageDraw.Draw(checker)
+        for y in range(0,canvas.height,16):
+            for x in range(0,canvas.width,16):
+                if (x//16+y//16)%2: draw.rectangle((x,y,x+15,y+15), fill=(221,221,213,255))
+        checker.alpha_composite(canvas)
+        canvas = checker
+        heading = ImageDraw.Draw(canvas)
+        heading.text((12,10), "SIMULATION HORS JEU  /  TRANSPARENCE", font=font(11), fill=(50,50,45,255))
+        canvas.convert("RGB").save(OUT/(name+"-checker.png"))
+    else:
+        canvas.convert("RGB").save(OUT/(name+".png"))
     return issues, canvas.convert("RGB")
 
 
@@ -359,7 +381,7 @@ def main():
     g.QA_TextWidth=lambda text,size,title=False: font(size,title).getlength(plaintext(text))
     g.QA_TextLines=lambda text,width,size,title=False: len(wrap(text,width,size,title))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
-    views=["journal","journal-readable","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","journal-readable-small-bottom","guilds","note","note-readable","settings","settings-readable","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
+    views=["journal","journal-readable","journal-transparent","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","journal-readable-small-bottom","guilds","note","note-readable","settings","settings-readable","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
     images, report, snapshots=[],{},{}
     for name in views:
         root=g.QA.capture(name)

@@ -13,7 +13,7 @@ local inkColors = { friend = { 0.10, 0.34, 0.15 }, warning = { 0.50, 0.22, 0.03 
 local relationIcons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy", neutral = "RelationNeutral" }
 local media = "Interface\\AddOns\\GrudgeLedger\\Media\\"
 local pvpNames = { kill = "Victoire", death = "Mort", aggression = "Agression" }
-local theme = { paper = { 0.94, 0.87, 0.72 }, muted = { 0.73, 0.64, 0.51 }, gold = { 0.52, 0.38, 0.20 },
+local theme = { paper = { 0.94, 0.87, 0.72 }, muted = { 0.73, 0.64, 0.51 }, gold = { 0.52, 0.38, 0.20 }, brass = { 0.91, 0.77, 0.48 },
     background = { 0.075, 0.045, 0.035 }, panel = { 0.115, 0.075, 0.055 }, red = { 0.30, 0.075, 0.075 },
     ink = { 0.20, 0.13, 0.08 }, inkMuted = { 0.36, 0.25, 0.16 }, selection = { 0.91, 0.80, 0.62 }, disabledInk = { 0.50, 0.44, 0.36 } }
 
@@ -89,20 +89,21 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     b:SetPoint("TOPLEFT", x, y)
     b:SetSize(width, 26)
     local edge = surface(b, theme.gold, 0, -1)
-    if paper then
-        edge:ClearAllPoints()
-        edge:SetPoint("BOTTOMLEFT")
-        edge:SetPoint("BOTTOMRIGHT")
-        edge:SetHeight(1)
-    end
+    b.edge = edge
+    edge:ClearAllPoints()
+    edge:SetPoint("BOTTOMLEFT")
+    edge:SetPoint("BOTTOMRIGHT")
+    edge:SetHeight(1)
+    edge:SetAlpha(0.65)
     local normal = surface(b, paper and theme.paper or theme.panel, 1)
-    normal:SetAlpha(paper and 0.35 or 1)
+    normal:SetAlpha(paper and 0.15 or 0)
     b.normalSurface = normal
     b:SetNormalTexture(normal)
-    local pushed = surface(b, paper and theme.selection or theme.red, 1)
+    local pushed = surface(b, paper and theme.selection or theme.brass, 1)
+    pushed:SetAlpha(paper and 0.65 or 0.18)
     b:SetPushedTexture(pushed)
     local disabled = surface(b, paper and theme.paper or theme.background, 1)
-    disabled:SetAlpha(paper and 0.15 or 1)
+    disabled:SetAlpha(paper and 0.08 or 0)
     b:SetDisabledTexture(disabled)
     local highlight = b:CreateTexture(nil, "HIGHLIGHT")
     highlight:SetPoint("TOPLEFT", 1, -1)
@@ -120,9 +121,9 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     b:SetHighlightFontObject("GameFontHighlightSmall")
     b:SetDisabledFontObject("GameFontDisableSmall")
     b:SetText(text)
-    caption:SetTextColor(unpack(paper and theme.ink or theme.paper))
+    caption:SetTextColor(unpack(paper and theme.ink or theme.brass))
     b:SetScript("OnEnable", function()
-        caption:SetTextColor(unpack(paper and theme.ink or theme.paper))
+        caption:SetTextColor(unpack(paper and theme.ink or theme.brass))
         edge:SetColorTexture(unpack(theme.gold))
     end)
     b:SetScript("OnDisable", function()
@@ -172,6 +173,7 @@ local function window(name, title, width, height)
     f:SetScript("OnDragStart", function(self) self:StartMoving() end)
     f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
     local shadow = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+    f.shadow = shadow
     shadow:SetPoint("TOPLEFT", -4, 4)
     shadow:SetPoint("BOTTOMRIGHT", 4, -4)
     shadow:SetColorTexture(0, 0, 0, 0.65)
@@ -212,7 +214,13 @@ local function window(name, title, width, height)
     f.title:SetTextColor(0.91, 0.77, 0.48)
     f.title:SetHeight(24)
     GL.Safe(f.title.SetWordWrap, f.title, false)
-    f.closeButton = button(f, "X", width - 37, -9, 26, function() f:Hide() end)
+    f.closeButton = button(f, "×", width - 37, -9, 26, function() f:Hide() end)
+    f.closeButton.edge:Hide()
+    f.closeButton:SetNormalFontObject("GameFontNormalLarge")
+    f.closeButton:SetHighlightFontObject("GameFontNormalLarge")
+    f.closeButton.caption:ClearAllPoints()
+    f.closeButton.caption:SetPoint("TOPLEFT", 3, -3)
+    f.closeButton.caption:SetSize(20, 20)
     f:SetScript("OnShow", function(self)
         self:Raise()
         local w, h = UIParent:GetWidth(), UIParent:GetHeight()
@@ -265,6 +273,7 @@ local function refreshGuilds()
         local active = current and current.reaction == reaction
         local color = active and theme.red or theme.panel
         control.normalSurface:SetColorTexture(unpack(color))
+        control.normalSurface:SetAlpha(active and 1 or 0)
         if active then control.selection:Show() else control.selection:Hide() end
     end
 end
@@ -484,7 +493,7 @@ local function renderDetail()
             or record.reactionSource ~= "automatic" and GL.Relation(record) == reaction)
         local color = active and theme.red or theme.paper
         control.normalSurface:SetColorTexture(unpack(color))
-        control.normalSurface:SetAlpha(active and 1 or 0.35)
+        control.normalSurface:SetAlpha(active and 1 or 0.15)
         control.caption:SetTextColor(unpack(record and (active and theme.paper or theme.ink) or theme.disabledInk))
         if active then control.selection:Show() else control.selection:Hide() end
     end
@@ -612,7 +621,7 @@ local function buildLedger()
     if ledger then return end
     local f = window("GrudgeLedgerWindow", "Grudge Ledger", 960, 700)
     ledger = f
-    for _, region in ipairs({ f.outerBorder, f.cover, f.innerBorder, f.grain, f.header, f.headerFill, f.headerLine }) do region:Hide() end
+    for _, region in ipairs({ f.shadow, f.outerBorder, f.cover, f.innerBorder, f.grain, f.header, f.headerFill, f.headerLine }) do region:Hide() end
     f.lining:ClearAllPoints()
     f.lining:SetPoint("TOPLEFT", 20, -20)
     f.lining:SetPoint("BOTTOMRIGHT", -20, 20)
@@ -626,8 +635,8 @@ local function buildLedger()
     f.title:SetSize(540, 30)
     journalFont(f.title, "Fancy24Font", 24)
     label(f, "Journal des rencontres et des rancunes", nil, 79, -51, 330):SetTextColor(unpack(theme.muted))
-    button(f, "Guildes", 702, -29, 91, function() GL.ShowGuilds() end)
-    button(f, "Réglages", 805, -29, 108, showSettings)
+    f.guildsButton = button(f, "Guildes", 702, -29, 91, function() GL.ShowGuilds() end)
+    f.settingsButton = button(f, "Réglages", 805, -29, 108, showSettings)
     button(f, "Ajouter la cible", 36, -138, 256, function()
         local identity = GL.Identity("target")
         if not identity then GL.Print("Sélectionne un joueur pour ouvrir sa fiche.") return end
@@ -747,8 +756,7 @@ local function buildLedger()
     f.actions[#f.actions + 1] = button(f, "Ajouter une note", 744, -203, 160, function()
         local record = currentRecord()
         if record then GL.EditNote(record) end
-    end)
-    f.actions[#f.actions].normalSurface:SetColorTexture(unpack(theme.red))
+    end, nil, true)
     for i, option in ipairs({ { "Avis positif (+1)", 1 }, { "Avis négatif (-1)", -1 } }) do
         local delta = option[2]
         f.actions[#f.actions + 1] = button(f, option[1], 350 + (i - 1) * 148, -625, 138, function()
@@ -836,13 +844,13 @@ refresh = function()
     for value, control in pairs(ledger.filters) do
         local c = value == filter and theme.red or theme.paper
         control.normalSurface:SetColorTexture(c[1], c[2], c[3], 1)
-        control.normalSurface:SetAlpha(value == filter and 1 or 0.35)
+        control.normalSurface:SetAlpha(value == filter and 1 or 0.15)
         control.caption:SetTextColor(unpack(value == filter and theme.paper or theme.ink))
     end
     for value, control in pairs(ledger.factions) do
         local c = value == factionFilter and theme.red or theme.paper
         control.normalSurface:SetColorTexture(c[1], c[2], c[3], 1)
-        control.normalSurface:SetAlpha(value == factionFilter and 1 or 0.35)
+        control.normalSurface:SetAlpha(value == factionFilter and 1 or 0.15)
         control.caption:SetTextColor(unpack(value == factionFilter and theme.paper or theme.ink))
     end
     ledger.next:SetEnabled(offset + #ledger.rows < #records)

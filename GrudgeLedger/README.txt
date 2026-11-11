@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.4.4
+GRUDGE LEDGER — 0.4.5
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -66,6 +66,14 @@ Les membres d'une même guilde aperçus dans les six secondes sont regroupés
 dans une alerte, avec leur nombre observé. Son clic ouvre la première fiche.
 Les alertes individuelles et les agressions personnelles gardent la priorité.
 Cliquer une alerte ouvre la fiche ; elle ne change jamais automatiquement la cible.
+
+FINITION DU LIVRE 0.4.5
+Le journal utilise le contour transparent de son illustration : l'ancienne
+ombre rectangulaire noire a été retirée. Les boutons sur le cuir portent une
+écriture dorée, ceux sur le parchemin une encre brune, avec un trait discret.
+Guildes, Réglages, fermeture et Ajouter une note partagent ces styles ; les
+états de survol, clic, désactivation et sélection restent distincts.
+Aucune texture nouvelle ni donnée personnelle modifiée. /reload suffit.
 
 RETOUR AU CALCUL AUTOMATIQUE 0.4.4
 L'ancien bouton personnel « Neutre » remettait le score à zéro et le verrouillait,

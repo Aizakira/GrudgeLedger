@@ -13,6 +13,7 @@ function methods:SetScale(value) assert(value > 0 and value < math.huge) self.sc
 function methods:SetTexture(value) self.texture, self.requestedTexture, self.color = value, value, nil end
 function methods:SetMaxLines(value) self.maxLines = value end
 function methods:SetWordWrap(value) self.wordWrap = value end
+function methods:SetAlpha(value) self.alpha = value end
 function methods:SetJustifyV(value) self.justifyV = value end
 function methods:HighlightText() self.highlighted = true end
 function methods:GetEffectiveScale() return self.effectiveScale or 1 end
@@ -123,9 +124,19 @@ end
 for _, control in ipairs(ledger.actions) do
     assert(control.anchor[2] + control:GetWidth() <= 904, "right-hand controls stay clear of the rough outer edge")
 end
-for _, region in ipairs({ ledger.outerBorder, ledger.cover, ledger.innerBorder, ledger.grain, ledger.header, ledger.headerFill, ledger.headerLine }) do
+for _, region in ipairs({ ledger.shadow, ledger.outerBorder, ledger.cover, ledger.innerBorder, ledger.grain, ledger.header, ledger.headerFill, ledger.headerLine }) do
     assert(not region:IsShown(), "old opaque chrome cannot cover the open-book artwork or protrude through its corners")
 end
+for _, control in ipairs({ ledger.guildsButton, ledger.settingsButton, ledger.closeButton }) do
+    assert(control.normalSurface.alpha == 0 and control.disabledTexture.alpha == 0,
+        "header controls must reveal the leather instead of adding opaque rectangles")
+    assert(control.pushedTexture.alpha > 0 and control.highlightTexture, "transparent buttons still have pressed and hover feedback")
+end
+assert(ledger.closeButton:GetText() == "×" and not ledger.closeButton.edge:IsShown())
+local noteButton = ledger.actions[5]
+assert(noteButton.caption.color[1] == ledger.actions[6].caption.color[1] and noteButton.normalSurface.alpha == 0.15,
+    "adding a note uses the same ink-on-parchment treatment as the other page actions")
+assert(noteButton.edge:GetHeight() == 1 and ledger.guildsButton.edge:GetHeight() == 1)
 for _, region in ipairs({ ledger.detailTitle, ledger.detailStatus, ledger.detailIdentity, ledger.detailScroll }) do
     assert(region.anchor[2] >= ledger.paper.anchor[2] and region.anchor[2] + region:GetWidth() < ledger.paper.anchor[2] + ledger.paper:GetWidth())
     assert(-region.anchor[3] + region:GetHeight() < -ledger.paper.anchor[3] + ledger.paper:GetHeight(), "reading content stays inside the page")
