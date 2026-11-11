@@ -10,7 +10,7 @@ local reasons = {
     class = "Ce test est réservé aux druides.", form = "Passe en forme de félin.",
     tracking = "Active Pistage des humanoïdes dans le menu de pistage.",
     api = "Une API nécessaire est absente, protégée ou illisible.",
-    mask = "Masque initial inconnu : change l'option de rotation de la minimap, remets sa valeur initiale, puis relance le test.",
+    mask = "Minimap à préparer : ouvre /gl debug, clique sur « Préparer la minimap », puis « Test druide ».",
     target = "Cible un autre joueur immobile, visible comme point sur ta minimap.",
     combat = "Combat : essai arrêté.", moving = "Déplacement du personnage : essai arrêté.",
     dead = "Personnage mort : essai arrêté.", instance = "Essai limité au monde extérieur.",
@@ -34,7 +34,7 @@ end
 -- Minimap has no GetMaskTexture (unlike Texture's mask API). Observe exact setter
 -- arguments; never guess a round/default mask that would overwrite another skin.
 -- ponytail: a mask applied before addon load is unknown until the next setter call.
--- The test stays read-only in that case; changing rotation reapplies Forever's skin.
+-- The test stays read-only in that case; the diagnostic offers a native skin refresh.
 local observedMap, maskAsset = Minimap, nil
 local maskHooked = observedMap and type(observedMap.SetMaskTexture) == "function"
     and type(hooksecurefunc) == "function" and pcall(hooksecurefunc, observedMap, "SetMaskTexture", function(_, asset)
@@ -54,6 +54,25 @@ local function yes(fn, ...)
     local value = public(call(fn, ...), "boolean")
     if value == nil then reject("api") end
     return value
+end
+function GL.PrepareDruidRadar()
+    if running or (GL.MinimapProbeActive and GL.MinimapProbeActive()) then return false, reasons.busy end
+    if restorationFailed then return false, reasons.restored end
+    if GL.Safe(InCombatLockdown) ~= false then return false, "Préparation indisponible en combat." end
+    if not maskHooked or Minimap ~= observedMap then return false, reasons.api end
+    if GL.Safe(Minimap.IsProtected, Minimap) ~= false then return false, reasons.map end
+    -- Preserve an already observed third-party skin. Never toggle a saved CVar.
+    if not maskAsset then
+        local cluster = MinimapCluster
+        if not cluster or not cluster.MinimapContainer or cluster.MinimapContainer.Minimap ~= observedMap
+            or type(cluster.UpdateMinimapConfig) ~= "function" then
+            return false, "Réapplication native indisponible sur ce client. Aucun essai lancé."
+        end
+        local ok = pcall(cluster.UpdateMinimapConfig, cluster)
+        if not ok then return false, "Échec de la réapplication native. Aucun essai lancé." end
+        if not maskAsset then return false, "Apparence réappliquée, mais masque toujours inconnu. Aucun essai lancé." end
+    end
+    return true, "Minimap prête. Lance « Test druide »."
 end
 local function build()
     local _, value = GL.Safe(GetBuildInfo)

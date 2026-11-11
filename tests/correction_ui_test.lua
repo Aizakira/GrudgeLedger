@@ -103,6 +103,18 @@ SlashCmdList.GRUDGELEDGER("debug")
 assert(GrudgeLedgerDiagnostic.edit:GetText():find("Interface : indisponible", 1, true))
 assert(#GL.errors == 2, "UI callbacks introduce no errors")
 local scheduled, ran
+local preparations = 0
+GL.PrepareDruidRadar = function()
+    preparations = preparations + 1
+    return false, "Préparation indisponible en combat."
+end
+SlashCmdList.GRUDGELEDGER("debug")
+assert(preparations == 0, "opening diagnostic never changes the minimap")
+click(button(d, "Préparer la minimap"))
+assert(preparations == 1 and d:IsShown() and not d.edit.focus and d.radarStatus:GetText():find("en combat", 1, true))
+GL.PrepareDruidRadar = function() return true, "Minimap prête. Lance « Test druide »." end
+click(button(d, "Préparer la minimap"))
+assert(d:IsShown() and d.radarStatus:GetText():find("prête", 1, true) and not scheduled and not ran, "preparation stays open and never starts a scan")
 C_Timer = { After = function(delay, callback) assert(delay == 3); scheduled = callback end }
 SlashCmdList.GRUDGELEDGERDRUIDRADAR = function(command) assert(command == "test"); ran = true end
 click(button(d, "Test druide"))

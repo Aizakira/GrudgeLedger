@@ -27,6 +27,15 @@ local function run(mode, expected, options)
         if options.restoreFail == method and flags.restoring then error("private restore failure") end
     end
     env.Minimap = map
+    local nativeCalls = 0
+    env.SetCVar = function() error("preparation must never write settings") end
+    env.C_CVar = { SetCVar = env.SetCVar }
+    env.MinimapCluster = { MinimapContainer = { Minimap = map }, UpdateMinimapConfig = function(self)
+        assert(self == env.MinimapCluster)
+        nativeCalls = nativeCalls + 1
+        if options.prepare == "throws" then error("private native error") end
+        if options.prepare ~= "noop" then map:SetMaskTexture(options.prepare == "secret" and secret or initialMask) end
+    end }
     map.IsVisible = function() return not flags.hidden end
     map.IsProtected = function() return flags.protected or false end
     map.GetEffectiveScale = function() return flags.scale or scale end
@@ -128,10 +137,10 @@ local function run(mode, expected, options)
         return { lines = { { leftText = "Autre Point", type = 0 }, { leftText = "|cffff0000Élodie Testeur|r", type = 0 } } }
     end }
     assert(loadstring(source, "DruidRadar.lua")); setfenv(assert(loadstring(source)), env)()
-    assert(mutations == 0 and not scripts.OnUpdate and #messages == 0, "dormant at login")
+    assert(mutations == 0 and nativeCalls == 0 and not scripts.OnUpdate and #messages == 0, "dormant at login")
     assert(not GL.db.druidRadarTests and not GL.DruidRadarActive())
     -- The game's skin (or another addon) sets its mask after our observer loads.
-    if mode ~= "unknown-mask" and mode ~= "observe-later" then
+    if mode ~= "unknown-mask" and mode ~= "observe-later" and not options.prepare then
         flags.initializing = true
         map:SetMaskTexture(initialMask)
         flags.initializing = nil
@@ -160,12 +169,37 @@ local function run(mode, expected, options)
     if mode == "missing" then map.SetMaskTexture = nil end
     if mode == "missing-tooltip" then env.C_TooltipInfo = nil end
     if mode == "duplicate" then GL.db.players.other = { fullName = target.fullName, surname = target.surname, score = 0 } end
+    if options.prepare then
+        if options.prepare == "missing" then env.MinimapCluster.UpdateMinimapConfig = nil end
+        if options.prepare == "mismatch" then env.MinimapCluster.MinimapContainer.Minimap = other end
+        if options.prepare == "combat" then flags.combat = true end
+        if options.prepare == "protected" then flags.protected = true end
+        if options.prepare == "legacy" then flags.legacy = true end
+        local ok, message = GL.PrepareDruidRadar()
+        assert(type(message) == "string" and not message:find("private", 1, true), "fixed public preparation message")
+        assert(not GL.db.druidRadarTests and not scripts.OnUpdate, "preparation never launches a scan")
+        assert(alpha == 0.73 and clicks and not wheel and #anchors == #original, "preparation does not move or hide the map")
+        if expected == "prepare-failed" then
+            assert(not ok and message:find(options.message, 1, true), options.prepare .. ": actionable preparation failure")
+            local called = options.prepare == "throws" or options.prepare == "noop" or options.prepare == "secret"
+            assert(nativeCalls == (called and 1 or 0), "guard failures must not call native refresh")
+            checked = checked + 1
+            return
+        end
+        assert(ok and message:find("prête", 1, true) and nativeCalls == 1 and mask == initialMask)
+        assert(GL.PrepareDruidRadar() and nativeCalls == 1, "repeat preparation preserves the observed skin")
+        mutations, calls = 0, {}
+    elseif mode == "working" then
+        assert(GL.PrepareDruidRadar() and nativeCalls == 0 and mutations == 0, "known custom skins are not reset")
+    end
     slash("test")
     if mode == "legacy" then assert(mutations == 0 and not GL.db.druidRadarTests); checked = checked + 1; return end
     if GL.DruidRadarActive() then
         local before = mutations
         slash("test")
         assert(before == mutations, "no overlapping scans")
+        local ok, message = GL.PrepareDruidRadar()
+        assert(not ok and message:find("déjà en cours", 1, true) and before == mutations and nativeCalls == (options.prepare and 1 or 0), "preparation cannot disturb a running scan")
     end
     if mode == "hidden-driver" then now = 12; watchdog() end
     while scripts.OnUpdate do
@@ -217,6 +251,8 @@ local function run(mode, expected, options)
             assert(calls[method] and calls[method] >= 2, "all restoration calls attempted")
         end
         local before = mutations; slash("test"); assert(before == mutations, "latch after failed restoration")
+        local ok, message = GL.PrepareDruidRadar()
+        assert(not ok and message:find("/reload", 1, true) and before == mutations, "preparation respects restoration latch")
     end
     if mode == "history" then
         flags.class = "HUNTER"
@@ -241,6 +277,14 @@ for mode, expected in pairs({ working = "positive", ["tracking-filter"] = "posit
 for _, scale in ipairs({ 0.5, 1, 1.5 }) do run("working", "positive", { scale = scale, latency = 2, width = 240, height = 180, dotX = 48, dotY = -36, rounding = 0.04 }) end
 run("working", "positive", { mask = 12345 }) -- FileDataID masks survive unchanged.
 run("working", "positive", { mask = "Interface\\AddOns\\CustomMap\\SquareMask" })
+run("prepare", "positive", { prepare = "working" })
+run("prepare", "positive", { prepare = "working", mask = 12345 })
+for mode, message in pairs({ missing = "indisponible sur ce client", mismatch = "indisponible sur ce client",
+    throws = "Échec", noop = "toujours inconnu", secret = "toujours inconnu", combat = "en combat",
+    protected = "protégée", legacy = "déjà en cours" }) do
+    run("prepare", "prepare-failed", { prepare = mode, message = message })
+end
+run("hook-failure", "prepare-failed", { prepare = "working", message = "API nécessaire" })
 run("empty", "timeout", { delta = 1 / 20 })
 run("hidden-driver", "timeout")
 run("silent-restore-failure", "restored", { silentRestore = true })
