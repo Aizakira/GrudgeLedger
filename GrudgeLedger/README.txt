@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.4.5
+GRUDGE LEDGER — 0.4.6
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -66,6 +66,24 @@ Les membres d'une même guilde aperçus dans les six secondes sont regroupés
 dans une alerte, avec leur nombre observé. Son clic ouvre la première fiche.
 Les alertes individuelles et les agressions personnelles gardent la priorité.
 Cliquer une alerte ouvre la fiche ; elle ne change jamais automatiquement la cible.
+
+GUILDES ET HISTORIQUE PVP 0.4.6
+La fiche conserve la dernière guilde connue. Une réponse vide, cachée ou en erreur
+ne prouve pas un départ de guilde et n'efface plus cette information. Une nouvelle
+guilde observée la remplace ; une guilde quittée peut donc rester indiquée comme
+dernière guilde connue tant qu'aucune information fiable ne la remplace.
+Les cibles, survols et barres de noms enrichissent les contacts existants, même
+après la mort et hors combat. Un cache local de 256 observations maximum, valable
+60 secondes, aide à retrouver la guilde d'un attaquant identifié par le récapitulatif.
+Ce cache ne crée aucune fiche pour les simples passants et disparaît au rechargement.
+Chaque nouvelle mort, victoire ou agression mémorise séparément la guilde, son
+serveur et la date de son observation. L'historique indique quand il s'agit d'une
+dernière information connue. Les événements anciens ou de guilde inconnue ne sont
+jamais réattribués après coup, même si le joueur rejoint une autre guilde.
+Les données préparent de futures statistiques : déductions et faits confirmés
+restent séparés ; les événements annulés restent identifiables ; une mort partagée
+par plusieurs attaquants garde le même identifiant pour éviter les doubles comptes.
+Aucun classement statistique des guildes n'est encore ajouté. /reload suffit.
 
 FINITION DU LIVRE 0.4.5
 Le journal utilise le contour transparent de son illustration : l'ancienne

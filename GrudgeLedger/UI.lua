@@ -528,7 +528,7 @@ local function renderDetail()
             "", "|cff653c20REPÈRES|r",
             "Réputation personnelle : " .. (record.reputation ~= nil and tostring(record.reputation) or "aucun avis"),
             subdued("PvP : mort −10 · agression −1 · victoire +1 (sans créer d'amitié)."),
-            "Guilde : " .. plain(record.guild or "aucune guilde connue"),
+            "Dernière guilde connue : " .. plain(record.guild or "inconnue"),
             guildRule and guildRule.note and guildRule.note ~= "" and "Note de guilde : " .. plain(guildRule.note) or "",
             subdued("Dernier lieu : " .. plain(record.lastZone or "inconnu")),
             subdued("Groupes partagés : " .. tostring(record.groupCount or 0)),
@@ -550,6 +550,11 @@ local function renderDetail()
             local zone = e.zone and " — " .. plain(e.zone) or ""
             local delta = type(e.delta) == "number" and " (" .. (e.delta >= 0 and "+" or "") .. tostring(e.delta) .. ")" or ""
             lines[#lines + 1] = stamp(e.time) .. " — " .. kind .. confidence .. (e.voided and " — annulé" or "") .. delta .. opinion .. zone
+            if e.guildSource then
+                lines[#lines + 1] = "  Guilde mémorisée : " .. plain(e.guild or "inconnue")
+                    .. (e.guild and e.guildRealm and " (" .. plain(e.guildRealm) .. ")" or "")
+                    .. (e.guildSource == "last-known" and " — dernière observation" or "")
+            end
             if e.evidence and e.evidence ~= "" then lines[#lines + 1] = "  " .. plain(e.evidence) end
         end
         ledger.detailText:SetText(table.concat(lines, "\n"))

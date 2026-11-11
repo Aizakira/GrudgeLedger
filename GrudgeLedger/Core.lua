@@ -1,10 +1,11 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.4.5", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.4.6", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
+local guildSightings = {}
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true,
@@ -66,8 +67,13 @@ function GL.IdentityFromName(name, surname, guid)
     if not guid and not surname then return nil end
     local fullName = name .. (surname and " " .. surname or "")
     local alias = surname and ("name:" .. fullName:lower()) or nil
-    return { key = guid and ("guid:" .. guid) or alias, guid = guid, name = name,
+    local identity = { key = guid and ("guid:" .. guid) or alias, guid = guid, name = name,
         surname = surname, fullName = fullName, alias = alias }
+    local seen = guid and guildSightings[guid]
+    if seen and GL.Now() - seen.time <= 60 then
+        identity.guild, identity.realm, identity.guildSeenAt = seen.guild, seen.realm, seen.time
+    end
+    return identity
 end
 
 function GL.Identity(unit)
@@ -90,11 +96,29 @@ function GL.Identity(unit)
     identity.level = GL.Clean(GL.Safe(UnitLevel, unit), "number")
     if type(GetGuildInfo) == "function" then
         local ok, guild, rank, rankIndex, guildRealm = pcall(GetGuildInfo, unit)
-        if ok and (not issecretvalue or GL.Safe(issecretvalue, guild) == false) then
+        guild = ok and cleanName(guild) or nil
+        if guild then
             identity.guildKnown = true
-            identity.guild = cleanName(guild)
+            identity.guild, identity.guildSeenAt = guild, GL.Now()
             identity.realm = cleanName(guildRealm) or cleanName(GL.Safe(GetRealmName))
+            if guid then
+                -- ponytail: retain only 256 recent guild observations, for 60 seconds.
+                -- This recovers recap-only attackers without adding bystanders to the journal.
+                if not guildSightings[guid] then
+                    local count, oldest, oldestTime = 0, nil, math.huge
+                    for key, seen in pairs(guildSightings) do
+                        if identity.guildSeenAt - seen.time > 60 then guildSightings[key] = nil
+                        else
+                            count = count + 1
+                            if seen.time < oldestTime then oldest, oldestTime = key, seen.time end
+                        end
+                    end
+                    if count >= 256 then guildSightings[oldest] = nil end
+                end
+                guildSightings[guid] = { guild = guild, realm = identity.realm, time = identity.guildSeenAt }
+            end
         end
+        -- An empty/secret reply is not proof that a known player left their guild.
     end
     return identity
 end
@@ -179,6 +203,9 @@ function GL.Get(identity)
 end
 
 local function merge(provisional, record)
+    if provisional.guild and (not record.guild or (provisional.guildSeenAt or 0) > (record.guildSeenAt or 0)) then
+        record.guild, record.realm, record.guildSeenAt = provisional.guild, provisional.realm, provisional.guildSeenAt
+    end
     for _, field in ipairs({ "class", "race" }) do
         if record[field] == nil and provisional[field] ~= nil then
             record[field], record[field .. "Name"] = provisional[field], provisional[field .. "Name"]
@@ -254,8 +281,14 @@ function GL.Remember(identity)
     if sex == 2 or sex == 3 then record.sex = sex end
     record.level = GL.Clean(identity.level, "number") or record.level
     record.realm = cleanName(identity.realm) or record.realm
-    if identity.guildKnown then record.guild = cleanName(identity.guild)
-    elseif identity.guild then record.guild = cleanName(identity.guild) end
+    local guild = cleanName(identity.guild)
+    if guild then
+        record.guild, record.guildSeenAt = guild, GL.Clean(identity.guildSeenAt, "number")
+            or (identity ~= record and GL.Now() or record.guildSeenAt)
+    elseif identity.guildKnown then
+        record.guild, record.guildSeenAt = nil, nil
+        if record.guid then guildSightings[record.guid] = nil end
+    end
     record.lastSeen, record.lastZone = GL.Now(), GL.Where()
     if clean.alias then
         local previous = GL.db.aliases[clean.alias]
@@ -311,6 +344,11 @@ end
 local function history(record, kind, extra)
     local entry = extra or {}
     entry.time, entry.kind, entry.zone = entry.time or GL.Now(), kind, entry.zone or GL.Where()
+    if kind == "kill" or kind == "death" or kind == "aggression" then
+        -- Snapshot once: later guild changes must never reassign old PvP events.
+        entry.guild, entry.guildRealm, entry.guildObservedAt = record.guild, record.realm, record.guildSeenAt
+        entry.guildSource = not record.guild and "unknown" or record.guildSeenAt == entry.time and "observed" or "last-known"
+    end
     table.insert(record.history, entry)
 end
 local reactionScores = { friend = 1, enemy = -10, warning = -1, neutral = 0 }
@@ -464,6 +502,7 @@ function GL.SetSetting(key, value)
     return true
 end
 function GL.InitDB()
+    guildSightings = {}
     if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end
     GL.db = GrudgeLedgerDB
     GL.db.schema = 1
