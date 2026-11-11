@@ -77,6 +77,7 @@ local function later(state, seconds, offMap, fn)
     end)
 end
 local function start()
+    if GrudgeLedger and GrudgeLedger.DruidRadarActive and GrudgeLedger.DruidRadarActive() then say("Essai druide en cours : /glradar stop pour annuler."); return end
     if active then say("Test deja en cours. /glprobe stop pour annuler."); return end
     if not Minimap or not Minimap.UpdateMouseoverAtPoint or not Minimap.SetUsingSoftCursor or
         not C_TooltipInfo or not C_TooltipInfo.GetMinimapMouseover or not C_Timer then
@@ -160,6 +161,7 @@ local function start()
     later(state, 0.5, false, capture)
 end
 SLASH_GRUDGELEDGERPROBE1 = "/glprobe"
+if GrudgeLedger then function GrudgeLedger.MinimapProbeActive() return active ~= nil end end
 SlashCmdList.GRUDGELEDGERPROBE = function(message)
     local command = (message or ""):lower():match("^%s*(.-)%s*$")
     if command == "test" then start()

@@ -61,6 +61,10 @@ local function run(mode)
     end }
     assert(loadstring(source, "Probe.lua")); setfenv(assert(loadstring(source)), env)()
     assert(#messages == 0 and #queue == 0 and not soft, "must be dormant at load")
+    env.GrudgeLedger.DruidRadarActive = function() return true end
+    env.SlashCmdList.GRUDGELEDGERPROBE("test")
+    assert(#queue == 0 and not soft, "druid and virtual cursor experiments are mutually exclusive")
+    env.GrudgeLedger.DruidRadarActive = function() return false end
     env.SlashCmdList.GRUDGELEDGERPROBE("test")
     if mode ~= "missing-hover-api" then
         assert(#queue == 1)

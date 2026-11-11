@@ -31,6 +31,9 @@ for name, expected_width, expected_height, transparent in (
         assert all(a == 255 for a in alpha), "opaque artwork must remain opaque"
     assert any(alpha), "artwork must not be empty"
 print("PASS artwork: uncompressed RGBA TGAs, correct dimensions, cutout alpha and opaque artwork", flush=True)
+mask = (addon / "Media" / "RadarBlank.tga").read_bytes()
+assert mask[:3] == bytes((0, 0, 2)) and mask[12:18] == bytes((8, 0, 8, 0, 32, 8))
+assert len(mask) == 18 + 8 * 8 * 4 and not any(mask[18:]), "radar mask must be fully transparent"
 compiler = LuaRuntime(unpack_returned_tuples=True)
 files = list(addon.glob("*.lua"))
 for file in files:

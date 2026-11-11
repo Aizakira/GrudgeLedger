@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.1
+GRUDGE LEDGER — 0.5.2
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -7,6 +7,41 @@ Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Wort
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
+
+Nouveauté 0.5.2 : essai du détecteur druide, sans survol manuel de minimap
+
+Il s'agit d'un test de capacité, pas encore d'un radar continu. Rien ne démarre
+au chargement, aucun pistage n'est changé et aucune rancune n'est modifiée.
+Le précédent test de curseur virtuel a échoué sur le client 70888.
+Cette nouvelle méthode déplace temporairement une minimap invisible sous la
+souris immobile, via les API Lua du client. Elle ne déplace jamais la souris.
+
+Pour le seul essai nécessitant le vrai client :
+1. Redémarrer WoW une fois pour charger le nouveau fichier et son masque.
+2. À l'abri, en extérieur, se mettre en félin et activer Pistage des humanoïdes.
+3. Cibler un autre joueur immobile, dont le point est visible sur la minimap.
+   Un ami convient ; choisir un joueur sous forme humanoïde.
+4. Placer la souris sur le décor, hors fenêtres et minimap, puis taper
+   /glradar test et rester immobile, sans clic, pendant au maximum 12 secondes.
+   Le bouton « Test druide » dans Diagnostic laisse trois secondes pour replacer
+   la souris. La minimap est masquée temporairement pendant le balayage.
+5. Copier le résultat avec /glradar rapport, ou via /gl debug.
+   /glradar stop interrompt l'essai ; bouger ou entrer en combat l'arrête aussi.
+
+Un résultat positif exige deux lectures du nom témoin, séparées et encadrées
+par des contrôles vides. Un nom de propriétaire de familier ne suffit pas.
+Un résultat négatif ne prouve pas l'absence d'humanoïdes : mouvement du témoin,
+grille de 225 positions et faible fréquence d'images peuvent limiter l'essai.
+Les dix derniers résultats gardent le build, l'étape, le motif et les compteurs,
+sans noms de joueurs ni infobulles. La restauration de la minimap est vérifiée.
+Si elle échoue, le test demande /reload et refuse un nouvel essai jusque-là.
+Désactiver NodeSight pendant ce test : deux scanners ne doivent pas déplacer
+la même minimap. Les autres contrôles de minimap ne sont pas forcés/désactivés.
+
+Il reste à démontrer la lecture sur Forever avant d'envisager le radar continu,
+ses alertes lointaines et l'option de pistage en félin. Aucun succès simulé ne
+déverrouille ces fonctions. Aucune approbation spécifique de Blizzard n'a été
+obtenue ; l'accès à une API ou l'existence d'un autre addon n'en constitue pas une.
 
 Nouveauté 0.5.1 : une icône de bisou reconnaissable
 Lèvres rouges peintes soufflant un cœur rose, générées avec l'outil d'images

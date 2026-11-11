@@ -72,7 +72,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.5.1.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.5.2.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -101,6 +101,30 @@ Quelques commandes facultatives, également utilisables dans une macro :
 
 Les actions concernent le joueur ciblé. Le [guide complet](GrudgeLedger/README.txt) détaille les classements, les corrections et les sauvegardes.
 
+## 0.5.2 : essai du détecteur druide sans survol manuel
+
+Le test de curseur virtuel a échoué sur le client observé 70888. Une autre méthode
+est maintenant testable : une minimap temporairement invisible est déplacée sous
+la souris immobile, puis les infobulles natives sont lues. La souris ne bouge pas.
+
+Après redémarrage du jeu, en extérieur et hors combat, passer en félin avec
+**Pistage des humanoïdes** actif. Cibler un joueur humanoïde immobile dont le point
+est visible sur la minimap. Placer la souris sur le décor, hors fenêtres, puis
+taper `/glradar test` et rester immobile jusqu'au résultat, au maximum 12 secondes.
+La minimap est temporairement masquée. `/glradar stop`, un déplacement ou le combat
+interrompent le test. `/glradar rapport` donne le résultat sans noms, l'étape et
+les compteurs ; il figure aussi dans Diagnostic. Désactiver tout autre scanner
+de minimap pour isoler l'essai.
+
+Le test exige deux lectures du nom témoin avec des contrôles vides avant, entre
+et après. La grille bornée de 225 positions peut manquer un point ; un faible
+nombre d'images par seconde peut limiter l'essai. **Le radar continu, les alertes
+lointaines et le pistage automatique en félin ne sont pas activés.** Les 73 cas
+automatisés vérifient le protocole et la restauration ; il faut encore valider la
+lecture native dans Forever. Aucune autorisation spécifique de Blizzard n'a été
+obtenue. Voir [l'enquête et ses sources primaires](DEVELOPMENT.txt) et les
+[instructions détaillées](GrudgeLedger/README.txt).
+
 ## Compatibilité et limites
 
 Prévu pour **Forever, interface 16001** ; développé avec le client **1.60.1.70862**. Les versions Retail, Classic et les autres serveurs ne sont pas validés. Les marqueurs nécessitent des barres de noms visibles et respectent les limites de portée du jeu. Ce n'est ni un radar couvrant toute la zone, ni un détecteur de furtivité.
@@ -109,7 +133,7 @@ Forever peut masquer le journal de combat. L'addon consulte aussi son récapitul
 
 Les boutons Ami/Méfiance/Ennemi et les avis manuels conservent leur priorité, même après une emote. Les gestes seuls ne verrouillent plus le classement : un `/spit` ne bloque pas le passage en ennemi après une mort PvP. La détection des duels dépend des signaux disponibles.
 
-Quinze scripts de tests automatisés, dont 71 scénarios de suivi, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
+Dix-neuf scripts de tests automatisés, dont 77 scénarios de suivi et 73 cas du détecteur druide, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
 
 ## Chacun son livre
 
@@ -136,7 +160,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.1.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.2.zip GrudgeLedger
 ```
 
 ## Licence et crédits

@@ -1,4 +1,4 @@
-Grudge Ledger 0.5.1 — sources et tests
+Grudge Ledger 0.5.2 — sources et tests
 
 Le dossier GrudgeLedger est le seul dossier à installer dans Interface/AddOns.
 Les tests utilisent Lua 5.1 via Lupa, sans lancer WoW.
@@ -24,3 +24,39 @@ et l'absence de peinture au-delà du livre. Il échoue si un contrôle
 se chevauche, dépasse la fenêtre ou si le texte dépasse sa région. Le workflow
 Windows exécute aussi cette vérification. Ces mesures ne remplacent pas une
 revue esthétique ni un essai dans le client réel.
+
+Détecteur druide, état au 11 novembre 2026
+----------------------------------------
+Le curseur virtuel (/glprobe test) a rendu un résultat négatif sur le vrai
+client 70888. Il reste disponible comme contrôle, mutuellement exclusif avec
+/glradar test. La nouvelle expérience est une machine à états bornée :
+point vide -> grille 15x15 -> point vide -> relecture du témoin -> point vide.
+Chaque lecture attend deux OnUpdate ; la limite globale est de 12 secondes.
+Les tests ne prétendent pas simuler le moteur natif : ils modélisent les noms
+à partir de la géométrie carte/curseur, avec une latence de rendu de 1/2 images.
+Une réussite locale valide le protocole, pas la disponibilité du moteur WoW.
+
+19 scripts de tests, dont 73 cas du détecteur druide : API absentes/protégées,
+cache trompeur, correspondance exacte et ambiguïtés, propriétaire d'un familier,
+relecture absente, échelles et dimensions différentes, timeout, interruptions,
+erreur à chaque mutation et restauration (y compris un setter sans effet),
+exclusion mutuelle, persistance bornée et absence d'identités dans le rapport.
+Le masque TGA de 8x8 pixels est contrôlé : transparent, sans image tierce.
+
+Sources primaires consultées (lecture uniquement, code réimplémenté ici) :
+- API Forever : https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/MinimapDocumentation.lua
+- API minimap : https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/MinimapFrameAPIDocumentation.lua
+- Changelog de l'auteur NodeSight 2.0.4 : https://www.curseforge.com/wow/addons/node-sight/files/9552010
+- Méthode publique : https://github.com/Krelock/NodeSight/blob/5c70c870447c9dfa83612a5fa0eba2698d04fb51/NodeSight.lua
+  NodeSight est All Rights Reserved : aucun code, asset ni bibliothèque de cet
+  addon n'est inclus, exécuté ou requis. La référence décrit une piste technique.
+- Politique officielle : https://us.forums.blizzard.com/en/wow/t/ui-add-on-development-policy/24534
+  La politique n'accorde pas d'autorisation spécifique à un radar PvP.
+  N'utiliser ni lecteur mémoire, ni injection, ni automatisation extérieure,
+  ni contournement de données/API protégées. Les refus d'API arrêtent le test.
+
+Avant toute fonctionnalité permanente : vérifier dans Forever plusieurs noms
+connus avec contrôles vides, puis portée réelle, déplacements, disparition,
+coexistence avec les addons de minimap, impact visuel et coût du balayage.
+Le pistage automatique en félin et les alertes de danger lointain restent hors
+service tant que ce préalable de lecture native n'est pas démontré.
