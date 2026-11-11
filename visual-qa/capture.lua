@@ -177,7 +177,20 @@ end
 QA = { mock = mock, records = records, selected = record }
 function QA.capture(name)
     hideWindows()
-    if name == "journal" then GL.ShowLedger(record.key) return GrudgeLedgerWindow
+    UIParent:SetSize(1920, 1080)
+    if name == "journal" or name == "journal-small" or name == "journal-small-bottom" then
+        if name ~= "journal" then UIParent:SetSize(1024, 600) end
+        GL.ShowLedger(record.key)
+        GrudgeLedgerWindow.search:SetText("")
+        GrudgeLedgerWindow.filters.all.scripts.OnClick()
+        GrudgeLedgerWindow.factions.all.scripts.OnClick()
+        GL.ShowLedger(record.key)
+        if name == "journal-small-bottom" then
+            local f = GrudgeLedgerWindow
+            assert(f.detailBody:GetHeight() >= f.detailText:GetStringHeight() + 12)
+            f.detailScroll:SetVerticalScroll(math.max(0, f.detailBody:GetHeight() - f.detailScroll:GetHeight()))
+        end
+        return GrudgeLedgerWindow
     elseif name == "journal-horde-friends" then
         GL.ShowLedger(records[1].key)
         GrudgeLedgerWindow.filters.friend.scripts.OnClick()
@@ -230,6 +243,7 @@ function QA.snapshot(root)
             buttonState = f.qaButtonState,
             template = f.qaTemplate, fontObject = f.qaFontObject, font = f.qaFont, fontSize = f.qaFontSize,
             color = f.qaFill, textColor = f.qaTextColor, tint = f.qaTint, alpha = f.qaAlpha,
+            ignoreParentAlpha = f.qaIgnoreAlpha, texCoord = f.texCoord,
             texture = type(f.texture) == "string" and f.texture or nil, mask = f.mask ~= nil,
             justifyH = f.qaJustifyH, justifyV = f.qaJustifyV, spacing = f.qaSpacing,
             maxLines = f.qaMaxLines, wordWrap = f.qaWordWrap, insets = f.qaInsets,

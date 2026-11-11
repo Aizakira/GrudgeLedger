@@ -90,18 +90,59 @@ assert(ledger.actions[1].enabled == false and ledger.actions[1].disabledFont == 
 assert(ledger.actions[1].normalFont ~= ledger.actions[1].disabledFont and ledger.actions[1].normalTexture ~= ledger.actions[1].disabledTexture,
     "native button states retain separate disabled font and background")
 assert(ledger.actions[1].fontString:GetText() == "Ami", "native Button text remains attached to custom caption")
+assert(ledger.actions[1].fontString.color[1] == 0.52, "empty-state captions visibly reflect disabled state")
+for _, control in pairs(ledger.reactions) do assert(not control.selection:IsShown()) end
 local identity = GL.Identity("target")
 GL.SetReaction(identity, "friend")
 GL.ShowLedger(identity.key)
 assert(ledger.rows[1].name.wordWrap == false and ledger.rows[1].name.maxLines == 1)
 assert(ledger.rows[1].selection:IsShown())
+assert(ledger.reactions.friend.selection:IsShown() and ledger.actions[1].fontString.color[1] > 0.9,
+    "selecting a person restores readable enabled captions and its effective reaction")
 local selectedColor = ledger.filters.all.normalSurface.color
 local inactiveColor = ledger.filters.enemy.normalSurface.color
 assert(selectedColor[1] ~= inactiveColor[1], "active filter has a visible fill")
-assert(ledger.detailText:GetText():find("|cffd4b373NOTES PERSONNELLES|r", 1, true), "section headings use aged gold")
-assert(ledger.detailText:GetText():find("|cffa6967aDernier lieu", 1, true), "secondary metadata is subdued")
+assert(ledger.detailText:GetText():find("|cff653c20NOTES PERSONNELLES|r", 1, true), "section headings use dark ink on parchment")
+assert(ledger.detailText:GetText():find("|cff5c4029Dernier lieu", 1, true), "secondary metadata stays readable on parchment")
+assert(ledger.paper.texture:find("JournalPaper", 1, true) and ledger.illustration.texture:find("JournalIllustration", 1, true))
+near(ledger.illustration:GetWidth() / ledger.illustration:GetHeight(), 2)
+assert(ledger.illustration:GetWidth() <= 144, "header decoration must leave room for controls")
+for _, region in ipairs({ ledger.detailTitle, ledger.detailStatus, ledger.detailIdentity, ledger.detailScroll }) do
+    assert(region.anchor[2] >= ledger.paper.anchor[2] and region.anchor[2] + region:GetWidth() < ledger.paper.anchor[2] + ledger.paper:GetWidth())
+    assert(-region.anchor[3] + region:GetHeight() < -ledger.paper.anchor[3] + ledger.paper:GetHeight(), "reading content stays inside the page")
+end
+local function luminance(c)
+    local result = 0
+    for i, weight in ipairs({ 0.2126, 0.7152, 0.0722 }) do
+        local v = c[i] <= 0.04045 and c[i] / 12.92 or ((c[i] + 0.055) / 1.055) ^ 2.4
+        result = result + weight * v
+    end
+    return result
+end
+local paperLuminance = luminance({ 0.86, 0.79, 0.65 }) -- darker than the calm center of the shipped paper
+local function readable(c) assert((paperLuminance + 0.05) / (luminance(c) + 0.05) >= 4.5, "page text needs at least 4.5:1 contrast") end
+readable(ledger.detailText.color) readable(ledger.detailIdentity.color)
+for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
+    GL.SetReaction(identity, relation)
+    readable(ledger.detailTitle.color) readable(ledger.detailStatus.color)
+    for value, control in pairs(ledger.reactions) do
+        assert(control.selection:IsShown() == (value == relation), "exactly the effective relation is selected")
+    end
+    local row = ledger.rows[1]
+    assert((luminance(row.name.color) + 0.05) / (luminance(row.bg.color) + 0.05) >= 4.5,
+        "subdued relation text stays readable on the selected index row")
+end
+ledger.search:SetText("No matching person")
+for _, control in pairs(ledger.reactions) do assert(not control.selection:IsShown() and not control.enabled) end
+assert(ledger.actions[1].fontString.color[1] == 0.52, "clearing selection restores the disabled appearance")
+GL.ShowLedger(identity.key)
+assert(ledger.detailText:GetText():find("NOTES PERSONNELLES", 1, true) < ledger.detailText:GetText():find("HISTORIQUE RÉCENT", 1, true))
+UIParent:SetSize(800, 600) ledger:Hide() ledger:Show()
+assert(ledger:GetWidth() * ledger.scale <= 776 and ledger:GetHeight() * ledger.scale <= 576, "journal fits small displays")
+UIParent:SetSize(1920, 1080)
 GL.EditNote(identity)
 assert(GrudgeLedgerNote.edit.justifyV == "TOP" and ledger.search.justifyV == "MIDDLE")
+readable(GrudgeLedgerNote.edit.color)
 SlashCmdList.GRUDGELEDGER("debug")
 assert(GrudgeLedgerDiagnostic.edit.justifyV == "TOP", "multiline editors always begin at the upper-left")
 assert(#GL.errors == 0)

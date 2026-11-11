@@ -59,7 +59,12 @@ function methods:Show()
 end
 function methods:Hide() self.shown = false if self.scripts.OnHide then self.scripts.OnHide(self) end end
 function methods:IsShown() return self.shown end
-function methods:SetEnabled(v) self.enabled = v end
+function methods:SetEnabled(v)
+    local changed = self.enabled ~= v
+    self.enabled = v
+    local callback = self.scripts[v and "OnEnable" or "OnDisable"]
+    if changed and callback then callback(self) end
+end
 function methods:SetToplevel(v) self.topLevel = v end
 function methods:Raise() self.raised = (self.raised or 0) + 1 end
 function methods:SetChecked(v) self.checked = v end

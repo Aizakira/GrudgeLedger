@@ -7,18 +7,25 @@ sys.path.insert(0, str(work / "test-runtime"))
 from lupa.lua51 import LuaRuntime
 
 addon = work / "GrudgeLedger"
-for name, size in (("LedgerIcon.tga", 256), ("LedgerBook.tga", 256),
-                   ("RelationFriend.tga", 128), ("RelationWarning.tga", 128), ("RelationEnemy.tga", 128)):
+for name, expected_width, expected_height, transparent in (
+    ("LedgerIcon.tga", 256, 256, True), ("LedgerBook.tga", 256, 256, True),
+    ("RelationFriend.tga", 128, 128, True), ("RelationWarning.tga", 128, 128, True), ("RelationEnemy.tga", 128, 128, True),
+    ("JournalIllustration.tga", 512, 256, True), ("JournalPaper.tga", 512, 512, False),
+):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")
     height = int.from_bytes(texture[14:16], "little")
     assert texture[1:3] == bytes((0, 2)) and texture[16] == 32 and texture[17] & 15 == 8, "uncompressed RGBA TGA required"
-    assert width == height == size, "game texture must have the expected power-of-two dimensions"
+    assert (width, height) == (expected_width, expected_height), "game texture must have the expected power-of-two dimensions"
     pixels = 18 + texture[0]
     assert len(texture) >= pixels + width * height * 4
-    assert all(texture[pixels + (y * width + x) * 4 + 3] == 0 for x in (0, size - 1) for y in (0, size - 1)), "icon corners must be transparent"
-    assert any(texture[pixels + 3:pixels + width * height * 4:4]), "icon must not be empty"
-print("PASS icons: five uncompressed RGBA TGAs, expected dimensions, transparent corners and visible artwork", flush=True)
+    alpha = texture[pixels + 3:pixels + width * height * 4:4]
+    if transparent:
+        assert all(alpha[y * width + x] == 0 for x in (0, width - 1) for y in (0, height - 1)), "artwork corners must be transparent"
+    else:
+        assert all(a == 255 for a in alpha), "reading parchment must remain opaque"
+    assert any(alpha), "artwork must not be empty"
+print("PASS artwork: seven uncompressed RGBA TGAs, correct dimensions, cutout alpha and opaque reading paper", flush=True)
 compiler = LuaRuntime(unpack_returned_tuples=True)
 files = list(addon.glob("*.lua"))
 for file in files:

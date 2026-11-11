@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.2.7
+GRUDGE LEDGER — 0.3.0
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -137,6 +137,16 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+PRÉSENTATION DU JOURNAL 0.3.0
+Le journal prend la forme d'un livre ancien : index sombre, fiche sur parchemin,
+encre brune, reliure bordeaux et illustration originale d'un livre ouvert.
+Le nom, le classement et l'identité précèdent les actions. Les notes personnelles
+apparaissent en premier. Les boutons signalent le classement actif, les fenêtres
+secondaires partagent le même cadre et l'éditeur de notes utilise le parchemin.
+L'inspiration artistique vient d'Overlord ; ses illustrations ne sont pas copiées.
+Deux nouvelles textures sont incluses : redémarrer WoW si elles ne se chargent
+pas après /reload. Les données personnelles et les règles de suivi sont conservées.
 
 SUIVI DES ATTAQUES MULTIPLES 0.2.7
 Ajout du récapitulatif de mort public de Forever, avec contrôle de fraîcheur,

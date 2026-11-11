@@ -24,3 +24,8 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install --target test-runtime -r requirements-test.txt
       - run: python tests/run_tests.py
+      - name: Check UI geometry on Windows
+        if: runner.os == 'Windows'
+        run: |
+          python -m pip install Pillow==12.1.1
+          python visual-qa/render.py

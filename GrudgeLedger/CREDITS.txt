@@ -1,4 +1,4 @@
-Grudge Ledger — 0.2.7
+Grudge Ledger — 0.3.0
 Distributed under the GNU General Public License, version 3 (see LICENSE).
 
 Menu integration and nameplate/tooltip lifecycle techniques are adapted from
@@ -33,3 +33,11 @@ and the client observations documented by GudaAddons/HeadHunter. The reader and
 validation logic here are independently implemented; no HeadHunter files are bundled.
 https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/DeathRecapDocumentation.lua
 https://github.com/GudaAddons/HeadHunter/blob/main/Detection/ForeverDeaths.lua
+
+The ancient-book presentation is visually inspired by Overlord's warm fantasy
+materials and restrained gold accents. No Overlord code or artwork is bundled.
+The open book/quill illustration (Media/JournalIllustration.tga, 512x256) and
+quiet parchment (Media/JournalPaper.tga, 512x512) were originally generated with
+OpenAI's built-in image tool, then converted to uncompressed RGBA TGA. They are
+distributed under the same GPLv3 terms. The illustration has a transparent
+background; the reading paper is opaque. No text is baked into either asset.

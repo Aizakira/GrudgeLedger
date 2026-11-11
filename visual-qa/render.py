@@ -38,7 +38,7 @@ def fontsize(obj):
 
 @lru_cache(maxsize=100)
 def font(size, title=False):
-    return ImageFont.truetype(str(FONTS / ("georgia.ttf" if title else "arial.ttf")), max(1, round(size)))
+    return ImageFont.truetype(str(FONTS / ("georgia.ttf" if title else "arial.ttf")), max(1, size))
 
 
 def plaintext(value):
@@ -86,6 +86,10 @@ class Layout:
     def scale(self, n):
         r = self.frames[n]
         return r.get("scale", 1) * (self.scale(r["parent"]) if r.get("parent") else 1)
+
+    def alpha(self, n):
+        r = self.frames[n]
+        return r.get("alpha", 1) * (self.alpha(r["parent"]) if r.get("parent") and not r.get("ignoreParentAlpha") else 1)
 
     def visible(self, n):
         r = self.frames[n]
@@ -179,7 +183,10 @@ def actual_texture(path):
 def draw_native_icon(draw, box, path, fill):
     x, y, x2, y2 = box
     cx, cy, rad = (x + x2) / 2, (y + y2) / 2, max(1, min(x2 - x, y2 - y) / 2 - 2)
-    if "Shield" in (path or ""):
+    if "QuestionMark" in (path or ""):
+        draw.rounded_rectangle(box, radius=2, fill=(33,28,23,255), outline=(122,98,65,255))
+        draw.text((cx,cy), "?", anchor="mm", font=font(max(7,rad*1.6)), fill=(215,188,135,255))
+    elif "Shield" in (path or ""):
         draw.polygon([(cx-rad,cy-rad),(cx+rad,cy-rad),(cx+rad*.8,cy+rad*.4),(cx,cy+rad),(cx-rad*.8,cy+rad*.4)], fill=fill, outline=(225,210,155,255))
     elif "Skull" in (path or ""):
         draw.ellipse((cx-rad,cy-rad,cx+rad,cy+rad*.6), fill=fill)
@@ -218,7 +225,7 @@ def render(name, frames, root):
         layer = Image.new("RGBA", canvas.size)
         draw = ImageDraw.Draw(layer)
         box = (round(x), round(y), round(x+w), round(y+h))
-        alpha = r.get("alpha", 1)
+        alpha = lay.alpha(r["id"])
         if r.get("color") is not None: draw.rectangle(box, fill=color(r["color"], alpha))
         if r["kind"] == "Minimap":
             draw.ellipse(box, fill=(43,51,43,255), outline=(144,115,66,255), width=4)
@@ -227,7 +234,12 @@ def render(name, frames, root):
             draw.ellipse((x+w*.47,y+h*.47,x+w*.53,y+h*.53),fill=(221,202,115,255))
         tex = actual_texture(r.get("texture"))
         if tex:
+            coords = r.get("texCoord")
+            if coords and len(coords) == 4:
+                left, right, top, bottom = coords
+                tex = tex.crop((round(left*tex.width), round(top*tex.height), round(right*tex.width), round(bottom*tex.height)))
             tex = tex.resize((max(1,round(w)),max(1,round(h))), Image.Resampling.LANCZOS)
+            tex = ImageChops.multiply(tex, Image.new("RGBA", tex.size, color(r.get("tint"), alpha)))
             if r.get("mask"):
                 mask = Image.new("L", tex.size, 0); ImageDraw.Draw(mask).ellipse((0,0,tex.width,tex.height), fill=255)
                 tex.putalpha(ImageChops.multiply(tex.getchannel("A"), mask))
@@ -243,42 +255,51 @@ def render(name, frames, root):
             draw.rectangle(cb, fill=(20,18,16,255),outline=(131,108,66,255))
             if r.get("checked"): draw.line([(x+7,y+h*.55),(x+w*.45,y+h-7),(x+w-5,y+6)],fill=(226,190,98,255),width=2)
         if r.get("text") and not r.get("fontString"):
-            size = (r.get("fontSize") or fontsize(r.get("fontObject") or r.get("template"))) * lay.scale(r["id"])
+            region_scale = lay.scale(r["id"])
+            size = (r.get("fontSize") or fontsize(r.get("fontObject") or r.get("template"))) * region_scale
             title = "Large" in str(r.get("fontObject") or r.get("template") or "")
-            f = font(size,title)
+            f = font(size/region_scale,title)
             inset = r.get("insets") or [0,0,0,0]
             if isinstance(inset,dict): inset=list(inset.values())
             ix,ir,it,ib = (list(inset)+[0]*4)[:4]
             if r["kind"] == "EditBox" and r.get("template"): ix += 7; ir += 7
+            ix,ir,it,ib = (v * region_scale for v in (ix,ir,it,ib))
             textw = max(1,w-ix-ir)
             wrapping = r.get("wordWrap", r["kind"] == "FontString" or r["kind"] == "EditBox")
-            lines = wrap(r["text"],textw,size,title,wrapping)
-            natural = len(lines)*(size+2) + max(0,len(lines)-1)*r.get("spacing",0)
+            # Layout wraps in UI units, before scale; scaled glyph hinting must not reflow it.
+            lines = wrap(r["text"],textw/region_scale,size/region_scale,title,wrapping)
+            line_height, spacing = size + 2*region_scale, r.get("spacing",0)*region_scale
+            natural = len(lines)*line_height + max(0,len(lines)-1)*spacing
             all_lines = lines
             if r.get("maxLines"): lines=lines[:int(r["maxLines"])]
             just = r.get("justifyH") or ("CENTER" if r["kind"] == "Button" else "LEFT")
             ty = y+it
             if r["kind"] in ("Button", "EditBox") and r.get("justifyV") != "TOP" and natural <= h-it-ib: ty += (h-it-ib-natural)/2
             elif r.get("justifyV") == "MIDDLE": ty += (h-natural)/2
-            textlayer = Image.new("RGBA", canvas.size); td = ImageDraw.Draw(textlayer)
-            rgba=color(r.get("textColor"), fallback=(.91,.86,.74,1))
-            if not r.get("enabled",True): rgba=(110,105,96,255)
+            textlayer = Image.new("RGBA", (math.ceil(canvas.width/region_scale), math.ceil(canvas.height/region_scale)))
+            td = ImageDraw.Draw(textlayer)
+            rgba=color(r.get("textColor"), alpha, fallback=(.91,.86,.74,1))
+            owner = lay.frames.get(r.get("parent"), {})
+            if not r.get("enabled",True) or (owner.get("kind") == "Button" and not owner.get("enabled",True)):
+                rgba=(110,105,96,round(alpha*255))
             for line in lines:
                 if not wrapping or r.get("maxLines"):
-                    truncated = f.getlength(line) > textw or (line == lines[-1] and len(all_lines)>len(lines))
+                    truncated = f.getlength(line)*region_scale > textw or (line == lines[-1] and len(all_lines)>len(lines))
                     if truncated:
-                        while line and f.getlength(line + "…") > textw: line=line[:-1]
+                        while line and f.getlength(line + "…")*region_scale > textw: line=line[:-1]
                         line += "…"
                 tx=x+ix
-                if just == "CENTER": tx += (textw-f.getlength(line))/2
-                elif just == "RIGHT": tx += textw-f.getlength(line)
+                if just == "CENTER": tx += (textw-f.getlength(line)*region_scale)/2
+                elif just == "RIGHT": tx += textw-f.getlength(line)*region_scale
                 linecolor = rgba
                 for hexcolor, phrase in re.findall(r"(?<!\|)\|c([0-9a-fA-F]{8})(.*?)\|r",r["text"]):
                     if phrase and phrase in line:
                         linecolor=tuple(int(hexcolor[k:k+2],16) for k in (2,4,6))+(int(hexcolor[:2],16),)
                         break
-                td.text((tx,ty),line,font=f,fill=linecolor,anchor="lt")
-                ty += size+2+r.get("spacing",0)
+                td.text((tx/region_scale,ty/region_scale),line,font=f,fill=linecolor,anchor="lt")
+                ty += line_height+spacing
+            if region_scale != 1:
+                textlayer = textlayer.resize(canvas.size, Image.Resampling.LANCZOS)
             rect=(max(0,round(x)),max(0,round(y)),min(canvas.width,round(x+w)),min(canvas.height,round(y+h)))
             if rect[2]>rect[0] and rect[3]>rect[1]: layer.alpha_composite(textlayer.crop(rect),(rect[0],rect[1]))
             if natural > h+3 and not r.get("maxLines") and r["kind"] == "FontString":
@@ -331,7 +352,7 @@ def main():
     g.QA_TextWidth=lambda text,size: font(size).getlength(plaintext(text))
     g.QA_TextLines=lambda text,width,size: len(wrap(text,width,size))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
-    views=["journal","journal-horde-friends","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
+    views=["journal","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
     images, report, snapshots=[],{},{}
     for name in views:
         root=g.QA.capture(name)
@@ -361,6 +382,7 @@ def main():
     (OUT/"geometry-report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
     (OUT/"captured-frames.json").write_text(json.dumps(snapshots,ensure_ascii=False,indent=2),encoding="utf-8")
     print(json.dumps({"views":len(views),"issues":report,"contact_sheet":str(OUT/"contact-sheet.png")},ensure_ascii=False))
+    assert not any(report.values()), "Visual geometry checks failed; inspect geometry-report.json"
 
 
 if __name__=="__main__": main()

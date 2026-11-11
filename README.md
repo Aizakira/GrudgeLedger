@@ -25,9 +25,13 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 - **Nearby encounter alerts:** a small popup above the main chat in the lower-left area, with distinct sounds, cooldowns and grouped guild alerts. It follows the chat's position, leaving room above its tabs. Friends in your party or raid never trigger these alerts. Other friends alert on first sighting, then only after more than ten minutes without an observed presence; every sighting renews this window, including across UI reloads. Encounter clocks are separate for each of your characters.
 - **A personal journal:** notes, encounters, shared groups and PvP history, accessed through the red book on the minimap or `/gl`.
 
+![Offline preview of the ancient-book journal, with synthetic example records](docs/journal.png)
+
+The journal combines a dark index with a quiet parchment page, brown ink and an original open-book illustration. Its visual direction was inspired by Overlord; none of its artwork is copied. Notes come first, and the current relationship is visible above the actions. This preview is rendered from the actual Lua layout outside WoW, with synthetic records and approximated native fonts/icons.
+
 ## Install
 
-1. Download **`GrudgeLedger-0.2.7.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.3.0.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -79,7 +83,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.2.7.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.3.0.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.
