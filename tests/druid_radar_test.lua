@@ -62,6 +62,7 @@ local function run(mode, expected, options)
         anchors[#anchors + 1] = { p, relative, rp, x, y }
         center = { x + (flags.clamp and 20 or 0), y }
         pending = { x, y, due = frame + (options.latency or 1) }
+        if options.zoomOnPlace and scripts.OnEvent then scripts.OnEvent(nil, "MINIMAP_UPDATE_ZOOM") end
     end
     map.SetAlpha = function(_, value) mutation("SetAlpha"); if not (options.silentRestore and flags.restoring) then alpha = value end end
     map.SetMaskTexture = function(_, value) mutation("SetMaskTexture"); mask = value end
@@ -113,13 +114,30 @@ local function run(mode, expected, options)
     env.IsMouseButtonDown = function() return flags.click or false end
     env.GetUnitSpeed = function() return flags.moving and 1 or 0 end
     env.GetTime = function() return now end
+    local profileCalls, lastReadFrame, totalReads = 0, nil, 0
+    env.debugprofilestart = function() error("must not reset the global profiler") end
+    if options.profiler ~= "missing" then
+        env.debugprofilestop = function()
+            profileCalls = profileCalls + 1
+            if options.profiler == "throws" then error("private profiler failure") end
+            if options.profiler == "secret" then return secret end
+            if options.profiler == "nan" then return 0 / 0 end
+            if options.profiler == "infinite" then return math.huge end
+            if options.profiler == "reset" and profileCalls == 4 then return 0 end
+            if options.profiler == "late-missing" and profileCalls == 4 then return nil end
+            return profileCalls * 0.125 -- deterministic cost, never a hardware benchmark
+        end
+    end
     env.GetBuildInfo = function() return "1.60.1", "70888" end
     env.C_Minimap = {
+        GetViewRadius = function() return flags.secretRadius and secret or flags.radius or 100 end,
         GetNumTrackingTypes = function() return 2 end,
         GetTrackingInfo = function(i) return { spellID = mode ~= "tracking-filter" and (i == 1 and 19883 or 5225) or nil, active = not flags.tracking } end,
         GetTrackingFilter = function(i) return i == 1 and 19883 or 5225, nil end,
         SetTracking = function() error("test must never change tracking") end,
     }
+    if options.radiusAPI == "missing" then env.C_Minimap.GetViewRadius = nil end
+    if options.radiusAPI == "secret" then flags.secretRadius = true end
     env.CreateFrame = function() return {
         RegisterEvent = function(_, event) events[event] = true end,
         SetScript = function(_, name, fn) scripts[name] = fn end,
@@ -127,7 +145,7 @@ local function run(mode, expected, options)
     env.SlashCmdList = {}
     local watchdog
     env.C_Timer = { After = function(delay, fn) assert(delay == 12); watchdog = fn end }
-    local GL = { version = "0.5.7", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
+    local GL = { version = "0.5.9", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
     env.GrudgeLedger = GL
     GL.Clean = function(value, kind)
         if value == secret or kind and type(value) ~= kind then return nil end
@@ -144,6 +162,9 @@ local function run(mode, expected, options)
     GL.MinimapProbeActive = function() return flags.legacy or false end
     env.C_TooltipInfo = { GetMinimapMouseover = function()
         assert(frame > 0, "no same-frame reads")
+        assert(lastReadFrame ~= frame, "at most one native tooltip read per rendered frame")
+        lastReadFrame, totalReads = frame, totalReads + 1
+        assert(totalReads <= 229, "225 grid reads plus four witness/cache controls")
         if focusBlocked then obstructedReads = obstructedReads + 1 end
         if mode == "throws" then error("Élodie raw error") end
         if mode == "secret" then return secret end
@@ -165,7 +186,7 @@ local function run(mode, expected, options)
         return { lines = { { leftText = "Autre Point", type = 0 }, { leftText = "|cffff0000Élodie Testeur|r", type = 0 } } }
     end }
     assert(loadstring(source, "DruidRadar.lua")); setfenv(assert(loadstring(source)), env)()
-    assert(mutations == 0 and nativeCalls == 0 and not scripts.OnUpdate and #messages == 0, "dormant at login")
+    assert(mutations == 0 and nativeCalls == 0 and not scripts.OnUpdate and #messages == 0 and profileCalls == 0, "dormant at login")
     assert(not GL.db.druidRadarTests and not GL.DruidRadarActive())
     -- The game's skin (or another addon) sets its mask after our observer loads.
     if mode ~= "unknown-mask" and mode ~= "observe-later" and not options.prepare then
@@ -221,7 +242,8 @@ local function run(mode, expected, options)
     elseif mode == "working" then
         assert(GL.PrepareDruidRadar() and nativeCalls == 0 and mutations == 0, "known custom skins are not reset")
     end
-    slash("test")
+    local measuredBefore = profileCalls
+    slash(options.validation and "validation" or "test")
     if mode == "legacy" then assert(mutations == 0 and not GL.db.druidRadarTests); checked = checked + 1; return end
     if GL.DruidRadarActive() then
         local before = mutations
@@ -240,6 +262,8 @@ local function run(mode, expected, options)
             if mode == "late-secret" then flags.secretCursor = true end
             if mode == "late-focus" then flags.focus = true end
             if mode == "zoom" then flags.zoom = 2 end
+            if mode == "radius" then flags.radius = 80 end
+            if mode == "late-radius-secret" then flags.secretRadius = true end
             if mode == "resize" then flags.width = width + 1 end
             if mode == "resize-height" then flags.height = height + 1 end
             if mode == "late-alpha" then alpha = 0.5 end
@@ -260,6 +284,20 @@ local function run(mode, expected, options)
     assert(saved.build == "70888" and saved.time == 12345 and saved.points <= 225)
     assert(saved.version == GL.version and messages[#messages]:find("addon " .. GL.version, 1, true), "identify the installed diagnostic revision")
     assert(saved.seconds >= 0 and saved.seconds <= 12.2, "bounded duration")
+    assert(saved.mode == (options.validation and "validation" or "test"))
+    assert(saved.samples <= saved.points - saved.skipped and saved.samples <= saved.reads)
+    if options.profiler then
+        assert(saved.workMs == nil and saved.peakMs == nil, "invalid profiling must not become a zero-cost claim")
+        assert(messages[#messages]:find("coût indisponible", 1, true))
+    else
+        assert(saved.workMs > 0 and saved.peakMs == 0.125, "measure synchronous intervals only")
+        assert(saved.workMs == (profileCalls - measuredBefore) / 2 * 0.125, "count setup, ticks and restoration exactly once: " .. mode)
+    end
+    if options.validation and expected == "positive" then
+        assert(saved.points == 225 and saved.samples + saved.skipped == 225, "do not stop early at the witness")
+        assert(saved.reads == saved.samples + 4, "initial blank, intermediate blank, replay and final blank")
+        assert(saved.seconds > 7 and saved.seconds < 8, "full grid spans rendered frames at 60 FPS")
+    end
     if options.child then
         assert(obstructedReads == 0, "a minimap button's tooltip must never count as a radar read")
         assert(messages[#messages]:find(saved.skipped .. " points ignorés", 1, true), "show the obstruction count")
@@ -267,13 +305,17 @@ local function run(mode, expected, options)
         if options.child == "all" then assert(saved.skipped == 225 and saved.reads == 1 and saved.texts == 0, "a fully obscured scan is inconclusive") end
     end
     local failedCheck = ({ clamp = "centre X", clampY = "centre Y", zoom = "zoom", resize = "largeur",
-        ["resize-height"] = "hauteur", rescale = "échelle", ["late-alpha"] = "transparence" })[mode]
+        radius = "portée", ["resize-height"] = "hauteur", rescale = "échelle", ["late-alpha"] = "transparence" })[mode]
     if failedCheck then
         assert(saved.check == "minimap : " .. failedCheck and saved.detail:find("Reçu :", 1, true)
             and saved.detail:find("attendu :", 1, true), "precise measured failure instead of generic map error")
     end
     if mode == "secretCenter" then assert(saved.check == "minimap : centre X" and saved.detail == "Valeur reçue illisible.") end
     if mode == "late-mask" then assert(saved.check == "minimap : masque modifié" and not saved.detail) end
+    if options.event == "MINIMAP_UPDATE_ZOOM" or options.zoomOnPlace then
+        assert(saved.zoomEvents > 0 and messages[#messages]:find("Notifications de zoom", 1, true))
+    end
+    if expected == "zoom_unknown" then assert(saved.check == "notification MINIMAP_UPDATE_ZOOM") end
     if mode == "target" or mode == "npc" or mode == "self" or mode == "surname" or mode == "noIdentity" or mode == "secretTarget" then
         assert(mutations == 0 and saved.reads == 0 and saved.points == 0, "target preflight stays read-only")
     end
@@ -310,7 +352,7 @@ local function run(mode, expected, options)
     end
     slash("rapport")
     assert(messages[#messages]:find(saved.build, 1, true))
-    saved.skipped = nil -- Reports saved by 0.5.6 remain readable.
+    saved.skipped, saved.mode, saved.workMs, saved.peakMs, saved.samples = nil, nil, nil, nil, nil -- Older reports remain readable.
     slash("rapport")
     assert(messages[#messages]:find("0 points ignorés", 1, true))
     checked = checked + 1
@@ -353,10 +395,39 @@ end
 run("hook-failure", "prepare-failed", { prepare = "working", message = "API nécessaire" })
 run("empty", "timeout", { delta = 1 / 20 })
 run("hidden-driver", "timeout")
+-- A full validation must not stop at the first hit, including an early/last witness.
+for _, point in ipairs({ { 0, 0 }, { -84, -84 }, { 84, 84 } }) do
+    run("working", "positive", { validation = true, dotX = point[1], dotY = point[2], latency = 2 })
+end
+run("unlisted", "positive", { validation = true })
+run("duplicate", "positive", { validation = true })
+run("working", "positive", { validation = true, child = "nested" })
+run("working", "missed", { validation = true, dotX = 6, dotY = 6 }) -- Gaps in a coarse grid are inconclusive.
+run("working", "obstructed", { validation = true, child = "all" })
+run("working", "timeout", { validation = true, delta = 1 / 20 })
+for mode, expected in pairs({ empty = "missed", stale = "cache", ["one-hit"] = "replay",
+    ["late-combat"] = "combat", ["cursor-move"] = "mouse", stop = "stopped" }) do
+    run(mode, expected, { validation = true })
+end
+for _, profiler in ipairs({ "missing", "throws", "secret", "nan", "infinite", "reset", "late-missing" }) do
+    run("working", "positive", { validation = true, profiler = profiler })
+end
 run("silent-restore-failure", "restored", { silentRestore = true })
 for event, expected in pairs({ PLAYER_REGEN_DISABLED = "combat", PLAYER_STARTED_MOVING = "moving", PLAYER_DEAD = "dead",
     PLAYER_LEAVING_WORLD = "world", PLAYER_LOGOUT = "world", UPDATE_SHAPESHIFT_FORM = "form",
-    MINIMAP_UPDATE_TRACKING = "tracking", MINIMAP_UPDATE_ZOOM = "map" }) do run("event", expected, { event = event }) end
+    MINIMAP_UPDATE_TRACKING = "tracking" }) do run("event", expected, { event = event }) end
+-- A zoom notification is not evidence of changed geometry. Validate live values,
+-- including indoor/outdoor view radius changes at the same numeric zoom level.
+run("working", "positive", { event = "MINIMAP_UPDATE_ZOOM", validation = true })
+run("working", "positive", { zoomOnPlace = true, validation = true })
+run("zoom", "map", { event = "MINIMAP_UPDATE_ZOOM" })
+run("radius", "map", { event = "MINIMAP_UPDATE_ZOOM" })
+run("radius", "map")
+run("late-radius-secret", "api", { event = "MINIMAP_UPDATE_ZOOM" })
+for _, api in ipairs({ "missing", "secret" }) do
+    run("working", "positive", { radiusAPI = api })
+    run("event", "zoom_unknown", { event = "MINIMAP_UPDATE_ZOOM", radiusAPI = api })
+end
 for _, method in ipairs({ "ClearAllPoints", "SetPoint", "SetAlpha", "SetMaskTexture", "SetMouseClickEnabled", "EnableMouseWheel" }) do
     run("mutation-failure", "api", { fail = method })
     run("restore-failure", "restored", { restoreFail = method })

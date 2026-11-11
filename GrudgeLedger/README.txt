@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.7
+GRUDGE LEDGER — 0.5.9
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -8,6 +8,39 @@ Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
 
+0.5.9 : validation complète et notifications de zoom
+
+Une notification de zoom ne suffit plus à interrompre l'essai : le zoom et la
+portée réels sont vérifiés à la mise à jour suivante. Un changement indique les
+valeurs reçues et attendues ; une portée initiale illisible impose encore l'arrêt
+sur notification, avec un motif précis. Le rapport compte ces notifications.
+La détection fiable en jeu reste à valider.
+
+Un essai réel 0.5.7 sur le client 70888 a relu deux fois un joueur témoin,
+sans survol manuel, avec des contrôles vides réussis : 69 positions, 53 lectures,
+12 textes distincts en 2,1 secondes. Ce n'est pas une preuve de douze joueurs
+identifiés ni de détection continue fiable. Le radar reste manuel et expérimental.
+
+Après /reload : en félin, Pistage des humanoïdes actif, hors combat et instance,
+cibler un joueur humanoïde immobile visible comme point sur la minimap.
+Ouvrir /gl debug, cliquer Préparer la minimap, puis Validation druide.
+Placer la souris sur le décor vide dans les trois secondes, puis rester immobile.
+La minimap disparaît pendant au maximum 12 secondes ; /glradar stop annule.
+Le témoin peut être inconnu du livre. /glradar rapport retrouve le résultat anonyme.
+
+/glradar validation tente toute la grille (225 positions) au lieu de s'arrêter
+au premier témoin trouvé comme /glradar test. Le rapport compte les positions
+lues/ignorées et mesure le travail synchrone cumulé et l'appel le plus coûteux,
+si le chronomètre natif est disponible. Le rendu natif entre appels n'est pas
+mesuré : il faut aussi comparer FPS et mémoire en jeu sur plusieurs machines.
+La grille espacée peut manquer des points ; un résultat vide ne garantit pas la sécurité.
+
+144 cas simulés vérifient protocole, interruptions, restauration et limites :
+229 lectures natives maximum, au plus une par image rendue, 12 secondes,
+dix rapports sans noms. Aucun balayage ne tourne au repos. Avant toute activation
+automatique facultative, il reste à vérifier les identités, les configurations
+de minimap et les performances réelles. Voir DEVELOPMENT.txt dans les sources.
+
 Correctif 0.5.7 : boutons de minimap pendant le balayage
 
 Les éléments attachés à la minimap peuvent passer sous la souris immobile pendant
@@ -15,8 +48,8 @@ le balayage. Ces points sont désormais ignorés et comptés, sans lire leur
 infobulle ni désactiver leurs boutons. Une fenêtre extérieure arrête l'essai ;
 un point de contrôle masqué empêche de valider le résultat. 113 cas simulés
 vérifient le protocole, dont cet arrêt au deuxième point et la restauration.
-Cela ne prouve pas encore la lecture des noms sur Forever : test manuel seulement.
-Après /reload : /gl debug, Préparer la minimap, Test druide avec un joueur ciblé.
+Un essai ultérieur a validé un témoin, sans valider un radar continu.
+Après /reload : /gl debug, Préparer la minimap, Validation druide avec un joueur ciblé.
 
 Correctif 0.5.6 : arrêts du test druide expliqués
 
@@ -40,7 +73,7 @@ Ce bouton réapplique l'apparence native avec la rotation actuelle, sans modifie
 les réglages sauvegardés ni un habillage personnalisé déjà observé. Aucun scan
 ne démarre automatiquement ; la préparation est refusée en combat ou pendant un test.
 Une fois prête : cibler un joueur immobile visible sur la minimap et cliquer
-« Test druide ». Placer la souris sur une zone vide du monde dans les trois
+« Validation druide ». Placer la souris sur une zone vide du monde dans les trois
 secondes, puis rester immobile en félin avec le pistage des humanoïdes actif.
 Vérifications : 20 suites, dont 90 cas du détecteur. La lecture réelle des joueurs
 par le moteur du jeu reste à démontrer ; ceci corrige seulement la préparation.
@@ -81,7 +114,7 @@ Pour le seul essai nécessitant le vrai client :
    Un ami convient ; choisir un joueur sous forme humanoïde.
 4. Placer la souris sur le décor, hors fenêtres et minimap, puis taper
    /glradar test et rester immobile, sans clic, pendant au maximum 12 secondes.
-   Le bouton « Test druide » dans Diagnostic laisse trois secondes pour replacer
+   Le bouton « Validation druide » dans Diagnostic laisse trois secondes pour replacer
    la souris. La minimap est masquée temporairement pendant le balayage.
 5. Copier le résultat avec /glradar rapport, ou via /gl debug.
    /glradar stop interrompt l'essai ; bouger ou entrer en combat l'arrête aussi.
@@ -98,7 +131,7 @@ Si elle échoue, le test demande /reload et refuse un nouvel essai jusque-là.
 Désactiver NodeSight pendant ce test : deux scanners ne doivent pas déplacer
 la même minimap. Les autres contrôles de minimap ne sont pas forcés/désactivés.
 
-Il reste à démontrer la lecture sur Forever avant d'envisager le radar continu,
+Il reste à valider la fiabilité dans plusieurs situations avant le radar continu,
 ses alertes lointaines et l'option de pistage en félin. Aucun succès simulé ne
 déverrouille ces fonctions. Aucune approbation spécifique de Blizzard n'a été
 obtenue ; l'accès à une API ou l'existence d'un autre addon n'en constitue pas une.

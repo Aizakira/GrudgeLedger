@@ -112,12 +112,12 @@ SlashCmdList.GRUDGELEDGER("debug")
 assert(preparations == 0, "opening diagnostic never changes the minimap")
 click(button(d, "Préparer la minimap"))
 assert(preparations == 1 and d:IsShown() and not d.edit.focus and d.radarStatus:GetText():find("en combat", 1, true))
-GL.PrepareDruidRadar = function() return true, "Minimap prête. Lance « Test druide »." end
+GL.PrepareDruidRadar = function() return true, "Minimap prête. Lance « Validation druide »." end
 click(button(d, "Préparer la minimap"))
 assert(d:IsShown() and d.radarStatus:GetText():find("prête", 1, true) and not scheduled and not ran, "preparation stays open and never starts a scan")
 C_Timer = { After = function(delay, callback) assert(delay == 3); scheduled = callback end }
-SlashCmdList.GRUDGELEDGERDRUIDRADAR = function(command) assert(command == "test"); ran = true end
-click(button(d, "Test druide"))
+SlashCmdList.GRUDGELEDGERDRUIDRADAR = function(command) assert(command == "validation"); ran = true end
+click(button(d, "Validation druide"))
 assert(not d:IsShown() and scheduled and not ran, "hide diagnostic and allow pointer repositioning before test")
 scheduled()
 assert(ran, "diagnostic invokes the installed druid test")
