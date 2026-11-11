@@ -231,6 +231,35 @@ local function window(name, title, width, height)
     return f
 end
 
+local function bookWindow(name, title)
+    local f = window(name, title, 960, 700)
+    for _, region in ipairs({ f.shadow, f.outerBorder, f.cover, f.innerBorder, f.grain, f.header, f.headerFill, f.headerLine }) do region:Hide() end
+    f.lining:ClearAllPoints()
+    f.lining:SetPoint("TOPLEFT", 20, -20)
+    f.lining:SetPoint("BOTTOMRIGHT", -20, 20)
+    f.closeButton:ClearAllPoints()
+    f.closeButton:SetPoint("TOPLEFT", 923, -29)
+    f.seal:ClearAllPoints()
+    f.seal:SetPoint("TOPLEFT", 22, -18)
+    f.seal:SetSize(44, 44)
+    f.title:ClearAllPoints()
+    f.title:SetPoint("TOPLEFT", 78, -19)
+    f.title:SetSize(500, 30)
+    journalFont(f.title, "Fancy24Font", 24)
+    f.indexPaper = f:CreateTexture(nil, "BACKGROUND", nil, -1)
+    f.indexPaper:SetPoint("TOPLEFT", 18, -96)
+    f.indexPaper:SetSize(294, 572)
+    f.indexPaper:SetColorTexture(unpack(theme.paper))
+    f.paper = f:CreateTexture(nil, "BACKGROUND", nil, -1)
+    f.paper:SetPoint("TOPLEFT", 329, -99)
+    f.paper:SetSize(610, 562)
+    f.paper:SetColorTexture(unpack(theme.paper))
+    f.bookSurface = f:CreateTexture(nil, "BACKGROUND", nil, 0)
+    f.bookSurface:SetAllPoints()
+    f.bookSurface:SetTexture(media .. "JournalBookSurface")
+    return f
+end
+
 local function currentRecord() return selectedKey and GL.Get(selectedKey) end
 local refresh
 
@@ -362,6 +391,141 @@ function GL.ShowGuilds(identity)
     refreshGuilds()
 end
 
+local statisticsWindow
+local statisticsChoices = {
+    players = {
+        { "deaths", "Mes plus grands bourreaux", "Morts confirmées causées par ce joueur" },
+        { "kills", "Mes victoires", "Victoires confirmées contre ce joueur" },
+        { "grudge", "Mes pires antagonistes", "Ampleur du solde négatif actuel" },
+        { "enemiesSeen", "Les menaces recroisées", "Rencontres distinctes avec les joueurs surveillés" },
+        { "reputation", "Mes meilleurs amis", "Solde positif actuel : gestes et avis personnels" },
+        { "friendsSeen", "Les amis recroisés", "Rencontres distinctes avec les amis actuels" },
+        { "probableDeaths", "Morts probables", "Attributions déduites, à confirmer" },
+        { "probableKills", "Victoires probables", "Attributions déduites, à confirmer" },
+    },
+    guilds = {
+        { "grudges", "Le plus de rancunes", "Membres connus avec une rancune personnelle" },
+        { "friends", "Le plus d'amis", "Membres connus avec un avis personnel positif" },
+        { "deaths", "Guildes qui m'ont tué", "Morts confirmées, guilde mémorisée lors des faits" },
+        { "probableDeaths", "Morts probables", "Morts déduites, guilde mémorisée lors des faits" },
+        { "aggressions", "Agressions confirmées", "Agressions confirmées lors des rencontres" },
+    },
+}
+local function refreshStatistics()
+    local f = statisticsWindow
+    if not f or not f:IsShown() then return end
+    local choice = statisticsChoices[f.mode][f.choice]
+    local rows = f.mode == "guilds" and GL.GuildStatistics() or GL.PlayerStatistics(choice[1])
+    if f.mode == "guilds" then
+        table.sort(rows, function(a, b)
+            if a[choice[1]] ~= b[choice[1]] then return a[choice[1]] > b[choice[1]] end
+            return a.key < b.key
+        end)
+    end
+    f.offset = math.min(f.offset, math.max(0, math.floor((#rows - 1) / 8) * 8))
+    f.heading:SetText(choice[2]) f.description:SetText(choice[3])
+    for i, control in ipairs(f.choices) do
+        local entry = statisticsChoices[f.mode][i]
+        if entry then
+            control:SetText(entry[2]) control:Show()
+            control.caption:SetTextColor(unpack(i == f.choice and theme.paper or theme.ink))
+            control.normalSurface:SetColorTexture(unpack(i == f.choice and theme.red or theme.paper))
+            control.normalSurface:SetAlpha(i == f.choice and 1 or 0.15)
+        else control:Hide() end
+    end
+    for i, row in ipairs(f.rows) do
+        local item = rows[f.offset + i]
+        row.item = item
+        if item then
+            local guild = f.mode == "guilds"
+            row.name:SetText((f.offset + i) .. ". " .. plain(guild and item.name or item.record.fullName))
+            row.value:SetText(tostring(guild and item[choice[1]] or item.value))
+            row.meta:SetText(guild and (plain(item.realm) .. " · " .. item.grudges .. " rancune(s) · " .. item.friends .. " ami(s) · " .. item.members .. " connu(s)")
+                or (relationNames[GL.Relation(item.record)] .. " · " .. plain(item.record.guild or "Guilde inconnue")))
+            row.bg:SetAlpha(guild and f.selected and f.selected.key == item.key and 0.8 or 0.15)
+            row:Show()
+        else row:Hide() end
+    end
+    f.empty:SetText(#rows == 0 and "Aucune donnée pour ce classement.\nLes nouvelles rencontres enrichiront ton livre." or "")
+    f.total:SetText(#rows .. (f.mode == "guilds" and " guilde(s)" or " personne(s)") .. " · " .. (f.offset + 1) .. "–" .. math.min(f.offset + 8, #rows))
+    if #rows == 0 then f.total:SetText("Aucune entrée") end
+    f.next:SetEnabled(f.offset + 8 < #rows)
+    f.previous:SetEnabled(f.offset > 0)
+    for _, b in ipairs(f.guildActions) do
+        if f.mode == "guilds" then b:Show() b:SetEnabled(f.selected ~= nil) else b:Hide() end
+    end
+    local rule = f.selected and GL.GetGuildRule(f.selected.name, f.selected.realm)
+    f.selection:SetText(f.mode == "guilds" and (f.selected and plain(f.selected.name) .. " · Avis global : " .. (rule and relationNames[rule.reaction] or "aucun") or "Clique sur une guilde pour définir un avis global.")
+        or "Clique sur une personne pour ouvrir sa fiche.")
+    f.footnote:SetText(f.mode == "guilds" and "Dernière guilde connue. Les avis personnels restent prioritaires. Les avis hérités ne gonflent pas le classement ; les faits sans guilde restent non attribués."
+        or "Rencontres comptées depuis cette mise à jour, après plus de 10 min sans observation. Données de ce compte ; les anciens passages ne sont pas reconstitués.")
+end
+function GL.ShowStatistics(mode)
+    if not GL.db then return end
+    mode = mode == "guilds" and "guilds" or "players"
+    if not statisticsWindow then
+        local f = bookWindow("GrudgeLedgerStatistics", "Grudge Ledger")
+        statisticsWindow = f
+        f.rows, f.choices, f.guildActions = {}, {}, {}
+        label(f, "Les chroniques de ton livre", nil, 79, -51, 330):SetTextColor(unpack(theme.muted))
+        button(f, "Personnes", 582, -29, 110, function() GL.ShowStatistics("players") end)
+        button(f, "Guildes", 702, -29, 91, function() GL.ShowStatistics("guilds") end)
+        button(f, "Retour au livre", 805, -29, 108, function() f:Hide() GL.ShowLedger() end)
+        label(f, "Classements", "large", 36, -115, 256):SetTextColor(unpack(theme.ink))
+        for i = 1, 8 do
+            f.choices[i] = button(f, "", 36, -157 - (i - 1) * 44, 256, function()
+                f.choice, f.offset, f.selected = i, 0, nil refreshStatistics()
+            end, nil, true)
+        end
+        button(f, "Gérer une guilde", 36, -548, 256, function() GL.ShowGuilds() end, nil, true)
+        f.footnote = label(f, "", nil, 36, -589, 256)
+        f.footnote:SetTextColor(unpack(theme.inkMuted))
+        f.heading = label(f, "", "large", 350, -115, 554)
+        f.heading:SetTextColor(unpack(theme.ink))
+        f.description = label(f, "", nil, 350, -143, 554)
+        f.description:SetTextColor(unpack(theme.inkMuted))
+        for i = 1, 8 do
+            local row = CreateFrame("Button", nil, f)
+            row:SetPoint("TOPLEFT", 350, -177 - (i - 1) * 47) row:SetSize(554, 43)
+            row.bg = surface(row, theme.selection)
+            row.name = label(row, "", nil, 8, -5, 458)
+            row.name:SetHeight(18) GL.Safe(row.name.SetWordWrap, row.name, false)
+            row.name:SetTextColor(unpack(theme.ink))
+            row.value = label(row, "", "large", 478, -5, 65)
+            row.value:SetJustifyH("RIGHT") row.value:SetTextColor(unpack(theme.ink))
+            row.meta = label(row, "", nil, 8, -25, 536)
+            row.meta:SetFontObject("GameFontHighlightSmall") row.meta:SetHeight(16)
+            GL.Safe(row.meta.SetWordWrap, row.meta, false)
+            row.meta:SetTextColor(unpack(theme.inkMuted))
+            row:SetScript("OnClick", function(self)
+                if f.mode == "guilds" then f.selected = self.item refreshStatistics()
+                else f:Hide() GL.ShowLedger(self.item.record.key) end
+            end)
+            f.rows[i] = row
+        end
+        f.empty = label(f, "", nil, 365, -220, 515) f.empty:SetTextColor(unpack(theme.inkMuted))
+        f.previous = button(f, "Précédent", 350, -561, 110, function() f.offset = math.max(0, f.offset - 8) refreshStatistics() end, nil, true)
+        f.total = label(f, "", nil, 475, -568, 285) f.total:SetTextColor(unpack(theme.inkMuted))
+        f.next = button(f, "Suivant", 794, -561, 110, function() f.offset = f.offset + 8 refreshStatistics() end, nil, true)
+        f.selection = label(f, "", nil, 350, -600, 554) f.selection:SetTextColor(unpack(theme.inkMuted))
+        f.selection:SetHeight(20) GL.Safe(f.selection.SetWordWrap, f.selection, false)
+        for i, action in ipairs({ { "Guilde à surveiller", "warning" }, { "Guilde amie", "friend" }, { "Avis et note…" } }) do
+            local reaction = action[2]
+            f.guildActions[i] = button(f, action[1], 350 + (i - 1) * 188, -628, 178, function()
+                local selected = f.selected
+                if not selected then return end
+                if reaction then GL.SetGuildReaction(selected.name, reaction, nil, selected.realm)
+                else GL.ShowGuilds({ guild = selected.name, realm = selected.realm }) end
+            end, nil, true)
+        end
+    end
+    local f = statisticsWindow
+    if f.mode ~= mode then f.mode, f.choice, f.offset, f.selected = mode, 1, 0, nil end
+    if ledger then ledger:Hide() end
+    f:Show() refreshStatistics()
+end
+GL.On("CHANGED", refreshStatistics)
+
 local function refreshCorrections()
     if not correctionWindow or not correctionWindow:IsShown() then return end
     local f, events = correctionWindow, {}
@@ -428,11 +592,11 @@ local function showCorrections(record)
     refreshCorrections()
 end
 
-local function showDiagnostic()
+local function showDiagnostic(private)
     if not diagnosticWindow then
         local f = window("GrudgeLedgerDiagnostic", "Grudge Ledger — Diagnostic", 660, 500)
         diagnosticWindow = f
-        label(f, "Texte sélectionné : Ctrl+C pour copier. Aucun nom, note ni détail d'erreur.", nil, 18, -54, 620)
+        f.privacy = label(f, "", nil, 18, -54, 620)
         f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
         f.scroll:SetPoint("TOPLEFT", 22, -91)
         f.scroll:SetSize(590, 355)
@@ -444,7 +608,12 @@ local function showDiagnostic()
         styleInput(f.edit, true)
         f.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() f:Hide() end)
         f.scroll:SetScrollChild(f.edit)
-        button(f, "Tout sélectionner", 22, -461, 180, function() f.edit:SetFocus() f.edit:HighlightText() end)
+        button(f, "Tout sélectionner", 22, -461, 150, function() f.edit:SetFocus() f.edit:HighlightText() end)
+        button(f, "Effacer les traces", 186, -461, 150, function() GL.ClearDetectionLog() showDiagnostic(f.private) end)
+        button(f, "Actualiser", 350, -461, 120, function() showDiagnostic(f.private) end)
+        button(f, "Test minimap", 484, -461, 145, function()
+            if SlashCmdList.GRUDGELEDGERPROBE then f:Hide() SlashCmdList.GRUDGELEDGERPROBE("test") end
+        end)
     end
     local function version(value)
         value = GL.Clean(value)
@@ -474,6 +643,10 @@ local function showDiagnostic()
         local value = GL.Safe((C_CVar and C_CVar.GetCVar) or GetCVar, key)
         lines[#lines + 1] = key .. " : " .. ((value == "0" or value == "1") and value or "indisponible")
     end
+    diagnosticWindow.private = private == true
+    diagnosticWindow.privacy:SetText(private == true and "Journal local : contient les noms de ton livre. Ne le publie pas tel quel."
+        or "Rapport anonyme : Ctrl+C pour copier. Aucun nom ni note personnelle.")
+    lines[#lines + 1] = GL.DetectionReport(private == true)
     diagnosticWindow.edit:SetText(table.concat(lines, "\n"))
     local _, fontHeight = diagnosticWindow.edit:GetFont()
     diagnosticWindow.edit:SetHeight(math.max(355, diagnosticWindow.edit:GetNumLines() * (fontHeight + diagnosticWindow.edit:GetSpacing()) + 8))
@@ -583,7 +756,7 @@ end
 
 local function showSettings()
     if not settingsWindow then
-        local f = window("GrudgeLedgerSettings", "Grudge Ledger — Réglages", 450, 563)
+        local f = window("GrudgeLedgerSettings", "Grudge Ledger — Réglages", 450, 685)
         settingsWindow = f
         f.checks = {}
         local options = {
@@ -614,7 +787,17 @@ local function showSettings()
         end
         button(f, "Activer le repérage (icônes + couleurs)", 20, -426, 405, enableRecognition)
         label(f, "Alertes amicales : plus de 10 min d'absence, hors groupe. Les icônes restent affichées en groupe.", nil, 20, -467, 405)
-        button(f, "Diagnostic", 20, -513, 405, showDiagnostic)
+        button(f, "Diagnostic", 20, -513, 405, function() showDiagnostic(false) end)
+        for i, entry in ipairs({ { "quickGestures", "Boutons bisou / crachat" }, { "detectionLog", "Conserver le diagnostic des détections (200 lignes)" } }) do
+            local key = entry[1]
+            local check = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+            check:SetPoint("TOPLEFT", 16, -550 - (i - 1) * 33) check:SetSize(26, 26)
+            label(check, entry[2], nil, 31, -6, 360)
+            check:SetScript("OnClick", function(self) GL.SetSetting(key, self:GetChecked() and true or false) end)
+            f.checks[key] = check
+        end
+        button(f, "Replacer les boutons", 20, -628, 195, function() if GL.ResetGesturePosition then GL.ResetGesturePosition() end end)
+        button(f, "Journal des détections", 230, -628, 195, function() showDiagnostic(true) end)
     end
     for key, check in pairs(settingsWindow.checks) do check:SetChecked(GL.Settings()[key]) end
     settingsWindow:UpdatePlateStatus()
@@ -624,23 +807,11 @@ end
 
 local function buildLedger()
     if ledger then return end
-    local f = window("GrudgeLedgerWindow", "Grudge Ledger", 960, 700)
+    local f = bookWindow("GrudgeLedgerWindow", "Grudge Ledger")
     ledger = f
-    for _, region in ipairs({ f.shadow, f.outerBorder, f.cover, f.innerBorder, f.grain, f.header, f.headerFill, f.headerLine }) do region:Hide() end
-    f.lining:ClearAllPoints()
-    f.lining:SetPoint("TOPLEFT", 20, -20)
-    f.lining:SetPoint("BOTTOMRIGHT", -20, 20)
-    f.closeButton:ClearAllPoints()
-    f.closeButton:SetPoint("TOPLEFT", 923, -29)
-    f.seal:ClearAllPoints()
-    f.seal:SetPoint("TOPLEFT", 22, -18)
-    f.seal:SetSize(44, 44)
-    f.title:ClearAllPoints()
-    f.title:SetPoint("TOPLEFT", 78, -19)
-    f.title:SetSize(540, 30)
-    journalFont(f.title, "Fancy24Font", 24)
     label(f, "Journal des rencontres et des rancunes", nil, 79, -51, 330):SetTextColor(unpack(theme.muted))
-    f.guildsButton = button(f, "Guildes", 702, -29, 91, function() GL.ShowGuilds() end)
+    f.guildsButton = button(f, "Guildes", 702, -29, 91, function() GL.ShowStatistics("guilds") end)
+    f.statsButton = button(f, "Statistiques", 582, -29, 110, function() GL.ShowStatistics("players") end)
     f.settingsButton = button(f, "Réglages", 805, -29, 108, showSettings)
     button(f, "Ajouter la cible", 36, -138, 256, function()
         local identity = GL.Identity("target")
@@ -648,17 +819,6 @@ local function buildLedger()
         local record = GL.Remember(identity)
         if record then GL.ShowLedger(record.key) end
     end, nil, true)
-    f.indexPaper = f:CreateTexture(nil, "BACKGROUND", nil, -1)
-    f.indexPaper:SetPoint("TOPLEFT", 18, -96)
-    f.indexPaper:SetSize(294, 572)
-    f.indexPaper:SetColorTexture(unpack(theme.paper))
-    f.paper = f:CreateTexture(nil, "BACKGROUND", nil, -1)
-    f.paper:SetPoint("TOPLEFT", 329, -99)
-    f.paper:SetSize(610, 562)
-    f.paper:SetColorTexture(unpack(theme.paper))
-    f.bookSurface = f:CreateTexture(nil, "BACKGROUND", nil, 0)
-    f.bookSurface:SetAllPoints()
-    f.bookSurface:SetTexture(media .. "JournalBookSurface")
     label(f, "Index des rencontres", "large", 36, -115, 256):SetTextColor(unpack(theme.ink))
     f.search = CreateFrame("EditBox", nil, f)
     f.search:SetPoint("TOPLEFT", 36, -193)
@@ -1081,6 +1241,9 @@ SlashCmdList.GRUDGELEDGER = function(message)
     reason = reason or ""
     if command == "debug" then
         showDiagnostic()
+    elseif command == "traces" then showDiagnostic(true)
+    elseif command == "stats" then GL.ShowStatistics("players")
+    elseif command == "guildes" then GL.ShowStatistics("guilds")
     elseif command == "settings" or command == "options" then showSettings()
     elseif command == "reperage" or command == "repérage" then enableRecognition()
     elseif command == "guilde" then
@@ -1107,5 +1270,5 @@ SlashCmdList.GRUDGELEDGER = function(message)
         end
     elseif command == "" then
         if ledger and ledger:IsShown() then ledger:Hide() else GL.ShowLedger() end
-    else GL.Print("Commandes : /gl, /gl + [raison], /gl - [raison], /gl ami|ennemi|auto|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl settings, /gl debug") end
+    else GL.Print("Commandes : /gl, /gl stats, /gl guildes, /gl traces, /gl + [raison], /gl - [raison], /gl ami|ennemi|auto|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl settings, /gl debug") end
 end

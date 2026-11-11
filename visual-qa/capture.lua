@@ -200,6 +200,16 @@ function QA.capture(name)
         GrudgeLedgerWindow.factions.Horde.scripts.OnClick()
         return GrudgeLedgerWindow
     elseif name == "journal-empty" then GL.ShowLedger() GrudgeLedgerWindow.search:SetText("Aucune correspondance QA") return GrudgeLedgerWindow
+    elseif name == "statistics" or name == "statistics-small" then
+        if name == "statistics-small" then UIParent:SetSize(1024, 600) end
+        GL.ShowStatistics("players") return GrudgeLedgerStatistics
+    elseif name == "guild-rankings" then
+        GL.ShowStatistics("guilds")
+        if GrudgeLedgerStatistics.rows[1].item then GrudgeLedgerStatistics.rows[1].scripts.OnClick(GrudgeLedgerStatistics.rows[1]) end
+        return GrudgeLedgerStatistics
+    elseif name == "statistics-empty" then
+        GL.ShowStatistics("players") GrudgeLedgerStatistics.choices[6].scripts.OnClick()
+        return GrudgeLedgerStatistics
     elseif name == "guilds" then GL.ShowGuilds(record) return GrudgeLedgerGuilds
     elseif name == "note" then GL.EditNote(record) GrudgeLedgerNote.edit:SetText("Une bonne équipe au monastère.\n\nJoueur patient, consignes claires et partage équitable du butin. À retrouver pour une prochaine sortie.") return GrudgeLedgerNote
     elseif name == "settings" then SlashCmdList.GRUDGELEDGER("settings") return GrudgeLedgerSettings

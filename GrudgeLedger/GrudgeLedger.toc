@@ -2,7 +2,7 @@
 ## Title: Grudge Ledger
 ## Notes: Journal personnel des amis et des rancunes : notes, rencontres et historique PvP.
 ## Author: Grudge Ledger contributors
-## Version: 0.4.6
+## Version: 0.5.0
 ## SavedVariables: GrudgeLedgerDB
 ## IconTexture: Interface\AddOns\GrudgeLedger\Media\LedgerBook
 ## X-License: GPL-3.0
@@ -14,3 +14,5 @@ Display.lua
 UI.lua
 Menu.lua
 Social.lua
+QuickGestures.lua
+MinimapProbe.lua

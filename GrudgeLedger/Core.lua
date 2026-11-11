@@ -1,15 +1,17 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.4.6", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.5.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
 local guildSightings = {}
+local traceLast = {}
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true,
     groupTracking = true, socialTracking = true, minimapAngle = 225, readableFont = false,
+    quickGestures = true, detectionLog = true,
 }
 
 function GL.Clean(value, kind)
@@ -37,6 +39,49 @@ function GL.Debug(message)
     GL.errors[#GL.errors + 1] = { time = GL.Now(), text = tostring(message) }
     if #GL.errors > 30 then table.remove(GL.errors, 1) end
 end
+local traceReasons = {
+    observed = "Identité reçue", unreadable = "Identité absente ou non lisible", unknown = "Aucun avis connu",
+    neutral = "Neutre : pas d'alerte", grouped = "Ami dans le groupe", present = "Ami déjà présent ou visibilité non confirmée",
+    disabled = "Alerte désactivée", cooldown = "Délai entre alertes", priority = "Alerte plus prioritaire affichée",
+    burst = "Regroupé avec l'alerte de guilde", shown = "Fenêtre affichée", protected = "Marqueur : cadre protégé",
+}
+function GL.Trace(code, identity, unit)
+    if not GL.db or not GL.Settings().detectionLog or not traceReasons[code] then return end
+    local record = identity and GL.Get(identity)
+    local key = record and record.key
+    local source = type(unit) == "string" and (unit:match("^nameplate%d+$") and "nameplate"
+        or ({ target = "target", mouseover = "mouseover", focus = "focus" })[unit]) or "autre"
+    local token = code .. ":" .. (key or "inconnu") .. ":" .. source
+    local now = GL.Now()
+    if traceLast[token] and now >= traceLast[token] and now - traceLast[token] < 30 then return end
+    for k, at in pairs(traceLast) do if now - at >= 30 or now < at then traceLast[k] = nil end end
+    traceLast[token] = now
+    -- ponytail: bounded local evidence, never a complete world scan or exported personal data.
+    GL.db.detectionLog = type(GL.db.detectionLog) == "table" and GL.db.detectionLog or {}
+    local log = GL.db.detectionLog
+    log[#log + 1] = { time = now, code = code, key = key, source = source }
+    while #log > 200 do table.remove(log, 1) end
+end
+function GL.DetectionReport(private)
+    local lines, aliases, count = { "\nDétections : 200 dernières décisions, répétitions espacées de 30 s." }, {}, 0
+    for _, event in ipairs(GL.db.detectionLog or {}) do
+        if traceReasons[event.code] then
+            local who = "identité inconnue"
+            if event.key then
+                if not aliases[event.key] then count = count + 1 aliases[event.key] = "joueur #" .. count end
+                local record = private and GL.Get(event.key)
+                who = record and (record.fullName or record.name):gsub("|", "||") or aliases[event.key]
+            end
+            lines[#lines + 1] = date("%d/%m %H:%M:%S", event.time) .. " · " .. who .. " · " .. event.source .. " · " .. traceReasons[event.code]
+        end
+    end
+    local probe = GL.db.minimapProbe
+    lines[#lines + 1] = "\nRadar minimap : expérimental, non activé."
+    if probe then lines[#lines + 1] = "Dernier test : " .. probe.result .. " (build " .. probe.build .. ")"
+    else lines[#lines + 1] = "Aucun résultat de test sauvegardé." end
+    return table.concat(lines, "\n")
+end
+function GL.ClearDetectionLog() GL.db.detectionLog, traceLast = {}, {} end
 function GL.On(event, fn)
     listeners[event] = listeners[event] or {}
     table.insert(listeners[event], fn)
@@ -151,6 +196,18 @@ end
 local function normalize(record)
     record.notes = type(record.notes) == "table" and record.notes or {}
     record.history = type(record.history) == "table" and record.history or {}
+    if record.encounters ~= nil then
+        local e = type(record.encounters) == "table" and record.encounters or {}
+        local function nonnegative(value, fallback)
+            return type(value) == "number" and value >= 0 and value < math.huge and math.floor(value) or fallback
+        end
+        e.count, e.since = nonnegative(e.count, 0), nonnegative(e.since, GL.Now())
+        e.seen = type(e.seen) == "table" and e.seen or {}
+        for character, at in pairs(e.seen) do
+            if type(character) ~= "string" or not nonnegative(at) then e.seen[character] = nil end
+        end
+        record.encounters = e
+    end
     if record.reaction and not record.reactionSource then
         record.reactionSource = "manual"
         for i = #record.history, 1, -1 do
@@ -203,6 +260,18 @@ function GL.Get(identity)
 end
 
 local function merge(provisional, record)
+    if provisional.encounters then
+        record.encounters = record.encounters or { count = 0, seen = {}, since = GL.Now() }
+        local a, b = record.encounters, provisional.encounters
+        -- ponytail: merge totals and the latest shared encounter; older visits have
+        -- no individual IDs. Exact historical overlap would require a visit ledger.
+        a.count = a.count + b.count
+        a.since = math.min(a.since, b.since)
+        for character, seen in pairs(b.seen) do
+            if a.seen[character] and math.abs(a.seen[character] - seen) <= 600 then a.count = math.max(1, a.count - 1) end
+            a.seen[character] = math.max(a.seen[character] or 0, seen)
+        end
+    end
     if provisional.guild and (not record.guild or (provisional.guildSeenAt or 0) > (record.guildSeenAt or 0)) then
         record.guild, record.realm, record.guildSeenAt = provisional.guild, provisional.realm, provisional.guildSeenAt
     end
@@ -301,10 +370,20 @@ function GL.Remember(identity)
     return record
 end
 
-function GL.RecordSeen(identity)
+function GL.RecordSeen(identity, visible)
     local record = GL.Get(identity)
     local rule = GL.GetGuildRule(identity)
     if record or (rule and rule.reaction ~= "neutral") then record = GL.Remember(identity) end
+    local me = visible and GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    if record and me then
+        -- ponytail: one encounter after >10 minutes without a public observation,
+        -- not an exact distance/time-spent measurement. No invented historical visits.
+        record.encounters = record.encounters or { count = 0, seen = {}, since = GL.Now() }
+        local visits, now = record.encounters, GL.Now()
+        local previous = visits.seen[me]
+        if not previous or now - previous > 600 then visits.count = visits.count + 1 end
+        visits.seen[me] = now
+    end
     return record
 end
 local function effectiveRelation(record)
@@ -374,6 +453,75 @@ function GL.SetGuildReaction(value, reaction, note, realm)
     GL.db.guilds[key] = rule
     GL.Emit("CHANGED")
     return rule
+end
+
+function GL.GuildStatistics()
+    local guilds, deaths = {}, {}
+    local function get(name, realm)
+        local key, clean, server = guildIdentity(name, realm)
+        if not key then return end
+        if not guilds[key] then
+            guilds[key] = { key = key, name = clean, realm = server, members = 0, grudges = 0,
+                friends = 0, deaths = 0, probableDeaths = 0, kills = 0, aggressions = 0 }
+        end
+        return guilds[key]
+    end
+    for _, rule in pairs(GL.db.guilds) do get(rule.name, rule.realm) end
+    for _, record in pairs(GL.db.players) do
+        local guild = record.guild and not GL.IsGroupOnly(record) and get(record.guild, record.realm)
+        if guild then
+            guild.members = guild.members + 1
+            local relation = GL.Relation(record)
+            -- A guild rule must not manufacture personal grudges/friends in its own ranking.
+            if GL.RelationSource(record) ~= "guild" then
+                if relation == "friend" then guild.friends = guild.friends + 1
+                elseif relation == "warning" or relation == "enemy" then guild.grudges = guild.grudges + 1 end
+            end
+        end
+        for _, event in ipairs(record.history or {}) do
+            if not event.voided and event.guild then
+                local historical = get(event.guild, event.guildRealm)
+                local field = event.kind == "death" and (event.confidence == "confirmed" and "deaths"
+                    or event.confidence == "probable" and "probableDeaths")
+                    or event.confidence == "confirmed" and ({ kill = "kills", aggression = "aggressions" })[event.kind]
+                if historical and field then
+                    if event.kind == "death" then
+                        deaths[historical.key] = deaths[historical.key] or {}
+                        local counted, id = deaths[historical.key], event.eventId or event
+                        -- One death per guild; confirmed evidence wins over other participants.
+                        -- Events without an ID stay separate: timestamps cannot prove a shared death.
+                        if counted[id] ~= "deaths" then counted[id] = field end
+                    else historical[field] = historical[field] + 1 end
+                end
+            end
+        end
+    end
+    local result = {}
+    for key, guild in pairs(guilds) do
+        for _, field in pairs(deaths[key] or {}) do guild[field] = guild[field] + 1 end
+        result[#result + 1] = guild
+    end
+    return result
+end
+
+function GL.PlayerStatistics(metric)
+    local result = {}
+    for _, record in pairs(GL.db.players) do
+        local relation, value = GL.Relation(record), 0
+        if metric == "reputation" then value = relation == "friend" and math.max(0, record.reputation or 0) or 0
+        elseif metric == "grudge" then value = (relation == "enemy" or relation == "warning") and math.max(0, -(record.reputation or 0)) or 0
+        elseif metric == "friendsSeen" or metric == "enemiesSeen" then
+            local match = metric == "friendsSeen" and relation == "friend"
+                or metric == "enemiesSeen" and (relation == "warning" or relation == "enemy")
+            value = match and record.encounters and record.encounters.count or 0
+        else value = record.pvp[metric] or 0 end
+        if type(value) == "number" and value > 0 then result[#result + 1] = { record = record, value = value } end
+    end
+    table.sort(result, function(a, b)
+        if a.value ~= b.value then return a.value > b.value end
+        return a.record.key < b.record.key
+    end)
+    return result
 end
 function GL.SetReaction(identity, reaction)
     if reactionScores[reaction] == nil then return nil end
@@ -503,6 +651,7 @@ function GL.SetSetting(key, value)
 end
 function GL.InitDB()
     guildSightings = {}
+    traceLast = {}
     if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end
     GL.db = GrudgeLedgerDB
     GL.db.schema = 1

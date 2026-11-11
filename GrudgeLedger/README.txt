@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.4.6
+GRUDGE LEDGER — 0.5.0
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -6,6 +6,20 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+
+Nouveautés 0.5.0 : chroniques, guildes et diagnostic
+
+- Statistiques dans le livre (/gl stats) : bourreaux, victoires, antagonistes par solde négatif, amis par score, amis et menaces recroisés. Morts/victoires probables ont leurs propres classements. Un clic ouvre la fiche.
+- Guildes (/gl guildes) : nombre de rancunes personnelles et d'amis parmi les membres connus, morts confirmées/probables et agressions confirmées. Cliquer une guilde permet de la marquer à surveiller, amie, ou d'ouvrir ses avis et notes. Les choix personnels restent prioritaires. Les avis hérités d'une guilde ne créent pas artificiellement de rancunes personnelles dans le classement. Les faits sans guilde connue restent non attribués ; une ancienne guilde enregistrée au moment des faits conserve ces événements.
+- Bisou / crachat : deux boutons avec les icônes natives de WoW, au-dessus du chat, sous les alertes. Clic sur un joueur ciblé : /kiss (+1) ou /spit (−1), avec le même délai de 30 secondes par sentiment que les macros. Un geste positif n'efface pas une dette PvP. Ctrl + glisser déplace les deux boutons ; position mémorisée et bouton de remise en place dans les réglages. Aucun geste n'est envoyé automatiquement. Désactivables dans les réglages.
+- Rencontres distinctes : compteur démarré à cette version, pour les joueurs déjà suivis ou couverts par un avis de guilde. Une nouvelle rencontre demande plus de dix minutes sans observation ; chaque présence renouvelle le délai. Le rechargement ne compte pas deux fois. Horloges séparées par personnage, statistiques réunies dans ce livre de compte. Ce n'est ni une mesure de distance ni du temps passé ensemble, et aucun ancien passage n'est inventé.
+- Diagnostic local (/gl traces) : les 200 dernières décisions de détection/alerte, avec la raison (identité absente, délai, ami du groupe, alerte désactivée, affichée, etc.). Répétitions limitées à une fois par 30 secondes ; effaçable et désactivable. Les noms de ce journal local sont privés. /gl debug produit la version anonymisée pour un signalement. Les données sont dans WTF/SavedVariables, jamais dans le code distribué. WoW écrit la sauvegarde lors d'un /reload ou d'une déconnexion normale.
+- Test minimap intégré (/glprobe test, /glprobe stop) : contrôle expérimental sur un point immobile avec référence au survol, relecture sans survol et contrôle vide anti-cache. Le résultat sans noms est sauvegardé avec le build du client et visible dans Diagnostic. Ce test manuel n'est pas la fonctionnalité finale : aucun radar automatique ni changement automatique de pistage n'est activé. Un résultat négatif sur un point resté immobile invalide cette méthode dans cet essai. Un résultat positif isolé ne suffit pas à valider un radar en mouvement.
+
+La précédente extension temporaire GrudgeLedgerProbe doit être retirée ou désactivée : le test est désormais inclus dans Grudge Ledger. Redémarrer le jeu après l'installation de cette version pour charger les nouveaux fichiers.
+
+Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, vide, protégée, indisponible ou un cache trompeur. Ils ne prouvent pas que le client réel donne accès aux points de la minimap : les essais dans Forever restent nécessaires. Une absence de trace ne prouve pas l'absence du joueur dans le monde.
 
 UTILISATION
 Clic droit sur le portrait d'un joueur ou son nom dans le chat, puis survoler
@@ -80,10 +94,13 @@ Chaque nouvelle mort, victoire ou agression mémorise séparément la guilde, so
 serveur et la date de son observation. L'historique indique quand il s'agit d'une
 dernière information connue. Les événements anciens ou de guilde inconnue ne sont
 jamais réattribués après coup, même si le joueur rejoint une autre guilde.
-Les données préparent de futures statistiques : déductions et faits confirmés
-restent séparés ; les événements annulés restent identifiables ; une mort partagée
-par plusieurs attaquants garde le même identifiant pour éviter les doubles comptes.
-Aucun classement statistique des guildes n'est encore ajouté. /reload suffit.
+Les statistiques de guilde séparent les déductions des faits confirmés et excluent
+les événements annulés. Une même mort identifiée ne compte qu'une fois par guilde,
+même avec plusieurs attaquants ; une preuve confirmée prime sur les participations
+probables. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne
+s'additionnent pas pour calculer vos morts. Sans identifiant commun, aucun regroupement
+des anciens événements n'est deviné.
+Les classements de guildes sont disponibles depuis la version 0.5.0.
 
 FINITION DU LIVRE 0.4.5
 Le journal utilise le contour transparent de son illustration : l'ancienne

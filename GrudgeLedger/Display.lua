@@ -172,7 +172,7 @@ local function updateMarker(entry)
     entry.identity = identity
     -- Refresh membership as well as identity: guild rules can change while the
     -- same player stays visible, and leaving a guild must remove its marker.
-    local record = identity and GL.RecordSeen(identity)
+    local record = identity and GL.RecordSeen(identity, true)
     local relation = record and GL.Relation(record)
     local guildKey = record and inheritedGuildKey(record)
     if record and (relation == "friend" or entry.recordKey ~= record.key or entry.relation ~= relation or entry.guildKey ~= guildKey) and alert then
@@ -184,7 +184,7 @@ local function updateMarker(entry)
         if marker and (not marker.owner or marker.owner == entry) then hideMarker(marker) end
         return
     end
-    if not canChange(plate) then hideMarker(marker) return end
+    if not canChange(plate) then GL.Trace("protected", identity, entry.unit) hideMarker(marker) return end
     marker = marker or ensureMarker(plate)
     if marker.key ~= record.key then restoreName(marker) end
     marker.key, marker.owner = record.key, entry
@@ -294,16 +294,17 @@ end
 alert = function(identity, unit)
     if not GL.db or not identity then return end
     local record = GL.Get(identity)
-    if not record then return end
+    if not record then GL.Trace("unknown", identity, unit) return end
     local relation = GL.Relation(record)
-    if relation == "neutral" then return end -- Known neutrals have a marker, never a proximity alert.
+    if relation == "neutral" then GL.Trace("neutral", identity, unit) return end
     if relation == "friend" then
         local fresh = newFriendEncounter(record, unit)
-        if not fresh or isGroupmate(record, unit) then return end
+        if isGroupmate(record, unit) then GL.Trace("grouped", identity, unit) return end
+        if not fresh then GL.Trace("present", identity, unit) return end
     end
     local style = styles[relation]
     local settings = GL.Settings()
-    if not style or not settings[alertSetting(relation)] then return end
+    if not style or not settings[alertSetting(relation)] then GL.Trace("disabled", identity, unit) return end
     local now = GL.Now()
     local source = GL.RelationSource(record)
     local guildKey = inheritedGuildKey(record)
@@ -311,11 +312,11 @@ alert = function(identity, unit)
     local groupGuild = source == "guild" and (pvp.deaths or 0) + (pvp.probableDeaths or 0)
         + (pvp.aggressions or 0) + (pvp.probableAggressions or 0) == 0
     local key = record.key .. ":" .. relation .. ":" .. source .. ":" .. (guildKey or "") .. (groupGuild and ":group" or "")
-    if relation ~= "friend" and lastAlert[key] and now - lastAlert[key] < (settings.alertCooldown or 180) then return end
+    if relation ~= "friend" and lastAlert[key] and now - lastAlert[key] < (settings.alertCooldown or 180) then GL.Trace("cooldown", identity, unit) return end
     validateToast()
     -- Guild crowds must not displace an equally serious personal/PvP warning.
     if toast and toast:IsShown() and (styles[toast.relation].priority > style.priority
-        or (groupGuild and relation ~= "friend" and not toast.guildBurst and styles[toast.relation].priority == style.priority)) then return end
+        or (groupGuild and relation ~= "friend" and not toast.guildBurst and styles[toast.relation].priority == style.priority)) then GL.Trace("priority", identity, unit) return end
     lastAlert[key] = now
     local burstKey, burst
     if groupGuild then
@@ -324,6 +325,7 @@ alert = function(identity, unit)
         -- Count distinct people observed during this six-second burst, not a
         -- total for the zone; the toast continues to open its first person's file.
         if burst and now - burst.started < 6 then
+            GL.Trace("burst", identity, unit)
             if not burst.people[record.key] then
                 burst.people[record.key], burst.count = true, burst.count + 1
                 if toast and toast:IsShown() and toast.guildBurst == burst then
@@ -347,6 +349,7 @@ alert = function(identity, unit)
     frame.title:SetTextColor(unpack(style.color))
     refreshToastText(frame, record)
     frame:Show()
+    GL.Trace("shown", identity, unit)
     if settings.sounds then
         local sounds = SOUNDKIT or {}
         local sound
@@ -364,8 +367,11 @@ local function observe(unit, notify)
     if not notify and GL.Safe(UnitIsVisible, unit) ~= true then return end
     local identity = GL.Identity(unit)
     if identity then
-        local record = GL.RecordSeen(identity)
+        GL.Trace("observed", identity, unit)
+        local record = GL.RecordSeen(identity, true)
         if notify or (record and GL.Relation(record) == "friend") then alert(identity, unit) end
+    elseif notify then
+        GL.Trace("unreadable", nil, unit)
     end
     return identity
 end
@@ -428,7 +434,7 @@ function D.Tooltip(tooltip)
     local _, unit = GL.Safe(tooltip.GetUnit, tooltip)
     unit = GL.Clean(unit, "string")
     local identity = unit and GL.Identity(unit)
-    local record = identity and GL.RecordSeen(identity)
+    local record = identity and GL.RecordSeen(identity, true)
     if record and GL.Relation(record) == "friend" then alert(identity, unit) end
     if not record or tooltip._grudgeLedgerKey == record.key then return end
     tooltip._grudgeLedgerKey = record.key

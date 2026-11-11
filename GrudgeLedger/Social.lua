@@ -82,6 +82,18 @@ local function outgoing(emoteName, targetName)
     end
 end
 
+function GL.SendGesture(token)
+    if token ~= "KISS" and token ~= "SPIT" then return false end
+    if not GL.Identity("target") then GL.Print("Sélectionne un joueur pour lui envoyer ce geste.") return false end
+    if not GL.Settings().socialTracking then GL.Print("Active « Avis via mes émotes » dans les réglages.") return false end
+    local perform = C_ChatInfo and C_ChatInfo.PerformEmote or DoEmote
+    if type(perform) ~= "function" then GL.Print("Les émotes ne sont pas disponibles sur ce client.") return false end
+    local ok = pcall(perform, token, "target")
+    if not ok then GL.Print("Le jeu a refusé le geste. Aucun avis ajouté.") return false end
+    outgoing(token, "target") -- The existing cooldown absorbs the native post-hook too.
+    return true
+end
+
 GL.On("READY", function()
     if installed then return end
     installed = true
