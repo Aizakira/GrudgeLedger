@@ -24,6 +24,7 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 - **Un historique PvP** des agressions et des morts observées, avec distinction entre faits confirmés et déductions probables. Une attribution erronée peut être corrigée.
 - **La camaraderie par les emotes** que vous envoyez à un joueur ciblé, y compris de l'autre faction. Les répétitions sont limitées pour éviter de gonfler les scores.
 - **Des avis sur des guildes entières**, avec des exceptions individuelles.
+- **Une mémoire des guildes** : dernière guilde observée dans la fiche, puis copie de son nom, serveur et date d'observation dans chaque nouvel événement PvP. Une réponse vide n'efface plus la guilde connue ; un changement ultérieur ne réécrit pas les anciennes rencontres. Les guildes inconnues restent inconnues. Ces données préparent les futures statistiques ; aucun classement des guildes n'est encore inclus.
 - **Des alertes de rencontre** en bas à gauche, au-dessus du chat principal, avec un petit son, des délais entre répétitions et un regroupement pour les membres d'une même guilde. Elles suivent la position du chat en laissant une marge au-dessus des onglets. Aucun rappel pour les amis du groupe ou du raid. Les autres amis sont annoncés à la première rencontre, puis seulement après plus de dix minutes sans présence observée : chaque recroisement repousse ce délai, même après un rechargement d'interface. Chaque personnage possède son propre compteur.
 - **Une liste centrée sur vos relations** : rejoindre un groupe n’ajoute plus les inconnus. Les groupes partagés sont suivis pour vos contacts ; les anciennes fiches constituées uniquement de groupes sont masquées sans effacement. Les avis, notes et événements PvP restent visibles.
 - **Un journal personnel** pour les notes, rencontres, groupes partagés et événements PvP, accessible par le livre de la minimap ou `/gl`.
@@ -48,7 +49,7 @@ Un **médaillon gris** identifie les personnes connues neutres dans le journal e
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.4.5.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.4.6.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -112,7 +113,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.4.5.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.4.6.zip GrudgeLedger
 ```
 
 ## Licence et crédits

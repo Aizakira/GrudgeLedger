@@ -63,15 +63,15 @@ local function identityForGUID(guid, name, encounter)
         local identity = GL.Identity(unit)
         if identity and identity.guid == guid then return identity end
     end
-    local known = GL.Get("guid:" .. guid)
-    if known then return known end
     local f = encounter or combatSession()
     for _, enemy in pairs(f and f.enemies or {}) do
         if enemy.identity.guid == guid then return enemy.identity end
     end
     -- Recap names can be Given-Realm, not Forever's Given Family.
     if name and not name:find(" ", 1, true) then name = name:match("^[^%-]+") end
-    return GL.IdentityFromName(name, nil, guid)
+    local identity = GL.IdentityFromName(name, nil, guid)
+    if identity and identity.guild then return identity end
+    return GL.Get("guid:" .. guid) or identity
 end
 
 local function creditKill(identity, confidence, evidence)
@@ -146,11 +146,18 @@ end
 
 function T.Observe(unit)
     local f = combatSession()
-    if not enabled() or not f or not unit or deathHandled then return end
+    if not unit then return end
+    local identity = GL.Identity(unit)
+    if identity then
+        local record = GL.Get(identity)
+        local previousGuild = record and record.guild
+        record = GL.RecordSeen(identity)
+        if record and record.guild ~= previousGuild then GL.Emit("CHANGED", record) end
+    end
+    if not enabled() or not f or deathHandled then return end
     local hostile = bool(UnitCanAttack, "player", unit) == true
     local engaged = bool(UnitAffectingCombat, unit) == true
     local targetingMe = bool(UnitIsUnit, unit .. "target", "player") == true
-    local identity = GL.Identity(unit)
     if not identity then
         -- A visible attacking NPC makes a fallback death attribution unsafe.
         if hostile and targetingMe and engaged and bool(UnitIsPlayer, unit) == false then f.pve = true end
@@ -479,7 +486,7 @@ function T.HandleEvent(event, arg)
         arg = GL.Clean(arg, "string")
         if arg then plates[arg] = nil end
     elseif event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" then T.Poll()
-    elseif event == "UNIT_TARGET" or event == "UNIT_FLAGS" or event == "UNIT_HEALTH" then
+    elseif event == "UNIT_TARGET" or event == "UNIT_FLAGS" or event == "UNIT_HEALTH" or event == "UNIT_NAME_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
         arg = GL.Clean(arg, "string")
         if event == "UNIT_HEALTH" and arg == "player" then T.Poll() else T.Observe(arg) end
     elseif event == "PLAYER_DEAD" then T.OnDeath()
@@ -495,7 +502,7 @@ GL.On("READY", function()
     local events = {
         "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "GROUP_ROSTER_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
         "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UPDATE_MOUSEOVER_UNIT",
-        "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_TARGET", "UNIT_FLAGS", "UNIT_HEALTH",
+        "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_TARGET", "UNIT_FLAGS", "UNIT_HEALTH", "UNIT_NAME_UPDATE", "PLAYER_GUILD_UPDATE",
         "PLAYER_PVP_KILLS_CHANGED", "CHAT_MSG_COMBAT_HONOR_GAIN", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED", "DUEL_INBOUNDS", "DUEL_OUTOFBOUNDS", "DUEL_FINISHED",
     }
     for _, event in ipairs(events) do pcall(frame.RegisterEvent, frame, event) end

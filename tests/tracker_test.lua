@@ -29,6 +29,8 @@ local function fixture(saved)
     function UnitFactionGroup(token) local u = unit(token) return u and u.faction or (token == "player" and "Alliance" or "Horde") end
     function UnitIsPVP(token) local u = unit(token) return u and u.flagged ~= false end
     function UnitLevel(token) return unit(token) and 34 end
+    function GetRealmName() return "Forever" end
+    function GetGuildInfo(token) local u = unit(token) return u and u.guild, nil, nil, u and u.realm end
     function UnitCanAttack(_, token) local u = unit(token) return u and u.hostile or false end
     function UnitAffectingCombat(token) local u = unit(token) return u and u.combat or false end
     function UnitIsDeadOrGhost(token) local u = unit(token) if u then return u.dead end end
@@ -878,6 +880,93 @@ test("tracking opt-out and duel start discard delayed native evidence", function
         rows[1] = recapRow(e, 0) now = now + 2 T.Poll()
         assert(count() == 0)
     end
+end)
+
+test("guild observed before combat survives recap-only identity and empty replies", function()
+    local e = opponent("guild-cache") e.guild, e.realm, e.combat = "Old Guild", "Realm A", false
+    unitData.mouseover = e T.HandleEvent("UPDATE_MOUSEOVER_UNIT")
+    assert(count() == 0, "nearby bystanders must not enter the persistent journal")
+    e.guild = nil now = now + 2
+    unitData.mouseover = nil
+    recapAPI({ recapRow(e, 0) }) T.HandleEvent("PLAYER_DEAD")
+    local record = assert(GL.Get("guid:" .. e.guid))
+    local death = record.history[#record.history]
+    assert(record.guild == "Old Guild" and record.realm == "Realm A")
+    assert(death.kind == "death" and death.guild == "Old Guild" and death.guildRealm == "Realm A")
+    assert(death.guildObservedAt == 1000 and death.guildSource == "last-known")
+    e.guild = "New Guild" unitData.target = e now = now + 1
+    T.HandleEvent("PLAYER_GUILD_UPDATE", "target")
+    assert(record.guild == "New Guild", "enrich after death without attributing another PvP event")
+    assert(death.guild == "Old Guild" and total("deaths") == 1)
+    e.guild = nil T.HandleEvent("UNIT_NAME_UPDATE", "target")
+    assert(record.guild == "New Guild", "missing response is not proof of departure")
+    fixture(GL.db)
+    record = GL.Get("guid:" .. e.guid)
+    assert(record.guild == "New Guild" and record.history[#record.history].guild == "Old Guild")
+end)
+
+test("unknown and old guild histories are never retroactively assigned", function()
+    local e = opponent("guild-unknown")
+    recapAPI({ recapRow(e, 0) }) T.HandleEvent("PLAYER_DEAD")
+    local record = GL.Get("guid:" .. e.guid)
+    local death = record.history[#record.history]
+    assert(death.guild == nil and death.guildSource == "unknown")
+    local legacy = { kind = "death", confidence = "probable", time = 900 }
+    record.history[#record.history + 1] = legacy
+    unitData.target = e e.guild = "Later Guild" now = now + 30
+    T.HandleEvent("PLAYER_GUILD_UPDATE", "target")
+    assert(record.guild == "Later Guild" and death.guild == nil and legacy.guild == nil)
+    assert(GL.VoidPvP(record, death) and death.guildSource == "unknown" and death.voided)
+end)
+
+test("stale guild cache and recycled unit tokens cannot misidentify a killer", function()
+    local e = opponent("guild-old") e.guild = "Old Guild" unitData.target = e
+    T.HandleEvent("PLAYER_TARGET_CHANGED")
+    local other = opponent("guild-new", e.name, e.surname) unitData.target = other
+    assert(GL.Identity("target").guild == nil, "a shared full name is not a GUID match")
+    now = now + 61 unitData.target = nil
+    recapAPI({ recapRow(e, 0) }) T.HandleEvent("PLAYER_DEAD")
+    assert(GL.Get("guid:" .. e.guid).guild == nil and count() == 1)
+end)
+
+test("guild cache has a fixed capacity without persisting unmarked people", function()
+    local first = opponent("guild-first") first.guild = "Evicted Guild" unitData.target = first
+    T.HandleEvent("PLAYER_TARGET_CHANGED") now = now + 1
+    for i = 1, 256 do
+        local e = opponent("guild-cap" .. i) e.guild = "Crowded Guild" unitData.target = e
+        T.HandleEvent("PLAYER_TARGET_CHANGED")
+    end
+    assert(count() == 0)
+    assert(GL.IdentityFromName(first.name, first.surname, first.guid).guild == nil)
+end)
+
+test("missing protected guild info preserves knowledge without leaking secret data", function()
+    local e = start() e.guild = "Known Guild"
+    T.Poll() cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
+    e.guild = secret now = now + 1 T.Poll()
+    assert(GL.Get("guid:" .. e.guid).guild == "Known Guild")
+    GetGuildInfo = function() error("unavailable") end
+    T.HandleEvent("PLAYER_DEAD")
+    local record = GL.Get("guid:" .. e.guid)
+    assert(record.guild == "Known Guild" and record.history[#record.history].guild == "Known Guild")
+    assert(#GL.errors == 0)
+end)
+
+test("all PvP event types snapshot guilds and multiple attackers share a death id", function()
+    local a, b = opponent("guild-A"), opponent("guild-B") a.guild, b.guild = "One Guild", "One Guild"
+    unitData.target, unitData.nameplate1 = a, b
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1") T.HandleEvent("PLAYER_TARGET_CHANGED")
+    recapAPI({ recapRow(a, 0), recapRow(b) }) T.HandleEvent("PLAYER_DEAD")
+    local ra, rb = GL.Get("guid:" .. a.guid), GL.Get("guid:" .. b.guid)
+    local da, db = ra.history[#ra.history], rb.history[#rb.history]
+    assert(da.eventId == db.eventId and da.guild == db.guild, "future guild counts can dedupe a shared death")
+    assert(da.guildSource == "observed" and ra.history[1].guild == "One Guild")
+    assert(da.confidence == "confirmed" and db.confidence == "probable")
+    unitData.player.dead = false T.HandleEvent("PLAYER_ALIVE")
+    a.guild = "Other Guild" now = now + 3
+    cle("PARTY_KILL", unitData.player, a)
+    assert(ra.history[#ra.history].kind == "kill" and ra.history[#ra.history].guild == "Other Guild")
+    assert(da.guild == "One Guild")
 end)
 
 print("PASS: " .. passed .. " tracker scenarios (actual Core.lua + Tracker.lua).")

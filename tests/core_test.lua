@@ -138,6 +138,20 @@ GL.RecordSeen(guildMember)
 GL.InitDB()
 assert(GL.Relation(member) == "enemy" and GL.GetGuildRule("test guild", "Realm One").note == "Guilde à éviter.")
 print("PASS guild and scoring: shared rules, realm isolation, manual exceptions, membership changes, persistence, bounded score")
+
+local guildAlias = GL.IdentityFromName("GuildMerge", "Example")
+guildAlias.guild, guildAlias.realm = "Historic Guild", "Other Realm"
+local guildProvisional = GL.RecordPvP(guildAlias, "death", "probable", "Observed", "guild-merge-death")
+local guildGuid = GL.IdentityFromName("GuildMerge", nil, "Player-1-guildmerge")
+GL.Remember(guildGuid)
+guildGuid = GL.IdentityFromName("GuildMerge", "Example", "Player-1-guildmerge")
+local guildMerged = GL.Remember(guildGuid)
+assert(guildMerged.guild == "Historic Guild" and guildMerged.realm == "Other Realm")
+assert(guildMerged.history[1].guild == "Historic Guild" and guildMerged.history[1].guildObservedAt == now)
+assert(GL.VoidPvP(guildMerged, guildMerged.history[1]) and guildMerged.history[1].guild == "Historic Guild")
+assert(GL.RecordPvP(guildGuid, "death", "probable", "Duplicate", "guild-merge-death") == nil)
+GL.InitDB()
+assert(GL.Get(guildGuid).history[1].voided and GL.Get(guildGuid).guild == "Historic Guild")
 print("PASS core: identity collisions, promotion, notes, persistence, manual priority, counters, dedup, settings and secrets")
 
 -- Correcting an attribution removes its effects, not its history or dedup identity.

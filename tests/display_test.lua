@@ -398,6 +398,9 @@ for _, line in ipairs(GameTooltip.lines) do text = text .. tostring(line[1]) end
 assert(text:find("Sa note personnelle") and not text:find("Plusieurs attaques"), "personal notes take precedence")
 units.nameplate6.guild = nil
 D.Refresh()
+assert(GL.Get(guildMember).guild == "Les Corbeaux", "empty lookup cannot erase the last observed guild")
+GL.Remember({ name = guildMember.name, surname = guildMember.surname, guid = guildMember.guid, guildKnown = true })
+D.Refresh()
 assert(guildMarker.shown and guildMarker.children[2].texture:find("RelationNeutral") and not toast.shown,
     "leaving the guild replaces inherited danger with a neutral marker and clears the stale toast")
 assert(GL.Get(guildMember).guild == nil and guildFont.color[1] == 1 and guildFont.color[2] == 1)

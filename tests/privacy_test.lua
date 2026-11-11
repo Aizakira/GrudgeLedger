@@ -40,7 +40,8 @@ GL.SetGuildReaction("Shared Name", "warning", nil, "Other Realm")
 assert(GL.Relation(GL.RecordSeen(foreign)) == "warning")
 GetGuildInfo = function() return mock.secret end
 local hidden = GL.Identity("target")
-assert(not hidden.guildKnown and not hidden.realm)
+assert(not hidden.guildKnown and hidden.realm == "Other Realm" and hidden.guild == "Shared Name",
+    "only the earlier public observation is reused, never the hidden response")
 local record = GL.RecordSeen(hidden)
 assert(record.guild == "Shared Name" and record.realm == "Other Realm")
 print("PASS privacy: empty new accounts, separate SavedVariables, no legacy import, serializable data, exact guild realm and hidden-membership preservation")
