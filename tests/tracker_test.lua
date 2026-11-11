@@ -1,9 +1,11 @@
 -- Executes the actual Core and Tracker with deterministic WoW API fixtures.
-local now, unitData, groupSize, honor, secret, GL, T
+local now, unitData, groupSize, honor, secret, instanceType, GL, T
 local passed = 0
 
 local function fixture(saved)
     now, groupSize, honor, secret = 1000, 0, 0, {}
+    instanceType = "none"
+    function IsInInstance() return instanceType ~= "none", instanceType end
     C_DeathRecap, C_NamePlate, C_CombatLog = nil, nil, nil
     unitData = { player = { guid = "Player-1-self", name = "Testeur", surname = "Exemple", dead = false, isPlayer = true, health = 1000, maxHealth = 1000 } }
     local function unit(token)
@@ -967,6 +969,53 @@ test("all PvP event types snapshot guilds and multiple attackers share a death i
     cle("PARTY_KILL", unitData.player, a)
     assert(ra.history[#ra.history].kind == "kill" and ra.history[#ra.history].guild == "Other Guild")
     assert(da.guild == "One Guild")
+end)
+
+for _, kind in ipairs({ "pvp", "arena" }) do
+    test(kind .. " ignores combat, death recap, honor and group memories, then resumes outdoors", function()
+        local enemy = opponent("instance-enemy")
+        local friend = opponent("instance-friend")
+        unitData.party1, groupSize = friend, 2
+        local identity = GL.Identity("party1")
+        local record = GL.SetReaction(identity, "friend")
+        local historyCount = #record.history
+        instanceType = kind
+        T.HandleEvent("PLAYER_ENTERING_WORLD")
+        start(enemy)
+        cle("SPELL_DAMAGE", enemy, unitData.player, -1, 64)
+        cle("PARTY_KILL", unitData.player, enemy)
+        recapAPI({ recapRow(enemy, 0) })
+        unitData.player.dead = true
+        T.HandleEvent("PLAYER_DEAD")
+        now = now + 3
+        T.Poll()
+        killedTarget()
+        T.HandleEvent("GROUP_ROSTER_UPDATE")
+        assert(count() == 1 and #record.history == historyCount and record.groupCount == 0,
+            "instance activity must not add players or alter existing memories")
+        assert(total("deaths") + total("probableDeaths") + total("kills") + total("probableKills") == 0)
+        instanceType, unitData.player.dead, enemy.dead = "none", false, false
+        T.HandleEvent("PLAYER_ENTERING_WORLD")
+        now = now + 3
+        cle("SPELL_DAMAGE", enemy, unitData.player, -1, 64)
+        cle("PARTY_KILL", unitData.player, enemy)
+        assert(total("aggressions") == 1 and total("kills") == 1 and total("deaths") == 0,
+            "world PvP resumes without replaying the instance death recap")
+        assert(record.groupCount == 1, "ordinary group memories resume outside")
+    end)
+end
+
+test("entering PvP clears a pending world death before it can be replayed", function()
+    local enemy = opponent("delayed-recap")
+    -- With no visible combatant or recap yet, resolution waits for a late recap.
+    T.HandleEvent("PLAYER_DEAD")
+    instanceType = "pvp"
+    T.Poll()
+    recapAPI({ recapRow(enemy, 0) })
+    instanceType = "none"
+    now = now + 3
+    T.Poll()
+    assert(count() == 0, "an interrupted death must not survive the instance boundary")
 end)
 
 print("PASS: " .. passed .. " tracker scenarios (actual Core.lua + Tracker.lua).")

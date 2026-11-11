@@ -38,7 +38,7 @@ local function enabled()
     -- from an ignored request; confirmed boundary events remain latched until finish.
     if duel and duelPendingUntil and GL.Now() > duelPendingUntil
         and bool(UnitAffectingCombat, "player") == false then duel, duelPendingUntil = false, nil end
-    return GL.db and GL.Settings().pvpTracking and not duel
+    return GL.db and GL.Settings().pvpTracking and not duel and not GL.IsPvPInstance()
 end
 
 local function combatSession()
@@ -145,6 +145,7 @@ local function tryAggression()
 end
 
 function T.Observe(unit)
+    if GL.IsPvPInstance() then return end
     local f = combatSession()
     if not unit then return end
     local identity = GL.Identity(unit)
@@ -391,7 +392,7 @@ function T.OnCombatLog(...)
 end
 
 function T.ScanGroup()
-    if not GL.db or not GL.Settings().groupTracking then return end
+    if not GL.db or not GL.Settings().groupTracking or GL.IsPvPInstance() then return end
     local size = GL.Clean(GL.Safe(GetNumGroupMembers), "number")
     local me = playerGUID()
     if size == nil or not me then return end
@@ -430,6 +431,11 @@ end
 
 function T.Poll()
     if not GL.db then return end
+    if GL.IsPvPInstance() then
+        -- Discard pending inference too, so a late recap cannot cross the boundary.
+        fight, lastFight, pendingDeath = nil, nil, nil
+        return
+    end
     resolveDeath()
     for _, unit in ipairs(units()) do T.Observe(unit) end
     observeHealth()

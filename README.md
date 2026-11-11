@@ -46,6 +46,17 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.5.10: pause automatically in battlegrounds and arenas
+
+Battlegrounds and arenas no longer create automatic grudges or affect existing
+scores, PvP statistics, sightings, group memories or emote opinions. Nearby alerts,
+relationship markers and tooltip additions pause there too. Pending combat
+inferences are discarded at the boundary so they cannot be recorded after leaving.
+
+Your journal and manual notes/classifications remain available. Existing records
+and settings are preserved; outdoor tracking resumes automatically on exit.
+Dungeons, raids and scenarios retain their normal behavior.
+
 ## 0.5.9: validate a full scan and distinguish real zoom changes
 
 Zoom notifications no longer abort a trial unconditionally. The next update
@@ -248,7 +259,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.9.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.10.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.
