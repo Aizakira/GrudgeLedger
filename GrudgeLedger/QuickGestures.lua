@@ -65,6 +65,11 @@ GL.On("READY", function()
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(title)
             GameTooltip:AddLine(help .. " sur le joueur ciblé.", 1, 0.85, 0.6)
+            local recipient = GL.Identity("target")
+            GameTooltip:AddLine(recipient and ("Cible : " .. recipient.fullName:gsub("|", "||")) or "Sélectionne un joueur.", 1, 1, 1)
+            if token == "SPIT" then
+                GameTooltip:AddLine("Le /spit natif peut rester un crachat au sol : le jeu décide du texte reçu, même avec une cible.", 1, 0.75, 0.4, true)
+            end
             GameTooltip:AddLine("Même avis au plus une fois par 30 s.\nCtrl + glisser : déplacer les deux boutons.", 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
         end)

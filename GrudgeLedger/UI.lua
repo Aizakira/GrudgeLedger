@@ -59,6 +59,33 @@ local function identityIcons(row, record)
 end
 local function subdued(text) return "|cff5c4029" .. text .. "|r" end
 local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
+local gestureNames = {
+    KISS = "Bisou", WINK = "Clin d'œil", HUG = "Étreinte", WAVE = "Signe de la main", THANK = "Remerciement",
+    BOW = "Révérence", SALUTE = "Salut", CHEER = "Encouragement", APPLAUD = "Applaudissement", SMILE = "Sourire",
+    LOVE = "Déclaration d'amour", COMFORT = "Réconfort", PAT = "Tape amicale", SOOTHE = "Geste apaisant",
+    RUDE = "Geste grossier", INSULT = "Insulte", TAUNT = "Provocation", MOCK = "Moquerie", SPIT = "Crachat",
+    SLAP = "Gifle", GLARE = "Regard noir", ANGRY = "Colère", FROWN = "Froncement de sourcils", BOO = "Huée", SNUB = "Dédain",
+}
+local function eventTitle(event)
+    local confirmed = event.confidence == "confirmed"
+    if event.kind == "death" then return confirmed and "Vous a tué" or "Participation possible à votre mort" end
+    if event.kind == "kill" then return confirmed and "Vous l'avez vaincu" or "Victoire probable contre ce joueur" end
+    if event.kind == "aggression" then return confirmed and "Vous a infligé des dégâts" or "Agression suspectée" end
+    if event.kind == "reputation" then
+        if event.source == "emote" then
+            local token = type(event.evidence) == "string" and event.evidence:match("/([A-Za-z]+)$")
+            return "Geste demandé : " .. (token and gestureNames[token:upper()] or "émote")
+        end
+        return (event.delta or 0) > 0 and "Vous avez ajouté un avis positif"
+            or (event.delta or 0) < 0 and "Vous avez ajouté un avis négatif" or "Votre avis est inchangé"
+    end
+    if event.kind == "reaction" then
+        return event.source == "automatic" and "Classement automatique réactivé"
+            or "Vous l'avez marqué : " .. (relationNames[event.reaction] or "avis personnel")
+    end
+    if event.kind == "grouped" or event.kind == "group" then return "Vous avez partagé un groupe" end
+    return event.kind == "note" and "Vous avez ajouté une note" or "Événement enregistré"
+end
 local journalFonts = {}
 local function journalFont(region, decorative, size)
     journalFonts[region] = { decorative, size }
@@ -704,35 +731,55 @@ local function renderDetail()
         local details = {
             "", "|cff653c20REPÈRES|r",
             "Réputation personnelle : " .. (record.reputation ~= nil and tostring(record.reputation) or "aucun avis"),
-            subdued("PvP : mort −10 · agression −1 · victoire +1 (sans créer d'amitié)."),
-            "Dernière guilde connue : " .. plain(record.guild or "inconnue"),
+            subdued("Solde automatique : vous tuer −10 · vous blesser −1 · le vaincre +1."),
+            record.guild and "Dernière guilde connue : " .. plain(record.guild) or "",
             guildRule and guildRule.note and guildRule.note ~= "" and "Note de guilde : " .. plain(guildRule.note) or "",
             subdued("Dernier lieu : " .. plain(record.lastZone or "inconnu")),
-            subdued("Groupes partagés : " .. tostring(record.groupCount or 0)),
+            (record.groupCount or 0) > 0 and subdued("Groupes partagés : " .. tostring(record.groupCount)) or "",
             "", "|cff653c20RENCONTRES PVP|r",
-            "PvP confirmé : " .. tostring(pvp.kills or 0) .. " victoire(s), " .. tostring(pvp.deaths or 0) .. " mort(s)",
-            "PvP probable : " .. tostring(pvp.probableKills or 0) .. " victoire(s), " .. tostring(pvp.probableDeaths or 0) .. " mort(s)",
-            "Agressions : " .. tostring(pvp.aggressions or 0) .. " confirmée(s), " .. tostring(pvp.probableAggressions or 0) .. " probable(s)",
-            subdued("Les événements probables sont des déductions, pas des confirmations."),
         }
         for _, line in ipairs(details) do lines[#lines + 1] = line end
+        local encounters = 0
+        for _, stat in ipairs({
+            { "deaths", "Vous a tué" }, { "kills", "Vous l'avez vaincu" }, { "aggressions", "Vous a infligé des dégâts" },
+            { "probableDeaths", "Participation possible à votre mort" }, { "probableKills", "Victoire probable contre ce joueur" },
+            { "probableAggressions", "Agression suspectée" },
+        }) do
+            local count = pvp[stat[1]] or 0
+            if count > 0 then lines[#lines + 1] = stat[2] .. " : " .. count .. " fois" encounters = encounters + count end
+        end
+        if encounters == 0 then lines[#lines + 1] = "Aucun affrontement enregistré." end
+        lines[#lines + 1] = subdued("Les faits supposés restent à confirmer. Détails et corrections : « Corriger le PvP ».")
         lines[#lines + 1] = "\n|cff653c20HISTORIQUE RÉCENT|r " .. subdued("(20 derniers événements)")
         local history = record.history or {}
         if #history == 0 then lines[#lines + 1] = "Aucun événement." end
         for i = #history, math.max(1, #history - 19), -1 do
             local e = history[i]
-            local kind = ({ kill = "Victoire", death = "Mort", aggression = "Agression", reputation = "Avis", grouped = "Groupe partagé", group = "Groupe partagé", reaction = "Classement", note = "Note ajoutée" })[e.kind] or plain(e.kind)
-            local confidence = e.confidence == "probable" and " (probable)" or e.confidence == "confirmed" and " (confirmé)" or ""
-            local opinion = e.reaction and " : " .. (e.source == "automatic" and "Automatique" or relationNames[e.reaction] or plain(e.reaction)) or ""
-            local zone = e.zone and " — " .. plain(e.zone) or ""
-            local delta = type(e.delta) == "number" and " (" .. (e.delta >= 0 and "+" or "") .. tostring(e.delta) .. ")" or ""
-            lines[#lines + 1] = stamp(e.time) .. " — " .. kind .. confidence .. (e.voided and " — annulé" or "") .. delta .. opinion .. zone
-            if e.guildSource then
-                lines[#lines + 1] = "  Guilde mémorisée : " .. plain(e.guild or "inconnue")
-                    .. (e.guild and e.guildRealm and " (" .. plain(e.guildRealm) .. ")" or "")
-                    .. (e.guildSource == "last-known" and " — dernière observation" or "")
+            lines[#lines + 1] = "\n" .. subdued(stamp(e.time)) .. (e.voided and " — annulé, non comptabilisé" or "")
+            local delta = type(e.delta) == "number" and e.delta ~= 0
+                and (" — avis " .. (e.delta > 0 and "+" or "") .. e.delta) or ""
+            lines[#lines + 1] = eventTitle(e) .. delta
+            local place = e.zone and e.zone ~= "?" and e.zone or ""
+            if e.subzone and e.subzone ~= "" and e.subzone ~= place then
+                place = e.subzone .. (place ~= "" and " · " .. place or "")
             end
-            if e.evidence and e.evidence ~= "" then lines[#lines + 1] = "  " .. plain(e.evidence) end
+            if place ~= "" then lines[#lines + 1] = subdued(plain(place)) end
+            if e.questTitle then lines[#lines + 1] = "Quête suivie : " .. plain(e.questTitle) end
+            if e.kind == "death" and e.confidence ~= "confirmed" then
+                lines[#lines + 1] = "Indices de participation à l'attaque ; coup fatal non identifié."
+            elseif e.kind == "kill" and e.confidence ~= "confirmed" then
+                lines[#lines + 1] = "Mort observée après un combat ; victoire à confirmer."
+            elseif e.kind == "aggression" and e.confidence ~= "confirmed" then
+                lines[#lines + 1] = "Attaque soupçonnée ; source des dégâts non confirmée."
+            end
+            if e.source ~= "emote" and not pvpNames[e.kind] and e.evidence and e.evidence ~= "" and e.evidence ~= "Avis personnel" then
+                lines[#lines + 1] = plain(e.evidence) -- Preserve personal reasons; raw PvP evidence stays in Corrections.
+            end
+            if e.guildSource and e.guild then
+                lines[#lines + 1] = subdued("Guilde mémorisée : " .. plain(e.guild)
+                    .. (e.guild and e.guildRealm and " (" .. plain(e.guildRealm) .. ")" or "")
+                    .. (e.guildSource == "last-known" and " — observée auparavant" or ""))
+            end
         end
         ledger.detailText:SetText(table.concat(lines, "\n"))
     end

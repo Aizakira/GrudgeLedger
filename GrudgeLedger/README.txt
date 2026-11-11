@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.2
+GRUDGE LEDGER — 0.5.3
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -7,6 +7,27 @@ Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Wort
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
+
+Nouveautés 0.5.3 : gestes et historique lisible
+
+Les boutons utilisent maintenant la cible sélectionnée, comme /kiss et /spit
+sans argument, au lieu de transmettre le nom littéral « target ». Les demandes
+refusées par l'API n'ajoutent plus d'avis via les boutons. Les deux factions
+passent par les émotes natives ; aucune émote personnalisée n'est substituée.
+ATTENTION : cela ne rétablit pas le texte ciblé de /spit, retiré par Blizzard.
+Si Forever conserve cette restriction, le destinataire voit un crachat au sol.
+L'addon ne peut ni forcer son texte ni confirmer ce que l'autre client reçoit.
+
+L'historique distingue « Vous a tué », « Vous l'avez vaincu » et les participations
+possibles. Date, lieu, avis et raisons personnelles restent visibles. Les preuves
+techniques restent dans « Corriger le PvP » ; rien n'est supprimé de la sauvegarde.
+Les nouveaux événements gardent aussi la sous-zone et la quête explicitement suivie
+si elles sont lisibles. Une quête suivie n'est pas une preuve de l'activité réelle.
+Les gestes sont des demandes, pas des accusés de réception. Les anciens événements
+ne reçoivent aucun contexte inventé. Depuis 0.5.2, un /reload suffit à charger 0.5.3.
+
+Vérifications : 20 suites Lua 5.1 et 27 vues simulées. La réception des émotes entre
+factions nécessite encore une vérification par les joueurs sur le client réel.
 
 Nouveauté 0.5.2 : essai du détecteur druide, sans survol manuel de minimap
 

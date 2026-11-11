@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.5.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.5.3", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -423,7 +423,22 @@ function GL.RelationConfidence(record)
 end
 local function history(record, kind, extra)
     local entry = extra or {}
-    entry.time, entry.kind, entry.zone = entry.time or GL.Now(), kind, entry.zone or GL.Where()
+    local now, zone = GL.Now(), GL.Where()
+    entry.time, entry.kind, entry.zone = entry.time or now, kind, entry.zone or zone
+    -- Snapshot the explicitly tracked quest, never guess which quest the player is doing.
+    -- ponytail: absent/protected quest APIs simply omit context; old events are not enriched.
+    if entry.time == now and entry.zone == zone then
+        entry.subzone = cleanName(GL.Safe(GetSubZoneText))
+        if GL.Safe(C_SuperTrack and C_SuperTrack.IsSuperTrackingQuest) == true then
+            local id = GL.Clean(GL.Safe(C_SuperTrack.GetSuperTrackedQuestID), "number")
+            local index = id and id > 0 and id < math.huge and id == math.floor(id)
+                and GL.Clean(GL.Safe(C_QuestLog and C_QuestLog.GetLogIndexForQuestID, id), "number")
+            if index and index > 0 then
+                entry.questTitle = cleanName(GL.Safe(C_QuestLog and C_QuestLog.GetTitleForQuestID, id))
+                if entry.questTitle then entry.questID = id end
+            end
+        end
+    end
     if kind == "kill" or kind == "death" or kind == "aggression" then
         -- Snapshot once: later guild changes must never reassign old PvP events.
         entry.guild, entry.guildRealm, entry.guildObservedAt = record.guild, record.realm, record.guildSeenAt

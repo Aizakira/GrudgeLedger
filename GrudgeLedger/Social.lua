@@ -11,7 +11,7 @@ local gestures = {
     RUDE = -1, INSULT = -1, TAUNT = -1, MOCK = -1, SPIT = -1,
     SLAP = -1, GLARE = -1, ANGRY = -1, FROWN = -1, BOO = -1, SNUB = -1,
 }
-local recentGestures, installed = {}, nil
+local recentGestures, installed, sending = {}, nil, false
 
 local function explicitTarget(target)
     -- Token arguments (as used by existing Forever addons) must still resolve to players.
@@ -44,22 +44,9 @@ local function explicitTarget(target)
     if not ambiguous then return found end
 end
 
-local function outgoing(emoteName, targetName)
-    if not GL.db or not GL.Settings().socialTracking then return end
-    emoteName = GL.Clean(emoteName, "string")
-    if not emoteName then return end
-    local token = emoteName:upper()
+local function recordGesture(token, identity)
     local delta = gestures[token]
-    if not delta then return end
-    -- A secret target argument is not equivalent to an omitted one.
-    local cleanedTarget = GL.Clean(targetName, "string")
-    if cleanedTarget == nil and type(targetName) ~= "nil" then return end
-    targetName = cleanedTarget
-    if targetName then targetName = targetName:match("^%s*(.-)%s*$") end
-    local identity
-    if not targetName or targetName == "" then identity = GL.Identity("target")
-    elseif targetName:lower() ~= "none" then identity = explicitTarget(targetName) end
-    if not identity then return end
+    if not delta or not identity then return end
     local now = GL.Clean(GL.Safe(GetTimePreciseSec), "number")
         or GL.Clean(GL.Safe(GetTime), "number") or GL.Now()
     -- ponytail: retain only 30 seconds of outgoing opinions. Record references keep
@@ -82,15 +69,44 @@ local function outgoing(emoteName, targetName)
     end
 end
 
+local function outgoing(emoteName, targetName)
+    if sending or not GL.db or not GL.Settings().socialTracking then return end
+    emoteName = GL.Clean(emoteName, "string")
+    if not emoteName then return end
+    local token = emoteName:upper()
+    if not gestures[token] then return end
+    -- A secret target argument is not equivalent to an omitted one.
+    local cleanedTarget = GL.Clean(targetName, "string")
+    if cleanedTarget == nil and type(targetName) ~= "nil" then return end
+    targetName = cleanedTarget
+    if targetName then targetName = targetName:match("^%s*(.-)%s*$") end
+    local identity
+    if not targetName or targetName == "" then identity = GL.Identity("target")
+    elseif targetName:lower() ~= "none" then identity = explicitTarget(targetName) end
+    recordGesture(token, identity)
+end
+
 function GL.SendGesture(token)
     if token ~= "KISS" and token ~= "SPIT" then return false end
-    if not GL.Identity("target") then GL.Print("Sélectionne un joueur pour lui envoyer ce geste.") return false end
+    local identity = GL.Identity("target")
+    if not identity then GL.Print("Sélectionne un joueur pour lui envoyer ce geste.") return false end
     if not GL.Settings().socialTracking then GL.Print("Active « Avis via mes émotes » dans les réglages.") return false end
-    local perform = C_ChatInfo and C_ChatInfo.PerformEmote or DoEmote
+    local modern = C_ChatInfo and type(C_ChatInfo.PerformEmote) == "function"
+    local perform = modern and C_ChatInfo.PerformEmote or DoEmote
     if type(perform) ~= "function" then GL.Print("Les émotes ne sont pas disponibles sur ce client.") return false end
-    local ok = pcall(perform, token, "target")
-    if not ok then GL.Print("Le jeu a refusé le geste. Aucun avis ajouté.") return false end
-    outgoing(token, "target") -- The existing cooldown absorbs the native post-hook too.
+    -- Match the native bare /kiss or /spit: "" uses the selected unit. The literal
+    -- "target" is a character NAME to this API, not a unit token (Forever full names too).
+    -- The native Forever chat parser treats a truthy return as RESTRICTED, despite
+    -- generated API docs calling it "success". Legacy DoEmote has no such contract.
+    -- https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua
+    sending = true -- Suppress our hooks until rejection is known; preserve the clicked identity.
+    local ok, restricted = pcall(perform, token, "")
+    sending = false
+    local publicResult = GL.Clean(restricted)
+    if not ok or (modern and (publicResult == nil and type(restricted) ~= "nil" or publicResult)) then
+        GL.Print("Le jeu a refusé le geste. Aucun avis ajouté.") return false
+    end
+    recordGesture(token, identity)
     return true
 end
 

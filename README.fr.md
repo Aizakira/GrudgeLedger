@@ -48,6 +48,26 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## Nouveautés 0.5.3 : gestes et historique lisible
+
+Les boutons **Bisou / Crachat** utilisent la cible sélectionnée comme les commandes
+natives sans argument. Ils ne transmettent plus le nom littéral « target » et
+n'ajoutent pas d'avis lorsque leur appel est refusé. Aucune faction n'est exclue.
+**Cela ne restaure pas le texte ciblé de `/spit`, retiré par Blizzard** : si Forever
+conserve cette restriction, le crachat reste au sol. Aucun faux message ou texte
+personnalisé n'est substitué. [Notes officielles de la 9.1.5](https://worldofwarcraft.blizzard.com/en-us/news/23731242/915-content-update-notes).
+
+Le journal précise qui a tué qui et distingue les participations possibles.
+Les événements sont espacés, avec date, lieu, avis et raisons personnelles.
+Les preuves techniques restent dans **Corriger le PvP**. Les nouveaux événements
+conservent la sous-zone et la quête explicitement suivie lorsqu'elles sont disponibles,
+sans deviner l'activité réelle ni réécrire les anciens souvenirs.
+Les gestes restent des intentions enregistrées, sans confirmation de réception.
+
+20 suites Lua 5.1 et 27 vues simulées vérifient la logique et l'agencement ; la
+réception des émotes entre factions doit encore être vérifiée sur le client réel.
+Depuis 0.5.2, un `/reload` suffit pour cette mise à jour.
+
 ## Nouveauté 0.5.1 : une icône de bisou reconnaissable
 
 Le bouton Bisou affiche désormais des lèvres rouges peintes soufflant un petit cœur
@@ -72,7 +92,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.5.2.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.5.3.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
