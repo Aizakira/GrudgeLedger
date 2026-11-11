@@ -645,11 +645,11 @@ local function showDiagnostic(private)
         button(f, "Tout sélectionner", 22, -461, 150, function() f.edit:SetFocus() f.edit:HighlightText() end)
         button(f, "Effacer les traces", 186, -461, 150, function() GL.ClearDetectionLog() showDiagnostic(f.private) end)
         button(f, "Actualiser", 350, -461, 120, function() showDiagnostic(f.private) end)
-        button(f, "Test druide", 484, -461, 145, function()
+        button(f, "Validation druide", 484, -461, 145, function()
             if SlashCmdList.GRUDGELEDGERDRUIDRADAR and C_Timer and type(C_Timer.After) == "function" then
                 f:Hide()
                 GL.Print("Essai dans 3 secondes : place la souris sur le monde, hors fenêtres, puis reste immobile.")
-                C_Timer.After(3, function() SlashCmdList.GRUDGELEDGERDRUIDRADAR("test") end)
+                C_Timer.After(3, function() SlashCmdList.GRUDGELEDGERDRUIDRADAR("validation") end)
             end
         end)
     end

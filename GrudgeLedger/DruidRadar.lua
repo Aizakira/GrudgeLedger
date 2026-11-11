@@ -10,7 +10,7 @@ local reasons = {
     class = "Ce test est réservé aux druides.", form = "Passe en forme de félin.",
     tracking = "Active Pistage des humanoïdes dans le menu de pistage.",
     api = "Une API nécessaire est absente, protégée ou illisible.",
-    mask = "Minimap à préparer : ouvre /gl debug, clique sur « Préparer la minimap », puis « Test druide ».",
+    mask = "Minimap à préparer : ouvre /gl debug, clique sur « Préparer la minimap », puis « Validation druide ».",
     target = "Cible un autre joueur immobile, visible comme point sur ta minimap.",
     target_missing = "Aucune cible au lancement du test. Sélectionne un joueur, puis relance sans changer de cible.",
     target_npc = "La cible n'est pas un joueur. Choisis un joueur comme témoin, pas un PNJ ni un familier.",
@@ -80,7 +80,7 @@ function GL.PrepareDruidRadar()
         if not ok then return false, "Échec de la réapplication native. Aucun essai lancé." end
         if not maskAsset then return false, "Apparence réappliquée, mais masque toujours inconnu. Aucun essai lancé." end
     end
-    return true, "Minimap prête. Lance « Test druide »."
+    return true, "Minimap prête. Lance « Validation druide »."
 end
 local function build()
     local _, value = GL.Safe(GetBuildInfo)
@@ -116,12 +116,37 @@ end
 local function reason(err)
     return public(err, "table") and reasons[err.code] and err.code or "api"
 end
+-- Measure synchronous work only, never reset the shared profiler or enable global
+-- profiling. Native rendering between callbacks is not included in these timings.
+local function measureStart(state)
+    if state.timingUnavailable or state.timingStart then return end
+    state.timingStart = number(GL.Safe(debugprofilestop))
+    if not state.timingStart then state.timingUnavailable = true end
+end
+local function measureEnd(state)
+    if state.timingUnavailable then return end
+    local value = number(GL.Safe(debugprofilestop))
+    if not value or not state.timingStart or value < state.timingStart then
+        state.timingUnavailable = true
+    else
+        local elapsed = value - state.timingStart
+        state.workMs = state.workMs + elapsed
+        state.peakMs = math.max(state.peakMs, elapsed)
+    end
+    state.timingStart = nil
+end
 local function report(entry)
     if not entry then return "Aucun essai druide sauvegardé. /glradar test pour commencer." end
-    return string.format("Radar druide · addon %s · build %s · %s · %s\n%s%s\n%d points, %d lectures, %d textes distincts, %d correspondances connues, %.1f s.\n%d points ignorés : élément de la minimap sous la souris.",
+    local text = string.format("Radar druide · addon %s · build %s · %s · %s\n%s%s\n%d points, %d lectures, %d textes distincts, %d correspondances connues, %.1f s.\n%d points ignorés : élément de la minimap sous la souris.",
         entry.version or "non précisé", entry.build, entry.phase, entry.check or "non précisé", reasons[entry.code] or reasons.api,
         entry.detail and ("\n" .. entry.detail) or "",
         entry.points, entry.reads, entry.texts, entry.known, entry.seconds, entry.skipped or 0)
+    if entry.mode then
+        text = text .. string.format("\nMode %s : %d/225 positions lues (grille espacée, couverture non exhaustive).", entry.mode, entry.samples or 0)
+        text = text .. (entry.workMs and string.format("\nTravail mesuré : %.2f ms cumulées ; pic %.2f ms par appel. Hors rendu natif entre les appels.", entry.workMs, entry.peakMs)
+            or "\nMesure du coût indisponible sur cet essai.")
+    end
+    return text
 end
 function GL.DruidRadarReport()
     local history = GL.db and GL.db.druidRadarTests
@@ -130,6 +155,7 @@ end
 local function finish(code)
     local state = running
     if not state then return end
+    measureStart(state)
     running = nil
     driver:SetScript("OnUpdate", nil)
     local restored = true
@@ -166,9 +192,12 @@ local function finish(code)
         if state.known[name] then known = known + 1 end
     end
     local now = number(GL.Safe(GetTime)) or state.started
+    measureEnd(state)
     local entry = { code = code, phase = state.phase, check = check, build = build(), version = GL.version, time = GL.Now(), detail = state.detail,
         points = state.points, reads = state.reads, texts = texts, known = known, skipped = state.skipped,
-        seconds = math.max(0, now - state.started) }
+        seconds = math.max(0, now - state.started), mode = state.mode, samples = state.samples,
+        workMs = not state.timingUnavailable and state.workMs or nil,
+        peakMs = not state.timingUnavailable and state.peakMs or nil }
     if GL.db then
         local history = type(GL.db.druidRadarTests) == "table" and GL.db.druidRadarTests or {}
         history[#history + 1] = entry
@@ -215,7 +244,13 @@ end
 local function emptyPoint(state) place(state, state.width * 2, state.height * 2) end
 local function nextPoint(state)
     local point = state.grid[state.points + 1]
-    if not point then finish(state.skipped > 0 and "obstructed" or "missed") return end
+    if not point or (state.hit and state.mode == "test") then
+        if state.hit then
+            state.phase = "vide intermédiaire"
+            emptyPoint(state)
+        else finish(state.skipped > 0 and "obstructed" or "missed") end
+        return
+    end
     state.points = state.points + 1
     state.phase = "balayage"
     place(state, point[1], point[2])
@@ -245,6 +280,7 @@ local function isMapChild(frame)
 end
 local function tick(state)
     if running ~= state then return end
+    measureStart(state)
     local ok, err = pcall(function()
         prerequisites()
         if clock() - state.started > 12 then reject("timeout") end
@@ -293,12 +329,10 @@ local function tick(state)
             if next(found) then reject("cache") end
             nextPoint(state)
         elseif state.phase == "balayage" then
+            state.samples = state.samples + 1
             for name in pairs(found) do state.names[name] = true end
-            if found[state.target] then
-                state.hit = state.grid[state.points]
-                state.phase = "vide intermédiaire"
-                emptyPoint(state)
-            else nextPoint(state) end
+            if found[state.target] and not state.hit then state.hit = state.grid[state.points] end
+            nextPoint(state)
         elseif state.phase == "vide intermédiaire" then
             if next(found) then reject("cache") end
             state.phase = "seconde lecture"
@@ -313,12 +347,15 @@ local function tick(state)
         end
     end)
     if not ok then finish(reason(err)) end
+    if running == state then measureEnd(state) end
 end
-local function start()
+local function start(mode)
     if running or (GL.MinimapProbeActive and GL.MinimapProbeActive()) then GL.Print(reasons.busy) return end
     if restorationFailed then GL.Print(reasons.restored) return end
-    local state = { names = {}, known = {}, grid = {}, points = 0, reads = 0, skipped = 0, phase = "préparation",
+    local state = { names = {}, known = {}, grid = {}, points = 0, reads = 0, skipped = 0, samples = 0,
+        mode = mode, workMs = 0, peakMs = 0, phase = "préparation",
         started = number(GL.Safe(GetTime)) or 0 }
+    measureStart(state)
     local ok, err = pcall(function()
         prerequisites()
         if NodeSightAPI then reject("conflict") end
@@ -395,18 +432,19 @@ local function start()
         running = state
         finish(reason(err))
     end
+    if running == state then measureEnd(state) end
 end
 function GL.DruidRadarActive() return running ~= nil end
 SLASH_GRUDGELEDGERDRUIDRADAR1 = "/glradar"
 SlashCmdList.GRUDGELEDGERDRUIDRADAR = function(message)
     local command = (message or ""):lower():match("^%s*(.-)%s*$")
-    if command == "test" then start()
+    if command == "test" or command == "validation" then start(command)
     elseif command == "stop" then finish("stopped")
     elseif command == "rapport" or command == "report" then GL.Print(GL.DruidRadarReport())
     else
         local ok, err = pcall(prerequisites)
         GL.Print(ok and reasons.ready or reasons[reason(err)])
-        GL.Print("/glradar test : cible un joueur témoin immobile, puis garde la souris hors minimap et fenêtres. /glradar rapport : résultat anonyme. Aucun pistage ni radar automatique activé.")
+        GL.Print("/glradar test : essai court avec un joueur témoin immobile. /glradar validation : grille complète et mesure du coût. Garde la souris hors minimap et fenêtres. /glradar rapport : résultat anonyme. Aucun pistage ni radar automatique activé.")
     end
 end
 for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_STARTED_MOVING", "PLAYER_LEAVING_WORLD", "PLAYER_LOGOUT", "PLAYER_DEAD", "UPDATE_SHAPESHIFT_FORM", "MINIMAP_UPDATE_TRACKING", "MINIMAP_UPDATE_ZOOM" }) do driver:RegisterEvent(event) end

@@ -46,6 +46,34 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.5.8: validate a full scan and measure its cost
+
+One live 0.5.7 trial on build 70888 read the selected witness twice without manual
+minimap hovering, with successful blank controls: 69 positions, 53 reads and
+12 distinct texts in 2.1 seconds. This validates that witness in that trial,
+**not twelve identified players or reliable continuous coverage**.
+
+After `/reload`, select a stationary humanoid player visible on the minimap,
+in cat form with Track Humanoids active, outside combat and instances. Open
+`/gl debug` → **Préparer la minimap** → **Validation druide**. The window closes;
+place the pointer over empty world space within three seconds and stay still.
+The minimap is temporarily hidden for at most 12 seconds. `/glradar stop` cancels.
+The witness need not be in the journal. Retrieve the anonymous result with
+`/glradar rapport` or Diagnostic.
+
+`/glradar validation` attempts all 225 grid positions instead of stopping at the
+first witness hit as `/glradar test` does. Reports show sampled/skipped positions,
+duration, cumulative synchronous work and the longest measured call, when the
+native timer is available. These timings **exclude native rendering between calls**;
+they are not a complete FPS or memory benchmark. The coarse grid can miss dots.
+
+135 simulated radar cases verify the protocol, interruption/restoration, optional
+timer failures and limits: no more than 229 native reads, one per rendered frame,
+12 seconds and ten name-free reports. No scanner runs while idle. Before enabling
+an optional automatic mode, live tests must check identities, different minimap
+layouts, interruptions and resource use on several machines. See the
+[validation criteria](DEVELOPMENT.txt). **The radar remains manual and experimental.**
+
 ## 0.5.7: skip samples covered by minimap controls
 
 Moving the minimap also moves attached controls underneath the stationary cursor.
@@ -55,9 +83,9 @@ disabling their controls. Unrelated UI still stops the experiment; an obstructed
 blank control or witness replay cannot validate a result.
 
 113 simulated cases cover the second-sample interruption, nested controls,
-obstructed samples and restoration. The two texts received in the live trial do
-not yet prove player identification. The radar remains experimental and manual.
-Use `/reload`, then `/gl debug` → **Préparer la minimap** → **Test druide**, with
+obstructed samples and restoration. A later live trial verified one witness;
+the broader validation procedure is described above. The radar remains manual.
+Use `/reload`, then `/gl debug` → **Préparer la minimap** → **Validation druide**, with
 a stationary player selected as the witness.
 
 ## 0.5.6: distinguish druid test failures
@@ -85,7 +113,7 @@ mask. If no mask has been observed since load, the test stops before any mutatio
 After `/reload`, open `/gl debug` and click **Préparer la minimap**. This explicitly
 reapplies Forever's native minimap appearance using its current rotation setting;
 it does not change saved settings or reset an already observed custom skin.
-Once ready, select a stationary player visible on the minimap and click **Test druide**:
+Once ready, select a stationary player visible on the minimap and click **Validation druide**:
 the window closes, leaving three seconds to place the pointer on empty world space.
 Stay still in cat form with Track Humanoids active. Preparation alone never starts
 a scan, and remains unavailable during combat or another test.
@@ -127,8 +155,9 @@ outcome, failure stage and counters. Do not run another minimap scanner alongsid
 A positive result requires two matching full-name reads with blank controls
 before, between and after. The bounded 225-point grid can miss a dot; low frame
 rates can time out. **This does not yet enable a continuous radar, distant-threat
-alerts or automatic tracking in cat form.** The 79 automated experiment cases
-test our protocol and restoration logic; only live tests can verify native reads.
+alerts or automatic tracking in cat form.** The 135 automated experiment cases
+test our protocol and restoration logic; the single live success described above
+does not establish reliability across players and configurations.
 There is no specific Blizzard approval for this use. See the [investigation and
 primary sources](DEVELOPMENT.txt) and [in-game test instructions](GrudgeLedger/README.txt).
 
@@ -156,7 +185,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 ## Install
 
-1. Download **`GrudgeLedger-0.5.7.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.5.8.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -213,7 +242,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.7.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.8.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

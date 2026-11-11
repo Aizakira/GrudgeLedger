@@ -48,6 +48,35 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## 0.5.8 : valider un balayage complet et mesurer son coût
+
+Un essai réel en 0.5.7 sur le client 70888 a relu deux fois le joueur témoin sans
+survol manuel, avec des contrôles vides réussis : 69 positions, 53 lectures et
+12 textes distincts en 2,1 secondes. Cela valide ce témoin dans cet essai,
+**pas douze joueurs identifiés ni une couverture continue fiable**.
+
+Après `/reload`, en félin avec Pistage des humanoïdes actif, hors combat et
+instance, cibler un joueur humanoïde immobile dont le point apparaît sur la minimap.
+Ouvrir `/gl debug` → **Préparer la minimap** → **Validation druide**. La fenêtre
+se ferme : placer la souris sur une zone vide du monde dans les trois secondes,
+puis rester immobile. La minimap disparaît pendant au maximum 12 secondes.
+`/glradar stop` annule. Le témoin n'a pas besoin d'être dans le livre.
+Retrouver le résultat anonyme avec `/glradar rapport` ou Diagnostic.
+
+`/glradar validation` tente les 225 positions de la grille, alors que `/glradar test`
+s'arrête au premier témoin trouvé. Le rapport indique positions lues/ignorées,
+durée, travail synchrone cumulé et appel le plus coûteux, si le chronomètre natif
+est disponible. Ces mesures **excluent le rendu natif entre les appels** ; ce n'est
+pas un bilan complet des FPS ou de la mémoire. La grille espacée peut manquer des points.
+
+135 cas simulés vérifient protocole, interruptions/restauration, défaillances du
+chronomètre et limites : au plus 229 lectures natives, une par image rendue,
+12 secondes et dix rapports sans noms. Aucun balayage ne tourne au repos.
+Avant un mode automatique facultatif, il faut vérifier en jeu les identités,
+différents agencements de minimap, les interruptions et les ressources sur plusieurs
+machines. Voir les [critères de validation](DEVELOPMENT.txt).
+**Le radar reste manuel et expérimental.**
+
 ## Correctif 0.5.7 : les boutons de minimap interrompaient le balayage
 
 Déplacer la minimap déplace aussi ses éléments attachés sous la souris immobile.
@@ -57,10 +86,10 @@ lire leur infobulle ni désactiver leurs boutons. Une fenêtre extérieure arrê
 toujours l'essai ; un point de contrôle masqué empêche de valider le résultat.
 
 113 cas simulés couvrent notamment cet arrêt au deuxième point, les éléments
-imbriqués, les points masqués et la restauration. Les deux textes reçus lors de
-l'essai en jeu ne prouvent pas encore l'identification d'un joueur. Le radar
-reste expérimental et manuel. `/reload` charge le correctif ; la procédure reste
-`/gl debug` → **Préparer la minimap** → **Test druide**, avec un joueur témoin ciblé.
+imbriqués, les points masqués et la restauration. Un essai réel ultérieur a validé
+un témoin ; la validation plus large est décrite ci-dessus. Le radar reste manuel.
+`/reload` charge le correctif ; la procédure est
+`/gl debug` → **Préparer la minimap** → **Validation druide**, avec un joueur témoin ciblé.
 
 ## Correctif 0.5.6 : comprendre les arrêts du test druide
 
@@ -88,7 +117,7 @@ Après `/reload`, ouvrir `/gl debug` et cliquer sur **Préparer la minimap**. Ce
 réapplique explicitement l'apparence native de Forever avec la rotation actuelle ;
 il ne change aucun réglage sauvegardé et préserve un habillage personnalisé déjà observé.
 Une fois la minimap prête, cibler un joueur immobile visible sur la minimap, puis cliquer
-sur **Test druide** : la fenêtre se ferme et laisse trois secondes pour placer la souris
+sur **Validation druide** : la fenêtre se ferme et laisse trois secondes pour placer la souris
 sur une zone vide du monde. Rester immobile, en félin, avec le pistage des humanoïdes actif.
 La préparation ne lance aucun scan et est refusée en combat ou pendant un autre test.
 Cela corrige la préparation ; **la lecture des joueurs reste à démontrer en jeu**.
@@ -137,7 +166,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.5.7.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.5.8.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -184,9 +213,9 @@ de minimap pour isoler l'essai.
 Le test exige deux lectures du nom témoin avec des contrôles vides avant, entre
 et après. La grille bornée de 225 positions peut manquer un point ; un faible
 nombre d'images par seconde peut limiter l'essai. **Le radar continu, les alertes
-lointaines et le pistage automatique en félin ne sont pas activés.** Les 79 cas
-automatisés vérifient le protocole et la restauration ; il faut encore valider la
-lecture native dans Forever. Aucune autorisation spécifique de Blizzard n'a été
+lointaines et le pistage automatique en félin ne sont pas activés.** Les 135 cas
+automatisés vérifient le protocole et la restauration ; l'essai réel réussi décrit
+plus haut ne valide pas encore toutes les situations. Aucune autorisation spécifique de Blizzard n'a été
 obtenue. Voir [l'enquête et ses sources primaires](DEVELOPMENT.txt) et les
 [instructions détaillées](GrudgeLedger/README.txt).
 
@@ -198,7 +227,7 @@ Forever peut masquer le journal de combat. L'addon consulte aussi son récapitul
 
 Les boutons Ami/Méfiance/Ennemi et les avis manuels conservent leur priorité, même après une emote. Les gestes seuls ne verrouillent plus le classement : un `/spit` ne bloque pas le passage en ennemi après une mort PvP. La détection des duels dépend des signaux disponibles.
 
-Vingt scripts de tests automatisés, dont 77 scénarios de suivi et 79 cas du détecteur druide, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
+Vingt scripts de tests automatisés, dont 77 scénarios de suivi et 135 cas du détecteur druide, accompagnent les sources. Ils simulent les API de WoW et ne remplacent pas les essais en jeu. C'est encore une jeune version : vos retours sont les bienvenus.
 
 ## Chacun son livre
 
@@ -225,7 +254,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.2.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.8.zip GrudgeLedger
 ```
 
 ## Licence et crédits

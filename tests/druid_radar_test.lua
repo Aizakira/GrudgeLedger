@@ -113,6 +113,20 @@ local function run(mode, expected, options)
     env.IsMouseButtonDown = function() return flags.click or false end
     env.GetUnitSpeed = function() return flags.moving and 1 or 0 end
     env.GetTime = function() return now end
+    local profileCalls, lastReadFrame, totalReads = 0, nil, 0
+    env.debugprofilestart = function() error("must not reset the global profiler") end
+    if options.profiler ~= "missing" then
+        env.debugprofilestop = function()
+            profileCalls = profileCalls + 1
+            if options.profiler == "throws" then error("private profiler failure") end
+            if options.profiler == "secret" then return secret end
+            if options.profiler == "nan" then return 0 / 0 end
+            if options.profiler == "infinite" then return math.huge end
+            if options.profiler == "reset" and profileCalls == 4 then return 0 end
+            if options.profiler == "late-missing" and profileCalls == 4 then return nil end
+            return profileCalls * 0.125 -- deterministic cost, never a hardware benchmark
+        end
+    end
     env.GetBuildInfo = function() return "1.60.1", "70888" end
     env.C_Minimap = {
         GetNumTrackingTypes = function() return 2 end,
@@ -127,7 +141,7 @@ local function run(mode, expected, options)
     env.SlashCmdList = {}
     local watchdog
     env.C_Timer = { After = function(delay, fn) assert(delay == 12); watchdog = fn end }
-    local GL = { version = "0.5.7", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
+    local GL = { version = "0.5.8", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
     env.GrudgeLedger = GL
     GL.Clean = function(value, kind)
         if value == secret or kind and type(value) ~= kind then return nil end
@@ -144,6 +158,9 @@ local function run(mode, expected, options)
     GL.MinimapProbeActive = function() return flags.legacy or false end
     env.C_TooltipInfo = { GetMinimapMouseover = function()
         assert(frame > 0, "no same-frame reads")
+        assert(lastReadFrame ~= frame, "at most one native tooltip read per rendered frame")
+        lastReadFrame, totalReads = frame, totalReads + 1
+        assert(totalReads <= 229, "225 grid reads plus four witness/cache controls")
         if focusBlocked then obstructedReads = obstructedReads + 1 end
         if mode == "throws" then error("Élodie raw error") end
         if mode == "secret" then return secret end
@@ -165,7 +182,7 @@ local function run(mode, expected, options)
         return { lines = { { leftText = "Autre Point", type = 0 }, { leftText = "|cffff0000Élodie Testeur|r", type = 0 } } }
     end }
     assert(loadstring(source, "DruidRadar.lua")); setfenv(assert(loadstring(source)), env)()
-    assert(mutations == 0 and nativeCalls == 0 and not scripts.OnUpdate and #messages == 0, "dormant at login")
+    assert(mutations == 0 and nativeCalls == 0 and not scripts.OnUpdate and #messages == 0 and profileCalls == 0, "dormant at login")
     assert(not GL.db.druidRadarTests and not GL.DruidRadarActive())
     -- The game's skin (or another addon) sets its mask after our observer loads.
     if mode ~= "unknown-mask" and mode ~= "observe-later" and not options.prepare then
@@ -221,7 +238,8 @@ local function run(mode, expected, options)
     elseif mode == "working" then
         assert(GL.PrepareDruidRadar() and nativeCalls == 0 and mutations == 0, "known custom skins are not reset")
     end
-    slash("test")
+    local measuredBefore = profileCalls
+    slash(options.validation and "validation" or "test")
     if mode == "legacy" then assert(mutations == 0 and not GL.db.druidRadarTests); checked = checked + 1; return end
     if GL.DruidRadarActive() then
         local before = mutations
@@ -260,6 +278,20 @@ local function run(mode, expected, options)
     assert(saved.build == "70888" and saved.time == 12345 and saved.points <= 225)
     assert(saved.version == GL.version and messages[#messages]:find("addon " .. GL.version, 1, true), "identify the installed diagnostic revision")
     assert(saved.seconds >= 0 and saved.seconds <= 12.2, "bounded duration")
+    assert(saved.mode == (options.validation and "validation" or "test"))
+    assert(saved.samples <= saved.points - saved.skipped and saved.samples <= saved.reads)
+    if options.profiler then
+        assert(saved.workMs == nil and saved.peakMs == nil, "invalid profiling must not become a zero-cost claim")
+        assert(messages[#messages]:find("coût indisponible", 1, true))
+    else
+        assert(saved.workMs > 0 and saved.peakMs == 0.125, "measure synchronous intervals only")
+        assert(saved.workMs == (profileCalls - measuredBefore) / 2 * 0.125, "count setup, ticks and restoration exactly once: " .. mode)
+    end
+    if options.validation and expected == "positive" then
+        assert(saved.points == 225 and saved.samples + saved.skipped == 225, "do not stop early at the witness")
+        assert(saved.reads == saved.samples + 4, "initial blank, intermediate blank, replay and final blank")
+        assert(saved.seconds > 7 and saved.seconds < 8, "full grid spans rendered frames at 60 FPS")
+    end
     if options.child then
         assert(obstructedReads == 0, "a minimap button's tooltip must never count as a radar read")
         assert(messages[#messages]:find(saved.skipped .. " points ignorés", 1, true), "show the obstruction count")
@@ -310,7 +342,7 @@ local function run(mode, expected, options)
     end
     slash("rapport")
     assert(messages[#messages]:find(saved.build, 1, true))
-    saved.skipped = nil -- Reports saved by 0.5.6 remain readable.
+    saved.skipped, saved.mode, saved.workMs, saved.peakMs, saved.samples = nil, nil, nil, nil, nil -- Older reports remain readable.
     slash("rapport")
     assert(messages[#messages]:find("0 points ignorés", 1, true))
     checked = checked + 1
@@ -353,6 +385,23 @@ end
 run("hook-failure", "prepare-failed", { prepare = "working", message = "API nécessaire" })
 run("empty", "timeout", { delta = 1 / 20 })
 run("hidden-driver", "timeout")
+-- A full validation must not stop at the first hit, including an early/last witness.
+for _, point in ipairs({ { 0, 0 }, { -84, -84 }, { 84, 84 } }) do
+    run("working", "positive", { validation = true, dotX = point[1], dotY = point[2], latency = 2 })
+end
+run("unlisted", "positive", { validation = true })
+run("duplicate", "positive", { validation = true })
+run("working", "positive", { validation = true, child = "nested" })
+run("working", "missed", { validation = true, dotX = 6, dotY = 6 }) -- Gaps in a coarse grid are inconclusive.
+run("working", "obstructed", { validation = true, child = "all" })
+run("working", "timeout", { validation = true, delta = 1 / 20 })
+for mode, expected in pairs({ empty = "missed", stale = "cache", ["one-hit"] = "replay",
+    ["late-combat"] = "combat", ["cursor-move"] = "mouse", stop = "stopped" }) do
+    run(mode, expected, { validation = true })
+end
+for _, profiler in ipairs({ "missing", "throws", "secret", "nan", "infinite", "reset", "late-missing" }) do
+    run("working", "positive", { validation = true, profiler = profiler })
+end
 run("silent-restore-failure", "restored", { silentRestore = true })
 for event, expected in pairs({ PLAYER_REGEN_DISABLED = "combat", PLAYER_STARTED_MOVING = "moving", PLAYER_DEAD = "dead",
     PLAYER_LEAVING_WORLD = "world", PLAYER_LOGOUT = "world", UPDATE_SHAPESHIFT_FORM = "form",

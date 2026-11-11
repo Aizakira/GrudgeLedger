@@ -1,4 +1,4 @@
-Grudge Ledger 0.5.2 — sources et tests
+Grudge Ledger 0.5.8 — sources et tests
 
 Le dossier GrudgeLedger est le seul dossier à installer dans Interface/AddOns.
 Les tests utilisent Lua 5.1 via Lupa, sans lancer WoW.
@@ -36,7 +36,7 @@ Les tests ne prétendent pas simuler le moteur natif : ils modélisent les noms
 à partir de la géométrie carte/curseur, avec une latence de rendu de 1/2 images.
 Une réussite locale valide le protocole, pas la disponibilité du moteur WoW.
 
-20 scripts de tests, dont 79 cas du détecteur druide : API absentes/protégées,
+20 scripts de tests, dont 135 cas du détecteur druide : API absentes/protégées,
 cache trompeur, correspondance exacte et ambiguïtés, propriétaire d'un familier,
 relecture absente, échelles et dimensions différentes, timeout, interruptions,
 erreur à chaque mutation et restauration (y compris un setter sans effet),
@@ -66,8 +66,65 @@ Sources primaires consultées (lecture uniquement, code réimplémenté ici) :
   N'utiliser ni lecteur mémoire, ni injection, ni automatisation extérieure,
   ni contournement de données/API protégées. Les refus d'API arrêtent le test.
 
-Avant toute fonctionnalité permanente : vérifier dans Forever plusieurs noms
-connus avec contrôles vides, puis portée réelle, déplacements, disparition,
-coexistence avec les addons de minimap, impact visuel et coût du balayage.
-Le pistage automatique en félin et les alertes de danger lointain restent hors
-service tant que ce préalable de lecture native n'est pas démontré.
+Résultat réel 0.5.7, client 70888 : témoin relu deux fois sans survol manuel,
+contrôles vides réussis. 69 positions, 53 lectures, 12 textes distincts,
+0 correspondance connue, 20 positions masquées, 2,1 secondes. Ce résultat
+valide un témoin immobile dans cette configuration, pas 12 joueurs ni une
+couverture complète. Aucun nom ni capture personnelle n'est publié ici.
+
+Validation 0.5.8 et critères avant automatisation
+-----------------------------------------------
+/glradar test conserve l'arrêt au premier témoin ; /glradar validation parcourt
+les 225 positions avant la relecture du témoin et les derniers contrôles vides.
+Le bouton « Validation druide » du diagnostic laisse trois secondes pour placer
+la souris. Le test exige toujours un témoin ciblé, félin, pistage actif et
+immobilité hors combat ; aucune relation ni alerte ne change. Une correspondance
+connue est un texte correspondant à un nom non ambigu du livre, pas un GUID
+confirmé. Un témoin inconnu convient ; zéro correspondance connue est normal.
+
+Bornes vérifiées : maximum 229 lectures natives (225 positions + 4 contrôles),
+au plus une lecture par image rendue, 12 secondes, 10 rapports anonymisés.
+Le pilote OnUpdate est retiré à chaque arrêt. Sans essai, pas de balayage ni
+mesure périodique. À 60 images/s, la grille complète sans obstruction demande
+environ 7,6 s : cette validation de charge n'est pas le futur rythme du radar.
+Les tests couvrent aussi le témoin au début/à la fin, les trous de grille,
+les points masqués, un faible débit d'images et les interruptions en validation.
+
+Mesure : différences entre debugprofilestop au début et à la fin des appels
+synchrones de préparation, balayage et restauration, sans réinitialiser le
+chronomètre partagé ni activer scriptProfile. Le rapport fournit le cumul et
+le pic par appel, pas un pourcentage CPU. Il exclut les attentes entre images,
+le rendu natif/GPU et la génération finale du rapport ; une erreur du chronomètre
+rend la mesure indisponible, jamais « coût nul ». Les coûts simulés des tests
+ne sont pas des mesures de matériel. Source native :
+https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/FrameScriptDocumentation.lua
+
+Matrice de validation réelle à compléter, sans présumer de compatibilité :
+1. Lecture : répéter avec témoins Alliance/Horde, connus/inconnus, aux bords et
+   entre positions de grille, superposés à d'autres points. Comparer au témoin
+   réel, pas au nombre de textes. Vérifier qu'un PNJ, un familier ou un homonyme
+   ne devient jamais une identification certaine. Comptabiliser succès,
+   absences et interruptions séparément ; ne pas exclure les échecs du bilan.
+2. Coexistence : tailles/échelles/zooms/rotation, minimap native puis habillages
+   courants, boutons attachés, changement de forme, combat, déplacement,
+   ouverture de fenêtre et annulation. Vérifier visuellement position, masque,
+   clic et molette restaurés à chaque sortie, sans flash ni erreur Lua.
+3. Charge : séries avec/sans essai dans une même scène, plusieurs machines et
+   sessions de 30 à 60 minutes. Comparer temps des images, pics et mémoire de
+   l'addon après stabilisation, sans forcer le ramasse-miettes. Les timings Lua
+   seuls ne détectent pas tout le travail du moteur. Aucun budget matériel n'est
+   encore validé ; calibrer le nombre de points et les pauses sur ces mesures.
+4. Intégration ensuite seulement : mode optionnel, petits lots interruptibles,
+   anti-répétition partagé avec la proximité et alerte distante distincte.
+   Tester arrivée, départ, retour, groupe et changement de forme en conditions
+   réelles. L'état « non observé » ne doit jamais devenir « zone sans danger ».
+   Vérifier séparément la possibilité de changer le pistage via les API permises.
+
+Condition de passage : identité non trompeuse, restauration fiable et coût
+acceptable mesuré sur plusieurs configurations représentatives. Des échecs de
+lecture systématiques ou une minimap perturbée bloquent l'automatisation.
+Les limitations de grille restent explicites même après un test positif.
+Après une mise à jour de client, revalider API et protocole avant d'étendre la
+compatibilité ; désactiver proprement une voie indisponible. Aucun contournement
+de protection. Le radar permanent, les alertes distantes et le pistage automatique
+restent désactivés à ce stade ; le test concluant ne les valide pas à lui seul.
