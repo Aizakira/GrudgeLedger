@@ -117,5 +117,24 @@ local redName = plate.TPFrame.visual.NameText.color
 assert(mock.cvars.nameplateShowFriendlyPlayers == 1 and mock.cvars.nameplateShowAll == 1)
 assert(redName and redName[1] == 1 and redName[2] == 0.25 and redName[3] == 0.2,
     "a same-faction enemy must be red on the actual displayed nameplate font")
+-- A targeted kiss marks a party member as a friend: keep the heart, suppress only the toast.
+mock.units.party1 = mock.units.nameplate1
+GetNumGroupMembers = function() return 2 end
+UnitInParty = function(unit) return UnitIsUnit(unit, "party1") end
+UnitIsVisible = function(unit) return UnitExists(unit) end
+GL.SetReaction(opponent, "neutral")
+mock.SetCombat(true) -- this fixture's world nameplate is not protected
+hooks.PerformEmote("KISS")
+assert(GL.Relation(GL.Get(opponent)) == "friend" and GL.Get(opponent).reputation == 1)
+local heart
+for _, child in ipairs(plate.children) do
+    local icon = child.children[2]
+    if icon and type(icon.texture) == "string" and icon.texture:find("RelationFriend") then heart = child end
+end
+assert(heart and heart:IsShown(), "party friends retain their heart even in combat on modifiable plates")
+assert(not GrudgeLedgerNearbyAlert:IsShown(), "party suppression must affect only the alert")
+GL.SetSetting("friendAlerts", false)
+assert(heart:IsShown(), "turning off friend alerts must not hide their hearts")
+mock.SetCombat(false)
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS integrated TOC: boot, menus, persistence writes, markers/alerts, notes, macros, tooltip, UI correction propagation; no forced UI/target/CVars")

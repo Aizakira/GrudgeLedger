@@ -374,6 +374,11 @@ local function showDiagnostic()
     for _, key in ipairs({ "markers", "nameColor", "friendAlerts", "enemyAlerts", "sounds", "pvpTracking", "groupTracking", "socialTracking" }) do
         lines[#lines + 1] = key .. " : " .. (GL.Clean(GL.Settings()[key], "boolean") == true and "oui" or "non")
     end
+    lines[#lines + 1] = "\nAffichage des noms :"
+    for _, key in ipairs({ "nameplateShowFriendlyPlayers", "nameplateShowEnemies", "nameplateShowAll", "nameplateShowOnlyNameForFriendlyPlayerUnits" }) do
+        local value = GL.Safe((C_CVar and C_CVar.GetCVar) or GetCVar, key)
+        lines[#lines + 1] = key .. " : " .. ((value == "0" or value == "1") and value or "indisponible")
+    end
     diagnosticWindow.edit:SetText(table.concat(lines, "\n"))
     local _, fontHeight = diagnosticWindow.edit:GetFont()
     diagnosticWindow.edit:SetHeight(math.max(355, diagnosticWindow.edit:GetNumLines() * (fontHeight + diagnosticWindow.edit:GetSpacing()) + 8))
@@ -486,7 +491,7 @@ local function showSettings()
             self.plateStatus:SetText("Alliés : " .. status("nameplateShowFriendlyPlayers") .. " • Ennemis : " .. status("nameplateShowEnemies"))
         end
         button(f, "Activer le repérage (icônes + couleurs)", 20, -393, 405, enableRecognition)
-        label(f, "Amis : après plus de 10 min d'absence, jamais dans votre groupe. Rancunes : délai de 3 min par défaut.", nil, 20, -434, 405)
+        label(f, "Alertes amicales : plus de 10 min d'absence, hors groupe. Les icônes restent affichées en groupe.", nil, 20, -434, 405)
         button(f, "Diagnostic", 20, -480, 405, showDiagnostic)
     end
     for key, check in pairs(settingsWindow.checks) do check:SetChecked(GL.Settings()[key]) end

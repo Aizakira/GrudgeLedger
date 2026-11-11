@@ -64,6 +64,9 @@ assert(not f.rows[1].undo.scripts.OnClick, "empty rows discard stale callbacks")
 GL.SetGuildReaction("PRIVATE guild", "enemy", "PRIVATE guild note")
 GL.errors = { { text = "PRIVATE raw error Aqua Player-1-aqua" }, { text = "PRIVATE more details" } }
 GL.db.settings.unrelatedPrivateSetting = "PRIVATE hidden setting"
+mock.cvars.nameplateShowFriendlyPlayers = 0
+mock.cvars.nameplateShowEnemies = 1
+mock.cvars.nameplateShowAll = "PRIVATE invalid CVar value"
 SlashCmdList.GRUDGELEDGER("settings")
 click(button(GrudgeLedgerSettings, "Diagnostic"))
 local d = GrudgeLedgerDiagnostic
@@ -73,6 +76,8 @@ assert(text:find("Client : 1.16.0", 1, true) and text:find("Build : 63690", 1, t
 assert(text:find("Intégration détectée : Threat Plates", 1, true))
 assert(text:find("Erreurs conservées : 2", 1, true))
 assert(text:find("markers : oui", 1, true) and text:find("CombatLogGetCurrentEventInfo : non", 1, true))
+assert(text:find("nameplateShowFriendlyPlayers : 0", 1, true) and text:find("nameplateShowEnemies : 1", 1, true))
+assert(text:find("nameplateShowAll : indisponible", 1, true), "only allowlisted boolean CVar values may be shared")
 for _, forbidden in ipairs({ "PRIVATE", "Aqua", "Megumin", "Player-1-", "Déduction", "Autre personne", "Forever", "unrelatedPrivateSetting" }) do
     assert(not text:find(forbidden, 1, true), "diagnostic leaked " .. forbidden)
 end

@@ -140,6 +140,21 @@ plate:SetAlpha(0)
 D.Refresh()
 assert(marker.shown and marker.ignoreParentAlpha and plate.alpha == 0)
 plate:SetAlpha(1)
+-- A hidden ThreatPlates parent can leave its child individually IsShown().
+local nativeName = region("FontString", nil, plate.UnitFrame)
+plate.UnitFrame.name = nativeName
+plate.TPFrame:Hide()
+D.Refresh()
+assert(font:IsShown() and marker.anchor[2] == nativeName,
+    "native name-only plates must not anchor their marker to a hidden TP name")
+assert(marker.shown and not marker.ignoreParentAlpha and not marker.ignoreParentScale)
+plate.TPFrame:Show()
+font.IsVisible = function() return false end
+D.Refresh()
+assert(marker.anchor[2] == nativeName, "a hidden name ancestor must also fall back to the native name")
+font.IsVisible = nil
+D.Refresh()
+assert(marker.anchor[2] == font and marker.ignoreParentAlpha and marker.ignoreParentScale)
 local toast = assert(GrudgeLedgerNearbyAlert)
 assert(toast.shown and toast.name.text == "Alex One" and toast.note.text == "Super donjon ensemble")
 assert(toast.icon.texture:find("RelationFriend") and toast.icon.vertex[1] == 1 and toast.icon.vertex[2] == 1 and toast.icon.vertex[3] == 1)

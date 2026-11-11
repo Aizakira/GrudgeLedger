@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.2.5
+GRUDGE LEDGER — 0.2.6
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -124,6 +124,14 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+MARQUEURS ET NOMS NATIFS 0.2.6
+Correction de l'ancrage lorsque Threat Plates masque son propre texte et laisse
+afficher le nom natif de WoW, notamment en mode nom uniquement. Un ami du groupe
+garde son cœur ; seules ses alertes de proximité sont supprimées. Le diagnostic
+affiche les réglages des plaques alliées/ennemies pour distinguer une absence
+de plaque d'un problème de rendu. Si les icônes manquent, utiliser /gl reperage
+hors combat : les noms flottants sans plaque ne peuvent pas porter de marqueur.
 
 FILTRES ET IDENTITÉS 0.2.5
 Filtres de faction cumulables avec les relations, compteur de sélection, race

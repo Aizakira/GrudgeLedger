@@ -128,10 +128,11 @@ end
 local function findName(plate)
     local tp = plate.TPFrame
     local font = tp and tp.visual and tp.visual.NameText
-    if font and GL.Safe(font.IsShown, font) ~= false then return font end
+    if font and GL.Safe(tp.IsShown, tp) ~= false and GL.Safe(font.IsShown, font) ~= false
+        and GL.Safe(font.IsVisible, font) ~= false then return font end
     local unitFrame = plate.UnitFrame
     font = unitFrame and (unitFrame.name or unitFrame.Name)
-    if font and GL.Safe(font.IsShown, font) ~= false then return font end
+    if font and GL.Safe(font.IsShown, font) ~= false and GL.Safe(font.IsVisible, font) ~= false then return font end
 end
 
 local function ensureMarker(plate)
