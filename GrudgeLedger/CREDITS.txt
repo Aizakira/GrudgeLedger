@@ -1,4 +1,4 @@
-Grudge Ledger — 0.4.5
+Grudge Ledger
 Distributed under the GNU General Public License, version 3 (see LICENSE).
 
 Menu integration and nameplate/tooltip lifecycle techniques are adapted from
@@ -25,6 +25,11 @@ uncompressed 128x128 RGBA TGA textures under the same GPLv3 terms.
 Other icons and sounds are referenced from the player's installed World of
 Warcraft client. No Blizzard media files are redistributed in this package.
 World of Warcraft is a trademark of Blizzard Entertainment.
+
+The kiss action icon (Media/GestureKiss.tga, 128x128 opaque RGBA) was generated
+with OpenAI's built-in image tool: painted red lips blowing a small pink heart.
+It is original artwork, distributed under the same GPLv3 terms, and uses the
+native client button frame. No Blizzard artwork was copied into this texture.
 
 No personal player database or guild list is distributed with this addon.
 

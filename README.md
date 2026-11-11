@@ -46,13 +46,19 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.5.1: a recognizable kiss icon
+
+The kiss button now uses original painted red lips blowing a pink heart, generated
+with OpenAI's image tool, inside the native WoW button frame. Restart the game after
+updating to load the new texture. Gesture behavior is unchanged.
+
 ## 0.5.0: chronicles, guild rankings and diagnostics
 
 A shared death ID counts once per guild, with confirmed evidence taking precedence over probable participation. Different guilds can be involved in the same death, so their totals are not additive. Legacy events without a shared ID are not guessed into one event.
 
 The book now opens **Statistics** (`/gl stats`) and **Guild rankings** (`/gl guildes`). Rank player deaths, victories, negative balances, positive friendships and distinct encounters; probable PvP events stay in separate rankings. Guild lists count personal grudges/friends and historically attributed deaths/aggressions. Click a guild to mark it for caution, as friendly, or edit its rule/notes. Personal overrides still win, inherited rules do not inflate personal grudge counts, unknown historical guilds remain unassigned and membership changes never rewrite old events.
 
-Two native WoW **kiss/spit** buttons sit above chat, below alerts. Clicking acts on the selected player using the existing emote path (+1/−1, same 30-second sentiment cooldown). Ctrl-drag moves the pair; settings hide or reset it. No automatic emotes or forced targeting.
+Two **kiss/spit** buttons with native WoW frames sit above chat, below alerts. Clicking acts on the selected player using the existing emote path (+1/−1, same 30-second sentiment cooldown). Ctrl-drag moves the pair; settings hide or reset it. No automatic emotes or forced targeting.
 
 Distinct encounters begin with this version: another encounter requires over ten minutes without an observation, with every sighting renewing the clock. Reloads preserve continuity; character clocks are separate and totals belong to this account's book. No old visits or time-spent estimates are invented.
 
@@ -64,7 +70,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 ## Install
 
-1. Download **`GrudgeLedger-0.5.0.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.5.1.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -121,7 +127,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.0.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.1.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.
