@@ -48,6 +48,22 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## Correctif 0.5.6 : comprendre les arrêts du test druide
+
+Le rapport distingue désormais une cible absente, un PNJ/familier, soi-même et
+une identité de joueur illisible ou incomplète. Pour la minimap, il indique la
+propriété en cause et les valeurs reçue/attendue au lieu d'un message regroupant
+sept contrôles. Les dimensions acceptent le même écart d'arrondi de 0,1 unité
+d'interface que la position ; les changements réels arrêtent toujours le test.
+La version de l'addon figure aussi dans le rapport, en plus du build du jeu.
+
+**Le joueur témoin n'a pas besoin d'être dans le journal.** Une lecture réussie
+peut avoir zéro correspondance connue. Cela n'explique pas un arrêt avant la
+lecture du moindre point. Le test n'ajoute jamais le témoin au livre.
+
+Un `/reload` charge cette mise à jour. La procédure ci-dessous reste identique ;
+les tests automatisés vérifient le protocole, pas la disponibilité réelle des noms.
+
 ## Correctif 0.5.5 : préparation de l'essai druide dans le diagnostic
 
 Le test appelait `Minimap:GetMaskTexture()`, absent des API Forever. La simulation
@@ -107,7 +123,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.5.5.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.5.6.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 

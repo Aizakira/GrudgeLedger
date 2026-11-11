@@ -12,6 +12,11 @@ local reasons = {
     api = "Une API nécessaire est absente, protégée ou illisible.",
     mask = "Minimap à préparer : ouvre /gl debug, clique sur « Préparer la minimap », puis « Test druide ».",
     target = "Cible un autre joueur immobile, visible comme point sur ta minimap.",
+    target_missing = "Aucune cible au lancement du test. Sélectionne un joueur, puis relance sans changer de cible.",
+    target_npc = "La cible n'est pas un joueur. Choisis un joueur comme témoin, pas un PNJ ni un familier.",
+    target_self = "Tu te cibles toi-même. Choisis un autre joueur comme témoin.",
+    target_identity = "La cible est un joueur, mais son identité n'a pas pu être lue. Aucun point n'a été testé.",
+    target_name = "La cible est un joueur, mais son prénom ou son nom de famille est indisponible. Aucun point n'a été testé.",
     combat = "Combat : essai arrêté.", moving = "Déplacement du personnage : essai arrêté.",
     dead = "Personnage mort : essai arrêté.", instance = "Essai limité au monde extérieur.",
     mouse = "Mouvement ou clic de souris : essai arrêté.",
@@ -110,8 +115,9 @@ local function reason(err)
 end
 local function report(entry)
     if not entry then return "Aucun essai druide sauvegardé. /glradar test pour commencer." end
-    return string.format("Radar druide · build %s · %s · %s\n%s\n%d points, %d lectures, %d textes distincts, %d correspondances connues, %.1f s.",
-        entry.build, entry.phase, entry.check or "non précisé", reasons[entry.code] or reasons.api,
+    return string.format("Radar druide · addon %s · build %s · %s · %s\n%s%s\n%d points, %d lectures, %d textes distincts, %d correspondances connues, %.1f s.",
+        entry.version or "non précisé", entry.build, entry.phase, entry.check or "non précisé", reasons[entry.code] or reasons.api,
+        entry.detail and ("\n" .. entry.detail) or "",
         entry.points, entry.reads, entry.texts, entry.known, entry.seconds)
 end
 function GL.DruidRadarReport()
@@ -157,7 +163,7 @@ local function finish(code)
         if state.known[name] then known = known + 1 end
     end
     local now = number(GL.Safe(GetTime)) or state.started
-    local entry = { code = code, phase = state.phase, check = check, build = build(), time = GL.Now(),
+    local entry = { code = code, phase = state.phase, check = check, build = build(), version = GL.version, time = GL.Now(), detail = state.detail,
         points = state.points, reads = state.reads, texts = texts, known = known,
         seconds = math.max(0, now - state.started) }
     if GL.db then
@@ -211,6 +217,18 @@ local function nextPoint(state)
     state.phase = "balayage"
     place(state, point[1], point[2])
 end
+local function expectNumber(state, label, actual, expected, tolerance)
+    check = "minimap : " .. label
+    actual = number(actual)
+    if not actual then
+        state.detail = "Valeur reçue illisible."
+        reject("api")
+    end
+    if math.abs(actual - expected) > (tolerance or 0) then
+        state.detail = string.format("Reçu : %.6f ; attendu : %.6f ; tolérance : %.6f.", actual, expected, tolerance or 0)
+        reject("map")
+    end
+end
 local function tick(state)
     if running ~= state then return end
     local ok, err = pcall(function()
@@ -228,16 +246,19 @@ local function tick(state)
             -- the pointer. Do not disable another addon's controls to force a read.
             if frame ~= WorldFrame and frame ~= Minimap then reject("focus") end
         end
-        check = "géométrie et masque minimap"
+        check = "minimap : centre"
         local cx, cy = Minimap:GetCenter()
-        cx, cy = number(cx), number(cy)
-        if not cx or not cy or math.abs(cx - state.expectedX) > 0.1 or math.abs(cy - state.expectedY) > 0.1
-            or numeric(Minimap.GetEffectiveScale, Minimap) ~= state.scale
-            or numeric(Minimap.GetAlpha, Minimap) ~= 0
-            or maskAsset ~= BLANK
-            or numeric(Minimap.GetZoom, Minimap) ~= state.zoom
-            or numeric(Minimap.GetWidth, Minimap) ~= state.width
-            or numeric(Minimap.GetHeight, Minimap) ~= state.height then reject("map") end
+        -- Match geometry within 0.1 UI unit: native float extents can round after
+        -- a move. Keep scale/alpha/zoom exact and report the first failing value.
+        expectNumber(state, "centre X", cx, state.expectedX, 0.1)
+        expectNumber(state, "centre Y", cy, state.expectedY, 0.1)
+        expectNumber(state, "échelle", call(Minimap.GetEffectiveScale, Minimap), state.scale)
+        expectNumber(state, "transparence", call(Minimap.GetAlpha, Minimap), 0)
+        check = "minimap : masque modifié"
+        if maskAsset ~= BLANK then reject("map") end
+        expectNumber(state, "zoom", call(Minimap.GetZoom, Minimap), state.zoom)
+        expectNumber(state, "largeur", call(Minimap.GetWidth, Minimap), state.width, 0.1)
+        expectNumber(state, "hauteur", call(Minimap.GetHeight, Minimap), state.height, 0.1)
         -- A native hover read updates on a rendered frame, not in a tight Lua loop.
         state.wait = state.wait + 1
         if state.wait < 2 then return end
@@ -275,9 +296,16 @@ local function start()
     local ok, err = pcall(function()
         prerequisites()
         if NodeSightAPI then reject("conflict") end
-        check = "identité du joueur témoin"
+        check = "cible : présence"
+        if not yes(UnitExists, "target") then reject("target_missing") end
+        check = "cible : type joueur"
+        if not yes(UnitIsPlayer, "target") then reject("target_npc") end
+        check = "cible : autre que soi"
+        if yes(UnitIsUnit, "target", "player") then reject("target_self") end
+        check = "cible : identité lisible"
         local identity = GL.Identity("target")
-        if not identity or not identity.name or not identity.surname then reject("target") end
+        if not identity then reject("target_identity") end
+        if not identity.name or not identity.surname then reject("target_name") end
         state.target = identity.name .. " " .. identity.surname
         check = "survol de souris initial"
         local focus = public(call(GetMouseFoci), "table")
