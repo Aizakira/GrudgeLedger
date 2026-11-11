@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.4
+GRUDGE LEDGER — 0.5.5
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -8,15 +8,20 @@ Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
 
-Correctif 0.5.4 : essai druide bloqué avant le balayage
+Correctif 0.5.5 : préparation de la minimap depuis le diagnostic
 
 Suppression de l'appel à GetMaskTexture, que la minimap Forever ne fournit pas.
 Le masque à restaurer provient des appels natifs SetMaskTexture observés depuis
 le chargement de l'addon. Aucun masque par défaut n'est imposé aux autres addons.
-Si le rapport indique « Masque initial inconnu », changer l'option de rotation
-de la minimap puis remettre sa valeur initiale avant de relancer /glradar test.
-La préparation indique désormais quelle étape bloque. Un /reload charge 0.5.4.
-Vérifications : 20 suites, dont 79 cas du détecteur. Le moteur du jeu reste à tester.
+Après /reload, ouvrir /gl debug puis cliquer « Préparer la minimap ».
+Ce bouton réapplique l'apparence native avec la rotation actuelle, sans modifier
+les réglages sauvegardés ni un habillage personnalisé déjà observé. Aucun scan
+ne démarre automatiquement ; la préparation est refusée en combat ou pendant un test.
+Une fois prête : cibler un joueur immobile visible sur la minimap et cliquer
+« Test druide ». Placer la souris sur une zone vide du monde dans les trois
+secondes, puis rester immobile en félin avec le pistage des humanoïdes actif.
+Vérifications : 20 suites, dont 90 cas du détecteur. La lecture réelle des joueurs
+par le moteur du jeu reste à démontrer ; ceci corrige seulement la préparation.
 
 Nouveautés 0.5.3 : gestes et historique lisible
 

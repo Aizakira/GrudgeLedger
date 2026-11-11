@@ -48,14 +48,19 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
-## Correctif 0.5.4 : préparation de l'essai druide
+## Correctif 0.5.5 : préparation de l'essai druide dans le diagnostic
 
 Le test appelait `Minimap:GetMaskTexture()`, absent des API Forever. La simulation
 fournissait cette fonction à tort. L'addon observe désormais les appels natifs à
 `SetMaskTexture` et restitue le masque exact, sans deviner un masque par défaut.
-Si aucun masque n'a été observé depuis le chargement, rien n'est modifié : changer
-l'option de rotation de la minimap puis remettre sa valeur initiale avant de retenter.
-Le rapport distingue les étapes de préparation. Un `/reload` charge le correctif.
+Si aucun masque n'a été observé depuis le chargement, le test s'arrête sans modification.
+Après `/reload`, ouvrir `/gl debug` et cliquer sur **Préparer la minimap**. Ce bouton
+réapplique explicitement l'apparence native de Forever avec la rotation actuelle ;
+il ne change aucun réglage sauvegardé et préserve un habillage personnalisé déjà observé.
+Une fois la minimap prête, cibler un joueur immobile visible sur la minimap, puis cliquer
+sur **Test druide** : la fenêtre se ferme et laisse trois secondes pour placer la souris
+sur une zone vide du monde. Rester immobile, en félin, avec le pistage des humanoïdes actif.
+La préparation ne lance aucun scan et est refusée en combat ou pendant un autre test.
 Cela corrige la préparation ; **la lecture des joueurs reste à démontrer en jeu**.
 
 ## Nouveautés 0.5.3 : gestes et historique lisible
@@ -102,7 +107,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.5.4.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.5.5.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
