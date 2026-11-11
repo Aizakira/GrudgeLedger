@@ -393,24 +393,27 @@ function T.ScanGroup()
     if type(state.groups) ~= "table" then state.groups = {} end
     if type(state.serial) ~= "number" or state.serial ~= state.serial or state.serial < 0 or state.serial == math.huge then state.serial = 0 end
     local previous, current = type(state.groups[me]) == "table" and state.groups[me] or {}, {}
+    local identified = 0
     local raid = bool(IsInRaid) == true
     if size > 0 then
         for i = 1, raid and math.min(size, 40) or 4 do
             local identity = GL.Identity((raid and "raid" or "party") .. i)
             if identity then
+                identified = identified + 1
                 local record = GL.Get(identity)
                 local id = previous[identity.key] or (record and previous[record.key])
-                if not id then
-                    state.serial = state.serial + 1
-                    id = me .. ":group:" .. state.serial
-                    record = GL.RecordGroup(identity, id, GL.Where())
-                else record = GL.Remember(identity) end
-                current[record and record.key or identity.key] = id
+                record = GL.RecordSeen(identity)
+                if record then
+                    if not id then
+                        state.serial = state.serial + 1
+                        id = me .. ":group:" .. state.serial
+                        GL.RecordGroup(identity, id, GL.Where())
+                    end
+                    current[record.key] = id
+                end
             end
         end
     end
-    local identified = 0
-    for _ in pairs(current) do identified = identified + 1 end
     if identified < math.max(0, size - 1) then
         -- Roster tokens can be incomplete during login or a raid transition.
         for key, id in pairs(previous) do if not current[key] then current[key] = id end end

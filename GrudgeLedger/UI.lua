@@ -8,7 +8,7 @@ local drafts = {}
 local guildDrafts = {}
 local relationNames = { friend = "Ami", warning = "Méfiance", enemy = "Ennemi", neutral = "Neutre" }
 local factionNames = { Alliance = "Alliance", Horde = "Horde", Neutral = "Neutre" }
-local colors = { friend = { 0.66, 0.83, 0.65 }, warning = { 0.92, 0.75, 0.45 }, enemy = { 0.94, 0.62, 0.56 }, neutral = { 0.79, 0.74, 0.65 } }
+local colors = { friend = { 0.48, 0.86, 0.56 }, warning = { 0.97, 0.76, 0.39 }, enemy = { 0.98, 0.55, 0.50 }, neutral = { 0.79, 0.74, 0.65 } }
 local inkColors = { friend = { 0.10, 0.34, 0.15 }, warning = { 0.50, 0.22, 0.03 }, enemy = { 0.57, 0.12, 0.11 }, neutral = { 0.34, 0.27, 0.20 } }
 local relationIcons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy" }
 local media = "Interface\\AddOns\\GrudgeLedger\\Media\\"
@@ -17,8 +17,8 @@ local theme = { paper = { 0.94, 0.87, 0.72 }, muted = { 0.73, 0.64, 0.51 }, gold
     background = { 0.075, 0.045, 0.035 }, panel = { 0.115, 0.075, 0.055 }, red = { 0.30, 0.075, 0.075 },
     ink = { 0.20, 0.13, 0.08 }, inkMuted = { 0.36, 0.25, 0.16 } }
 
-local function surface(parent, color, inset)
-    local texture = parent:CreateTexture(nil, "BACKGROUND")
+local function surface(parent, color, inset, sublevel)
+    local texture = parent:CreateTexture(nil, "BACKGROUND", nil, sublevel or 0)
     texture:SetPoint("TOPLEFT", inset or 0, -(inset or 0))
     texture:SetPoint("BOTTOMRIGHT", -(inset or 0), inset or 0)
     texture:SetColorTexture(color[1], color[2], color[3], 1)
@@ -74,7 +74,7 @@ local function button(parent, text, x, y, width, callback, selectable)
     local b = CreateFrame("Button", nil, parent)
     b:SetPoint("TOPLEFT", x, y)
     b:SetSize(width, 26)
-    local edge = surface(b, theme.gold)
+    local edge = surface(b, theme.gold, 0, -1)
     local normal = surface(b, theme.panel, 1)
     b.normalSurface = normal
     b:SetNormalTexture(normal)
@@ -118,9 +118,13 @@ local function button(parent, text, x, y, width, callback, selectable)
 end
 
 local function styleInput(edit, multiline, paper)
-    local edge = surface(edit, theme.gold)
-    local fill = surface(edit, theme.background, 1)
-    if paper then fill:SetTexture(media .. "JournalPaper") end
+    local edge = surface(edit, theme.gold, 0, -1)
+    local fill = surface(edit, paper and theme.paper or theme.background, 1)
+    if paper then
+        local texture = edit:CreateTexture(nil, "BACKGROUND", nil, 1)
+        texture:SetAllPoints(fill)
+        texture:SetTexture(media .. "JournalPaper")
+    end
     edit:SetFontObject("ChatFontNormal")
     edit:SetTextColor(unpack(paper and theme.ink or theme.paper))
     GL.Safe(edit.SetJustifyV, edit, multiline and "TOP" or "MIDDLE")
@@ -142,24 +146,31 @@ local function window(name, title, width, height)
     f:SetScript("OnMouseDown", function(self) self:Raise() end)
     f:SetScript("OnDragStart", function(self) self:StartMoving() end)
     f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-    local shadow = f:CreateTexture(nil, "BACKGROUND")
+    local shadow = f:CreateTexture(nil, "BACKGROUND", nil, -8)
     shadow:SetPoint("TOPLEFT", -4, 4)
     shadow:SetPoint("BOTTOMRIGHT", 4, -4)
     shadow:SetColorTexture(0, 0, 0, 0.65)
-    surface(f, theme.gold)
-    surface(f, theme.red, 1)
-    surface(f, theme.gold, 6)
-    local lining = surface(f, theme.background, 7)
-    lining:SetTexture(media .. "JournalPaper")
-    GL.Safe(lining.SetVertexColor, lining, 0.13, 0.085, 0.065)
-    local header = f:CreateTexture(nil, "BORDER")
+    -- ponytail: explicit native sublevels, never creation order; keep solid fills
+    -- below decorative images so a missing texture cannot erase readable backing.
+    surface(f, theme.gold, 0, -7)
+    surface(f, theme.red, 1, -6)
+    surface(f, theme.gold, 6, -5)
+    local lining = surface(f, theme.background, 7, -4)
+    local grain = f:CreateTexture(nil, "BACKGROUND", nil, -3)
+    grain:SetAllPoints(lining)
+    grain:SetTexture(media .. "JournalPaper")
+    GL.Safe(grain.SetVertexColor, grain, 0.13, 0.085, 0.065)
+    local header = f:CreateTexture(nil, "BORDER", nil, 0)
     f.header = header
     header:SetPoint("TOPLEFT", 7, -7)
     header:SetPoint("TOPRIGHT", -7, -7)
     header:SetHeight(35)
     header:SetTexture(media .. "JournalPaper")
     GL.Safe(header.SetVertexColor, header, 0.32, 0.075, 0.065)
-    f.headerLine = f:CreateTexture(nil, "BORDER")
+    local headerFill = f:CreateTexture(nil, "BORDER", nil, -1)
+    headerFill:SetAllPoints(header)
+    headerFill:SetColorTexture(unpack(theme.red))
+    f.headerLine = f:CreateTexture(nil, "BORDER", nil, 1)
     f.headerLine:SetPoint("TOPLEFT", 8, -42)
     f.headerLine:SetPoint("TOPRIGHT", -8, -42)
     f.headerLine:SetHeight(1)
@@ -591,7 +602,7 @@ local function buildLedger()
         local record = GL.Remember(identity)
         if record then GL.ShowLedger(record.key) end
     end)
-    local listPanel = f:CreateTexture(nil, "BACKGROUND")
+    local listPanel = f:CreateTexture(nil, "BACKGROUND", nil, -2)
     listPanel:SetPoint("TOPLEFT", 18, -96)
     listPanel:SetSize(290, 568)
     listPanel:SetColorTexture(theme.panel[1], theme.panel[2], theme.panel[3], 0.92)
@@ -599,14 +610,17 @@ local function buildLedger()
     divider:SetPoint("TOPLEFT", 315, -103)
     divider:SetSize(2, 554)
     divider:SetColorTexture(theme.gold[1], theme.gold[2], theme.gold[3], 0.7)
-    local pageEdge = f:CreateTexture(nil, "BACKGROUND")
+    local pageEdge = f:CreateTexture(nil, "BACKGROUND", nil, -2)
     pageEdge:SetPoint("TOPLEFT", 326, -96)
     pageEdge:SetSize(616, 568)
     pageEdge:SetColorTexture(unpack(theme.gold))
-    f.paper = f:CreateTexture(nil, "BACKGROUND")
+    f.paper = f:CreateTexture(nil, "BACKGROUND", nil, 0)
     f.paper:SetPoint("TOPLEFT", 329, -99)
     f.paper:SetSize(610, 562)
     f.paper:SetTexture(media .. "JournalPaper")
+    local pageFill = f:CreateTexture(nil, "BACKGROUND", nil, -1)
+    pageFill:SetAllPoints(f.paper)
+    pageFill:SetColorTexture(unpack(theme.paper))
     label(f, "INDEX DES RENCONTRES", nil, 30, -109, 266):SetTextColor(0.84, 0.70, 0.45)
     f.search = CreateFrame("EditBox", nil, f)
     f.search:SetPoint("TOPLEFT", 30, -187)
@@ -644,7 +658,10 @@ local function buildLedger()
         hover:SetAllPoints()
         hover:SetColorTexture(0.57, 0.39, 0.18, 0.16)
         row:SetHighlightTexture(hover)
-        row.name = label(row, "", nil, 8, -3, 255)
+        row.relationIcon = row:CreateTexture(nil, "ARTWORK")
+        row.relationIcon:SetPoint("TOPLEFT", 8, -2)
+        row.relationIcon:SetSize(19, 19)
+        row.name = label(row, "", nil, 31, -3, 232)
         row.name:SetHeight(18)
         GL.Safe(row.name.SetWordWrap, row.name, false)
         GL.Safe(row.name.SetMaxLines, row.name, 1)
@@ -654,12 +671,18 @@ local function buildLedger()
         row.classIcon = row:CreateTexture(nil, "ARTWORK")
         row.classIcon:SetPoint("TOPLEFT", 26, -21)
         row.classIcon:SetSize(15, 15)
-        row.identity = label(row, "", nil, 46, -22, 217)
+        row.identity = label(row, "", nil, 46, -22, 137)
         row.identity:SetFontObject("GameFontHighlightSmall")
         row.identity:SetTextColor(unpack(theme.muted))
         row.identity:SetHeight(14)
         GL.Safe(row.identity.SetWordWrap, row.identity, false)
         GL.Safe(row.identity.SetMaxLines, row.identity, 1)
+        row.relation = label(row, "", nil, 188, -22, 75)
+        row.relation:SetFontObject("GameFontHighlightSmall")
+        row.relation:SetJustifyH("RIGHT")
+        row.relation:SetHeight(14)
+        GL.Safe(row.relation.SetWordWrap, row.relation, false)
+        GL.Safe(row.relation.SetMaxLines, row.relation, 1)
         row:SetScript("OnClick", function(self) selectedKey = self.key f.detailScroll:SetVerticalScroll(0) refresh() end)
         f.rows[i] = row
     end
@@ -741,7 +764,8 @@ refresh = function()
         local name = (record.fullName or record.name or record.key):lower()
         local matchesFaction = factionFilter == "all" or record.faction == factionFilter
             or (factionFilter == "unknown" and not factionNames[record.faction])
-        if matchesFaction and (filter == "all" or GL.Relation(record) == filter) and name:find(text, 1, true) then
+        if (record.key == selectedKey or not GL.IsGroupOnly(record)) and matchesFaction
+            and (filter == "all" or GL.Relation(record) == filter) and name:find(text, 1, true) then
             records[#records + 1] = record
             if selectedKey == record.key then selectionVisible = true end
         end
@@ -758,8 +782,17 @@ refresh = function()
             row.key = record.key
             local relation = GL.Relation(record)
             local color = colors[relation]
-            row.name:SetText((relation == "friend" and "+ " or relation == "warning" and "? " or relation == "enemy" and "! " or "  ") .. plain(record.fullName or record.name or record.key))
+            row.name:SetText(plain(record.fullName or record.name or record.key))
             row.name:SetTextColor(color[1], color[2], color[3])
+            row.relation:SetText(relationNames[relation])
+            row.relation:SetTextColor(color[1], color[2], color[3])
+            if relationIcons[relation] then
+                row.relationIcon:SetTexture(media .. relationIcons[relation])
+                row.relationIcon:Show()
+            else
+                row.relationIcon:SetTexture(nil)
+                row.relationIcon:Hide()
+            end
             local faction, race, class = identityLabels(record)
             row.identity:SetText(plain(faction .. " · " .. race .. " · " .. class))
             identityIcons(row, record)

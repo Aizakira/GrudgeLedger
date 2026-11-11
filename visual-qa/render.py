@@ -232,7 +232,8 @@ def render(name, frames, root):
             draw.line((x+w*.2,y+h*.72,x+w*.8,y+h*.25),fill=(85,90,65,255),width=12)
             draw.text((x+w*.46,y+h*.04),"N",font=font(12),fill=(235,211,143,255))
             draw.ellipse((x+w*.47,y+h*.47,x+w*.53,y+h*.53),fill=(221,202,115,255))
-        tex = actual_texture(r.get("texture"))
+        missing_paper = name == "journal-no-paper" and "JournalPaper" in (r.get("texture") or "")
+        tex = None if missing_paper else actual_texture(r.get("texture"))
         if tex:
             coords = r.get("texCoord")
             if coords and len(coords) == 4:
@@ -244,7 +245,7 @@ def render(name, frames, root):
                 mask = Image.new("L", tex.size, 0); ImageDraw.Draw(mask).ellipse((0,0,tex.width,tex.height), fill=255)
                 tex.putalpha(ImageChops.multiply(tex.getchannel("A"), mask))
             layer.alpha_composite(tex, (round(x),round(y)))
-        elif r.get("texture") and r["kind"] == "Texture":
+        elif not missing_paper and r.get("texture") and r["kind"] == "Texture":
             draw_native_icon(draw, box, r["texture"], color(r.get("tint"),alpha))
         if r.get("template") == "UIPanelButtonTemplate":
             draw.rounded_rectangle(box,radius=3,fill=(70,35,32,255),outline=(122,98,65,255))
@@ -352,7 +353,7 @@ def main():
     g.QA_TextWidth=lambda text,size: font(size).getlength(plaintext(text))
     g.QA_TextLines=lambda text,width,size: len(wrap(text,width,size))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
-    views=["journal","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
+    views=["journal","journal-no-paper","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","guilds","note","settings","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
     images, report, snapshots=[],{},{}
     for name in views:
         root=g.QA.capture(name)

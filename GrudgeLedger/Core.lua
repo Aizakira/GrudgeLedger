@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.3.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.3.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -248,6 +248,15 @@ local function effectiveRelation(record)
 end
 function GL.Relation(record) local relation = effectiveRelation(record) return relation end
 function GL.RelationSource(record) local _, source = effectiveRelation(record) return source end
+function GL.IsGroupOnly(record)
+    if not record or (record.groupCount or 0) == 0 or record.reaction or #(record.notes or {}) > 0
+        or (record.reputation or 0) ~= 0 or GL.Relation(record) ~= "neutral" then return false end
+    for _, count in pairs(record.pvp or {}) do if type(count) == "number" and count > 0 then return false end end
+    for _, event in ipairs(record.history or {}) do
+        if event.kind ~= "grouped" and event.kind ~= "group" then return false end
+    end
+    return true
+end
 function GL.RelationConfidence(record)
     local relation, source = effectiveRelation(record)
     if source ~= "pvp" then return nil end
@@ -379,7 +388,8 @@ function GL.VoidPvP(identity, event)
     return true
 end
 function GL.RecordGroup(identity, sessionId, zone)
-    local record = GL.Remember(identity)
+    -- Group membership is history for an existing opinion, not an automatic introduction.
+    local record = GL.RecordSeen(identity)
     if not record then return nil end
     for _, event in ipairs(record.history) do
         if event.kind == "grouped" and event.sessionId == sessionId then return nil end

@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.3.0
+GRUDGE LEDGER — 0.3.1
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -137,6 +137,18 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+LISIBILITÉ ET COMPAGNONS DE GROUPE 0.3.1
+Les fonds ont des couches explicites. Un fond uni reste présent sous le parchemin,
+même quand sa texture n'est pas disponible : l'encre sombre reste lisible.
+L'index affiche une icône et un libellé Ami/Méfiance/Ennemi/Neutre par personne.
+Rejoindre un groupe n'ajoute plus les inconnus au journal. Les groupes partagés
+sont suivis pour les contacts déjà enregistrés ou reconnus par un avis de guilde.
+Les anciennes fiches constituées uniquement de groupes sont masquées sans être
+effacées ; une ouverture explicite reste possible. Les avis, notes et historiques
+PvP restent visibles, y compris les avis neutres choisis et les faits annulés.
+Un /reload charge le correctif. Si une texture manque encore, quitter puis
+relancer WoW ; il n'est pas nécessaire de redémarrer l'ordinateur.
 
 PRÉSENTATION DU JOURNAL 0.3.0
 Le journal prend la forme d'un livre ancien : index sombre, fiche sur parchemin,

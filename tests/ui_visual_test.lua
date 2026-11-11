@@ -1,9 +1,16 @@
 local mock = assert(loadfile(TEST_WORK .. "/tests/wow_mock.lua"))()
 local methods = getmetatable(UIParent).__index
 local setPoint = methods.SetPoint
+local createTexture = methods.CreateTexture
+function methods:CreateTexture(name, layer, template, sublevel)
+    local texture = createTexture(self, name, layer, template, sublevel)
+    texture.drawLayer, texture.sublevel = layer, sublevel
+    return texture
+end
+function methods:SetAllPoints(region) self.allPoints = region or self.parent end
 function methods:SetPoint(...) setPoint(self, ...) self.anchor = { ... } end
 function methods:SetScale(value) assert(value > 0 and value < math.huge) self.scale = value end
-function methods:SetTexture(value) self.texture = value end
+function methods:SetTexture(value) self.texture, self.requestedTexture, self.color = value, value, nil end
 function methods:SetMaxLines(value) self.maxLines = value end
 function methods:SetWordWrap(value) self.wordWrap = value end
 function methods:SetJustifyV(value) self.justifyV = value end
@@ -121,6 +128,27 @@ local function luminance(c)
 end
 local paperLuminance = luminance({ 0.86, 0.79, 0.65 }) -- darker than the calm center of the shipped paper
 local function readable(c) assert((paperLuminance + 0.05) / (luminance(c) + 0.05) >= 4.5, "page text needs at least 4.5:1 contrast") end
+local function solidFallback(texture)
+    for _, child in ipairs(texture.parent.children) do
+        if child.color and (child.allPoints == texture or texture.allPoints == child) then
+            assert(child.drawLayer == texture.drawLayer and child.sublevel < texture.sublevel,
+                "solid fallback must stay below its image without relying on creation order")
+            return child
+        end
+    end
+    error("paper texture has no independent, matching solid fallback")
+end
+local function checkPage(frame)
+    local fill = solidFallback(frame.paper)
+    assert((luminance(fill.color) + 0.05) / (luminance(frame.detailText.color) + 0.05) >= 4.5,
+        "dark page text remains readable without the parchment image")
+    for _, child in ipairs(frame.children) do
+        if child ~= fill and child.drawLayer == "BACKGROUND" and child.color then
+            assert(child.sublevel < fill.sublevel, "leather, lining and borders must be below the reading page")
+        end
+    end
+end
+checkPage(ledger)
 readable(ledger.detailText.color) readable(ledger.detailIdentity.color)
 for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
     GL.SetReaction(identity, relation)
@@ -129,8 +157,18 @@ for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
         assert(control.selection:IsShown() == (value == relation), "exactly the effective relation is selected")
     end
     local row = ledger.rows[1]
+    local names = { friend = "Ami", warning = "Méfiance", enemy = "Ennemi", neutral = "Neutre" }
+    local icons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy" }
+    assert(row.relation:GetText() == names[relation] and row.relation.wordWrap == false and row.relation.maxLines == 1)
+    assert(row.name:GetText() == GL.Get(identity.key).fullName, "relation has its own icon and label, not a cryptic name prefix")
+    assert(row.relationIcon:IsShown() == (relation ~= "neutral"))
+    assert(icons[relation] and row.relationIcon.texture:find(icons[relation], 1, true) or relation == "neutral" and not row.relationIcon.texture,
+        "recycled rows must update or clear the previous relation icon")
+    assert(row.identity.anchor[2] + row.identity:GetWidth() < row.relation.anchor[2]
+        and row.relation.anchor[2] + row.relation:GetWidth() < row:GetWidth(), "identity and explicit relation labels cannot overlap")
     assert((luminance(row.name.color) + 0.05) / (luminance(row.bg.color) + 0.05) >= 4.5,
         "subdued relation text stays readable on the selected index row")
+    assert((luminance(row.relation.color) + 0.05) / (luminance(row.bg.color) + 0.05) >= 4.5)
 end
 ledger.search:SetText("No matching person")
 for _, control in pairs(ledger.reactions) do assert(not control.selection:IsShown() and not control.enabled) end
@@ -143,6 +181,9 @@ UIParent:SetSize(1920, 1080)
 GL.EditNote(identity)
 assert(GrudgeLedgerNote.edit.justifyV == "TOP" and ledger.search.justifyV == "MIDDLE")
 readable(GrudgeLedgerNote.edit.color)
+for _, region in ipairs(mock.frames) do
+    if type(region.requestedTexture) == "string" and region.requestedTexture:find("JournalPaper", 1, true) then solidFallback(region) end
+end
 SlashCmdList.GRUDGELEDGER("debug")
 assert(GrudgeLedgerDiagnostic.edit.justifyV == "TOP", "multiline editors always begin at the upper-left")
 assert(#GL.errors == 0)
@@ -151,7 +192,18 @@ for _, frame in ipairs(mock.frames) do if frame.name then _G[frame.name] = nil e
 local modernMock = assert(loadfile(TEST_WORK .. "/tests/wow_mock.lua"))()
 AddonCompartmentFrame = {}
 local modernMethods = getmetatable(UIParent).__index
-function modernMethods:SetTexture(value) self.texture = value end
+local modernCreateTexture = modernMethods.CreateTexture
+function modernMethods:CreateTexture(name, layer, template, sublevel)
+    local texture = modernCreateTexture(self, name, layer, template, sublevel)
+    texture.drawLayer, texture.sublevel = layer, sublevel
+    return texture
+end
+function modernMethods:SetAllPoints(region) self.allPoints = region or self.parent end
+-- Reproduce a session where the new parchment is unavailable but the book loads.
+function modernMethods:SetTexture(value)
+    self.texture, self.requestedTexture, self.color = value, value, nil
+    if type(value) == "string" and value:find("JournalPaper", 1, true) then self.texture = nil end
+end
 function modernMethods:SetPoint(...) self.anchor = { ... } end
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
@@ -161,5 +213,22 @@ assert(modernButton:GetWidth() == 31 and modernButton.icon:GetWidth() == 18)
 assert(modernButton.icon.anchor[1] == "CENTER" and modernButton.background.anchor[1] == "CENTER")
 assert(modernButton.background:GetWidth() == 24 and modernButton.border:GetWidth() == 50)
 assert(modernButton.icon.texture == GrudgeLedger.minimapIcon and GrudgeLedger.minimapIcon ~= GrudgeLedger.icon)
+GrudgeLedger.ShowLedger()
+GrudgeLedger.EditNote(GrudgeLedger.Identity("target"))
+GrudgeLedger.ShowGuilds()
+local missingPaperCount = 0
+for _, region in ipairs(modernMock.frames) do
+    if type(region.requestedTexture) == "string" and region.requestedTexture:find("JournalPaper", 1, true) then
+        assert(region.texture == nil)
+        local fill = solidFallback(region)
+        if region.parent == GrudgeLedgerNote.edit then
+            assert((luminance(fill.color) + 0.05) / (luminance(GrudgeLedgerNote.edit.color) + 0.05) >= 4.5)
+        end
+        missingPaperCount = missingPaperCount + 1
+    end
+end
+assert(missingPaperCount == 8, "main, note, guild windows and note editor all keep their solid fills")
+assert(GrudgeLedgerWindow.illustration.texture and not GrudgeLedgerWindow.paper.texture)
+checkPage(GrudgeLedgerWindow)
 assert(#GrudgeLedger.errors == 0)
 print("PASS visual UI: native minimap frame with small borderless artwork (legacy/compartment), shape/size/scale-aware rim, unclipped parent, one drag commit, resize/visibility, selected rows and headings.")

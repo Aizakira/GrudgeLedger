@@ -46,6 +46,23 @@ GL.RecordGroup(b, "session-1", "Donjon")
 assert(GL.Get(b).groupCount == 1)
 GL.RecordGroup(b, "session-2", "Donjon")
 assert(GL.Get(b).groupCount == 2)
+local rosterOnly = GL.Remember(GL.IdentityFromName("Old", "Roster", "Player-1-oldroster"))
+rosterOnly.groupCount, rosterOnly.history = 2, { { kind = "grouped", sessionId = "old-session" } }
+assert(GL.IsGroupOnly(rosterOnly) and not GL.IsGroupOnly(GL.Get(b)))
+for field, value in pairs({ reaction = "neutral", reputation = 1, notes = { { text = "Keep this note" } },
+    pvp = { kills = 1 }, history = { { kind = "death", voided = true } } }) do
+    local old = rosterOnly[field]
+    rosterOnly[field] = value
+    assert(not GL.IsGroupOnly(rosterOnly), "meaningful data must survive the group-only filter: " .. field)
+    rosterOnly[field] = old
+end
+rosterOnly.guild, rosterOnly.realm = "Marked Guild", "Forever"
+GL.SetGuildReaction("Marked Guild", "enemy", nil, "Forever")
+assert(not GL.IsGroupOnly(rosterOnly), "guild opinions also qualify for the journal")
+rosterOnly.guild = nil
+GL.InitDB()
+assert(GL.IsGroupOnly(GL.Get(rosterOnly)) and GL.Get(rosterOnly).groupCount == 2,
+    "legacy group-only entries remain stored without losing history")
 assert(not GL.SetSetting("sounds", "true"))
 assert(GL.SetSetting("alertCooldown", 0) and GL.Settings().alertCooldown == 15)
 assert(GL.SetSetting("minimapAngle", 370) and GL.Settings().minimapAngle == 10)

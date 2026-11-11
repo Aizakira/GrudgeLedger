@@ -346,6 +346,7 @@ end)
 
 test("group history dedupes roster events and survives reload", function()
     unitData.party1 = opponent("companion") groupSize = 2
+    GL.SetReaction(GL.Identity("party1"), "friend")
     T.ScanGroup() T.ScanGroup()
     local record = GL.Get(GL.Identity("party1"))
     assert(record.groupCount == 1)
@@ -363,7 +364,8 @@ test("group history dedupes roster events and survives reload", function()
 end)
 
 test("partial roster resolution does not create a new session", function()
-    unitData.party1 = opponent("companion") groupSize = 2 T.ScanGroup()
+    unitData.party1 = opponent("companion") groupSize = 2
+    GL.SetReaction(GL.Identity("party1"), "friend") T.ScanGroup()
     local record = GL.Get(GL.Identity("party1"))
     unitData.party1 = nil T.ScanGroup()
     unitData.party1 = opponent("companion") T.ScanGroup()
@@ -372,7 +374,8 @@ end)
 
 test("GUID availability changes do not duplicate group history", function()
     local p = opponent("companion") p.guid = nil
-    unitData.party1 = p groupSize = 2 T.ScanGroup()
+    unitData.party1 = p groupSize = 2
+    GL.SetReaction(GL.Identity("party1"), "friend") T.ScanGroup()
     local record = GL.Get(GL.Identity("party1"))
     assert(record.groupCount == 1)
     p.guid = "Player-1-companion" T.ScanGroup()
@@ -380,6 +383,27 @@ test("GUID availability changes do not duplicate group history", function()
     p.guid = secret T.ScanGroup()
     p.guid = "Player-1-companion" T.ScanGroup()
     assert(record.groupCount == 1)
+end)
+
+test("unrated group members do not enter the journal but can be marked during a group", function()
+    unitData.party1 = opponent("companion") groupSize = 2
+    local identity = GL.Identity("party1")
+    assert(GL.RecordGroup(identity, "direct-call", "Test") == nil)
+    T.ScanGroup() T.ScanGroup()
+    assert(GL.Get(identity) == nil and next(GL.db.aliases) == nil)
+    local record = GL.SetReaction(identity, "friend")
+    T.ScanGroup() T.ScanGroup()
+    assert(record.groupCount == 1, "marking the current companion starts one remembered session")
+end)
+
+test("untracked but identified roster members do not preserve departed friends", function()
+    unitData.party1 = opponent("companion") groupSize = 2
+    local record = GL.SetReaction(GL.Identity("party1"), "friend")
+    T.ScanGroup()
+    unitData.party1 = opponent("stranger") T.ScanGroup()
+    assert(GL.Get(GL.Identity("party1")) == nil)
+    unitData.party1 = opponent("companion") T.ScanGroup()
+    assert(record.groupCount == 2, "a known friend's return is a new session after an observed departure")
 end)
 
 test("disabling tracking clears active inference", function()
