@@ -10,6 +10,7 @@ local reasons = {
     class = "Ce test est réservé aux druides.", form = "Passe en forme de félin.",
     tracking = "Active Pistage des humanoïdes dans le menu de pistage.",
     api = "Une API nécessaire est absente, protégée ou illisible.",
+    mask = "Masque initial inconnu : change l'option de rotation de la minimap, remets sa valeur initiale, puis relance le test.",
     target = "Cible un autre joueur immobile, visible comme point sur ta minimap.",
     combat = "Combat : essai arrêté.", moving = "Déplacement du personnage : essai arrêté.",
     dead = "Personnage mort : essai arrêté.", instance = "Essai limité au monde extérieur.",
@@ -30,6 +31,16 @@ local function number(value)
     value = public(value, "number")
     return value and value == value and math.abs(value) < math.huge and value or nil
 end
+-- Minimap has no GetMaskTexture (unlike Texture's mask API). Observe exact setter
+-- arguments; never guess a round/default mask that would overwrite another skin.
+-- ponytail: a mask applied before addon load is unknown until the next setter call.
+-- The test stays read-only in that case; changing rotation reapplies Forever's skin.
+local observedMap, maskAsset = Minimap, nil
+local maskHooked = observedMap and type(observedMap.SetMaskTexture) == "function"
+    and type(hooksecurefunc) == "function" and pcall(hooksecurefunc, observedMap, "SetMaskTexture", function(_, asset)
+        asset = public(asset)
+        maskAsset = (type(asset) == "string" and asset ~= "" or number(asset)) and asset or nil
+    end)
 local function reject(code) error({ code = code }, 0) end
 local function call(fn, ...)
     if type(fn) ~= "function" then reject("api") end
@@ -108,7 +119,7 @@ local function finish(code)
         local ok, matches = pcall(function()
             if numeric(Minimap.GetNumPoints, Minimap) ~= #state.anchors
                 or numeric(Minimap.GetAlpha, Minimap) ~= state.alpha
-                or public(call(Minimap.GetMaskTexture, Minimap)) ~= state.mask
+                or maskAsset ~= state.mask
                 or yes(Minimap.IsMouseClickEnabled, Minimap) ~= state.clicks
                 or yes(Minimap.IsMouseWheelEnabled, Minimap) ~= state.wheel then return false end
             for i, point in ipairs(state.anchors) do
@@ -204,7 +215,7 @@ local function tick(state)
         if not cx or not cy or math.abs(cx - state.expectedX) > 0.1 or math.abs(cy - state.expectedY) > 0.1
             or numeric(Minimap.GetEffectiveScale, Minimap) ~= state.scale
             or numeric(Minimap.GetAlpha, Minimap) ~= 0
-            or public(call(Minimap.GetMaskTexture, Minimap)) ~= BLANK
+            or maskAsset ~= BLANK
             or numeric(Minimap.GetZoom, Minimap) ~= state.zoom
             or numeric(Minimap.GetWidth, Minimap) ~= state.width
             or numeric(Minimap.GetHeight, Minimap) ~= state.height then reject("map") end
@@ -255,17 +266,23 @@ local function start()
         state.x, state.y = call(GetCursorPosition)
         state.x, state.y = number(state.x), number(state.y)
         if not state.x or not state.y then reject("api") end
-        check = "sauvegarde de la minimap"
+        check = "sauvegarde : échelle et dimensions minimap"
         state.scale = numeric(Minimap.GetEffectiveScale, Minimap)
         state.width, state.height = numeric(Minimap.GetWidth, Minimap), numeric(Minimap.GetHeight, Minimap)
         if state.scale <= 0 or state.width < 40 or state.height < 40 or state.width > 600 or state.height > 600 then reject("map") end
+        check = "sauvegarde : zoom et transparence minimap"
         state.zoom, state.alpha = numeric(Minimap.GetZoom, Minimap), numeric(Minimap.GetAlpha, Minimap)
-        state.mask = public(call(Minimap.GetMaskTexture, Minimap))
-        if not (type(state.mask) == "string" and state.mask ~= "" or number(state.mask)) then reject("api") end
+        check = "sauvegarde : observation de SetMaskTexture"
+        if not maskHooked or Minimap ~= observedMap then reject("api") end
+        state.mask = maskAsset
+        if not state.mask then reject("mask") end
+        check = "sauvegarde : clics et molette minimap"
         state.clicks, state.wheel = yes(Minimap.IsMouseClickEnabled, Minimap), yes(Minimap.IsMouseWheelEnabled, Minimap)
         for _, method in ipairs({ "ClearAllPoints", "SetPoint", "SetAlpha", "SetMaskTexture", "SetMouseClickEnabled", "EnableMouseWheel", "GetCenter" }) do
+            check = "API Minimap:" .. method
             if type(Minimap[method]) ~= "function" then reject("api") end
         end
+        check = "sauvegarde : ancrages minimap"
         state.anchors = {}
         local count = numeric(Minimap.GetNumPoints, Minimap)
         if count < 1 or count > 8 or count % 1 ~= 0 then reject("map") end

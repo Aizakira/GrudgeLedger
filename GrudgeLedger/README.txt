@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.3
+GRUDGE LEDGER — 0.5.4
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -7,6 +7,16 @@ Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Wort
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
+
+Correctif 0.5.4 : essai druide bloqué avant le balayage
+
+Suppression de l'appel à GetMaskTexture, que la minimap Forever ne fournit pas.
+Le masque à restaurer provient des appels natifs SetMaskTexture observés depuis
+le chargement de l'addon. Aucun masque par défaut n'est imposé aux autres addons.
+Si le rapport indique « Masque initial inconnu », changer l'option de rotation
+de la minimap puis remettre sa valeur initiale avant de relancer /glradar test.
+La préparation indique désormais quelle étape bloque. Un /reload charge 0.5.4.
+Vérifications : 20 suites, dont 79 cas du détecteur. Le moteur du jeu reste à tester.
 
 Nouveautés 0.5.3 : gestes et historique lisible
 
@@ -54,7 +64,9 @@ par des contrôles vides. Un nom de propriétaire de familier ne suffit pas.
 Un résultat négatif ne prouve pas l'absence d'humanoïdes : mouvement du témoin,
 grille de 225 positions et faible fréquence d'images peuvent limiter l'essai.
 Les dix derniers résultats gardent le build, l'étape, le motif et les compteurs,
-sans noms de joueurs ni infobulles. La restauration de la minimap est vérifiée.
+sans noms de joueurs ni infobulles. Les propriétés lisibles sont revérifiées après
+restauration ; pour le masque sans getter, seul l'appel du setter est observable,
+pas son rendu effectif par le moteur.
 Si elle échoue, le test demande /reload et refuse un nouvel essai jusque-là.
 Désactiver NodeSight pendant ce test : deux scanners ne doivent pas déplacer
 la même minimap. Les autres contrôles de minimap ne sont pas forcés/désactivés.
