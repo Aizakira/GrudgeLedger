@@ -48,11 +48,18 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## Nouveauté 0.5.1 : une icône de bisou reconnaissable
+
+Le bouton Bisou affiche désormais des lèvres rouges peintes soufflant un petit cœur
+rose, une illustration originale générée avec l'outil d'images d'OpenAI et intégrée
+au cadre natif de WoW. Redémarrer le jeu après la mise à jour pour charger cette
+nouvelle texture. Le fonctionnement des gestes reste identique.
+
 ## Nouveautés 0.5.0 : chroniques, guildes et diagnostic
 
 - **Statistiques** dans le livre (`/gl stats`) : bourreaux, victoires, antagonistes par solde négatif, amis par score, amis et menaces recroisés. Morts/victoires probables ont leurs propres classements. Un clic ouvre la fiche.
 - **Guildes** (`/gl guildes`) : nombre de rancunes personnelles et d'amis parmi les membres connus, morts confirmées/probables et agressions confirmées. Cliquer une guilde permet de la marquer **à surveiller**, amie, ou d'ouvrir ses avis et notes. Les choix personnels restent prioritaires. Les avis hérités d'une guilde ne créent pas artificiellement de rancunes personnelles dans le classement. Les faits sans guilde connue restent non attribués ; une ancienne guilde enregistrée au moment des faits conserve ces événements.
-- **Bisou / crachat** : deux boutons avec les icônes natives de WoW, au-dessus du chat, sous les alertes. Clic sur un joueur ciblé : `/kiss` (+1) ou `/spit` (−1), avec le même délai de 30 secondes par sentiment que les macros. Un geste positif n'efface pas une dette PvP. **Ctrl + glisser** déplace les deux boutons ; position mémorisée et bouton de remise en place dans les réglages. Aucun geste n'est envoyé automatiquement. Désactivables dans les réglages.
+- **Bisou / crachat** : deux boutons avec les cadres natifs de WoW, au-dessus du chat, sous les alertes. Clic sur un joueur ciblé : `/kiss` (+1) ou `/spit` (−1), avec le même délai de 30 secondes par sentiment que les macros. Un geste positif n'efface pas une dette PvP. **Ctrl + glisser** déplace les deux boutons ; position mémorisée et bouton de remise en place dans les réglages. Aucun geste n'est envoyé automatiquement. Désactivables dans les réglages.
 - **Rencontres distinctes** : compteur démarré à cette version, pour les joueurs déjà suivis ou couverts par un avis de guilde. Une nouvelle rencontre demande plus de dix minutes sans observation ; chaque présence renouvelle le délai. Le rechargement ne compte pas deux fois. Horloges séparées par personnage, statistiques réunies dans ce livre de compte. Ce n'est ni une mesure de distance ni du temps passé ensemble, et aucun ancien passage n'est inventé.
 - **Diagnostic local** (`/gl traces`) : les 200 dernières décisions de détection/alerte, avec la raison (identité absente, délai, ami du groupe, alerte désactivée, affichée, etc.). Répétitions limitées à une fois par 30 secondes ; effaçable et désactivable. Les noms de ce journal local sont privés. **`/gl debug` produit la version anonymisée** pour un signalement. Les données sont dans `WTF/SavedVariables`, jamais dans le code distribué. WoW écrit la sauvegarde lors d'un `/reload` ou d'une déconnexion normale.
 - **Test minimap intégré** (`/glprobe test`, `/glprobe stop`) : contrôle expérimental sur un point immobile avec référence au survol, relecture sans survol et contrôle vide anti-cache. Le résultat sans noms est sauvegardé avec le build du client et visible dans Diagnostic. Ce test manuel n'est pas la fonctionnalité finale : **aucun radar automatique ni changement automatique de pistage n'est activé**. Un résultat négatif sur un point resté immobile invalide cette méthode dans cet essai. Un résultat positif isolé ne suffit pas à valider un radar en mouvement.
@@ -65,7 +72,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.5.0.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger **`GrudgeLedger-0.5.1.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -129,7 +136,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.0.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.1.zip GrudgeLedger
 ```
 
 ## Licence et crédits

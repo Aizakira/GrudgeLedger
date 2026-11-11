@@ -1,4 +1,4 @@
--- Two native WoW icons; clicks use the same outgoing gesture path as /kiss and /spit.
+-- Native WoW button frames; clicks use the same outgoing gesture path as /kiss and /spit.
 local GL = GrudgeLedger
 local bar
 local function position()
@@ -23,8 +23,8 @@ GL.On("READY", function()
     bar:SetClampedToScreen(true)
     bar.buttons = {}
     for i, action in ipairs({
-        { "KISS", "Bisou", "INV_ValentinesCandy", "Geste amical : +1" },
-        { "SPIT", "Crachat", "Spell_Nature_CorrosiveBreath", "Geste négatif : −1" },
+        { "KISS", "Bisou", "Interface\\AddOns\\GrudgeLedger\\Media\\GestureKiss", "Geste amical : +1" },
+        { "SPIT", "Crachat", "Interface\\Icons\\Spell_Nature_CorrosiveBreath", "Geste négatif : −1" },
     }) do
         local token = action[1]
         local b = CreateFrame("Button", nil, bar)
@@ -33,7 +33,7 @@ GL.On("READY", function()
         b:SetPoint("TOPLEFT", (i - 1) * 48, 0)
         local icon = b:CreateTexture(nil, "ARTWORK")
         icon:SetPoint("TOPLEFT", 4, -4) icon:SetPoint("BOTTOMRIGHT", -4, 4)
-        icon:SetTexture("Interface\\Icons\\" .. action[3])
+        icon:SetTexture(action[3])
         b:SetNormalTexture("Interface\\Buttons\\UI-Quickslot2")
         b:SetPushedTexture("Interface\\Buttons\\UI-Quickslot-Depress")
         b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
