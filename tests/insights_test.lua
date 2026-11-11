@@ -64,6 +64,23 @@ local noGuild = identity("Unknown")
 GL.RecordPvP(noGuild, "death", "confirmed", "fixture", "d3")
 assert(guild("New Guild").deaths == 0, "missing historical guild is not guessed")
 
+local shared = {}
+for i, confidence in ipairs({ "probable", "confirmed", "probable" }) do
+    local record = GL.RecordPvP(identity("Shared" .. i, "Shared Guild"), "death", confidence, "fixture", "shared-death")
+    shared[i] = { record, record.history[#record.history] }
+end
+assert(guild("Shared Guild").deaths == 1 and guild("Shared Guild").probableDeaths == 0,
+    "one guild death, strongest evidence wins independently of participant order")
+GL.RecordPvP(identity("OtherParticipant", "Other Guild"), "death", "probable", "fixture", "shared-death")
+assert(guild("Other Guild").probableDeaths == 1, "each involved guild retains its own evidence")
+GL.VoidPvP(unpack(shared[2]))
+assert(guild("Shared Guild").deaths == 0 and guild("Shared Guild").probableDeaths == 1,
+    "voided lethal attribution falls back to the other participants, counted once")
+GL.VoidPvP(unpack(shared[1])) GL.VoidPvP(unpack(shared[3]))
+assert(guild("Shared Guild").deaths == 0 and guild("Shared Guild").probableDeaths == 0)
+for i = 1, 2 do GL.RecordPvP(identity("Legacy" .. i, "Legacy Guild"), "death", "probable", "fixture") end
+assert(guild("Legacy Guild").probableDeaths == 2, "legacy events without IDs must not be guessed into one death")
+
 GL.ClearDetectionLog()
 GL.Trace("observed", a, "nameplate1") GL.Trace("observed", a, "nameplate2")
 assert(#GL.db.detectionLog == 1, "recycled unit tokens do not flood logs")

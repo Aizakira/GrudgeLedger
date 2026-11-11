@@ -456,7 +456,7 @@ function GL.SetGuildReaction(value, reaction, note, realm)
 end
 
 function GL.GuildStatistics()
-    local guilds = {}
+    local guilds, deaths = {}, {}
     local function get(name, realm)
         local key, clean, server = guildIdentity(name, realm)
         if not key then return end
@@ -484,12 +484,23 @@ function GL.GuildStatistics()
                 local field = event.kind == "death" and (event.confidence == "confirmed" and "deaths"
                     or event.confidence == "probable" and "probableDeaths")
                     or event.confidence == "confirmed" and ({ kill = "kills", aggression = "aggressions" })[event.kind]
-                if historical and field then historical[field] = historical[field] + 1 end
+                if historical and field then
+                    if event.kind == "death" then
+                        deaths[historical.key] = deaths[historical.key] or {}
+                        local counted, id = deaths[historical.key], event.eventId or event
+                        -- One death per guild; confirmed evidence wins over other participants.
+                        -- Events without an ID stay separate: timestamps cannot prove a shared death.
+                        if counted[id] ~= "deaths" then counted[id] = field end
+                    else historical[field] = historical[field] + 1 end
+                end
             end
         end
     end
     local result = {}
-    for _, guild in pairs(guilds) do result[#result + 1] = guild end
+    for key, guild in pairs(guilds) do
+        for _, field in pairs(deaths[key] or {}) do guild[field] = guild[field] + 1 end
+        result[#result + 1] = guild
+    end
     return result
 end
 

@@ -94,9 +94,12 @@ Chaque nouvelle mort, victoire ou agression mémorise séparément la guilde, so
 serveur et la date de son observation. L'historique indique quand il s'agit d'une
 dernière information connue. Les événements anciens ou de guilde inconnue ne sont
 jamais réattribués après coup, même si le joueur rejoint une autre guilde.
-Les statistiques de guilde séparent les déductions des faits confirmés ; ils
-restent séparés ; les événements annulés restent identifiables ; une mort partagée
-par plusieurs attaquants garde le même identifiant pour éviter les doubles comptes.
+Les statistiques de guilde séparent les déductions des faits confirmés et excluent
+les événements annulés. Une même mort identifiée ne compte qu'une fois par guilde,
+même avec plusieurs attaquants ; une preuve confirmée prime sur les participations
+probables. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne
+s'additionnent pas pour calculer vos morts. Sans identifiant commun, aucun regroupement
+des anciens événements n'est deviné.
 Les classements de guildes sont disponibles depuis la version 0.5.0.
 
 FINITION DU LIVRE 0.4.5

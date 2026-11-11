@@ -48,6 +48,8 @@ A **gray medallion** marks known neutral people in the journal and on their visi
 
 ## 0.5.0: chronicles, guild rankings and diagnostics
 
+A shared death ID counts once per guild, with confirmed evidence taking precedence over probable participation. Different guilds can be involved in the same death, so their totals are not additive. Legacy events without a shared ID are not guessed into one event.
+
 The book now opens **Statistics** (`/gl stats`) and **Guild rankings** (`/gl guildes`). Rank player deaths, victories, negative balances, positive friendships and distinct encounters; probable PvP events stay in separate rankings. Guild lists count personal grudges/friends and historically attributed deaths/aggressions. Click a guild to mark it for caution, as friendly, or edit its rule/notes. Personal overrides still win, inherited rules do not inflate personal grudge counts, unknown historical guilds remain unassigned and membership changes never rewrite old events.
 
 Two native WoW **kiss/spit** buttons sit above chat, below alerts. Clicking acts on the selected player using the existing emote path (+1/−1, same 30-second sentiment cooldown). Ctrl-drag moves the pair; settings hide or reset it. No automatic emotes or forced targeting.

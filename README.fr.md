@@ -59,6 +59,8 @@ Un **médaillon gris** identifie les personnes connues neutres dans le journal e
 
 La précédente extension temporaire `GrudgeLedgerProbe` doit être retirée ou désactivée : le test est désormais inclus dans Grudge Ledger. Redémarrer le jeu après l'installation de cette version pour charger les nouveaux fichiers.
 
+Une mort ayant le même identifiant compte une seule fois par guilde, même avec plusieurs attaquants ; une preuve confirmée prime sur les participations probables. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne s'additionnent pas. Sans identifiant commun, aucun regroupement des anciens événements n'est deviné.
+
 Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, vide, protégée, indisponible ou un cache trompeur. Ils ne prouvent pas que le client réel donne accès aux points de la minimap : les essais dans Forever restent nécessaires. Une absence de trace ne prouve pas l'absence du joueur dans le monde.
 
 ## Installation et premiers pas
