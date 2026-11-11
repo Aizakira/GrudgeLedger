@@ -46,6 +46,16 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.5.11: clean up old battleground grudges
+
+On first load, PvP events recorded in exactly Arathi Basin, Warsong Gulch or
+Alterac Valley (French or English zone names) are excluded from scores and stats.
+Records containing only these fights, without personal notes or opinions, leave
+the active journal but remain in `battlegroundArchive` in your private SavedVariables.
+Mixed records retain their history with an explicit battleground exclusion label.
+Notes, gestures, personal opinions, guild rules and outdoor events are preserved.
+Unknown locations are never guessed. This migration runs once, not in the background.
+
 ## 0.5.10: pause automatically in battlegrounds and arenas
 
 Battlegrounds and arenas no longer create automatic grudges or affect existing
@@ -259,7 +269,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.10.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.11.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

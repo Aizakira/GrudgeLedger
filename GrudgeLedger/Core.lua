@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.5.10", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.5.11", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -633,7 +633,7 @@ function GL.RecordAggression(identity, confidence, evidence, eventId)
     GL.Emit("CHANGED", record)
     return record
 end
-function GL.VoidPvP(identity, event)
+function GL.VoidPvP(identity, event, silent)
     local record = GL.Get(identity)
     if not record or type(event) ~= "table" or event.voided then return false, "Événement indisponible ou déjà annulé." end
     local fields = pvpFields[event.kind]
@@ -646,8 +646,53 @@ function GL.VoidPvP(identity, event)
     event.voided, event.voidedAt = true, GL.Now()
     record.pvp[field] = math.max(0, (record.pvp[field] or 0) - 1)
     refreshReputation(record)
-    GL.Emit("CHANGED", record)
+    if not silent then GL.Emit("CHANGED", record) end
     return true
+end
+local function cleanBattlegroundHistory()
+    if GL.db.battlegroundCleanupVersion == 1 then return end
+    if GL.db.battlegroundArchive ~= nil and type(GL.db.battlegroundArchive) ~= "table" then
+        GL.Debug("Archive de champs de bataille invalide : nettoyage reporté.")
+        return
+    end
+    -- ponytail: old events have zone text, not instance IDs. Match only exact known
+    -- FR/EN battleground names; unknown zones stay intact until evidence is available.
+    local zones = { ["Bassin Arathi"] = true, ["Arathi Basin"] = true,
+        ["Goulet des Chanteguerres"] = true, ["Warsong Gulch"] = true,
+        ["Vallée d'Alterac"] = true, ["Alterac Valley"] = true }
+    local archived, events, count = {}, 0, 0
+    for key, record in pairs(GL.db.players) do
+        local onlyBattlegrounds = #record.history > 0 and #record.notes == 0 and record.groupCount == 0
+            and (not record.reaction or record.reactionSource == "automatic")
+        for _, event in ipairs(record.history) do
+            local fields = type(event) == "table" and pvpFields[event.kind]
+            if fields and fields[event.confidence] and zones[event.zone] then
+                -- READY refreshes consumers once; CHANGED here could observe players
+                -- and mutate the database while it is still being migrated.
+                if GL.VoidPvP(record, event, true) then
+                    event.voidReason = "battleground"
+                    events = events + 1
+                end
+            else onlyBattlegrounds = false end
+        end
+        -- Unexplained counters may describe older outdoor events: retain the record.
+        for _, value in pairs(record.pvp) do if value ~= 0 then onlyBattlegrounds = false end end
+        if onlyBattlegrounds and record.reputation == 0 then archived[key] = record end
+    end
+    for key, record in pairs(archived) do
+        GL.db.battlegroundArchive = GL.db.battlegroundArchive or {}
+        table.insert(GL.db.battlegroundArchive, record)
+        GL.db.players[key] = nil
+        count = count + 1
+    end
+    for alias, key in pairs(GL.db.aliases) do
+        if archived[key] then GL.db.aliases[alias] = nil end
+    end
+    GL.db.battlegroundCleanupVersion = 1
+    if events > 0 or count > 0 then
+        GL.Print("Champs de bataille : " .. events .. " événement(s) écarté(s), " .. count
+            .. " fiche(s) archivée(s). Notes et avis personnels conservés.")
+    end
 end
 function GL.RecordGroup(identity, sessionId, zone)
     -- Group membership is history for an existing opinion, not an automatic introduction.
@@ -698,6 +743,7 @@ function GL.InitDB()
             GL.Debug("Entrée sauvegardée invalide conservée dans quarantine : " .. tostring(key))
         end
     end
+    cleanBattlegroundHistory()
     GL.Emit("READY")
 end
 local boot = CreateFrame("Frame")

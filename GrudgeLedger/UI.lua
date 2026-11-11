@@ -565,7 +565,7 @@ local function refreshCorrections()
     for i, row in ipairs(f.rows) do
         local event = events[f.offset + i]
         if event then
-            row.title:SetText(stamp(event.time) .. " — " .. pvpNames[event.kind] .. " (" .. (event.confidence == "confirmed" and "confirmé" or "probable") .. ")" .. (event.voided and " — annulé" or ""))
+            row.title:SetText(stamp(event.time) .. " — " .. pvpNames[event.kind] .. " (" .. (event.confidence == "confirmed" and "confirmé" or "probable") .. ")" .. (event.voidReason == "battleground" and " — champ de bataille, exclu" or event.voided and " — annulé" or ""))
             row.evidence:SetText(plain(event.evidence or "Aucune précision enregistrée."))
             row.undo:SetText(event.voided and "Annulé" or "Annuler")
             row.undo:SetEnabled(not event.voided)
@@ -762,7 +762,7 @@ local function renderDetail()
         if #history == 0 then lines[#lines + 1] = "Aucun événement." end
         for i = #history, math.max(1, #history - 19), -1 do
             local e = history[i]
-            lines[#lines + 1] = "\n" .. subdued(stamp(e.time)) .. (e.voided and " — annulé, non comptabilisé" or "")
+            lines[#lines + 1] = "\n" .. subdued(stamp(e.time)) .. (e.voidReason == "battleground" and " — champ de bataille, non comptabilisé" or e.voided and " — annulé, non comptabilisé" or "")
             local delta = type(e.delta) == "number" and e.delta ~= 0
                 and (" — avis " .. (e.delta > 0 and "+" or "") .. e.delta) or ""
             lines[#lines + 1] = eventTitle(e) .. delta

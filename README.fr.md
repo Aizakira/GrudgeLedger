@@ -48,6 +48,18 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## 0.5.11 : retirer les anciennes rancunes de champs de bataille
+
+Au premier chargement, les événements PvP dont le lieu identifie exactement le
+Bassin Arathi, le Goulet des Chanteguerres ou la Vallée d'Alterac (noms français ou
+anglais) sont exclus des scores et statistiques. Les fiches constituées uniquement
+de ces combats, sans note ni avis personnel, quittent le journal actif et restent
+conservées dans `battlegroundArchive`, dans vos SavedVariables privées.
+Les fiches mixtes gardent leur historique avec la mention « champ de bataille,
+non comptabilisé ». Les notes, gestes et avis personnels, règles de guilde et
+événements extérieurs restent conservés. Un lieu inconnu n'est jamais deviné.
+Ce nettoyage s'exécute une seule fois ; il ne travaille pas en arrière-plan.
+
 ## 0.5.10 : pause automatique en champ de bataille et en arène
 
 Les champs de bataille et les arènes ne créent plus de rancunes automatiques et
@@ -272,7 +284,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.10.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.11.zip GrudgeLedger
 ```
 
 ## Licence et crédits
