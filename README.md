@@ -46,6 +46,20 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.5.7: skip samples covered by minimap controls
+
+Moving the minimap also moves attached controls underneath the stationary cursor.
+The experiment previously treated their hover as an unrelated window and stopped.
+It now skips and counts those scan samples without reading their tooltips or
+disabling their controls. Unrelated UI still stops the experiment; an obstructed
+blank control or witness replay cannot validate a result.
+
+113 simulated cases cover the second-sample interruption, nested controls,
+obstructed samples and restoration. The two texts received in the live trial do
+not yet prove player identification. The radar remains experimental and manual.
+Use `/reload`, then `/gl debug` → **Préparer la minimap** → **Test druide**, with
+a stationary player selected as the witness.
+
 ## 0.5.6: distinguish druid test failures
 
 The report now distinguishes a missing target, an NPC/pet, self-targeting and
@@ -142,7 +156,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 ## Install
 
-1. Download **`GrudgeLedger-0.5.6.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.5.7.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -199,7 +213,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.6.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.7.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

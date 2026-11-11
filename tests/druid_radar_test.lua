@@ -13,6 +13,13 @@ local function run(mode, expected, options)
     local flags, map = {}, {}
     env.UIParent, env.WorldFrame = {}, {}
     local other = {}
+    local mapChild = { GetParent = function() return map end }
+    local mapGrandchild = { GetParent = function() return mapChild end }
+    local foreignChild = { GetParent = function() return other end }
+    local unreadableParent = { GetParent = function() return secret end }
+    local throwingParent = { GetParent = function() error("private frame parent") end }
+    local cyclic = {}; cyclic.GetParent = function() return cyclic end
+    local focusBlocked, obstructedReads = false, 0
     local original = { { "TOPRIGHT", env.UIParent, "TOPRIGHT", -12, -20 },
         { "BOTTOMLEFT", env.UIParent, "BOTTOMLEFT", 5, 6 } }
     local anchors = { original[1], original[2] }
@@ -73,6 +80,23 @@ local function run(mode, expected, options)
     env.GetMouseFoci = function()
         if flags.focus then return { other } end
         if env.GrudgeLedger.DruidRadarActive and env.GrudgeLedger.DruidRadarActive() then
+            local dx, dy = cursor[1] / scale - center[1], cursor[2] / scale - center[2]
+            local scanPoint = math.abs(dx) <= width / 2 and math.abs(dy) <= height / 2
+            local secondPoint = math.abs(dx + 6 * width / 15) < 1 and math.abs(dy + 7 * height / 15) < 1
+            local replay = hits > 0 and math.abs(dx) < 1 and math.abs(dy) < 1
+            focusBlocked = options.child and (secondPoint or options.child == "all" and scanPoint
+                or options.child == "initial" and not scanPoint
+                or options.child == "replay" and replay
+                or options.child == "empty-after-hit" and hits > 0 and not scanPoint)
+            if focusBlocked then
+                if options.child == "mixed" then return { mapChild, other } end
+                if options.child == "foreign" then return { foreignChild } end
+                if options.child == "cycle" then return { cyclic } end
+                if options.child == "secret" then return { secret } end
+                if options.child == "secret-parent" then return { unreadableParent } end
+                if options.child == "throwing-parent" then return { throwingParent } end
+                return { env.WorldFrame, map, options.child == "nested" and mapGrandchild or mapChild }
+            end
             return { env.WorldFrame, map }
         end
         return { env.WorldFrame }
@@ -103,7 +127,7 @@ local function run(mode, expected, options)
     env.SlashCmdList = {}
     local watchdog
     env.C_Timer = { After = function(delay, fn) assert(delay == 12); watchdog = fn end }
-    local GL = { version = "0.5.6", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
+    local GL = { version = "0.5.7", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
     env.GrudgeLedger = GL
     GL.Clean = function(value, kind)
         if value == secret or kind and type(value) ~= kind then return nil end
@@ -120,6 +144,7 @@ local function run(mode, expected, options)
     GL.MinimapProbeActive = function() return flags.legacy or false end
     env.C_TooltipInfo = { GetMinimapMouseover = function()
         assert(frame > 0, "no same-frame reads")
+        if focusBlocked then obstructedReads = obstructedReads + 1 end
         if mode == "throws" then error("Élodie raw error") end
         if mode == "secret" then return secret end
         if mode == "secret-lines" then return { lines = secret } end
@@ -235,6 +260,12 @@ local function run(mode, expected, options)
     assert(saved.build == "70888" and saved.time == 12345 and saved.points <= 225)
     assert(saved.version == GL.version and messages[#messages]:find("addon " .. GL.version, 1, true), "identify the installed diagnostic revision")
     assert(saved.seconds >= 0 and saved.seconds <= 12.2, "bounded duration")
+    if options.child then
+        assert(obstructedReads == 0, "a minimap button's tooltip must never count as a radar read")
+        assert(messages[#messages]:find(saved.skipped .. " points ignorés", 1, true), "show the obstruction count")
+        if expected == "positive" then assert(saved.skipped == 1 and saved.points > 2, "skip the covered second point and continue") end
+        if options.child == "all" then assert(saved.skipped == 225 and saved.reads == 1 and saved.texts == 0, "a fully obscured scan is inconclusive") end
+    end
     local failedCheck = ({ clamp = "centre X", clampY = "centre Y", zoom = "zoom", resize = "largeur",
         ["resize-height"] = "hauteur", rescale = "échelle", ["late-alpha"] = "transparence" })[mode]
     if failedCheck then
@@ -279,6 +310,9 @@ local function run(mode, expected, options)
     end
     slash("rapport")
     assert(messages[#messages]:find(saved.build, 1, true))
+    saved.skipped = nil -- Reports saved by 0.5.6 remain readable.
+    slash("rapport")
+    assert(messages[#messages]:find("0 points ignorés", 1, true))
     checked = checked + 1
 end
 
@@ -291,13 +325,23 @@ for mode, expected in pairs({ working = "positive", ["tracking-filter"] = "posit
     target = "target_missing", surname = "target_name", npc = "target_npc", self = "target_self", noIdentity = "target_identity", secretTarget = "api",
     conflict = "conflict", missing = "api", ["missing-tooltip"] = "api", ["cursor-move"] = "mouse", ["late-secret"] = "api",
     ["unknown-mask"] = "mask", ["hook-failure"] = "api", ["secret-mask"] = "mask", ["observe-later"] = "positive",
-    ["late-focus"] = "focus", zoom = "map", resize = "map", ["resize-height"] = "map", ["late-alpha"] = "map", rescale = "map", ["late-combat"] = "combat",
+    ["late-focus"] = "focus_changed", zoom = "map", resize = "map", ["resize-height"] = "map", ["late-alpha"] = "map", rescale = "map", ["late-combat"] = "combat",
     ["late-move"] = "moving", ["late-click"] = "mouse", ["late-mask"] = "map", stop = "stopped" }) do run(mode, expected) end
 for _, scale in ipairs({ 0.5, 1, 1.5 }) do run("working", "positive", { scale = scale, latency = 2, width = 240, height = 180, dotX = 48, dotY = -36, rounding = 0.04 }) end
 run("working", "positive", { mask = 12345 }) -- FileDataID masks survive unchanged.
 -- Native frame extents can differ slightly after repositioning at another origin.
 run("working", "positive", { sizeRounding = 0.00006103515625 })
 run("unlisted", "positive") -- A valid witness does not need a journal entry.
+run("working", "positive", { child = "direct" })
+run("working", "positive", { child = "nested" })
+run("working", "obstructed", { child = "direct", dotX = -72, dotY = -84, latency = 2 })
+run("working", "obstructed", { child = "all" })
+run("working", "map_focus", { child = "initial" })
+run("working", "map_focus", { child = "replay" })
+run("working", "map_focus", { child = "empty-after-hit" })
+for _, child in ipairs({ "mixed", "foreign", "cycle", "secret", "secret-parent", "throwing-parent" }) do
+    run("working", "focus_changed", { child = child })
+end
 run("working", "positive", { mask = "Interface\\AddOns\\CustomMap\\SquareMask" })
 run("prepare", "positive", { prepare = "working" })
 run("prepare", "positive", { prepare = "working", mask = 12345 })

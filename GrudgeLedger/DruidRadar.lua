@@ -21,6 +21,9 @@ local reasons = {
     dead = "Personnage mort : essai arrêté.", instance = "Essai limité au monde extérieur.",
     mouse = "Mouvement ou clic de souris : essai arrêté.",
     focus = "Place la souris sur une zone vide du monde, hors fenêtres et minimap.",
+    focus_changed = "Un élément d'interface extérieur à la minimap intercepte la souris : essai arrêté.",
+    map_focus = "Un élément attaché à la minimap masque un point de contrôle : résultat non validé.",
+    obstructed = "Témoin non retrouvé et certains points masqués par des éléments de la minimap : balayage incomplet.",
     map = "Minimap masquée, protégée ou modifiée pendant l'essai.",
     conflict = "Un autre scanner est chargé : désactive-le pour isoler l'essai.",
     busy = "Un autre test est déjà en cours.", timeout = "Temps limite atteint : résultat incomplet.",
@@ -115,10 +118,10 @@ local function reason(err)
 end
 local function report(entry)
     if not entry then return "Aucun essai druide sauvegardé. /glradar test pour commencer." end
-    return string.format("Radar druide · addon %s · build %s · %s · %s\n%s%s\n%d points, %d lectures, %d textes distincts, %d correspondances connues, %.1f s.",
+    return string.format("Radar druide · addon %s · build %s · %s · %s\n%s%s\n%d points, %d lectures, %d textes distincts, %d correspondances connues, %.1f s.\n%d points ignorés : élément de la minimap sous la souris.",
         entry.version or "non précisé", entry.build, entry.phase, entry.check or "non précisé", reasons[entry.code] or reasons.api,
         entry.detail and ("\n" .. entry.detail) or "",
-        entry.points, entry.reads, entry.texts, entry.known, entry.seconds)
+        entry.points, entry.reads, entry.texts, entry.known, entry.seconds, entry.skipped or 0)
 end
 function GL.DruidRadarReport()
     local history = GL.db and GL.db.druidRadarTests
@@ -164,7 +167,7 @@ local function finish(code)
     end
     local now = number(GL.Safe(GetTime)) or state.started
     local entry = { code = code, phase = state.phase, check = check, build = build(), version = GL.version, time = GL.Now(), detail = state.detail,
-        points = state.points, reads = state.reads, texts = texts, known = known,
+        points = state.points, reads = state.reads, texts = texts, known = known, skipped = state.skipped,
         seconds = math.max(0, now - state.started) }
     if GL.db then
         local history = type(GL.db.druidRadarTests) == "table" and GL.db.druidRadarTests or {}
@@ -212,7 +215,7 @@ end
 local function emptyPoint(state) place(state, state.width * 2, state.height * 2) end
 local function nextPoint(state)
     local point = state.grid[state.points + 1]
-    if not point then finish("missed") return end
+    if not point then finish(state.skipped > 0 and "obstructed" or "missed") return end
     state.points = state.points + 1
     state.phase = "balayage"
     place(state, point[1], point[2])
@@ -229,6 +232,17 @@ local function expectNumber(state, label, actual, expected, tolerance)
         reject("map")
     end
 end
+local function isMapChild(frame)
+    -- ponytail: bound ancestry traversal to 16 levels; an unrecognised hierarchy
+    -- stops the test instead of admitting an unrelated or unreadable control.
+    for _ = 1, 16 do
+        frame = public(frame)
+        if not frame or (type(frame) ~= "table" and type(frame) ~= "userdata") then return false end
+        if frame == Minimap then return true end
+        frame = GL.Safe(frame.GetParent, frame)
+    end
+    return false
+end
 local function tick(state)
     if running ~= state then return end
     local ok, err = pcall(function()
@@ -240,11 +254,13 @@ local function tick(state)
         if not x or not y then reject("api") end
         if math.abs(x - state.x) > 2 or math.abs(y - state.y) > 2 then reject("mouse") end
         local focus = public(call(GetMouseFoci), "table")
-        if not focus or #focus == 0 or #focus > 8 then reject("focus") end
+        if not focus or #focus == 0 or #focus > 8 then reject("focus_changed") end
+        local obscured = false
         for _, frame in ipairs(focus) do
-            -- Ignore the transparent map itself, but stop if a window/button takes
-            -- the pointer. Do not disable another addon's controls to force a read.
-            if frame ~= WorldFrame and frame ~= Minimap then reject("focus") end
+            if frame ~= WorldFrame and frame ~= Minimap then
+                if not isMapChild(frame) then reject("focus_changed") end
+                obscured = true
+            end
         end
         check = "minimap : centre"
         local cx, cy = Minimap:GetCenter()
@@ -259,6 +275,16 @@ local function tick(state)
         expectNumber(state, "zoom", call(Minimap.GetZoom, Minimap), state.zoom)
         expectNumber(state, "largeur", call(Minimap.GetWidth, Minimap), state.width, 0.1)
         expectNumber(state, "hauteur", call(Minimap.GetHeight, Minimap), state.height, 0.1)
+        -- Repositioning also moves attached buttons beneath the stationary cursor.
+        -- Skip those samples, never read their tooltips or alter their controls.
+        -- Empty controls and the witness replay must remain unobstructed.
+        if obscured then
+            check = "survol : élément de la minimap"
+            if state.phase ~= "balayage" then reject("map_focus") end
+            state.skipped = state.skipped + 1
+            nextPoint(state)
+            return
+        end
         -- A native hover read updates on a rendered frame, not in a tight Lua loop.
         state.wait = state.wait + 1
         if state.wait < 2 then return end
@@ -291,7 +317,7 @@ end
 local function start()
     if running or (GL.MinimapProbeActive and GL.MinimapProbeActive()) then GL.Print(reasons.busy) return end
     if restorationFailed then GL.Print(reasons.restored) return end
-    local state = { names = {}, known = {}, grid = {}, points = 0, reads = 0, phase = "préparation",
+    local state = { names = {}, known = {}, grid = {}, points = 0, reads = 0, skipped = 0, phase = "préparation",
         started = number(GL.Safe(GetTime)) or 0 }
     local ok, err = pcall(function()
         prerequisites()
