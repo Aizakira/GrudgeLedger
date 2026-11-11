@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.2.1
+GRUDGE LEDGER — 0.2.2
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -34,6 +34,8 @@ du jeu : ce n'est pas un radar de toute la zone ni un détecteur de furtivité.
 La coloration supplémentaire des noms est facultative, désactivée au départ.
 Les alertes de proximité affichent le joueur et un souvenir, avec des sons
 distincts. Les répétitions sont espacées et les sons limités pour éviter le bruit.
+Elles apparaissent au-dessus du chat principal, avec une marge pour ses onglets
+et les petits panneaux. Elles suivent sa position sans disparaître s'il est masqué.
 Les membres d'une même guilde aperçus dans les six secondes sont regroupés
 dans une alerte, avec leur nombre observé. Son clic ouvre la première fiche.
 Les alertes individuelles et les agressions personnelles gardent la priorité.
@@ -97,6 +99,11 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+PLACEMENT DES ALERTES 0.2.2
+Les alertes de rencontre quittent le centre pour se placer en bas à gauche,
+au-dessus du chat principal. Sans fenêtre de chat native, elles utilisent un
+emplacement fixe en bas à gauche. Elles restent limitées aux bords de l'écran.
 
 AJUSTEMENT 0.2.1
 Dans la minimap, le livre est désormais une illustration sans cercle intégré,

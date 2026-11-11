@@ -190,7 +190,14 @@ local function makeToast()
     if toast then return toast end
     local frame = CreateFrame("Button", "GrudgeLedgerNearbyAlert", UIParent)
     frame:SetSize(416, 112)
-    frame:SetPoint("TOP", UIParent, "TOP", 0, -110)
+    if ChatFrame1 then
+        -- Follow the chat layout, leaving room for tabs and small panels above it.
+        frame:SetPoint("BOTTOMLEFT", ChatFrame1, "TOPLEFT", 0, 96)
+    else
+        -- ponytail: custom chat replacements without ChatFrame1 use a fixed corner.
+        -- Add a custom anchor only if such a layout needs its own positioning.
+        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 24, 320)
+    end
     frame:SetClampedToScreen(true)
     frame:SetFrameStrata("DIALOG")
     GL.Safe(frame.SetClipsChildren, frame, true)
