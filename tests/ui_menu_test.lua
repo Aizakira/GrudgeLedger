@@ -115,12 +115,35 @@ socialCheck:SetChecked(false) click(socialCheck)
 assert(GL.Settings().socialTracking == false)
 assert(not next(cvars), "no automatic changes to nameplate settings")
 mock.SetCombat(true)
-click(childButton(GrudgeLedgerSettings, "Afficher les noms alliés et ennemis"))
+local recognition = childButton(GrudgeLedgerSettings, "Activer le repérage (icônes + couleurs)")
+click(recognition)
+SlashCmdList.GRUDGELEDGER("reperage")
 assert(not next(cvars), "no restricted CVar changes in combat")
+assert(not GL.Settings().nameColor, "combat rejection also preserves addon preferences")
 mock.SetCombat(false)
-click(childButton(GrudgeLedgerSettings, "Afficher les noms alliés et ennemis"))
-assert(cvars.nameplateShowFriends == 1 and cvars.nameplateShowEnemies == 1)
+local allowed = { nameplateShowFriendlyPlayers = true, nameplateShowEnemies = true, nameplateShowAll = true }
+C_CVar = {
+    SetCVar = function(key, value) assert(allowed[key], "obsolete or unrelated CVar") cvars[key] = value end,
+    GetCVar = function(key) return cvars[key] and tostring(cvars[key]) or "0" end,
+}
+click(recognition)
+assert(cvars.nameplateShowFriendlyPlayers == 1 and cvars.nameplateShowEnemies == 1 and cvars.nameplateShowAll == 1)
+assert(not cvars.nameplateShowFriends, "use Forever's current friendly-player filter")
+assert(GL.Settings().markers and GL.Settings().nameColor)
+assert(GrudgeLedgerSettings.checks.nameColor:GetChecked())
 assert(GrudgeLedgerSettings.plateStatus:GetText():find("Alliés : activées", 1, true))
+GL.SetSetting("markers", false) GL.SetSetting("nameColor", false)
+cvars.nameplateShowFriendlyPlayers = 0
+SlashCmdList.GRUDGELEDGER("reperage")
+assert(cvars.nameplateShowFriendlyPlayers == 1 and GL.Settings().markers and GL.Settings().nameColor,
+    "command and button share the complete setup")
+C_CVar.SetCVar = function() error("CVar refused") end
+cvars.nameplateShowFriendlyPlayers = 0
+SlashCmdList.GRUDGELEDGER("repérage")
+assert(mock.messages[#mock.messages]:find("pas confirmé", 1, true), "do not claim success after a refused setting")
+C_CVar = nil
+SlashCmdList.GRUDGELEDGER("reperage")
+assert(cvars.nameplateShowFriendlyPlayers == 1, "legacy global API fallback")
 SlashCmdList.GRUDGELEDGER("+ Super donjon")
 local megumin = GL.Get("guid:Player-1-megumin")
 assert(megumin.reputation == 1 and GL.Relation(megumin) == "friend")

@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.2.2
+GRUDGE LEDGER — 0.2.3
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -29,7 +29,11 @@ Un petit « ? » accompagne les marqueurs fondés uniquement sur une déduction
 PvP. Une mort probable reste signalée comme telle, même si une agression était
 confirmée. Le « ? » disparaît après correction ou confirmation pertinente.
 Les icônes nécessitent les barres de noms du jeu. Le bouton des Réglages permet
-d'activer les noms alliés et ennemis, hors combat. Portée et visibilité dépendent
+d'activer le repérage (icônes + couleurs), hors combat, également avec /gl reperage.
+Il active les barres des joueurs alliés, les barres ennemies et leur affichage
+hors combat, puis les icônes et couleurs de Grudge Ledger. Il n'est pas exécuté
+automatiquement au démarrage. Les simples noms flottants ne sont pas des barres
+modifiables par l'addon. Portée et visibilité dépendent
 du jeu : ce n'est pas un radar de toute la zone ni un détecteur de furtivité.
 La coloration supplémentaire des noms est facultative, désactivée au départ.
 Les alertes de proximité affichent le joueur et un souvenir, avec des sons
@@ -82,6 +86,7 @@ COMMANDES (FACULTATIVES, UTILISABLES DANS UNE MACRO)
 /gl note                    ouvre l'éditeur de note pour la cible
 /gl guilde mefiance         classe la guilde du joueur ciblé
 /gl settings                ouvre les réglages
+/gl reperage                active barres de noms, icônes et couleurs, hors combat
 /gl debug                   ouvre le diagnostic copiable (également dans Réglages)
 /grudges                    alias de /gl
 
@@ -99,6 +104,13 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+REPÉRAGE DES JOUEURS ALLIÉS 0.2.3
+Le bouton utilise désormais le réglage des joueurs alliés de Forever, au lieu
+de l'ancien réglage général. L'activation regroupe barres de noms, icônes et
+coloration, via les Réglages ou /gl reperage. Une activation refusée par le jeu
+est signalée. Ennemi donne le rouge ; Méfiance ou un simple avis -1 donne l'orange.
+Les commandes françaises accentuées conservent leurs caractères sous Windows.
 
 PLACEMENT DES ALERTES 0.2.2
 Les alertes de rencontre quittent le centre pour se placer en bas à gauche,

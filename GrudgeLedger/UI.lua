@@ -402,6 +402,23 @@ local function renderDetail()
     ledger.detailBody:SetHeight(math.max(300, ledger.detailText:GetStringHeight() + 12))
 end
 
+local function enableRecognition()
+    if GL.Safe(InCombatLockdown) then GL.Print("Active le repérage hors combat.") return end
+    local set = (C_CVar and C_CVar.SetCVar) or SetCVar
+    local get = (C_CVar and C_CVar.GetCVar) or GetCVar
+    local ready = true
+    -- Forever uses the per-player filter, not the old nameplateShowFriends CVar.
+    for _, key in ipairs({ "nameplateShowFriendlyPlayers", "nameplateShowEnemies", "nameplateShowAll" }) do
+        GL.Safe(set, key, 1)
+        if GL.Safe(get, key) ~= "1" then ready = false end
+    end
+    GL.SetSetting("markers", true)
+    GL.SetSetting("nameColor", true)
+    if settingsWindow then settingsWindow:UpdatePlateStatus() end
+    GL.Print(ready and "Repérage activé : barres de noms, icônes et couleurs. Ennemi = rouge, méfiance = orange."
+        or "Icônes et couleurs activées, mais le jeu n'a pas confirmé toutes les barres de noms. Vérifie les réglages d'affichage.")
+end
+
 local function showSettings()
     if not settingsWindow then
         local f = window("GrudgeLedgerSettings", "Grudge Ledger — Réglages", 450, 530)
@@ -423,21 +440,16 @@ local function showSettings()
             check:SetScript("OnClick", function(self) GL.SetSetting(key, self:GetChecked() and true or false) end)
             f.checks[key] = check
         end
-        label(f, "Pour voir les icônes, les barres de noms des joueurs doivent être affichées. La portée dépend du jeu.", nil, 20, -325, 405)
+        label(f, "Les noms flottants seuls ne portent pas les marqueurs. Active le repérage pour afficher les barres, icônes et couleurs.", nil, 20, -325, 405)
         f.plateStatus = label(f, "", nil, 20, -365, 405)
         function f:UpdatePlateStatus()
             local function status(key)
                 local value = GL.Clean(GL.Safe((C_CVar and C_CVar.GetCVar) or GetCVar, key), "string")
                 return value == "1" and "activées" or value == "0" and "désactivées" or "inconnu"
             end
-            self.plateStatus:SetText("Alliés : " .. status("nameplateShowFriends") .. " • Ennemis : " .. status("nameplateShowEnemies"))
+            self.plateStatus:SetText("Alliés : " .. status("nameplateShowFriendlyPlayers") .. " • Ennemis : " .. status("nameplateShowEnemies"))
         end
-        button(f, "Afficher les noms alliés et ennemis", 20, -393, 300, function()
-            if GL.Safe(InCombatLockdown) then GL.Print("Change ce réglage hors combat.") return end
-            GL.Safe(SetCVar, "nameplateShowFriends", 1)
-            GL.Safe(SetCVar, "nameplateShowEnemies", 1)
-            f:UpdatePlateStatus()
-        end)
+        button(f, "Activer le repérage (icônes + couleurs)", 20, -393, 405, enableRecognition)
         label(f, "Les alertes pour une même personne sont espacées de 3 minutes par défaut.", nil, 20, -434, 405)
         button(f, "Diagnostic", 20, -480, 405, showDiagnostic)
     end
@@ -797,14 +809,15 @@ SLASH_GRUDGELEDGER1 = "/gl"
 SLASH_GRUDGELEDGER2 = "/grudges"
 SlashCmdList.GRUDGELEDGER = function(message)
     local command, reason = (GL.Clean(message, "string") or ""):match("^%s*(%S*)%s*(.-)%s*$")
-    command = (command or ""):lower()
+    command = (command or ""):gsub("[A-Z]", string.lower) -- Preserve UTF-8 bytes in French commands.
     reason = reason or ""
     if command == "debug" then
         showDiagnostic()
     elseif command == "settings" or command == "options" then showSettings()
+    elseif command == "reperage" or command == "repérage" then enableRecognition()
     elseif command == "guilde" then
         if reason == "" then GL.ShowGuilds() return end
-        local reaction = ({ ami = "friend", amie = "friend", ennemi = "enemy", ennemie = "enemy", neutre = "neutral", mefiance = "warning", ["méfiance"] = "warning" })[reason:lower()]
+        local reaction = ({ ami = "friend", amie = "friend", ennemi = "enemy", ennemie = "enemy", neutre = "neutral", mefiance = "warning", ["méfiance"] = "warning" })[(reason:gsub("[A-Z]", string.lower))]
         if not reaction then GL.Print("/gl guilde ami|ennemi|mefiance|neutre — utilise la guilde de ta cible.") return end
         local identity = GL.Identity("target")
         if not identity or not identity.guild then GL.Print("Sélectionne un joueur dont la guilde est connue.") return end
@@ -826,5 +839,5 @@ SlashCmdList.GRUDGELEDGER = function(message)
         end
     elseif command == "" then
         if ledger and ledger:IsShown() then ledger:Hide() else GL.ShowLedger() end
-    else GL.Print("Commandes : /gl, /gl + [raison], /gl - [raison], /gl ami|ennemi|neutre|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl settings, /gl debug") end
+    else GL.Print("Commandes : /gl, /gl + [raison], /gl - [raison], /gl ami|ennemi|neutre|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl settings, /gl debug") end
 end

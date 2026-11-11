@@ -110,5 +110,12 @@ undo.scripts.OnClick(undo, "LeftButton")
 assert(record.pvp.probableDeaths == 0 and GL.Relation(record) == "neutral")
 assert(not GrudgeLedgerNearbyAlert:IsShown(), "correction immediately removes the obsolete alert")
 assert(GrudgeLedgerWindow.detailText:GetText():find("annulé", 1, true))
+-- An Alliance player marked as a personal enemy becomes red after explicit setup.
+SlashCmdList.GRUDGELEDGER("reperage")
+GL.SetReaction(opponent, "enemy")
+local redName = plate.TPFrame.visual.NameText.color
+assert(mock.cvars.nameplateShowFriendlyPlayers == 1 and mock.cvars.nameplateShowAll == 1)
+assert(redName and redName[1] == 1 and redName[2] == 0.25 and redName[3] == 0.2,
+    "a same-faction enemy must be red on the actual displayed nameplate font")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS integrated TOC: boot, menus, persistence writes, markers/alerts, notes, macros, tooltip, UI correction propagation; no forced UI/target/CVars")
