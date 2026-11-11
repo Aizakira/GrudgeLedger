@@ -569,4 +569,18 @@ now = now + 10
 eventFrame.scripts.OnUpdate(eventFrame, 1)
 assert(not toast.shown)
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
+GL.ClearDetectionLog()
+now = now + 400
+units.target = units.nameplate19
+GL.SetReaction(debt, "enemy")
+D.OnEvent(nil, "PLAYER_TARGET_CHANGED")
+D.OnEvent(nil, "PLAYER_TARGET_CHANGED")
+GL.SetSetting("enemyAlerts", false)
+D.OnEvent(nil, "PLAYER_TARGET_CHANGED")
+units.target = nil
+D.OnEvent(nil, "PLAYER_TARGET_CHANGED")
+local decisions = {}
+for _, event in ipairs(GL.db.detectionLog) do decisions[event.code] = true end
+assert(decisions.observed and decisions.shown and decisions.cooldown and decisions.disabled and decisions.unreadable,
+    "actual detection path must explain shown, cooldown, disabled and unreadable outcomes")
 print("PASS display: existing plates, ThreatPlates, confidence badges/corrections, color restoration, recycling, secret/protected values, cooldowns/sounds, captured clicks, guild inheritance/burst grouping/PvP exemptions, tooltips and missing APIs")

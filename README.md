@@ -22,7 +22,7 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 - **PvP memory:** records observed aggression and deaths. Inferred events are explicitly marked as probable and can be corrected without erasing your personal notes.
 - **Friendly and unfriendly gestures:** your own targeted emotes can adjust camaraderie, including toward the opposing faction. Repeated emotes are rate-limited.
 - **Guild opinions:** mark an entire guild, with individual exceptions.
-- **Guild history:** keep the last observed guild and snapshot it separately for each new PvP event, including its realm and observation time. Missing replies do not erase known guilds; later membership changes never rewrite old encounters. Unknown guilds stay unknown. These records prepare future statistics; no guild leaderboard is included yet.
+- **Guild history:** keep the last observed guild and snapshot it separately for each new PvP event, including its realm and observation time. Missing replies do not erase known guilds; later membership changes never rewrite old encounters. Unknown guilds stay unknown. Guild rankings use these event snapshots and separate confirmed deaths from probable ones.
 - **Nearby encounter alerts:** a small popup above the main chat in the lower-left area, with distinct sounds, cooldowns and grouped guild alerts. It follows the chat's position, leaving room above its tabs. Friends in your party or raid never trigger these alerts. Other friends alert on first sighting, then only after more than ten minutes without an observed presence; every sighting renews this window, including across UI reloads. Encounter clocks are separate for each of your characters.
 - **No automatic roster clutter:** joining a group does not add unknown players. Group history is kept for existing contacts; legacy entries containing only group sessions are hidden without deleting them. Opinions, notes and PvP records remain visible.
 - **A personal journal:** notes, encounters, shared groups and PvP history, accessed through the red book on the minimap or `/gl`.
@@ -45,9 +45,24 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
+
+## 0.5.0: chronicles, guild rankings and diagnostics
+
+The book now opens **Statistics** (`/gl stats`) and **Guild rankings** (`/gl guildes`). Rank player deaths, victories, negative balances, positive friendships and distinct encounters; probable PvP events stay in separate rankings. Guild lists count personal grudges/friends and historically attributed deaths/aggressions. Click a guild to mark it for caution, as friendly, or edit its rule/notes. Personal overrides still win, inherited rules do not inflate personal grudge counts, unknown historical guilds remain unassigned and membership changes never rewrite old events.
+
+Two native WoW **kiss/spit** buttons sit above chat, below alerts. Clicking acts on the selected player using the existing emote path (+1/−1, same 30-second sentiment cooldown). Ctrl-drag moves the pair; settings hide or reset it. No automatic emotes or forced targeting.
+
+Distinct encounters begin with this version: another encounter requires over ten minutes without an observation, with every sighting renewing the clock. Reloads preserve continuity; character clocks are separate and totals belong to this account's book. No old visits or time-spent estimates are invented.
+
+`/gl traces` displays a private, bounded 200-entry decision log explaining shown/suppressed alerts and missing readable identities. Repeats are throttled to 30 seconds. It can be cleared or disabled. `/gl debug` exports an anonymized report with no names/notes. SavedVariables stay separate from the shipped addon; normal logout or UI reload flushes them to disk.
+
+The standalone minimap experiment is now integrated (`/glprobe test`, `/glprobe stop`): a stationary hovered reference, automatic re-read off the map, and a blank-point control distinguish real reads from stale caches. The name-free outcome and client build survive reloads. **This is a manual capability test, not an enabled automatic radar or tracking toggle.** A negative result is conditional on the tracked point staying still; even a positive isolated trial does not validate moving-world scanning. Unit tests cover working, blocked, missing, secret and stale-cache APIs; only live client observations establish what Forever actually allows. No trace does not prove a player was absent from the world.
+
+Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command conflicts. Restart WoW once after updating to load the new source files.
+
 ## Install
 
-1. Download **`GrudgeLedger-0.4.6.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.5.0.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -104,7 +119,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.4.6.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.0.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.
