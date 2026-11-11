@@ -48,6 +48,18 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## 0.5.10 : pause automatique en champ de bataille et en arène
+
+Les champs de bataille et les arènes ne créent plus de rancunes automatiques et
+ne modifient plus les scores, statistiques PvP, rencontres, souvenirs de groupe
+ou avis liés aux émotes. Les alertes de proximité, marqueurs et ajouts aux
+infobulles y sont également suspendus. Les déductions de combat en attente sont
+abandonnées au changement de contexte pour éviter un enregistrement à la sortie.
+
+Le journal, les notes et les classements manuels restent accessibles. Les fiches
+existantes et les réglages sont conservés ; le suivi reprend automatiquement
+à la sortie. Les donjons, raids et scénarios gardent leur fonctionnement habituel.
+
 ## 0.5.9 : valider le balayage et distinguer les vrais changements de zoom
 
 Une notification de zoom ne suffit plus à interrompre l'essai. La mise à jour
@@ -260,7 +272,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.9.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.10.zip GrudgeLedger
 ```
 
 ## Licence et crédits

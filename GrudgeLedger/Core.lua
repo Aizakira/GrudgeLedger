@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.5.9", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.5.10", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -27,6 +27,11 @@ function GL.Safe(fn, ...)
     if type(fn) ~= "function" then return nil end
     local ok, a, b, c, d = pcall(fn, ...)
     if ok then return GL.Clean(a), GL.Clean(b), GL.Clean(c), GL.Clean(d) end
+end
+
+function GL.IsPvPInstance()
+    local _, kind = GL.Safe(IsInInstance)
+    return kind == "pvp" or kind == "arena"
 end
 
 function GL.Now() return GL.Safe(GetServerTime) or GL.Safe(time) or 0 end
@@ -372,6 +377,7 @@ function GL.Remember(identity)
 end
 
 function GL.RecordSeen(identity, visible)
+    if GL.IsPvPInstance() then return nil end
     local record = GL.Get(identity)
     local rule = GL.GetGuildRule(identity)
     if record or (rule and rule.reaction ~= "neutral") then record = GL.Remember(identity) end
@@ -555,6 +561,7 @@ function GL.SetReaction(identity, reaction)
     return record
 end
 function GL.AdjustReputation(identity, delta, reason, source)
+    if source == "emote" and GL.IsPvPInstance() then return nil end
     delta = GL.Clean(delta, "number")
     if not delta or delta ~= delta or math.abs(delta) == math.huge or delta == 0 then return nil end
     delta = math.max(-100, math.min(100, math.floor(delta)))
@@ -596,6 +603,7 @@ local pvpFields = {
     aggression = { confirmed = "aggressions", probable = "probableAggressions" },
 }
 function GL.RecordPvP(identity, kind, confidence, evidence, eventId)
+    if GL.IsPvPInstance() then return nil end
     if kind ~= "kill" and kind ~= "death" then return nil end
     if confidence ~= "confirmed" and confidence ~= "probable" then return nil end
     local record = GL.Remember(identity)
@@ -611,6 +619,7 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId)
     return record
 end
 function GL.RecordAggression(identity, confidence, evidence, eventId)
+    if GL.IsPvPInstance() then return nil end
     if confidence ~= "confirmed" and confidence ~= "probable" then return nil end
     local record = GL.Remember(identity)
     if not record then return nil end

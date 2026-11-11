@@ -81,6 +81,7 @@ end
 
 local function validateToast()
     if not toast or not toast:IsShown() then return end
+    if GL.IsPvPInstance() then toast:Hide() return end
     local record = GL.Get(toast.key)
     if not record or GL.Relation(record) ~= toast.relation or GL.RelationSource(record) ~= toast.source
         or inheritedGuildKey(record) ~= toast.guildKey
@@ -292,7 +293,7 @@ local function makeToast()
 end
 
 alert = function(identity, unit)
-    if not GL.db or not identity then return end
+    if not GL.db or not identity or GL.IsPvPInstance() then return end
     local record = GL.Get(identity)
     if not record then GL.Trace("unknown", identity, unit) return end
     local relation = GL.Relation(record)
@@ -363,7 +364,7 @@ end
 
 local function observe(unit, notify)
     unit = GL.Clean(unit, "string")
-    if not unit or not GL.db then return end
+    if not unit or not GL.db or GL.IsPvPInstance() then return end
     if not notify and GL.Safe(UnitIsVisible, unit) ~= true then return end
     local identity = GL.Identity(unit)
     if identity then
@@ -412,6 +413,10 @@ function D.Refresh(changedRecord)
         end
     end
     validateToast()
+    if GL.IsPvPInstance() then
+        for _, marker in pairs(markers) do hideMarker(marker) end
+        return
+    end
     for _, entry in pairs(visible) do
         updateMarker(entry)
         local record = entry.identity and GL.Get(entry.identity)
@@ -482,7 +487,7 @@ function D.OnEvent(_, event, unit)
         if unit then removeUnit(unit) end
     elseif event == "PLAYER_TARGET_CHANGED" then observe("target", true)
     elseif event == "UPDATE_MOUSEOVER_UNIT" then observe("mouseover", true)
-    elseif event == "PLAYER_ENTERING_WORLD" then
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         for token in pairs(visible) do removeUnit(token) end
         guildBursts = {}
         if toast then toast:Hide() end
@@ -503,7 +508,7 @@ eventFrame:SetScript("OnUpdate", function(_, delta)
     if toast and toast:IsShown() and GL.Now() >= toast.expires then toast:Hide() end
 end)
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
-    "UPDATE_MOUSEOVER_UNIT", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
+    "UPDATE_MOUSEOVER_UNIT", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
     GL.Safe(eventFrame.RegisterEvent, eventFrame, event)
 end
 GL.On("READY", function()
