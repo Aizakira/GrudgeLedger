@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.5
+GRUDGE LEDGER — 0.5.6
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -7,6 +7,18 @@ Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Wort
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
+
+Correctif 0.5.6 : arrêts du test druide expliqués
+
+Le témoin peut être un joueur inconnu : aucune entrée dans le livre n'est requise
+ni créée par le test. Zéro correspondance connue ne signifie pas zéro lecture.
+Le rapport distingue cible absente, PNJ/familier, soi-même et identité illisible
+ou incomplète. Une erreur de géométrie précise maintenant la propriété, la valeur
+reçue et la valeur attendue. La version de l'addon figure dans chaque rapport.
+La comparaison des dimensions tolère les petits arrondis (0,1 unité d'interface),
+comme la position. Un changement réel de la minimap arrête toujours l'essai.
+Un /reload suffit. 100 cas simulés du détecteur vérifiés ; la disponibilité des
+noms sur la minimap du client réel reste à démontrer.
 
 Correctif 0.5.5 : préparation de la minimap depuis le diagnostic
 

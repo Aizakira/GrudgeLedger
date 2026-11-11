@@ -46,6 +46,22 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.5.6: distinguish druid test failures
+
+The report now distinguishes a missing target, an NPC/pet, self-targeting and
+an unreadable or incomplete player identity. Geometry failures identify the
+property and its measured/expected values, instead of combining seven checks
+into one generic error. Size checks allow the same 0.1 UI-unit rounding tolerance
+as position checks; meaningful changes still stop the test. Reports include the
+addon version as well as the client build.
+
+**The witness does not need to be in the journal.** A successful reading can have
+zero known matches. Missing knowledge does not explain a test that stops before
+reading any points, and the test never adds the witness to the journal.
+
+Use `/reload` for this update. The test procedure below is unchanged; automated
+checks verify the protocol, not whether the native client supplies player names.
+
 ## 0.5.5: prepare the druid experiment from the diagnostic window
 
 The experiment called `Minimap:GetMaskTexture()`, which Forever does not expose.
@@ -126,7 +142,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 ## Install
 
-1. Download **`GrudgeLedger-0.5.5.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download **`GrudgeLedger-0.5.6.zip`** from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -183,7 +199,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.5.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.6.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

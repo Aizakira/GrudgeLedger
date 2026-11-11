@@ -39,14 +39,14 @@ local function run(mode, expected, options)
     map.IsVisible = function() return not flags.hidden end
     map.IsProtected = function() return flags.protected or false end
     map.GetEffectiveScale = function() return flags.scale or scale end
-    map.GetWidth = function() return flags.width or width end
-    map.GetHeight = function() return height end
+    map.GetWidth = function() return flags.width or width + (#anchors == 1 and (options.sizeRounding or 0) or 0) end
+    map.GetHeight = function() return flags.height or height + (#anchors == 1 and (options.sizeRounding or 0) or 0) end
     map.GetZoom = function() return flags.zoom or 1 end
     map.GetAlpha = function() return alpha end
     -- Forever's Minimap supports SetMaskTexture, but has no GetMaskTexture.
     map.GetNumPoints = function() return #anchors end
     map.GetPoint = function(_, i) return unpack(anchors[i]) end
-    map.GetCenter = function() return center[1] + (options.rounding or 0), center[2] end
+    map.GetCenter = function() return flags.secretCenter and secret or center[1] + (options.rounding or 0), center[2] + (flags.clampY and 20 or 0) end
     map.IsMouseClickEnabled = function() return clicks end
     map.IsMouseWheelEnabled = function() return wheel end
     map.ClearAllPoints = function() mutation("ClearAllPoints"); anchors = {} end
@@ -78,6 +78,9 @@ local function run(mode, expected, options)
         return { env.WorldFrame }
     end
     env.UnitClass = function() return "Druide", flags.class or "DRUID" end
+    env.UnitExists = function(unit) assert(unit == "target"); return flags.secretTarget and secret or target ~= nil end
+    env.UnitIsPlayer = function(unit) assert(unit == "target"); return not flags.npc end
+    env.UnitIsUnit = function(unit, otherUnit) assert(unit == "target" and otherUnit == "player"); return flags.self or false end
     env.GetShapeshiftFormID = function() return flags.form or 1 end
     env.InCombatLockdown = function() return flags.combat or false end
     env.UnitIsDeadOrGhost = function() return flags.dead or false end
@@ -100,7 +103,7 @@ local function run(mode, expected, options)
     env.SlashCmdList = {}
     local watchdog
     env.C_Timer = { After = function(delay, fn) assert(delay == 12); watchdog = fn end }
-    local GL = { db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
+    local GL = { version = "0.5.6", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
     env.GrudgeLedger = GL
     GL.Clean = function(value, kind)
         if value == secret or kind and type(value) ~= kind then return nil end
@@ -113,7 +116,7 @@ local function run(mode, expected, options)
     end
     GL.Now = function() return 12345 end
     GL.Print = function(s) messages[#messages + 1] = s end
-    GL.Identity = function(unit) assert(unit == "target"); return target end
+    GL.Identity = function(unit) assert(unit == "target"); if not flags.noIdentity then return target end end
     GL.MinimapProbeActive = function() return flags.legacy or false end
     env.C_TooltipInfo = { GetMinimapMouseover = function()
         assert(frame > 0, "no same-frame reads")
@@ -160,7 +163,7 @@ local function run(mode, expected, options)
     end
     if mode == "class" then flags.class = "HUNTER" end
     if mode == "form" then flags.form = 5 end
-    for _, key in ipairs({ "tracking", "combat", "dead", "instance", "moving", "focus", "hidden", "protected", "look", "click", "legacy", "secretCursor", "clamp" }) do
+    for _, key in ipairs({ "tracking", "combat", "dead", "instance", "moving", "focus", "hidden", "protected", "look", "click", "legacy", "secretCursor", "clamp", "clampY", "secretCenter", "npc", "self", "noIdentity", "secretTarget" }) do
         if mode == key then flags[key] = true end
     end
     if mode == "target" then target = nil end
@@ -169,6 +172,7 @@ local function run(mode, expected, options)
     if mode == "missing" then map.SetMaskTexture = nil end
     if mode == "missing-tooltip" then env.C_TooltipInfo = nil end
     if mode == "duplicate" then GL.db.players.other = { fullName = target.fullName, surname = target.surname, score = 0 } end
+    if mode == "unlisted" then GL.db.players = {} end
     if options.prepare then
         if options.prepare == "missing" then env.MinimapCluster.UpdateMinimapConfig = nil end
         if options.prepare == "mismatch" then env.MinimapCluster.MinimapContainer.Minimap = other end
@@ -212,6 +216,8 @@ local function run(mode, expected, options)
             if mode == "late-focus" then flags.focus = true end
             if mode == "zoom" then flags.zoom = 2 end
             if mode == "resize" then flags.width = width + 1 end
+            if mode == "resize-height" then flags.height = height + 1 end
+            if mode == "late-alpha" then alpha = 0.5 end
             if mode == "rescale" then flags.scale = scale + 0.1 end
             if mode == "late-combat" then flags.combat = true end
             if mode == "late-move" then flags.moving = true end
@@ -227,7 +233,19 @@ local function run(mode, expected, options)
     local saved = assert(GL.db.druidRadarTests and GL.db.druidRadarTests[1], mode)
     assert(saved.code == expected, mode .. ": expected " .. expected .. " got " .. saved.code .. " at " .. saved.phase)
     assert(saved.build == "70888" and saved.time == 12345 and saved.points <= 225)
+    assert(saved.version == GL.version and messages[#messages]:find("addon " .. GL.version, 1, true), "identify the installed diagnostic revision")
     assert(saved.seconds >= 0 and saved.seconds <= 12.2, "bounded duration")
+    local failedCheck = ({ clamp = "centre X", clampY = "centre Y", zoom = "zoom", resize = "largeur",
+        ["resize-height"] = "hauteur", rescale = "échelle", ["late-alpha"] = "transparence" })[mode]
+    if failedCheck then
+        assert(saved.check == "minimap : " .. failedCheck and saved.detail:find("Reçu :", 1, true)
+            and saved.detail:find("attendu :", 1, true), "precise measured failure instead of generic map error")
+    end
+    if mode == "secretCenter" then assert(saved.check == "minimap : centre X" and saved.detail == "Valeur reçue illisible.") end
+    if mode == "late-mask" then assert(saved.check == "minimap : masque modifié" and not saved.detail) end
+    if mode == "target" or mode == "npc" or mode == "self" or mode == "surname" or mode == "noIdentity" or mode == "secretTarget" then
+        assert(mutations == 0 and saved.reads == 0 and saved.points == 0, "target preflight stays read-only")
+    end
     if mode == "unknown-mask" or mode == "hook-failure" or mode == "secret-mask" then
         assert(mutations == 0 and saved.reads == 0 and saved.points == 0, "unknown restoration state must never mutate the map")
         assert(saved.check == "sauvegarde : observation de SetMaskTexture", "precise failure stage")
@@ -237,10 +255,10 @@ local function run(mode, expected, options)
         assert(not tostring(v):find("Élodie", 1, true) and not tostring(v):find("private", 1, true))
     end
     for _, text in ipairs(messages) do assert(not text:find("Élodie", 1, true) and not text:find("private", 1, true), "name-free messages") end
-    assert(GL.db.players.person.score == -9, "no relation changes")
+    if mode ~= "unlisted" then assert(GL.db.players.person.score == -9, "no relation changes") end
     local n = 0; for _ in pairs(GL.db.players) do n = n + 1 end
-    assert(n == (mode == "duplicate" and 2 or 1), "no automatic player creation")
-    if expected == "positive" then assert(saved.known == (mode == "duplicate" and 0 or 1) and hits == 2 and saved.texts == 2) end
+    assert(n == (mode == "duplicate" and 2 or mode == "unlisted" and 0 or 1), "no automatic player creation")
+    if expected == "positive" then assert(saved.known == ((mode == "duplicate" or mode == "unlisted") and 0 or 1) and hits == 2 and saved.texts == 2) end
     if not options.restoreFail and not options.silentRestore then
         assert(alpha == 0.73 and mask == (mode == "secret-mask" and secret or initialMask) and clicks and not wheel, mode .. ": all map properties restored")
         assert(#anchors == #original, mode .. ": anchors restored")
@@ -269,13 +287,17 @@ for mode, expected in pairs({ working = "positive", ["tracking-filter"] = "posit
     ["metadata-first"] = "missed", substring = "missed", throws = "api", secret = "api", ["secret-lines"] = "api",
     ["secret-text"] = "api", malformed = "api", class = "class", form = "form", tracking = "tracking", combat = "combat",
     dead = "dead", instance = "instance", moving = "moving", focus = "focus", hidden = "map", protected = "map",
-    look = "mouse", click = "mouse", legacy = "busy", secretCursor = "api", clamp = "map", target = "target", surname = "target",
+    look = "mouse", click = "mouse", legacy = "busy", secretCursor = "api", clamp = "map", clampY = "map", secretCenter = "api",
+    target = "target_missing", surname = "target_name", npc = "target_npc", self = "target_self", noIdentity = "target_identity", secretTarget = "api",
     conflict = "conflict", missing = "api", ["missing-tooltip"] = "api", ["cursor-move"] = "mouse", ["late-secret"] = "api",
     ["unknown-mask"] = "mask", ["hook-failure"] = "api", ["secret-mask"] = "mask", ["observe-later"] = "positive",
-    ["late-focus"] = "focus", zoom = "map", resize = "map", rescale = "map", ["late-combat"] = "combat",
+    ["late-focus"] = "focus", zoom = "map", resize = "map", ["resize-height"] = "map", ["late-alpha"] = "map", rescale = "map", ["late-combat"] = "combat",
     ["late-move"] = "moving", ["late-click"] = "mouse", ["late-mask"] = "map", stop = "stopped" }) do run(mode, expected) end
 for _, scale in ipairs({ 0.5, 1, 1.5 }) do run("working", "positive", { scale = scale, latency = 2, width = 240, height = 180, dotX = 48, dotY = -36, rounding = 0.04 }) end
 run("working", "positive", { mask = 12345 }) -- FileDataID masks survive unchanged.
+-- Native frame extents can differ slightly after repositioning at another origin.
+run("working", "positive", { sizeRounding = 0.00006103515625 })
+run("unlisted", "positive") -- A valid witness does not need a journal entry.
 run("working", "positive", { mask = "Interface\\AddOns\\CustomMap\\SquareMask" })
 run("prepare", "positive", { prepare = "working" })
 run("prepare", "positive", { prepare = "working", mask = 12345 })
