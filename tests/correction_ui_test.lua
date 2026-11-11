@@ -102,4 +102,11 @@ GetBuildInfo = function() return mock.secret, mock.secret, "PRIVATE build date",
 SlashCmdList.GRUDGELEDGER("debug")
 assert(GrudgeLedgerDiagnostic.edit:GetText():find("Interface : indisponible", 1, true))
 assert(#GL.errors == 2, "UI callbacks introduce no errors")
+local scheduled, ran
+C_Timer = { After = function(delay, callback) assert(delay == 3); scheduled = callback end }
+SlashCmdList.GRUDGELEDGERDRUIDRADAR = function(command) assert(command == "test"); ran = true end
+click(button(d, "Test druide"))
+assert(not d:IsShown() and scheduled and not ran, "hide diagnostic and allow pointer repositioning before test")
+scheduled()
+assert(ran, "diagnostic invokes the installed druid test")
 print("PASS correction/diagnostic UI: paginated immutable events, retained cancellations and manual opinions, empty states, selected safe allowlisted report.")
