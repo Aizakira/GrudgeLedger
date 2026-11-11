@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.2.3", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.2.4", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -118,6 +118,17 @@ function GL.Get(identity)
 end
 
 local function merge(provisional, record)
+    if type(provisional.friendPresence) == "table" then
+        record.friendPresence = type(record.friendPresence) == "table" and record.friendPresence or {}
+        for character, seen in pairs(provisional.friendPresence) do
+            if type(character) == "string" and type(seen) == "number" and seen >= 0 and seen < math.huge then
+                local previous = record.friendPresence[character]
+                if type(previous) ~= "number" or not (previous >= seen and previous < math.huge) then
+                    record.friendPresence[character] = seen
+                end
+            end
+        end
+    end
     for _, note in ipairs(provisional.notes or {}) do table.insert(record.notes, note) end
     for _, event in ipairs(provisional.history or {}) do table.insert(record.history, event) end
     for _, field in ipairs({ "kills", "deaths", "probableKills", "probableDeaths", "aggressions", "probableAggressions" }) do

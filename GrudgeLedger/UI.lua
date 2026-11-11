@@ -450,7 +450,7 @@ local function showSettings()
             self.plateStatus:SetText("Alliés : " .. status("nameplateShowFriendlyPlayers") .. " • Ennemis : " .. status("nameplateShowEnemies"))
         end
         button(f, "Activer le repérage (icônes + couleurs)", 20, -393, 405, enableRecognition)
-        label(f, "Les alertes pour une même personne sont espacées de 3 minutes par défaut.", nil, 20, -434, 405)
+        label(f, "Amis : après plus de 10 min d'absence, jamais dans votre groupe. Rancunes : délai de 3 min par défaut.", nil, 20, -434, 405)
         button(f, "Diagnostic", 20, -480, 405, showDiagnostic)
     end
     for key, check in pairs(settingsWindow.checks) do check:SetChecked(GL.Settings()[key]) end

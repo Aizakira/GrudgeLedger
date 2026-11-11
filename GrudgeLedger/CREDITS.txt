@@ -1,4 +1,4 @@
-Grudge Ledger — 0.2.3
+Grudge Ledger — 0.2.4
 Distributed under the GNU General Public License, version 3 (see LICENSE).
 
 Menu integration and nameplate/tooltip lifecycle techniques are adapted from
@@ -18,6 +18,10 @@ using OpenAI's built-in image generation tool. Its borderless book variant
 Both were converted to uncompressed 256x256 RGBA TGA textures and are included
 under the same GPLv3 distribution terms. The minimap's frame uses native client
 textures and the standard LibDBIcon button dimensions, with no library dependency.
+The relationship markers (Media/RelationFriend.tga, RelationWarning.tga and
+RelationEnemy.tga) were generated and edited using the same OpenAI tool: a green
+heart, an orange watchful eye and a red broken heart. They are included as
+uncompressed 128x128 RGBA TGA textures under the same GPLv3 terms.
 Other icons and sounds are referenced from the player's installed World of
 Warcraft client. No Blizzard media files are redistributed in this package.
 World of Warcraft is a trademark of Blizzard Entertainment.

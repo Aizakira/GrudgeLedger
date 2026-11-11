@@ -6,9 +6,9 @@ local D = {}
 GL.Display = D
 
 local styles = {
-    friend = { label = "Ami", priority = 1, color = { 0.25, 1, 0.45 }, icon = "Interface\\Icons\\INV_Shield_04" },
-    warning = { label = "Agression", priority = 2, color = { 1, 0.6, 0.1 }, icon = "Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew" },
-    enemy = { label = "Ennemi", priority = 3, color = { 1, 0.25, 0.2 }, icon = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull" },
+    friend = { label = "Ami", priority = 1, color = { 0.25, 1, 0.45 }, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationFriend" },
+    warning = { label = "Agression", priority = 2, color = { 1, 0.6, 0.1 }, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationWarning" },
+    enemy = { label = "Ennemi", priority = 3, color = { 1, 0.25, 0.2 }, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationEnemy" },
 }
 local visible, markers, lastAlert, pendingNames = {}, {}, {}, {}
 local guildBursts = {}
@@ -16,6 +16,32 @@ local toast, elapsed = nil, 0
 local alert
 local lastSound
 local function alertSetting(relation) return relation == "friend" and "friendAlerts" or "enemyAlerts" end
+
+local function isGroupmate(record, unit)
+    if unit and (GL.Safe(UnitInParty, unit) == true or type(GL.Safe(UnitInRaid, unit)) == "number") then return true end
+    if not record.guid then return false end
+    local count = GL.Clean(GL.Safe(GetNumGroupMembers), "number") or 0
+    local raid = GL.Safe(IsInRaid) == true
+    -- Only a live roster proves membership; group-history tracking may be off.
+    for i = 1, count > 0 and (raid and math.min(count, 40) or 4) or 0 do
+        if GL.Safe(UnitGUID, (raid and "raid" or "party") .. i) == record.guid then return true end
+    end
+    return false
+end
+
+local function newFriendEncounter(record, unit)
+    if not unit or (not unit:match("^nameplate%d+$") and GL.Safe(UnitIsVisible, unit) ~= true) then return false end
+    local me = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    if not me then return false end
+    record.friendPresence = type(record.friendPresence) == "table" and record.friendPresence or {}
+    local previous = GL.Clean(record.friendPresence[me], "number")
+    if previous and not (previous >= 0 and previous < math.huge) then previous = nil end
+    local now = GL.Now()
+    record.friendPresence[me] = now
+    -- Sliding absence, not time since the last popup. A 600-second gap is still
+    -- the same encounter; UI reloads and other characters keep separate clocks.
+    return not previous or now - previous > 600
+end
 
 local function guildLabel(record, relation)
     if not record.guild then return nil end
@@ -57,7 +83,8 @@ local function validateToast()
     local record = GL.Get(toast.key)
     if not record or GL.Relation(record) ~= toast.relation or GL.RelationSource(record) ~= toast.source
         or inheritedGuildKey(record) ~= toast.guildKey
-        or GL.Now() >= toast.expires or not GL.Settings()[alertSetting(toast.relation)] then toast:Hide()
+        or GL.Now() >= toast.expires or not GL.Settings()[alertSetting(toast.relation)]
+        or (toast.relation == "friend" and isGroupmate(record)) then toast:Hide()
     else refreshToastText(toast, record) end
 end
 
@@ -137,7 +164,7 @@ local function updateMarker(entry)
         if previous and previous.owner == entry then hideMarker(previous) end
         entry.plate = plate
     end
-    if not plate then return end
+    if not plate then entry.identity = nil; return end
     local marker = markers[plate]
     local identity = GL.Identity(entry.unit)
     entry.identity = identity
@@ -146,8 +173,8 @@ local function updateMarker(entry)
     local record = identity and GL.RecordSeen(identity)
     local relation = record and GL.Relation(record)
     local guildKey = record and inheritedGuildKey(record)
-    if record and (entry.recordKey ~= record.key or entry.relation ~= relation or entry.guildKey ~= guildKey) and alert then
-        alert(identity)
+    if record and (relation == "friend" or entry.recordKey ~= record.key or entry.relation ~= relation or entry.guildKey ~= guildKey) and alert then
+        alert(identity, entry.unit)
     end
     entry.recordKey, entry.relation, entry.guildKey = record and record.key, relation, guildKey
     local style = relation and styles[relation]
@@ -173,7 +200,7 @@ local function updateMarker(entry)
     if font then marker.frame:SetPoint("RIGHT", font, "LEFT", -5, 0)
     else marker.frame:SetPoint("BOTTOM", plate, "TOP", 0, 5) end
     marker.icon:SetTexture(style.icon)
-    marker.icon:SetVertexColor(unpack(style.color))
+    marker.icon:SetVertexColor(1, 1, 1)
     if GL.RelationConfidence(record) == "probable" then marker.probable:Show() else marker.probable:Hide() end
     marker.frame:Show()
     if GL.Settings().nameColor and font and canChange(font) then
@@ -262,11 +289,15 @@ local function makeToast()
     return frame
 end
 
-alert = function(identity)
+alert = function(identity, unit)
     if not GL.db or not identity then return end
     local record = GL.Get(identity)
     if not record then return end
     local relation = GL.Relation(record)
+    if relation == "friend" then
+        local fresh = newFriendEncounter(record, unit)
+        if not fresh or isGroupmate(record, unit) then return end
+    end
     local style = styles[relation]
     local settings = GL.Settings()
     if not style or not settings[alertSetting(relation)] then return end
@@ -277,7 +308,7 @@ alert = function(identity)
     local groupGuild = source == "guild" and (pvp.deaths or 0) + (pvp.probableDeaths or 0)
         + (pvp.aggressions or 0) + (pvp.probableAggressions or 0) == 0
     local key = record.key .. ":" .. relation .. ":" .. source .. ":" .. (guildKey or "") .. (groupGuild and ":group" or "")
-    if lastAlert[key] and now - lastAlert[key] < (settings.alertCooldown or 180) then return end
+    if relation ~= "friend" and lastAlert[key] and now - lastAlert[key] < (settings.alertCooldown or 180) then return end
     validateToast()
     -- Guild crowds must not displace an equally serious personal/PvP warning.
     if toast and toast:IsShown() and (styles[toast.relation].priority > style.priority
@@ -308,7 +339,7 @@ alert = function(identity)
     frame.guildKey, frame.guildBurst = guildKey, burst
     frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
     frame.icon:SetTexture(style.icon)
-    frame.icon:SetVertexColor(unpack(style.color))
+    frame.icon:SetVertexColor(1, 1, 1)
     frame.stripe:SetColorTexture(style.color[1], style.color[2], style.color[3], 1)
     frame.title:SetTextColor(unpack(style.color))
     refreshToastText(frame, record)
@@ -327,10 +358,11 @@ end
 local function observe(unit, notify)
     unit = GL.Clean(unit, "string")
     if not unit or not GL.db then return end
+    if not notify and GL.Safe(UnitIsVisible, unit) ~= true then return end
     local identity = GL.Identity(unit)
     if identity then
-        GL.RecordSeen(identity)
-        if notify then alert(identity) end
+        local record = GL.RecordSeen(identity)
+        if notify or (record and GL.Relation(record) == "friend") then alert(identity, unit) end
     end
     return identity
 end
@@ -375,8 +407,15 @@ function D.Refresh(changedRecord)
         updateMarker(entry)
         local record = entry.identity and GL.Get(entry.identity)
         if type(changedRecord) == "table" and record and record.key == changedRecord.key then
-            alert(entry.identity)
+            alert(entry.identity, entry.unit)
         end
+    end
+    observe("target", false)
+    observe("mouseover", false)
+    local count = GL.Clean(GL.Safe(GetNumGroupMembers), "number") or 0
+    local raid = GL.Safe(IsInRaid) == true
+    for i = 1, count > 0 and (raid and math.min(count, 40) or 4) or 0 do
+        observe((raid and "raid" or "party") .. i, false)
     end
     validateToast()
 end
@@ -387,6 +426,7 @@ function D.Tooltip(tooltip)
     unit = GL.Clean(unit, "string")
     local identity = unit and GL.Identity(unit)
     local record = identity and GL.RecordSeen(identity)
+    if record and GL.Relation(record) == "friend" then alert(identity, unit) end
     if not record or tooltip._grudgeLedgerKey == record.key then return end
     tooltip._grudgeLedgerKey = record.key
     local relation = GL.Relation(record)
@@ -438,7 +478,7 @@ function D.OnEvent(_, event, unit)
         guildBursts = {}
         if toast then toast:Hide() end
         scanPlates()
-    elseif event == "PLAYER_REGEN_ENABLED" then D.Refresh()
+    elseif event == "PLAYER_REGEN_ENABLED" or event == "GROUP_ROSTER_UPDATE" then D.Refresh()
     end
 end
 
@@ -454,7 +494,7 @@ eventFrame:SetScript("OnUpdate", function(_, delta)
     if toast and toast:IsShown() and GL.Now() >= toast.expires then toast:Hide() end
 end)
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
-    "UPDATE_MOUSEOVER_UNIT", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }) do
+    "UPDATE_MOUSEOVER_UNIT", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
     GL.Safe(eventFrame.RegisterEvent, eventFrame, event)
 end
 GL.On("READY", function()

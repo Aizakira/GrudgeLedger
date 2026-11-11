@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.2.3
+GRUDGE LEDGER — 0.2.4
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -16,15 +16,15 @@ Le bouton livre de la minimap ouvre le journal. La recherche est facultative.
 Le bouton livre se place sur le bord de la minimap, en tenant compte de sa
 taille. Le faire glisser permet de choisir son emplacement ; clic droit ouvre
 les réglages. Après cette mise à jour graphique, redémarrer le jeu pour charger
-aussi la nouvelle texture du livre.
+aussi les nouvelles textures des icônes.
 La fiche réunit les notes, les groupes partagés, les agressions et les morts PvP.
 « Corriger le PvP » permet d'annuler un événement attribué à tort. Ses effets
 disparaissent des compteurs et du classement automatique ; il reste marqué
 « annulé » dans l'historique. Les notes et les choix personnels sont conservés.
 
 MARQUEURS ET ALERTES
-Vert avec un bouclier : ami. Orange avec un avertissement : méfiance/agression.
-Rouge avec un crâne : ennemi/rancune forte, notamment après une mort PvP.
+Cœur vert : ami. Œil orange : méfiance/agression.
+Cœur brisé rouge : ennemi/rancune forte, notamment après une mort PvP.
 Un petit « ? » accompagne les marqueurs fondés uniquement sur une déduction
 PvP. Une mort probable reste signalée comme telle, même si une agression était
 confirmée. Le « ? » disparaît après correction ou confirmation pertinente.
@@ -37,7 +37,13 @@ modifiables par l'addon. Portée et visibilité dépendent
 du jeu : ce n'est pas un radar de toute la zone ni un détecteur de furtivité.
 La coloration supplémentaire des noms est facultative, désactivée au départ.
 Les alertes de proximité affichent le joueur et un souvenir, avec des sons
-distincts. Les répétitions sont espacées et les sons limités pour éviter le bruit.
+distincts. Les amis du groupe ou du raid ne déclenchent pas d'alerte.
+Pour les autres amis : première rencontre, puis plus de dix minutes sans présence
+observée avant une nouvelle alerte. Chaque recroisement repousse ce délai ; rester
+ensemble ne relance jamais le popup. Le compteur est conservé après /reload et
+séparé pour chacun de vos personnages. Une cible hors de portée ou une simple
+présence distante dans le groupe ne compte pas comme une rencontre.
+Les rancunes conservent un délai de trois minutes par défaut, les sons sont limités.
 Elles apparaissent au-dessus du chat principal, avec une marge pour ses onglets
 et les petits panneaux. Elles suivent sa position sans disparaître s'il est masqué.
 Les membres d'une même guilde aperçus dans les six secondes sont regroupés
@@ -104,6 +110,13 @@ Le diagnostic se copie avec Ctrl+C. Il contient les versions, les disponibilité
 d'API, les réglages techniques autorisés et le nombre d'erreurs conservées.
 Il n'inclut pas les noms, guildes, notes, GUID, historiques ou erreurs brutes.
 Rien n'est envoyé automatiquement.
+
+RENCONTRES ET ICÔNES 0.2.4
+Les alertes amicales suivent désormais le temps sans présence observée, au lieu
+du temps écoulé depuis le dernier popup. Aucun rappel pour un ami dans le groupe
+ou le raid. Les nouveaux symboles cœur vert, œil orange et cœur brisé rouge
+remplacent le bouclier, l'avertissement et le crâne. Redémarrer WoW pour charger
+les nouvelles textures.
 
 REPÉRAGE DES JOUEURS ALLIÉS 0.2.3
 Le bouton utilise désormais le réglage des joueurs alliés de Forever, au lieu

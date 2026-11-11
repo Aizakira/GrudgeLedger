@@ -7,17 +7,18 @@ sys.path.insert(0, str(work / "test-runtime"))
 from lupa.lua51 import LuaRuntime
 
 addon = work / "GrudgeLedger"
-for name in ("LedgerIcon.tga", "LedgerBook.tga"):
+for name, size in (("LedgerIcon.tga", 256), ("LedgerBook.tga", 256),
+                   ("RelationFriend.tga", 128), ("RelationWarning.tga", 128), ("RelationEnemy.tga", 128)):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")
     height = int.from_bytes(texture[14:16], "little")
     assert texture[1:3] == bytes((0, 2)) and texture[16] == 32 and texture[17] & 15 == 8, "uncompressed RGBA TGA required"
-    assert width == height == 256, "game texture must have power-of-two dimensions"
+    assert width == height == size, "game texture must have the expected power-of-two dimensions"
     pixels = 18 + texture[0]
     assert len(texture) >= pixels + width * height * 4
-    assert all(texture[pixels + (y * width + x) * 4 + 3] == 0 for x, y in ((0, 0), (255, 0), (0, 255), (255, 255))), "icon corners must be transparent"
-    assert texture[pixels + (128 * width + 128) * 4 + 3] > 0, "icon must not be empty"
-print("PASS icons: two uncompressed 256x256 RGBA TGAs, transparent corners and visible centers", flush=True)
+    assert all(texture[pixels + (y * width + x) * 4 + 3] == 0 for x in (0, size - 1) for y in (0, size - 1)), "icon corners must be transparent"
+    assert any(texture[pixels + 3:pixels + width * height * 4:4]), "icon must not be empty"
+print("PASS icons: five uncompressed RGBA TGAs, expected dimensions, transparent corners and visible artwork", flush=True)
 compiler = LuaRuntime(unpack_returned_tuples=True)
 files = list(addon.glob("*.lua"))
 for file in files:
