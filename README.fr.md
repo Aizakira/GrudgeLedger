@@ -48,7 +48,13 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
-## 0.5.8 : valider un balayage complet et mesurer son coût
+## 0.5.9 : valider le balayage et distinguer les vrais changements de zoom
+
+Une notification de zoom ne suffit plus à interrompre l'essai. La mise à jour
+suivante vérifie le zoom et la portée réels ; un changement indique les valeurs
+mesurées. Si la portée initiale était illisible, la notification arrête toujours
+l'essai avec une explication précise. Le rapport compte ces notifications.
+Ce correctif traite un arrêt prématuré ; la détection fiable en jeu reste à valider.
 
 Un essai réel en 0.5.7 sur le client 70888 a relu deux fois le joueur témoin sans
 survol manuel, avec des contrôles vides réussis : 69 positions, 53 lectures et
@@ -69,7 +75,7 @@ durée, travail synchrone cumulé et appel le plus coûteux, si le chronomètre 
 est disponible. Ces mesures **excluent le rendu natif entre les appels** ; ce n'est
 pas un bilan complet des FPS ou de la mémoire. La grille espacée peut manquer des points.
 
-135 cas simulés vérifient protocole, interruptions/restauration, défaillances du
+144 cas simulés vérifient protocole, interruptions/restauration, défaillances du
 chronomètre et limites : au plus 229 lectures natives, une par image rendue,
 12 secondes et dix rapports sans noms. Aucun balayage ne tourne au repos.
 Avant un mode automatique facultatif, il faut vérifier en jeu les identités,
@@ -166,7 +172,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger **`GrudgeLedger-0.5.8.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger le paquet de l'addon **`GrudgeLedger-<version>.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -254,7 +260,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.8.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.9.zip GrudgeLedger
 ```
 
 ## Licence et crédits

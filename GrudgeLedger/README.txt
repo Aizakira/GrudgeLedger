@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.8
+GRUDGE LEDGER — 0.5.9
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -8,7 +8,13 @@ Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
 
-0.5.8 : validation complète du détecteur druide
+0.5.9 : validation complète et notifications de zoom
+
+Une notification de zoom ne suffit plus à interrompre l'essai : le zoom et la
+portée réels sont vérifiés à la mise à jour suivante. Un changement indique les
+valeurs reçues et attendues ; une portée initiale illisible impose encore l'arrêt
+sur notification, avec un motif précis. Le rapport compte ces notifications.
+La détection fiable en jeu reste à valider.
 
 Un essai réel 0.5.7 sur le client 70888 a relu deux fois un joueur témoin,
 sans survol manuel, avec des contrôles vides réussis : 69 positions, 53 lectures,
@@ -29,7 +35,7 @@ si le chronomètre natif est disponible. Le rendu natif entre appels n'est pas
 mesuré : il faut aussi comparer FPS et mémoire en jeu sur plusieurs machines.
 La grille espacée peut manquer des points ; un résultat vide ne garantit pas la sécurité.
 
-135 cas simulés vérifient protocole, interruptions, restauration et limites :
+144 cas simulés vérifient protocole, interruptions, restauration et limites :
 229 lectures natives maximum, au plus une par image rendue, 12 secondes,
 dix rapports sans noms. Aucun balayage ne tourne au repos. Avant toute activation
 automatique facultative, il reste à vérifier les identités, les configurations

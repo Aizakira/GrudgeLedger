@@ -25,6 +25,7 @@ local reasons = {
     map_focus = "Un élément attaché à la minimap masque un point de contrôle : résultat non validé.",
     obstructed = "Témoin non retrouvé et certains points masqués par des éléments de la minimap : balayage incomplet.",
     map = "Minimap masquée, protégée ou modifiée pendant l'essai.",
+    zoom_unknown = "Notification de zoom reçue, mais portée illisible : essai arrêté par précaution.",
     conflict = "Un autre scanner est chargé : désactive-le pour isoler l'essai.",
     busy = "Un autre test est déjà en cours.", timeout = "Temps limite atteint : résultat incomplet.",
     cache = "Le témoin persiste sur un point vide : cache possible, résultat non validé.",
@@ -146,6 +147,9 @@ local function report(entry)
         text = text .. (entry.workMs and string.format("\nTravail mesuré : %.2f ms cumulées ; pic %.2f ms par appel. Hors rendu natif entre les appels.", entry.workMs, entry.peakMs)
             or "\nMesure du coût indisponible sur cet essai.")
     end
+    if (entry.zoomEvents or 0) > 0 then
+        text = text .. string.format("\nNotifications de zoom reçues : %d.", entry.zoomEvents)
+    end
     return text
 end
 function GL.DruidRadarReport()
@@ -195,7 +199,7 @@ local function finish(code)
     measureEnd(state)
     local entry = { code = code, phase = state.phase, check = check, build = build(), version = GL.version, time = GL.Now(), detail = state.detail,
         points = state.points, reads = state.reads, texts = texts, known = known, skipped = state.skipped,
-        seconds = math.max(0, now - state.started), mode = state.mode, samples = state.samples,
+        seconds = math.max(0, now - state.started), mode = state.mode, samples = state.samples, zoomEvents = state.zoomEvents,
         workMs = not state.timingUnavailable and state.workMs or nil,
         peakMs = not state.timingUnavailable and state.peakMs or nil }
     if GL.db then
@@ -309,6 +313,13 @@ local function tick(state)
         check = "minimap : masque modifié"
         if maskAsset ~= BLANK then reject("map") end
         expectNumber(state, "zoom", call(Minimap.GetZoom, Minimap), state.zoom)
+        if state.zoomEvents > 0 and not state.viewRadius then
+            check = "notification MINIMAP_UPDATE_ZOOM"
+            reject("zoom_unknown")
+        end
+        if state.viewRadius then
+            expectNumber(state, "portée", call(C_Minimap.GetViewRadius), state.viewRadius)
+        end
         expectNumber(state, "largeur", call(Minimap.GetWidth, Minimap), state.width, 0.1)
         expectNumber(state, "hauteur", call(Minimap.GetHeight, Minimap), state.height, 0.1)
         -- Repositioning also moves attached buttons beneath the stationary cursor.
@@ -353,7 +364,7 @@ local function start(mode)
     if running or (GL.MinimapProbeActive and GL.MinimapProbeActive()) then GL.Print(reasons.busy) return end
     if restorationFailed then GL.Print(reasons.restored) return end
     local state = { names = {}, known = {}, grid = {}, points = 0, reads = 0, skipped = 0, samples = 0,
-        mode = mode, workMs = 0, peakMs = 0, phase = "préparation",
+        mode = mode, workMs = 0, peakMs = 0, zoomEvents = 0, phase = "préparation",
         started = number(GL.Safe(GetTime)) or 0 }
     measureStart(state)
     local ok, err = pcall(function()
@@ -382,6 +393,8 @@ local function start(mode)
         if state.scale <= 0 or state.width < 40 or state.height < 40 or state.width > 600 or state.height > 600 then reject("map") end
         check = "sauvegarde : zoom et transparence minimap"
         state.zoom, state.alpha = numeric(Minimap.GetZoom, Minimap), numeric(Minimap.GetAlpha, Minimap)
+        state.viewRadius = number(GL.Safe(C_Minimap.GetViewRadius))
+        if state.viewRadius and state.viewRadius <= 0 then state.viewRadius = nil end
         check = "sauvegarde : observation de SetMaskTexture"
         if not maskHooked or Minimap ~= observedMap then reject("api") end
         state.mask = maskAsset
@@ -450,6 +463,12 @@ end
 for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_STARTED_MOVING", "PLAYER_LEAVING_WORLD", "PLAYER_LOGOUT", "PLAYER_DEAD", "UPDATE_SHAPESHIFT_FORM", "MINIMAP_UPDATE_TRACKING", "MINIMAP_UPDATE_ZOOM" }) do driver:RegisterEvent(event) end
 driver:SetScript("OnEvent", function(_, event)
     if not running then return end
+    if event == "MINIMAP_UPDATE_ZOOM" then
+        -- A notification alone does not prove the map changed. Check zoom and
+        -- radius next tick, avoiding reentrant restoration inside a map setter.
+        running.zoomEvents = running.zoomEvents + 1
+        return
+    end
     finish(({ PLAYER_REGEN_DISABLED = "combat", PLAYER_STARTED_MOVING = "moving", PLAYER_DEAD = "dead",
-        UPDATE_SHAPESHIFT_FORM = "form", MINIMAP_UPDATE_TRACKING = "tracking", MINIMAP_UPDATE_ZOOM = "map" })[event] or "world")
+        UPDATE_SHAPESHIFT_FORM = "form", MINIMAP_UPDATE_TRACKING = "tracking" })[event] or "world")
 end)

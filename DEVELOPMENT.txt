@@ -1,4 +1,4 @@
-Grudge Ledger 0.5.8 — sources et tests
+Grudge Ledger 0.5.9 — sources et tests
 
 Le dossier GrudgeLedger est le seul dossier à installer dans Interface/AddOns.
 Les tests utilisent Lua 5.1 via Lupa, sans lancer WoW.
@@ -36,7 +36,7 @@ Les tests ne prétendent pas simuler le moteur natif : ils modélisent les noms
 à partir de la géométrie carte/curseur, avec une latence de rendu de 1/2 images.
 Une réussite locale valide le protocole, pas la disponibilité du moteur WoW.
 
-20 scripts de tests, dont 135 cas du détecteur druide : API absentes/protégées,
+20 scripts de tests, dont 144 cas du détecteur druide : API absentes/protégées,
 cache trompeur, correspondance exacte et ambiguïtés, propriétaire d'un familier,
 relecture absente, échelles et dimensions différentes, timeout, interruptions,
 erreur à chaque mutation et restauration (y compris un setter sans effet),
@@ -71,6 +71,19 @@ contrôles vides réussis. 69 positions, 53 lectures, 12 textes distincts,
 0 correspondance connue, 20 positions masquées, 2,1 secondes. Ce résultat
 valide un témoin immobile dans cette configuration, pas 12 joueurs ni une
 couverture complète. Aucun nom ni capture personnelle n'est publié ici.
+
+Correctif 0.5.9 : notifications de zoom
+--------------------------------------
+Le handler MINIMAP_UPDATE_ZOOM arrêtait systématiquement l'essai avec le motif
+générique « map » et le dernier contrôle effectué. Il compte désormais l'événement
+et laisse le tick vérifier zoom, géométrie et C_Minimap.GetViewRadius. La portée
+est aussi contrôlée sans notification, lorsqu'elle était lisible au départ.
+Une portée initiale absente/protégée conserve l'arrêt sur notification avec le
+motif zoom_unknown. Aucun contournement d'API ; aucune restauration réentrante
+depuis SetPoint. Les tests couvrent notification sans changement, notification
+à chaque positionnement, vrai changement de zoom/portée et portée illisible.
+Les anciennes captures ne mesuraient pas la portée : elles ne prouvent donc pas
+que les notifications étaient superflues. Le prochain essai doit le déterminer.
 
 Validation 0.5.8 et critères avant automatisation
 -----------------------------------------------

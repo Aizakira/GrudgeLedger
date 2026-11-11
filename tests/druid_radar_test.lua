@@ -62,6 +62,7 @@ local function run(mode, expected, options)
         anchors[#anchors + 1] = { p, relative, rp, x, y }
         center = { x + (flags.clamp and 20 or 0), y }
         pending = { x, y, due = frame + (options.latency or 1) }
+        if options.zoomOnPlace and scripts.OnEvent then scripts.OnEvent(nil, "MINIMAP_UPDATE_ZOOM") end
     end
     map.SetAlpha = function(_, value) mutation("SetAlpha"); if not (options.silentRestore and flags.restoring) then alpha = value end end
     map.SetMaskTexture = function(_, value) mutation("SetMaskTexture"); mask = value end
@@ -129,11 +130,14 @@ local function run(mode, expected, options)
     end
     env.GetBuildInfo = function() return "1.60.1", "70888" end
     env.C_Minimap = {
+        GetViewRadius = function() return flags.secretRadius and secret or flags.radius or 100 end,
         GetNumTrackingTypes = function() return 2 end,
         GetTrackingInfo = function(i) return { spellID = mode ~= "tracking-filter" and (i == 1 and 19883 or 5225) or nil, active = not flags.tracking } end,
         GetTrackingFilter = function(i) return i == 1 and 19883 or 5225, nil end,
         SetTracking = function() error("test must never change tracking") end,
     }
+    if options.radiusAPI == "missing" then env.C_Minimap.GetViewRadius = nil end
+    if options.radiusAPI == "secret" then flags.secretRadius = true end
     env.CreateFrame = function() return {
         RegisterEvent = function(_, event) events[event] = true end,
         SetScript = function(_, name, fn) scripts[name] = fn end,
@@ -141,7 +145,7 @@ local function run(mode, expected, options)
     env.SlashCmdList = {}
     local watchdog
     env.C_Timer = { After = function(delay, fn) assert(delay == 12); watchdog = fn end }
-    local GL = { version = "0.5.8", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
+    local GL = { version = "0.5.9", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
     env.GrudgeLedger = GL
     GL.Clean = function(value, kind)
         if value == secret or kind and type(value) ~= kind then return nil end
@@ -258,6 +262,8 @@ local function run(mode, expected, options)
             if mode == "late-secret" then flags.secretCursor = true end
             if mode == "late-focus" then flags.focus = true end
             if mode == "zoom" then flags.zoom = 2 end
+            if mode == "radius" then flags.radius = 80 end
+            if mode == "late-radius-secret" then flags.secretRadius = true end
             if mode == "resize" then flags.width = width + 1 end
             if mode == "resize-height" then flags.height = height + 1 end
             if mode == "late-alpha" then alpha = 0.5 end
@@ -299,13 +305,17 @@ local function run(mode, expected, options)
         if options.child == "all" then assert(saved.skipped == 225 and saved.reads == 1 and saved.texts == 0, "a fully obscured scan is inconclusive") end
     end
     local failedCheck = ({ clamp = "centre X", clampY = "centre Y", zoom = "zoom", resize = "largeur",
-        ["resize-height"] = "hauteur", rescale = "échelle", ["late-alpha"] = "transparence" })[mode]
+        radius = "portée", ["resize-height"] = "hauteur", rescale = "échelle", ["late-alpha"] = "transparence" })[mode]
     if failedCheck then
         assert(saved.check == "minimap : " .. failedCheck and saved.detail:find("Reçu :", 1, true)
             and saved.detail:find("attendu :", 1, true), "precise measured failure instead of generic map error")
     end
     if mode == "secretCenter" then assert(saved.check == "minimap : centre X" and saved.detail == "Valeur reçue illisible.") end
     if mode == "late-mask" then assert(saved.check == "minimap : masque modifié" and not saved.detail) end
+    if options.event == "MINIMAP_UPDATE_ZOOM" or options.zoomOnPlace then
+        assert(saved.zoomEvents > 0 and messages[#messages]:find("Notifications de zoom", 1, true))
+    end
+    if expected == "zoom_unknown" then assert(saved.check == "notification MINIMAP_UPDATE_ZOOM") end
     if mode == "target" or mode == "npc" or mode == "self" or mode == "surname" or mode == "noIdentity" or mode == "secretTarget" then
         assert(mutations == 0 and saved.reads == 0 and saved.points == 0, "target preflight stays read-only")
     end
@@ -405,7 +415,19 @@ end
 run("silent-restore-failure", "restored", { silentRestore = true })
 for event, expected in pairs({ PLAYER_REGEN_DISABLED = "combat", PLAYER_STARTED_MOVING = "moving", PLAYER_DEAD = "dead",
     PLAYER_LEAVING_WORLD = "world", PLAYER_LOGOUT = "world", UPDATE_SHAPESHIFT_FORM = "form",
-    MINIMAP_UPDATE_TRACKING = "tracking", MINIMAP_UPDATE_ZOOM = "map" }) do run("event", expected, { event = event }) end
+    MINIMAP_UPDATE_TRACKING = "tracking" }) do run("event", expected, { event = event }) end
+-- A zoom notification is not evidence of changed geometry. Validate live values,
+-- including indoor/outdoor view radius changes at the same numeric zoom level.
+run("working", "positive", { event = "MINIMAP_UPDATE_ZOOM", validation = true })
+run("working", "positive", { zoomOnPlace = true, validation = true })
+run("zoom", "map", { event = "MINIMAP_UPDATE_ZOOM" })
+run("radius", "map", { event = "MINIMAP_UPDATE_ZOOM" })
+run("radius", "map")
+run("late-radius-secret", "api", { event = "MINIMAP_UPDATE_ZOOM" })
+for _, api in ipairs({ "missing", "secret" }) do
+    run("working", "positive", { radiusAPI = api })
+    run("event", "zoom_unknown", { event = "MINIMAP_UPDATE_ZOOM", radiusAPI = api })
+end
 for _, method in ipairs({ "ClearAllPoints", "SetPoint", "SetAlpha", "SetMaskTexture", "SetMouseClickEnabled", "EnableMouseWheel" }) do
     run("mutation-failure", "api", { fail = method })
     run("restore-failure", "restored", { restoreFail = method })
