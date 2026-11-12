@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.9
+GRUDGE LEDGER — 0.5.12
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -6,6 +6,16 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.5.12 : calculs et affichage plus légers
+
+Les vérifications périodiques partagent brièvement les informations d'identité ;
+les actions lisent toujours les informations à nouveau. Les icônes stables ne
+sont plus repositionnées et rechargées à chaque passage. Les statistiques de
+guilde sont recalculées après un changement utile, pas à chaque rafraîchissement.
+Le calcul des gestes amicaux ou hostiles relit seulement les nouveaux événements.
+Les historiques et choix personnels sont conservés ; aucune dépendance ajoutée.
+Le détecteur druide reste expérimental, manuel et inchangé dans cette version.
 
 
 0.5.9 : validation complète et notifications de zoom

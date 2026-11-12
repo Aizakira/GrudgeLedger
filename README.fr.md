@@ -48,6 +48,21 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## 0.5.12 : alléger les observations et l'affichage
+
+Les vérifications périodiques partagent les informations d'identité pendant
+moins d'une demi-seconde, avec contrôle du GUID actuel et lecture fraîche pour
+les actions. Les marqueurs stables évitent les réécritures de texture et de
+position. Les statistiques de guilde sont réutilisées jusqu'à un changement
+utile ; le calcul des gestes ne relit que les nouveaux événements de l'historique.
+Les souvenirs et choix personnels sont conservés, sans dépendance ni minuterie
+supplémentaire en arrière-plan.
+
+La [revue d'architecture et le benchmark reproductible](docs/architecture.md)
+détaillent les mesures, les règles des caches et les limites des gros journaux.
+Les tests hors jeu ne démontrent pas un gain de FPS réel. Le travail sur le radar
+druide est mis de côté ; son fonctionnement expérimental manuel reste inchangé.
+
 ## 0.5.11 : retirer les anciennes rancunes de champs de bataille
 
 Au premier chargement, les événements PvP dont le lieu identifie exactement le
@@ -284,7 +299,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.11.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.12.zip GrudgeLedger
 ```
 
 ## Licence et crédits

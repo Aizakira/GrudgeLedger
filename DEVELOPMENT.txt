@@ -1,4 +1,4 @@
-Grudge Ledger 0.5.9 — sources et tests
+Grudge Ledger 0.5.12 — sources et tests
 
 Le dossier GrudgeLedger est le seul dossier à installer dans Interface/AddOns.
 Les tests utilisent Lua 5.1 via Lupa, sans lancer WoW.
@@ -7,6 +7,12 @@ Depuis ce dossier :
   python tests/run_tests.py
 
 Le runtime de test ne fait pas partie de l’addon.
+Architecture, responsabilités, résultats et limites : docs/architecture.md.
+Mesure facultative hors jeu, mêmes dépendances :
+  python tests/benchmark.py > benchmark.json
+Ce benchmark utilise uniquement des données fictives et les API simulées.
+Les comptages déterministes sont testés en CI ; les timings ne sont pas des
+seuils de réussite et ne mesurent ni les FPS ni le rendu natif de WoW.
 Aucune donnée SavedVariables n’est incluse.
 Les noms et identifiants des tests sont des exemples simulés.
 Les icônes, clics, sons et API effectives doivent aussi être vérifiés dans WoW.
@@ -36,7 +42,7 @@ Les tests ne prétendent pas simuler le moteur natif : ils modélisent les noms
 à partir de la géométrie carte/curseur, avec une latence de rendu de 1/2 images.
 Une réussite locale valide le protocole, pas la disponibilité du moteur WoW.
 
-20 scripts de tests, dont 144 cas du détecteur druide : API absentes/protégées,
+22 scripts de tests, dont 144 cas du détecteur druide : API absentes/protégées,
 cache trompeur, correspondance exacte et ambiguïtés, propriétaire d'un familier,
 relecture absente, échelles et dimensions différentes, timeout, interruptions,
 erreur à chaque mutation et restauration (y compris un setter sans effet),

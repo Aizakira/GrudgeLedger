@@ -136,6 +136,26 @@ assert(marker.anchor[2] == font, "icon must follow visible ThreatPlates name")
 assert(font.color[1] == 0.3 and font.color[3] == 0.5, "name colors off by default")
 assert(marker.alpha == 1 and plate.alpha == 1, "never alter plate alpha")
 assert(marker.ignoreParentAlpha and marker.ignoreParentScale, "TP overlay must ignore underlying Blizzard alpha/scale")
+-- Stable markers must not repeatedly dirty native layout/texture state.
+local writes, originals = {}, {}
+for _, method in ipairs({ "SetPoint", "ClearAllPoints", "SetSize", "SetFrameLevel", "SetTexture", "SetIgnoreParentAlpha", "SetIgnoreParentScale" }) do
+    local key = method
+    originals[key] = methods[key]
+    methods[key] = function(self, ...)
+        if self == marker or self == icon then writes[key] = (writes[key] or 0) + 1 end
+        return originals[key](self, ...)
+    end
+end
+for i = 1, 20 do D.Refresh() end
+assert(next(writes) == nil, "unchanged marker must not reset anchors, size, level or texture")
+plate.TPFrame.frameLevel = 80
+D.Refresh()
+assert(writes.SetFrameLevel == 1 and marker.frameLevel == 100)
+GL.SetSetting("iconSize", 24)
+assert(writes.SetSize == 1 and marker.width == 24)
+GL.SetSetting("iconSize", 20)
+plate.TPFrame.frameLevel = 40
+for key, fn in pairs(originals) do methods[key] = fn end
 plate:SetAlpha(0)
 D.Refresh()
 assert(marker.shown and marker.ignoreParentAlpha and plate.alpha == 0)
