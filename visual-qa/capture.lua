@@ -2,6 +2,7 @@
 local mock = assert(loadfile(TEST_WORK .. "/tests/wow_mock.lua"))()
 local qaClock = 1794400000
 time = function() return qaClock end
+date = function(format, timestamp) return os.date(format or "%c", timestamp or qaClock) end
 local methods = getmetatable(UIParent).__index
 local oldFrame, oldTexture, oldFont = CreateFrame, methods.CreateTexture, methods.CreateFontString
 local function tag(region, kind, template, layer)
@@ -166,7 +167,10 @@ end
 GL.RecordAggression(record, "probable", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack")
 GL.RecordPvP(records[3], "kill", "confirmed", "Coup fatal observé.", "qa-victory")
 GL.RecordPvP(records[7], "kill", "probable", "Adversaire observé mort après le combat.", "qa-probable-victory")
-records[1].encounters = { count = 12, firstSeen = qaClock - 86400 * 25, lastSeen = qaClock }
+for i, r in ipairs(records) do
+    r.encounters = { count = 15 - i, seen = { ["Player-1-self"] = qaClock - 3600 * i } }
+    if GL.Relation(r) == "friend" then r.groupCount = 15 - i end
+end
 local function hideWindows()
     for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert" }) do
         if _G[name] then _G[name]:Hide() end
@@ -215,16 +219,22 @@ function QA.capture(name)
         GrudgeLedgerWindow.factions.Horde.scripts.OnClick()
         return GrudgeLedgerWindow
     elseif name == "journal-empty" then GL.ShowLedger() GrudgeLedgerWindow.search:SetText("Aucune correspondance QA") return GrudgeLedgerWindow
-    elseif name == "statistics" or name == "statistics-small" then
-        if name == "statistics-small" then UIParent:SetSize(1024, 600) end
-        GL.ShowStatistics("players") return GrudgeLedgerStatistics
-    elseif name == "guild-rankings" then
-        GL.ShowStatistics("guilds")
-        if GrudgeLedgerStatistics.rows[1].item then GrudgeLedgerStatistics.rows[1].scripts.OnClick(GrudgeLedgerStatistics.rows[1]) end
-        return GrudgeLedgerStatistics
-    elseif name == "statistics-empty" then
-        GL.ShowStatistics("players") GrudgeLedgerStatistics.choices[6].scripts.OnClick()
-        return GrudgeLedgerStatistics
+    elseif name:find("^statistics") or name:find("^guild%-rankings") then
+        if name:find("%-small") then UIParent:SetSize(1024, 600) end
+        local guild = name:find("^guild") ~= nil
+        GL.ShowStatistics(guild and "guilds" or "players")
+        local f = GrudgeLedgerStatistics
+        f.category, f.choice, f.offset, f.faction, f.selected = 1, 1, 0, "all", nil
+        if name:find("%-friends") or name:find("%-group") then f.category = 2 end
+        if name:find("%-encounters") then f.choice = 2 end
+        if name:find("%-recent") then f.choice = 3 end
+        if name:find("%-group") then f.choice = 4 end
+        if name:find("%-combat") then f.category = guild and 2 or 3 end
+        if name:find("%-empty") then f.faction = "unknown" end
+        if name:find("%-horde") then f.faction = "Horde" end
+        GL.ShowStatistics(guild and "guilds" or "players")
+        if guild and f.rows[1].item then f.rows[1].scripts.OnClick(f.rows[1]) end
+        return f
     elseif name == "guilds" then GL.ShowGuilds(record) return GrudgeLedgerGuilds
     elseif name == "note-edit" or name == "note-delete" then
         GL.EditNote(record, record.notes[1])

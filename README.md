@@ -46,6 +46,37 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.6.1: more meaningful rankings
+
+**Classements** or `/gl stats` opens a book with themed navigation:
+
+| Theme | Rankings |
+| --- | --- |
+| Threats | Strongest grudges, most encountered threats, recently observed threats, confirmed aggressions |
+| Friends | Most encountered friends, strongest affinities, recently observed friends, shared group sessions |
+| Combat | Players who killed you most, most defeated opponents, separate probable deaths and victories |
+| Guilds | Personal grudges, personal friends, deaths, victories, aggressions and probable deaths |
+
+Each view states its units, scope and calculation. Active Person/Guild tabs and
+themes are marked; player lists filter by Alliance, Horde or unknown faction.
+Click a person to open their record; select a guild to set a guild-wide opinion.
+
+**Encounter counts are memories, not current presence.** A new encounter starts
+after more than ten minutes without observation. Lists use current relationships,
+but their encounter/group totals may include earlier sessions. Recent dates come
+only from real observations; notes and opinion changes do not refresh them.
+Unmarked group partners do not become friends in these rankings.
+
+Zero-value guilds are omitted for the selected metric. Guild friend/grudge lists
+describe current relationships and last known memberships; combat rankings retain
+the guild known at the time of each event. Existing counters are reused, without
+another background watcher or database migration.
+
+![Most encountered threats, offline preview with fictional data](docs/statistics.png)
+
+Validation: **26 test scripts and 48 offline UI views**, including small windows,
+empty lists, long names and readable fonts. Native rendering remains to be checked.
+
 ## 0.6.0: personal PvP summary and chronicle
 
 **Bilan & récit**, `/gl bilan` and `/gl chronique` open two new pages. The summary
@@ -82,7 +113,7 @@ service is added.
 
 ![Offline honor-board preview with synthetic records](docs/honor.png)
 
-Validation covers 25 test scripts and 39 offline UI views. See the
+Validation covers 26 test scripts and 48 offline UI views. See the
 [architecture review](docs/architecture.md) for measurements and large-journal limits.
 Native appearance, sounds and alerts still need real-client validation.
 

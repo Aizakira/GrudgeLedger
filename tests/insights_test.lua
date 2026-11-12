@@ -100,23 +100,73 @@ assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 GL.ShowStatistics("guilds")
 local f = GrudgeLedgerStatistics
 assert(f:IsShown() and f.rows[1].item)
+assert(f.tabs.guilds.selection:IsShown() and not f.tabs.players.selection:IsShown())
+assert(f.scope:GetText() == "Compte · Relations actuelles")
 f.rows[1].scripts.OnClick(f.rows[1])
 local chosen = f.selected
 f.guildActions[1].scripts.OnClick()
 assert(GL.GetGuildRule(chosen.name, chosen.realm).reaction == "warning")
 GL.ShowStatistics("players")
+assert(f.tabs.players.selection:IsShown() and not f.tabs.guilds.selection:IsShown())
 assert(f.rows[1].item.value >= 1 and not f.guildActions[1]:IsShown())
 local selected = f.rows[1].item.record
 f.rows[1].scripts.OnClick(f.rows[1])
 assert(not f:IsShown() and GrudgeLedgerWindow:IsShown())
 assert(GrudgeLedgerWindow.detailTitle:GetText():find(selected.fullName, 1, true))
-GL.ShowStatistics("players") f.choices[6].scripts.OnClick()
+GL.ShowStatistics("players") f.groups[2].scripts.OnClick()
 assert(f.rows[1].item.record.key == b.key)
-for i = 1, 10 do GL.SetGuildReaction("Fixture " .. i, "warning") end
+assert(f.rows[1].value:GetText() == "1 rencontre" and f.rows[1].rank:GetText() == "1")
+assert(f.columnValue:GetText() == "Rencontres" and f.scope:GetText():find("Toutes périodes", 1, true))
+GL.Get(b).faction = "Alliance"
+f.factionButton.scripts.OnClick()
+assert(f.rows[1].item.record.key == b.key and not f.rows[2]:IsShown())
+f.factionButton.scripts.OnClick()
+assert(not f.rows[1]:IsShown() and f.empty:GetText():find("Toutes les factions", 1, true))
+f.factionButton.scripts.OnClick()
+assert(f.rows[1].item.record.key == promoted.key, "unknown factions remain separately visible")
+f.factionButton.scripts.OnClick()
+for i = 1, 10 do GL.SetReaction(identity("Fixture" .. i, "Fixture " .. i), "enemy") end
+local allGuilds = #GL.GuildStatistics()
 GL.ShowStatistics("guilds") f.next.scripts.OnClick()
-assert(f.offset == 8 and f.rows[1].item and f.previous.enabled)
-GL.ShowStatistics("players") f.choices[2].scripts.OnClick()
+assert(f.offset == 7 and f.rows[1].item and f.previous.enabled)
+f.rows[1].scripts.OnClick(f.rows[1])
+assert(f.guildActions[1].enabled)
+f.choices[2].scripts.OnClick()
+assert(f.offset == 0 and not f.selected and not f.guildActions[1].enabled)
+assert(#GL.GuildStatistics() == allGuilds, "UI filtering must not modify the cached guilds")
+for _, row in ipairs(f.rows) do if row:IsShown() then assert(row.item.friends > 0) end end
+assert(not f.factionButton:IsShown())
+-- Exercise every navigation path and ensure each choice maps to a measured metric.
+local metrics = {
+    players = { {"grudge", "enemiesSeen", "enemiesRecent", "aggressions"}, {"friendsSeen", "reputation", "friendsRecent", "friendsGrouped"}, {"deaths", "kills", "probableDeaths", "probableKills"} },
+    guilds = { {"grudges", "friends"}, {"deaths", "kills", "aggressions", "probableDeaths"} },
+}
+for mode, groups in pairs(metrics) do
+    GL.ShowStatistics(mode)
+    for i, choices in ipairs(groups) do
+        f.groups[i].scripts.OnClick()
+        for j, metric in ipairs(choices) do
+            f.choices[j].scripts.OnClick()
+            assert(f.choices[j].metric == metric and f.choices[j].selection:IsShown())
+            assert(f.description:GetText() ~= "" and f.footnote:GetText() ~= "")
+            for _, row in ipairs(f.rows) do
+                if row:IsShown() then assert((mode == "guilds" and row.item[metric] or row.item.value) > 0) end
+            end
+        end
+    end
+end
+GL.ShowStatistics("players") f.groups[3].scripts.OnClick() f.choices[2].scripts.OnClick()
 assert(not f.rows[1]:IsShown() and f.empty:GetText() ~= "" and not f.next.enabled)
+assert(f.selection:GetText() == "", "empty rankings must not invite selecting a missing row")
+-- Commands use the same entry points as buttons: only one book may be visible.
+GL.ShowJournal("summary")
+assert(GrudgeLedgerJournal:IsShown() and not f:IsShown())
+GL.ShowStatistics("players")
+assert(f:IsShown() and not GrudgeLedgerJournal:IsShown())
+GL.ShowLedger()
+assert(GrudgeLedgerWindow:IsShown() and not f:IsShown())
+GL.ShowJournal("history") GL.ShowLedger()
+assert(GrudgeLedgerWindow:IsShown() and not GrudgeLedgerJournal:IsShown())
 SlashCmdList.GRUDGELEDGER("traces")
 assert(GrudgeLedgerDiagnostic.privacy:GetText():find("contient les noms", 1, true))
 SlashCmdList.GRUDGELEDGER("debug")

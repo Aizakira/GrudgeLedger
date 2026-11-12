@@ -48,6 +48,39 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## 0.6.1 : des classements plus parlants
+
+**Classements** ou `/gl stats` ouvre un livre organisé par thèmes :
+
+| Thème | Ce qu'on peut retrouver |
+| --- | --- |
+| Menaces | Rancunes les plus fortes, menaces les plus recroisées, menaces vues récemment, agressions confirmées |
+| Amis | Amis les plus recroisés, affinités les plus fortes, amis vus récemment, sessions de groupe partagées |
+| Combats | Ceux qui m'ont le plus tué, adversaires les plus vaincus, morts et victoires probables séparées |
+| Guildes | Rancunes personnelles, amis personnels, morts, victoires, agressions et morts probables |
+
+Chaque classement affiche son unité, son périmètre et une explication. Les pages
+Personnes/Guildes et le thème actif sont identifiés ; les listes de personnes
+se filtrent par Alliance, Horde ou faction inconnue. Cliquer une personne ouvre
+sa fiche ; sélectionner une guilde permet de définir un avis global.
+
+**« Recroisées » décrit les rencontres enregistrées, pas une présence actuelle.**
+Une nouvelle rencontre commence après plus de dix minutes sans observation.
+Les relations sont celles d'aujourd'hui, mais les compteurs peuvent inclure des
+rencontres ou groupes antérieurs à l'avis. Les dates récentes viennent uniquement
+d'observations réelles : une note ou un changement d'avis ne rajeunit pas la date.
+Un partenaire de groupe sans amitié ne figure pas parmi les amis.
+
+Les guildes à zéro sont masquées pour le critère choisi. Les classements d'amis
+et de rancunes décrivent les relations et dernières guildes connues actuelles ;
+les combats gardent la guilde mémorisée au moment des faits. Les vues réutilisent
+les compteurs existants, sans nouvelle surveillance en arrière-plan ni migration.
+
+![Classement des menaces les plus recroisées, simulation hors jeu](docs/statistics.png)
+
+Validation : **26 scripts de tests et 48 vues hors jeu**, dont petites fenêtres,
+listes vides, noms longs et police classique. Le rendu natif reste à confirmer.
+
 ## 0.6.0 : tableau d'honneur et chronique personnelle
 
 Le bouton **Bilan & récit**, `/gl bilan` et `/gl chronique` ouvrent deux nouvelles
@@ -87,7 +120,7 @@ pour plus tard. Le radar druide demeure en pause. Aucun service externe ajouté.
 
 ![Aperçu hors jeu du tableau d'honneur, données fictives](docs/honor.png)
 
-La version est vérifiée par 25 scripts de tests et 39 vues hors jeu. Les mesures
+La version est vérifiée par 26 scripts de tests et 48 vues hors jeu. Les mesures
 et limites des grands journaux sont dans la [revue d'architecture](docs/architecture.md).
 La validation du rendu, des sons et des alertes sur le vrai client reste nécessaire.
 
