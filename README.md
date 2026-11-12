@@ -46,6 +46,19 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.5.12: reduce repeated observation and UI work
+
+Polling shares identity metadata for less than half a second, with live GUID
+checks and fresh reads for actions. Stable markers avoid repeated texture and
+layout writes. Guild statistics are reused until relevant data changes, and
+social scores process new history entries incrementally. Histories and personal
+choices are preserved; no runtime dependency or background timer was added.
+
+See the [architecture review and reproducible benchmark](docs/architecture.md)
+for measurements, cache contracts and remaining large-journal limits. Offline
+tests do not establish real-client FPS gains. Druid radar work is deferred and
+its manual experimental behavior is unchanged.
+
 ## 0.5.11: clean up old battleground grudges
 
 On first load, PvP events recorded in exactly Arathi Basin, Warsong Gulch or
@@ -269,7 +282,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.11.zip GrudgeLedger
+python -m zipfile -c GrudgeLedger-0.5.12.zip GrudgeLedger
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

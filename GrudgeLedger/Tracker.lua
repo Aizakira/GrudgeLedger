@@ -144,11 +144,11 @@ local function tryAggression()
     end
 end
 
-function T.Observe(unit)
+function T.Observe(unit, reuseObservation)
     if GL.IsPvPInstance() then return end
     local f = combatSession()
     if not unit then return end
-    local identity = GL.Identity(unit)
+    local identity = GL.Identity(unit, reuseObservation)
     if identity then
         local record = GL.Get(identity)
         local previousGuild = record and record.guild
@@ -437,7 +437,7 @@ function T.Poll()
         return
     end
     resolveDeath()
-    for _, unit in ipairs(units()) do T.Observe(unit) end
+    for _, unit in ipairs(units()) do T.Observe(unit, true) end
     observeHealth()
     tryAggression()
     tryKills()

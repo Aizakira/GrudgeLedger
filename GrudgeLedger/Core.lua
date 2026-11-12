@@ -1,12 +1,15 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.5.11", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.5.12", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
 local guildSightings = {}
 local traceLast = {}
+local observations, observationCount = {}, 0
+local guildStatistics
+local socialTotals = setmetatable({}, { __mode = "k" })
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true,
@@ -127,16 +130,27 @@ function GL.IdentityFromName(name, surname, guid)
     return identity
 end
 
-function GL.Identity(unit)
+function GL.Identity(unit, reuseObservation)
     unit = GL.Clean(unit, "string")
     if not unit or not GL.Safe(UnitExists, unit) or not GL.Safe(UnitIsPlayer, unit) then return nil end
     if GL.Safe(UnitIsUnit, unit, "player") then return nil end
-    local name, surname = GL.Safe(UnitName, unit)
     local guid = GL.Clean(GL.Safe(UnitGUID, unit), "string")
     local mine = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
     if guid and mine and guid == mine then return nil end
+    local now = GL.Clean(GL.Safe(GetTime), "number")
+    if now and not (now >= 0 and now < math.huge) then now = nil end
+    local cached = guid and observations[guid]
+    -- ponytail: polling shares metadata for at most 0.5 s, keyed by live GUID
+    -- (unit tokens are recycled). Events/actions read fresh; combat state is never cached.
+    if reuseObservation and cached and now and now >= cached.time and now - cached.time < 0.5 then
+        return cached.identity
+    end
+    local name, surname = GL.Safe(UnitName, unit)
     local identity = GL.IdentityFromName(name, surname, guid)
-    if not identity then return nil end
+    if not identity then
+        if cached then observations[guid], observationCount = nil, observationCount - 1 end
+        return nil
+    end
     local className, class = GL.Safe(UnitClass, unit)
     identity.class, identity.className = cleanName(class), cleanName(className)
     local raceName, race = GL.Safe(UnitRace, unit)
@@ -171,6 +185,14 @@ function GL.Identity(unit)
         end
         -- An empty/secret reply is not proof that a known player left their guild.
     end
+    if now and identity.guid then
+        -- Bounded session cache: a crowded zone cannot retain every passer-by.
+        if not observations[guid] then
+            if observationCount >= 256 then observations, observationCount = {}, 0 end
+            observationCount = observationCount + 1
+        end
+        observations[guid] = { time = now, identity = identity }
+    end
     return identity
 end
 
@@ -179,15 +201,23 @@ local function scoreRelation(score)
 end
 local function refreshReputation(record)
     if record.reaction and record.reactionSource ~= "emote" and record.reactionSource ~= "automatic" then return end
-    -- ponytail: replay social deltas only on changes/load, never on nameplate ticks.
-    -- If histories become very large, cache this subtotal with a versioned migration.
-    local social = 0
-    for _, event in ipairs(record.history or {}) do
+    -- Histories remain authoritative and untouched. Replay only new entries;
+    -- normalization/merges discard this session-only subtotal before replaying.
+    local events = record.history or {}
+    local cached = socialTotals[record]
+    if not cached or cached.history ~= events or cached.count > #events then
+        cached = { history = events, count = 0, total = 0 }
+        socialTotals[record] = cached
+    end
+    local social = cached.total
+    for i = cached.count + 1, #events do
+        local event = events[i]
         if type(event) == "table" and event.kind == "reputation" and event.source == "emote" then
             local delta = GL.Clean(event.delta, "number")
             if delta and delta == delta and math.abs(delta) < math.huge then social = social + delta end
         end
     end
+    cached.total, cached.count = social, #events
     local pvp = record.pvp
     local balance = (pvp.kills or 0) + (pvp.probableKills or 0)
         - 10 * ((pvp.deaths or 0) + (pvp.probableDeaths or 0))
@@ -200,6 +230,7 @@ local function refreshReputation(record)
     if record.reactionSource == "emote" or record.reactionSource == "automatic" then record.reaction = scoreRelation(record.reputation) end
 end
 local function normalize(record)
+    socialTotals[record] = nil
     record.notes = type(record.notes) == "table" and record.notes or {}
     record.history = type(record.history) == "table" and record.history or {}
     if record.encounters ~= nil then
@@ -266,6 +297,7 @@ function GL.Get(identity)
 end
 
 local function merge(provisional, record)
+    guildStatistics, socialTotals[record] = nil, nil
     if provisional.encounters then
         record.encounters = record.encounters or { count = 0, seen = {}, since = GL.Now() }
         local a, b = record.encounters, provisional.encounters
@@ -333,6 +365,7 @@ function GL.Remember(identity)
     if not record then
         record = normalize({ key = clean.key, firstSeen = GL.Now() })
         GL.db.players[clean.key] = record
+        guildStatistics = nil
     end
     if clean.guid and clean.alias then
         local provisional = GL.db.players[clean.alias]
@@ -355,6 +388,7 @@ function GL.Remember(identity)
     local sex = GL.Clean(identity.sex, "number")
     if sex == 2 or sex == 3 then record.sex = sex end
     record.level = GL.Clean(identity.level, "number") or record.level
+    local previousGuild, previousRealm = record.guild, record.realm
     record.realm = cleanName(identity.realm) or record.realm
     local guild = cleanName(identity.guild)
     if guild then
@@ -364,6 +398,7 @@ function GL.Remember(identity)
         record.guild, record.guildSeenAt = nil, nil
         if record.guid then guildSightings[record.guid] = nil end
     end
+    if record.guild ~= previousGuild or record.realm ~= previousRealm then guildStatistics = nil end
     record.lastSeen, record.lastZone = GL.Now(), GL.Where()
     if clean.alias then
         local previous = GL.db.aliases[clean.alias]
@@ -451,6 +486,7 @@ local function history(record, kind, extra)
         entry.guildSource = not record.guild and "unknown" or record.guildSeenAt == entry.time and "observed" or "last-known"
     end
     table.insert(record.history, entry)
+    guildStatistics = nil
 end
 local reactionScores = { friend = 1, enemy = -10, warning = -1, neutral = 0 }
 local function guildIdentity(value, realm)
@@ -473,11 +509,12 @@ function GL.SetGuildReaction(value, reaction, note, realm)
     rule.reaction, rule.updatedAt = reaction, GL.Now()
     if note ~= nil then rule.note = note end
     GL.db.guilds[key] = rule
+    guildStatistics = nil
     GL.Emit("CHANGED")
     return rule
 end
 
-function GL.GuildStatistics()
+local function buildGuildStatistics()
     local guilds, deaths = {}, {}
     local function get(name, realm)
         local key, clean, server = guildIdentity(name, realm)
@@ -522,6 +559,19 @@ function GL.GuildStatistics()
     for key, guild in pairs(guilds) do
         for _, field in pairs(deaths[key] or {}) do guild[field] = guild[field] + 1 end
         result[#result + 1] = guild
+    end
+    return result
+end
+
+function GL.GuildStatistics()
+    -- Only Core mutations invalidate totals; a repaint or a sighting does not
+    -- replay the ledger. Return copies so UI sorting/editing cannot alter the cache.
+    if not guildStatistics then guildStatistics = buildGuildStatistics() end
+    local result = {}
+    for i, row in ipairs(guildStatistics) do
+        local copy = {}
+        for key, value in pairs(row) do copy[key] = value end
+        result[i] = copy
     end
     return result
 end
@@ -594,6 +644,7 @@ function GL.AddNote(identity, text)
     local record = GL.Remember(identity)
     if not record then return false, "Identité du joueur indisponible." end
     table.insert(record.notes, { time = GL.Now(), text = text })
+    guildStatistics = nil -- a note makes a formerly group-only record personal
     GL.Emit("CHANGED", record)
     return true
 end
@@ -644,6 +695,7 @@ function GL.VoidPvP(identity, event, silent)
     if not found then return false, "Cet événement n'appartient pas à cette fiche." end
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
+    guildStatistics = nil
     record.pvp[field] = math.max(0, (record.pvp[field] or 0) - 1)
     refreshReputation(record)
     if not silent then GL.Emit("CHANGED", record) end
@@ -720,6 +772,8 @@ function GL.SetSetting(key, value)
     return true
 end
 function GL.InitDB()
+    observations, observationCount, guildStatistics = {}, 0, nil
+    socialTotals = setmetatable({}, { __mode = "k" })
     guildSightings = {}
     traceLast = {}
     if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end

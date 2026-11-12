@@ -148,6 +148,7 @@ local function ensureMarker(plate)
     bg:SetAllPoints()
     bg:SetColorTexture(0.025, 0.025, 0.025, 0.95)
     local icon = frame:CreateTexture(nil, "OVERLAY")
+    icon:SetVertexColor(1, 1, 1)
     icon:SetPoint("TOPLEFT", 2, -2)
     icon:SetPoint("BOTTOMRIGHT", -2, 2)
     local probable = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -160,7 +161,7 @@ local function ensureMarker(plate)
     return marker
 end
 
-local function updateMarker(entry)
+local function updateMarker(entry, reuseObservation)
     local plate = C_NamePlate and GL.Safe(C_NamePlate.GetNamePlateForUnit, entry.unit)
     if entry.plate ~= plate then
         local previous = entry.plate and markers[entry.plate]
@@ -169,7 +170,7 @@ local function updateMarker(entry)
     end
     if not plate then entry.identity = nil; return end
     local marker = markers[plate]
-    local identity = GL.Identity(entry.unit)
+    local identity = GL.Identity(entry.unit, reuseObservation)
     entry.identity = identity
     -- Refresh membership as well as identity: guild rules can change while the
     -- same player stays visible, and leaving a guild must remove its marker.
@@ -192,18 +193,26 @@ local function updateMarker(entry)
     local font = findName(plate)
     -- ThreatPlates ignores Blizzard's faded/hidden plate alpha and scale itself.
     -- Our overlay must do the same when its visible name is supplied by TP.
-    local usesTP = plate.TPFrame and GL.Safe(plate.TPFrame.IsShown, plate.TPFrame) ~= false
-    GL.Safe(marker.frame.SetIgnoreParentAlpha, marker.frame, usesTP and true or false)
-    GL.Safe(marker.frame.SetIgnoreParentScale, marker.frame, usesTP and true or false)
+    local usesTP = plate.TPFrame ~= nil and GL.Safe(plate.TPFrame.IsShown, plate.TPFrame) ~= false
+    if marker.usesTP ~= usesTP then
+        GL.Safe(marker.frame.SetIgnoreParentAlpha, marker.frame, usesTP)
+        GL.Safe(marker.frame.SetIgnoreParentScale, marker.frame, usesTP)
+        marker.usesTP = usesTP
+    end
     local level = GL.Safe(plate.GetFrameLevel, plate) or 0
     local tpLevel = usesTP and GL.Safe(plate.TPFrame.GetFrameLevel, plate.TPFrame) or 0
-    marker.frame:SetFrameLevel(math.max(level, tpLevel or 0) + 20)
-    marker.frame:SetSize(GL.Settings().iconSize or 20, GL.Settings().iconSize or 20)
-    marker.frame:ClearAllPoints()
-    if font then marker.frame:SetPoint("RIGHT", font, "LEFT", -5, 0)
-    else marker.frame:SetPoint("BOTTOM", plate, "TOP", 0, 5) end
-    marker.icon:SetTexture(style.icon)
-    marker.icon:SetVertexColor(1, 1, 1)
+    level = math.max(level, tpLevel or 0) + 20
+    if marker.level ~= level then marker.frame:SetFrameLevel(level) marker.level = level end
+    local size = GL.Settings().iconSize or 20
+    if marker.size ~= size then marker.frame:SetSize(size, size) marker.size = size end
+    local anchor = font or plate
+    if marker.anchor ~= anchor then
+        marker.frame:ClearAllPoints()
+        if font then marker.frame:SetPoint("RIGHT", font, "LEFT", -5, 0)
+        else marker.frame:SetPoint("BOTTOM", plate, "TOP", 0, 5) end
+        marker.anchor = anchor
+    end
+    if marker.texture ~= style.icon then marker.icon:SetTexture(style.icon) marker.texture = style.icon end
     if GL.RelationConfidence(record) == "probable" then marker.probable:Show() else marker.probable:Hide() end
     marker.frame:Show()
     if relation ~= "neutral" and GL.Settings().nameColor and font and canChange(font) then
@@ -212,7 +221,9 @@ local function updateMarker(entry)
         if current and not sameColor(current, marker.appliedColor) then marker.baseColor = current end
         marker.font = font
         marker.appliedColor = style.color
-        GL.Safe(font.SetTextColor, font, style.color[1], style.color[2], style.color[3], 1)
+        if not sameColor(current, style.color) then
+            GL.Safe(font.SetTextColor, font, style.color[1], style.color[2], style.color[3], 1)
+        end
     else restoreName(marker) end
 end
 
@@ -362,11 +373,11 @@ alert = function(identity, unit)
     end
 end
 
-local function observe(unit, notify)
+local function observe(unit, notify, reuseObservation)
     unit = GL.Clean(unit, "string")
     if not unit or not GL.db or GL.IsPvPInstance() then return end
     if not notify and GL.Safe(UnitIsVisible, unit) ~= true then return end
-    local identity = GL.Identity(unit)
+    local identity = GL.Identity(unit, reuseObservation)
     if identity then
         GL.Trace("observed", identity, unit)
         local record = GL.RecordSeen(identity, true)
@@ -418,18 +429,18 @@ function D.Refresh(changedRecord)
         return
     end
     for _, entry in pairs(visible) do
-        updateMarker(entry)
+        updateMarker(entry, true)
         local record = entry.identity and GL.Get(entry.identity)
         if type(changedRecord) == "table" and record and record.key == changedRecord.key then
             alert(entry.identity, entry.unit)
         end
     end
-    observe("target", false)
-    observe("mouseover", false)
+    observe("target", false, true)
+    observe("mouseover", false, true)
     local count = GL.Clean(GL.Safe(GetNumGroupMembers), "number") or 0
     local raid = GL.Safe(IsInRaid) == true
     for i = 1, count > 0 and (raid and math.min(count, 40) or 4) or 0 do
-        observe((raid and "raid" or "party") .. i, false)
+        observe((raid and "raid" or "party") .. i, false, true)
     end
     validateToast()
 end
