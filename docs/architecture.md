@@ -1,6 +1,6 @@
 # Architecture and performance
 
-Review for 0.6.0, 12 November 2026. This describes the implementation and its
+Review for 0.6.1, 12 November 2026. This describes the implementation and its
 limits, not a guarantee of live-client performance.
 
 ## Runtime and ownership
@@ -32,6 +32,36 @@ a second scoring system. Confirmed and inferred events stay distinguishable.
 Source files belong in `Interface/AddOns/GrudgeLedger`; the game's SavedVariables
 belong in `WTF`. Tests, previews and benchmarks use fictional records. Neither
 packaging nor deployment should copy journals into the addon or repository.
+
+## Ranking UX and data contracts in 0.6.1
+
+The previous flat metric selector mixed relationships, encounters and confirmed/
+probable combat, with weak units and generic help. The revised book adapts
+Overlord's navigation hierarchy and explicit selection/column structure to the
+existing parchment artwork: Person/Guild tabs, themes, metric choices, ranked
+rows and context-specific explanations. It does not copy Overlord assets.
+
+Twelve player and six guild rankings reuse `PlayerStatistics`/`GuildStatistics`.
+Recent friends/threats use the maximum valid `encounters.seen` timestamp across
+characters, not `lastSeen` (which can change on metadata/manual operations).
+Shared-session rankings use `groupCount` for current friends only. Filters apply
+to current relations; lifetime observations/sessions may predate those relations.
+No retrospective dates, current-presence claim or time-together estimate is made.
+
+Each metric declares its title, description, unit, column heading and help in the
+same UI table. Seven rows per page and explicit faction filtering reuse existing
+controls. Guild metrics discard zeros on returned row copies, leaving cached data
+intact. Guild social rankings describe current membership/relationships; combat
+rankings retain historical guild attribution and uncertainty. Empty selections
+explain missing data without offering impossible row actions. Shared navigation
+entry points prevent overlapping record, summary and ranking books.
+
+Computation occurs on opening/changing a visible page, using existing counts and
+session caches; no new polling or SavedVariables schema is needed. Sorting remains
+O(n log n); recent timestamps require O(character observations) reads. Independent
+code and offline visual reviews covered hierarchy, units, scope, empty states and
+small layouts. They do not replace real-client visual validation or claim a numeric
+design score equivalent to Overlord.
 
 ## Personal journal contracts in 0.6.0
 
@@ -171,8 +201,8 @@ SavedVariables are touched by the benchmark.
 fresh actions, unavailable data, guild mutation/correction/merge invalidation,
 copy isolation and large social-history updates. Existing integration tests load
 the TOC and exercise menu -> database -> markers -> alerts -> journal together.
-The complete suite currently has 25 scripts; CI runs it on Windows and Linux,
-with 39 offline UI views on Windows. Native appearance, sounds, targeting and
+The complete suite currently has 26 scripts; CI runs it on Windows and Linux,
+with 48 offline UI views on Windows. Native appearance, sounds, targeting and
 protected APIs still need a real-client smoke test.
 
 Changes go through a branch and pull request. Passing CI does not merge a PR or

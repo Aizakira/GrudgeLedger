@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.6.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.6.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -616,8 +616,18 @@ function GL.PlayerStatistics(metric)
             local match = metric == "friendsSeen" and relation == "friend"
                 or metric == "enemiesSeen" and (relation == "warning" or relation == "enemy")
             value = match and record.encounters and record.encounters.count or 0
+        elseif metric == "friendsRecent" or metric == "enemiesRecent" then
+            local match = metric == "friendsRecent" and relation == "friend"
+                or metric == "enemiesRecent" and (relation == "warning" or relation == "enemy")
+            if match then
+                -- lastSeen also changes on manual edits and group updates; these are real observations.
+                for _, at in pairs(record.encounters and record.encounters.seen or {}) do
+                    if type(at) == "number" and at > value and at < math.huge then value = at end
+                end
+            end
+        elseif metric == "friendsGrouped" then value = relation == "friend" and record.groupCount or 0
         else value = record.pvp[metric] or 0 end
-        if type(value) == "number" and value > 0 then result[#result + 1] = { record = record, value = value } end
+        if type(value) == "number" and value > 0 and value < math.huge then result[#result + 1] = { record = record, value = value } end
     end
     table.sort(result, function(a, b)
         if a.value ~= b.value then return a.value > b.value end

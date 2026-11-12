@@ -37,6 +37,7 @@ def runtime():
                 id.guild, id.realm = 'Guild' .. (i % 20), 'Forever'
                 local r = GL.Remember(id)
                 r.reaction, r.reactionSource = 'enemy', 'manual'
+                r.encounters = {count=i, seen={['Player-1-audit']=1700000000+i}}
                 for j = 1, events do
                     r.history[j] = {kind='death', confidence='confirmed', guild=r.guild,
                         guildRealm=r.realm, eventId='event' .. i .. ':' .. j, time=j, zone='Example'}
@@ -85,6 +86,7 @@ for people in (100, 1000, 10000):
     row["global_history_ms"] = timed(lua, "GL.JournalEvents({scope='all'})")
     row["history_search_ms"] = timed(lua, "GL.JournalEvents({scope='all', query='Guild1 Example'})")
     row["contact_search_ms"] = timed(lua, "GL.SearchPlayers({query='Guild1', sort='deaths'})")
+    row["recent_threat_ranking_ms"] = timed(lua, "local rows = GL.PlayerStatistics('enemiesRecent'); assert(#rows > 0)")
     row["hidden_change_ms"] = timed(lua, "GL.Emit('CHANGED')")
     lua.execute("GL.ShowLedger()")
     row["open_ledger_change_ms"] = timed(lua, "GL.Emit('CHANGED')")

@@ -422,74 +422,134 @@ function GL.ShowGuilds(identity)
     refreshGuilds()
 end
 
-local statisticsWindow
+local statisticsWindow, journalWindow
+local rankingPageSize = 7
+local encounterHelp = "Une rencontre recommence après plus de 10 min sans observation. Le total inclut les rencontres avant le changement d'avis ; les anciens passages ne sont pas reconstitués."
+local recentHelp = "Dernière observation enregistrée, tous tes personnages confondus. Une personne vue récemment n'est pas forcément encore à proximité."
+local confirmedHelp = "Faits confirmés uniquement. Les attributions probables ont leur propre classement. Pour choisir un personnage ou une période, ouvre Mon bilan PvP."
+local probableHelp = "Attributions déduites des indices disponibles, pas des coups fatals confirmés. Ouvre une fiche pour vérifier ou corriger les événements."
 local statisticsChoices = {
     players = {
-        { "deaths", "Mes plus grands bourreaux", "Morts confirmées causées par ce joueur" },
-        { "kills", "Mes victoires", "Victoires confirmées contre ce joueur" },
-        { "grudge", "Mes pires antagonistes", "Ampleur du solde négatif actuel" },
-        { "enemiesSeen", "Les menaces recroisées", "Rencontres distinctes avec les joueurs surveillés" },
-        { "reputation", "Mes meilleurs amis", "Solde positif actuel : gestes et avis personnels" },
-        { "friendsSeen", "Les amis recroisés", "Rencontres distinctes avec les amis actuels" },
-        { "probableDeaths", "Morts probables", "Attributions déduites, à confirmer" },
-        { "probableKills", "Victoires probables", "Attributions déduites, à confirmer" },
+        { name = "Menaces", entries = {
+            { "grudge", "Rancunes les plus fortes", "Tes ennemis et les personnes à surveiller, selon leur solde négatif actuel.", "point", "Solde actuel", "Les rancunes restent tenaces : une mort pèse dix victoires. Un avis manuel ou de guilde peut aussi signaler un danger sans solde négatif." },
+            { "enemiesSeen", "Menaces les plus recroisées", "Les personnes actuellement surveillées que tu as rencontrées le plus souvent.", "rencontre", "Rencontres", encounterHelp },
+            { "enemiesRecent", "Menaces vues récemment", "Tes ennemis et les personnes à surveiller, du plus récemment aperçu au plus ancien.", "date", "Dernière observation", recentHelp },
+            { "aggressions", "Le plus d'agressions", "Les joueurs avec le plus d'agressions confirmées enregistrées à ton encontre.", "agression", "Agressions confirmées", "Nombre d'épisodes enregistrés, pas de coups reçus ni de fréquence horaire. Les suspicions sont exclues de ce classement." },
+        } },
+        { name = "Amis", entries = {
+            { "friendsSeen", "Amis les plus recroisés", "Tes amis actuels que tu as rencontrés le plus souvent.", "rencontre", "Rencontres", encounterHelp },
+            { "reputation", "Affinités les plus fortes", "Tes amis selon le solde positif de tes gestes et avis personnels.", "point", "Solde actuel", "Ce score traduit tes avis et tes gestes. Il ne mesure ni la qualité d'un joueur, ni le temps passé avec lui. Un ami marqué manuellement peut ne pas avoir de points." },
+            { "friendsRecent", "Amis vus récemment", "Tes amis actuels, du plus récemment aperçu au plus ancien.", "date", "Dernière observation", recentHelp },
+            { "friendsGrouped", "Compagnons de groupe", "Les amis actuels avec lesquels tu as partagé le plus de sessions de groupe.", "session", "Sessions partagées", "Sessions enregistrées, y compris avant l'amitié ; ni durée ni donjons terminés. Partager un groupe ne rend personne ami automatiquement." },
+        } },
+        { name = "Combats", entries = {
+            { "deaths", "Ceux qui m'ont le plus tué", "Les joueurs auxquels le plus de tes morts sont attribuées avec confirmation.", "mort", "Morts confirmées", confirmedHelp },
+            { "kills", "Adversaires les plus vaincus", "Les joueurs contre lesquels tu as le plus de victoires confirmées.", "victoire", "Victoires confirmées", confirmedHelp },
+            { "probableDeaths", "Morts probables", "Participations possibles à ta mort : un classement séparé, à vérifier.", "mort", "Morts probables", probableHelp },
+            { "probableKills", "Victoires probables", "Victoires déduites des observations : un classement séparé, à vérifier.", "victoire", "Victoires probables", probableHelp },
+        } },
     },
     guilds = {
-        { "grudges", "Le plus de rancunes", "Membres connus avec une rancune personnelle" },
-        { "friends", "Le plus d'amis", "Membres connus avec un avis personnel positif" },
-        { "deaths", "Guildes qui m'ont tué", "Morts confirmées, guilde mémorisée lors des faits" },
-        { "probableDeaths", "Morts probables", "Morts déduites, guilde mémorisée lors des faits" },
-        { "aggressions", "Agressions confirmées", "Agressions confirmées lors des rencontres" },
+        { name = "Relations", entries = {
+            { "grudges", "Le plus de rancunes", "Guildes réunissant le plus de membres avec une rancune personnelle.", "rancune", "Rancunes personnelles", "Dernière guilde connue des personnes de ton livre. Un avis global sur une guilde ne crée pas artificiellement des rancunes personnelles." },
+            { "friends", "Le plus d'amis", "Guildes réunissant le plus de membres que tu apprécies personnellement.", "ami", "Amis personnels", "Dernière guilde connue des personnes de ton livre. Les relations héritées d'un avis global sur la guilde ne gonflent pas ce total." },
+        } },
+        { name = "Combats", entries = {
+            { "deaths", "Guildes qui m'ont le plus tué", "Morts confirmées, rattachées à la guilde connue au moment des faits.", "mort", "Morts confirmées", "Une même mort n'est comptée qu'une fois par guilde impliquée. Les faits sans guilde connue restent non attribués." },
+            { "kills", "Guildes les plus vaincues", "Victoires confirmées contre les membres de ces guildes.", "victoire", "Victoires confirmées", "Guilde mémorisée au moment du combat. Les victoires probables et les faits sans guilde connue sont exclus." },
+            { "aggressions", "Le plus d'agressions", "Agressions confirmées attribuées aux membres de ces guildes.", "agression", "Agressions confirmées", "Guilde mémorisée lors des faits. Plusieurs membres peuvent participer à un même épisode ; les faits sans guilde restent non attribués." },
+            { "probableDeaths", "Morts probables", "Participations possibles à ta mort, séparées des morts confirmées.", "mort", "Morts probables", probableHelp },
+        } },
     },
 }
 local function refreshStatistics()
     local f = statisticsWindow
     if not f or not f:IsShown() then return end
-    local choice = statisticsChoices[f.mode][f.choice]
-    local rows = f.mode == "guilds" and GL.GuildStatistics() or GL.PlayerStatistics(choice[1])
-    if f.mode == "guilds" then
+    local guild = f.mode == "guilds"
+    local groups = statisticsChoices[f.mode]
+    local choices = groups[f.category].entries
+    local choice = choices[f.choice]
+    local rows = guild and GL.GuildStatistics() or GL.PlayerStatistics(choice[1])
+    -- ponytail: filter the existing result on demand; no extra cache or background scan.
+    for i = #rows, 1, -1 do
+        if (guild and rows[i][choice[1]] <= 0)
+            or (not guild and f.faction ~= "all" and (rows[i].record.faction or "unknown") ~= f.faction) then
+            table.remove(rows, i)
+        end
+    end
+    if guild then
         table.sort(rows, function(a, b)
             if a[choice[1]] ~= b[choice[1]] then return a[choice[1]] > b[choice[1]] end
             return a.key < b.key
         end)
+        local selected
+        for _, item in ipairs(rows) do if f.selected and f.selected.key == item.key then selected = item break end end
+        f.selected = selected
     end
-    f.offset = math.min(f.offset, math.max(0, math.floor((#rows - 1) / 8) * 8))
+    f.offset = math.min(f.offset, math.max(0, math.floor((#rows - 1) / rankingPageSize) * rankingPageSize))
     f.heading:SetText(choice[2]) f.description:SetText(choice[3])
-    for i, control in ipairs(f.choices) do
-        local entry = statisticsChoices[f.mode][i]
-        if entry then
-            control:SetText(entry[2]) control:Show()
-            control.caption:SetTextColor(unpack(i == f.choice and theme.paper or theme.ink))
-            control.normalSurface:SetColorTexture(unpack(i == f.choice and theme.red or theme.paper))
-            control.normalSurface:SetAlpha(i == f.choice and 1 or 0.15)
-        else control:Hide() end
+    f.columnName:SetText(guild and "Guilde" or "Personne")
+    f.columnValue:SetText(choice[5])
+    f.scope:SetText(guild and f.category == 1 and "Compte · Relations actuelles" or choice[4] == "date" and "Compte · Dernières observations" or choice[4] == "point" and "Compte · Soldes actuels" or "Compte · Toutes périodes")
+    for mode, tab in pairs(f.tabs) do if mode == f.mode then tab.selection:Show() else tab.selection:Hide() end end
+    if guild then f.factionButton:Hide() else f.factionButton:Show() end
+    f.factionButton:SetText(f.faction == "all" and "Toutes les factions" or factionNames[f.faction] or "Faction inconnue")
+    f.manage:SetText(guild and "Gérer les avis de guilde" or "Mon bilan PvP")
+    for _, controls in ipairs({ f.groups, f.choices }) do
+        for i, control in ipairs(controls) do
+            local entry = controls == f.groups and groups[i] or choices[i]
+            if entry then
+                local selected = i == (controls == f.groups and f.category or f.choice)
+                control:SetText(controls == f.groups and entry.name or entry[2]) control:Show()
+                control.metric = controls == f.choices and entry[1] or nil
+                control.caption:SetTextColor(unpack(selected and theme.paper or theme.ink))
+                control.normalSurface:SetColorTexture(unpack(selected and theme.red or theme.paper))
+                control.normalSurface:SetAlpha(selected and 1 or 0.15)
+                if selected then control.selection:Show() else control.selection:Hide() end
+            else control:Hide() end
+        end
     end
     for i, row in ipairs(f.rows) do
         local item = rows[f.offset + i]
         row.item = item
         if item then
-            local guild = f.mode == "guilds"
-            row.name:SetText((f.offset + i) .. ". " .. plain(guild and item.name or item.record.fullName))
-            row.value:SetText(tostring(guild and item[choice[1]] or item.value))
-            row.meta:SetText(guild and (plain(item.realm) .. " · " .. item.grudges .. " rancune(s) · " .. item.friends .. " ami(s) · " .. item.members .. " connu(s)")
-                or (relationNames[GL.Relation(item.record)] .. " · " .. plain(item.record.guild or "Guilde inconnue")))
-            row.bg:SetAlpha(guild and f.selected and f.selected.key == item.key and 0.8 or 0.15)
+            local relation = not guild and GL.Relation(item.record)
+            local value = guild and item[choice[1]] or item.value
+            local suffix = choice[4] .. (value > 1 and "s" or "")
+            row.rank:SetText(tostring(f.offset + i))
+            row.name:SetText(plain(guild and item.name or item.record.fullName))
+            row.name:SetTextColor(unpack(relation and inkColors[relation] or theme.ink))
+            row.value:SetText(choice[4] == "date" and date("%d/%m/%y %H:%M", value)
+                or (choice[1] == "grudge" and "−" or choice[1] == "reputation" and "+" or "") .. value .. " " .. suffix)
+            if guild then row.icon:Hide() else row.icon:Show() end
+            if relation then row.icon:SetTexture(media .. relationIcons[relation]) end
+            if guild then
+                row.meta:SetText(plain(item.realm) .. " · " .. item.members .. " membre(s) connu(s) · " .. item.grudges .. " rancune(s) · " .. item.friends .. " ami(s)")
+            else
+                local faction, _, class = identityLabels(item.record)
+                row.meta:SetText(relationNames[relation] .. " · " .. plain(faction) .. " · " .. plain(class) .. " · " .. plain(item.record.guild or "Guilde inconnue"))
+            end
+            row.bg:SetAlpha(guild and f.selected and f.selected.key == item.key and 0.8 or (i % 2 == 1 and 0.30 or 0.08))
             row:Show()
         else row:Hide() end
     end
-    f.empty:SetText(#rows == 0 and "Aucune donnée pour ce classement.\nLes nouvelles rencontres enrichiront ton livre." or "")
-    f.total:SetText(#rows .. (f.mode == "guilds" and " guilde(s)" or " personne(s)") .. " · " .. (f.offset + 1) .. "–" .. math.min(f.offset + 8, #rows))
-    if #rows == 0 then f.total:SetText("Aucune entrée") end
-    f.next:SetEnabled(f.offset + 8 < #rows)
+    local emptyHelp = guild and "Seules les guildes avec une valeur positive figurent ici."
+        or choice[4] == "date" and "Il faut au moins une observation enregistrée d'une personne de cette catégorie."
+        or choice[4] == "rencontre" and "Les passages anciens ne sont pas reconstitués."
+        or choice[4] == "session" and "Il faut une session de groupe enregistrée avec un ami."
+        or "Seules les personnes avec des données pour ce critère figurent ici."
+    f.empty:SetText(#rows == 0 and ("Aucun résultat dans cette sélection.\n\n" .. emptyHelp .. (not guild and f.faction ~= "all" and "\nEssaie aussi Toutes les factions." or "")) or "")
+    f.total:SetText(#rows == 0 and "Aucune entrée" or (#rows .. (guild and " guilde(s)" or " personne(s)") .. " · " .. (f.offset + 1) .. "–" .. math.min(f.offset + rankingPageSize, #rows)))
+    f.next:SetEnabled(f.offset + rankingPageSize < #rows)
     f.previous:SetEnabled(f.offset > 0)
     for _, b in ipairs(f.guildActions) do
-        if f.mode == "guilds" then b:Show() b:SetEnabled(f.selected ~= nil) else b:Hide() end
+        if guild then b:Show() else b:Hide() end
+        b:SetEnabled(f.selected ~= nil)
     end
     local rule = f.selected and GL.GetGuildRule(f.selected.name, f.selected.realm)
-    f.selection:SetText(f.mode == "guilds" and (f.selected and plain(f.selected.name) .. " · Avis global : " .. (rule and relationNames[rule.reaction] or "aucun") or "Clique sur une guilde pour définir un avis global.")
-        or "Clique sur une personne pour ouvrir sa fiche.")
-    f.footnote:SetText(f.mode == "guilds" and "Dernière guilde connue. Les avis personnels restent prioritaires. Les avis hérités ne gonflent pas le classement ; les faits sans guilde restent non attribués."
-        or "Rencontres comptées depuis cette mise à jour, après plus de 10 min sans observation. Données de ce compte ; les anciens passages ne sont pas reconstitués.")
+    f.selection:SetText(#rows == 0 and "" or guild and (f.selected and plain(f.selected.name) .. " · Avis global : " .. (rule and relationNames[rule.reaction] or "aucun") or "Sélectionne une guilde pour définir un avis global.")
+        or "Clique sur une personne pour lire son histoire.")
+    f.footnote:SetText(choice[6])
 end
 function GL.ShowStatistics(mode)
     if not GL.db then return end
@@ -497,47 +557,76 @@ function GL.ShowStatistics(mode)
     if not statisticsWindow then
         local f = bookWindow("GrudgeLedgerStatistics", "Grudge Ledger")
         statisticsWindow = f
-        f.rows, f.choices, f.guildActions = {}, {}, {}
-        label(f, "Les chroniques de ton livre", nil, 79, -51, 330):SetTextColor(unpack(theme.muted))
-        button(f, "Personnes", 582, -29, 110, function() GL.ShowStatistics("players") end)
-        button(f, "Guildes", 702, -29, 91, function() GL.ShowStatistics("guilds") end)
+        f.rows, f.groups, f.choices, f.guildActions = {}, {}, {}, {}
+        label(f, "Classements · Mémoire du compte", nil, 79, -51, 330):SetTextColor(unpack(theme.muted))
+        f.tabs = {
+            players = button(f, "Personnes", 582, -29, 110, function() GL.ShowStatistics("players") end, true),
+            guilds = button(f, "Guildes", 702, -29, 91, function() GL.ShowStatistics("guilds") end, true),
+        }
         button(f, "Retour au livre", 805, -29, 108, function() f:Hide() GL.ShowLedger() end)
-        label(f, "Classements", "large", 36, -115, 256):SetTextColor(unpack(theme.ink))
-        for i = 1, 8 do
-            f.choices[i] = button(f, "", 36, -157 - (i - 1) * 44, 256, function()
-                f.choice, f.offset, f.selected = i, 0, nil refreshStatistics()
-            end, nil, true)
+        label(f, "Choisir un thème", "large", 36, -115, 256):SetTextColor(unpack(theme.ink))
+        label(f, "Les liens qui marquent ton histoire", nil, 36, -145, 256):SetTextColor(unpack(theme.inkMuted))
+        for i = 1, 3 do
+            f.groups[i] = button(f, "", 36 + (i - 1) * 87, -182, 82, function()
+                f.category, f.choice, f.offset, f.selected = i, 1, 0, nil refreshStatistics()
+            end, true, true)
         end
-        button(f, "Gérer une guilde", 36, -548, 256, function() GL.ShowGuilds() end, nil, true)
-        f.footnote = label(f, "", nil, 36, -589, 256)
+        for i = 1, 4 do
+            f.choices[i] = button(f, "", 36, -236 - (i - 1) * 43, 256, function()
+                f.choice, f.offset, f.selected = i, 0, nil refreshStatistics()
+            end, true, true)
+            f.choices[i].caption:SetJustifyH("LEFT")
+        end
+        label(f, "Comment lire ce classement", nil, 36, -442, 256):SetTextColor(unpack(theme.ink))
+        f.footnote = label(f, "", nil, 36, -468, 256)
         f.footnote:SetTextColor(unpack(theme.inkMuted))
+        f.manage = button(f, "", 36, -620, 256, function()
+            f:Hide()
+            if f.mode == "guilds" then GL.ShowGuilds() else GL.ShowJournal("summary") end
+        end, nil, true)
         f.heading = label(f, "", "large", 350, -115, 554)
         f.heading:SetTextColor(unpack(theme.ink))
-        f.description = label(f, "", nil, 350, -143, 554)
+        f.description = label(f, "", nil, 350, -145, 554)
         f.description:SetTextColor(unpack(theme.inkMuted))
-        for i = 1, 8 do
+        f.factionButton = button(f, "", 350, -182, 155, function()
+            local nextFaction = { all = "Alliance", Alliance = "Horde", Horde = "unknown", unknown = "all" }
+            f.faction, f.offset, f.selected = nextFaction[f.faction], 0, nil refreshStatistics()
+        end, nil, true)
+        f.scope = label(f, "", nil, 516, -189, 388)
+        f.scope:SetJustifyH("RIGHT") f.scope:SetTextColor(unpack(theme.inkMuted))
+        label(f, "#", nil, 358, -221, 24):SetTextColor(unpack(theme.inkMuted))
+        f.columnName = label(f, "", nil, 400, -221, 320) f.columnName:SetTextColor(unpack(theme.inkMuted))
+        f.columnValue = label(f, "", nil, 741, -221, 163)
+        f.columnValue:SetJustifyH("RIGHT") f.columnValue:SetTextColor(unpack(theme.inkMuted))
+        for i = 1, rankingPageSize do
             local row = CreateFrame("Button", nil, f)
-            row:SetPoint("TOPLEFT", 350, -177 - (i - 1) * 47) row:SetSize(554, 43)
+            row:SetPoint("TOPLEFT", 350, -243 - (i - 1) * 43) row:SetSize(554, 41)
             row.bg = surface(row, theme.selection)
-            row.name = label(row, "", nil, 8, -5, 458)
+            local hover = row:CreateTexture(nil, "HIGHLIGHT")
+            hover:SetAllPoints() hover:SetColorTexture(0.57, 0.39, 0.18, 0.15) row:SetHighlightTexture(hover)
+            row.rank = label(row, "", nil, 8, -6, 22) row.rank:SetTextColor(unpack(theme.inkMuted))
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetPoint("TOPLEFT", 30, -6) row.icon:SetSize(14, 14)
+            row.name = label(row, "", nil, 50, -5, 326)
             row.name:SetHeight(18) GL.Safe(row.name.SetWordWrap, row.name, false)
-            row.name:SetTextColor(unpack(theme.ink))
-            row.value = label(row, "", "large", 478, -5, 65)
+            row.value = label(row, "", nil, 383, -5, 163)
+            row.value:SetHeight(18) GL.Safe(row.value.SetWordWrap, row.value, false)
             row.value:SetJustifyH("RIGHT") row.value:SetTextColor(unpack(theme.ink))
-            row.meta = label(row, "", nil, 8, -25, 536)
+            row.meta = label(row, "", nil, 50, -24, 496)
             row.meta:SetFontObject("GameFontHighlightSmall") row.meta:SetHeight(16)
             GL.Safe(row.meta.SetWordWrap, row.meta, false)
             row.meta:SetTextColor(unpack(theme.inkMuted))
             row:SetScript("OnClick", function(self)
+                if not self.item then return end
                 if f.mode == "guilds" then f.selected = self.item refreshStatistics()
                 else f:Hide() GL.ShowLedger(self.item.record.key) end
             end)
             f.rows[i] = row
         end
-        f.empty = label(f, "", nil, 365, -220, 515) f.empty:SetTextColor(unpack(theme.inkMuted))
-        f.previous = button(f, "Précédent", 350, -561, 110, function() f.offset = math.max(0, f.offset - 8) refreshStatistics() end, nil, true)
+        f.empty = label(f, "", nil, 400, -276, 470) f.empty:SetTextColor(unpack(theme.inkMuted))
+        f.previous = button(f, "Précédent", 350, -561, 110, function() f.offset = math.max(0, f.offset - rankingPageSize) refreshStatistics() end, nil, true)
         f.total = label(f, "", nil, 475, -568, 285) f.total:SetTextColor(unpack(theme.inkMuted))
-        f.next = button(f, "Suivant", 794, -561, 110, function() f.offset = f.offset + 8 refreshStatistics() end, nil, true)
+        f.next = button(f, "Suivant", 794, -561, 110, function() f.offset = f.offset + rankingPageSize refreshStatistics() end, nil, true)
         f.selection = label(f, "", nil, 350, -600, 554) f.selection:SetTextColor(unpack(theme.inkMuted))
         f.selection:SetHeight(20) GL.Safe(f.selection.SetWordWrap, f.selection, false)
         for i, action in ipairs({ { "Guilde à surveiller", "warning" }, { "Guilde amie", "friend" }, { "Avis et note…" } }) do
@@ -551,13 +640,15 @@ function GL.ShowStatistics(mode)
         end
     end
     local f = statisticsWindow
-    if f.mode ~= mode then f.mode, f.choice, f.offset, f.selected = mode, 1, 0, nil end
+    if f.mode ~= mode then f.mode, f.category, f.choice, f.offset, f.selected = mode, 1, 1, 0, nil end
+    f.faction = f.faction or "all"
     if ledger then ledger:Hide() end
+    if journalWindow then journalWindow:Hide() end
     f:Show() refreshStatistics()
 end
 GL.On("CHANGED", refreshStatistics)
 
-local journalWindow
+
 local journalPeriods = { { "all", "Tout le récit" }, { "week", "7 derniers jours" }, { "month", "30 derniers jours" }, { "year", "Année" } }
 local journalScopes = { { "character", "Ce personnage" }, { "all", "Tout le compte" }, { "legacy", "Auteur inconnu" } }
 local journalKinds = { { "all", "Tous les événements" }, { "pvp", "Rencontres PvP" }, { "social", "Avis et gestes" }, { "notes", "Notes personnelles" } }
@@ -1305,6 +1396,8 @@ end
 function GL.ShowLedger(key)
     if not GL.db then return end
     buildLedger()
+    if statisticsWindow then statisticsWindow:Hide() end
+    if journalWindow then journalWindow:Hide() end
     if key then
         local record = GL.Get(key)
         selectedKey = record and record.key or nil
