@@ -164,8 +164,11 @@ for i = 1, 7 do
     GL.RecordPvP(record, "death", i % 2 == 0 and "confirmed" or "probable", "Un seul adversaire hostile vous ciblait avant la mort. Attribution déduite ; aucune confirmation du coup fatal.", "qa-event-" .. i)
 end
 GL.RecordAggression(record, "probable", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack")
+GL.RecordPvP(records[3], "kill", "confirmed", "Coup fatal observé.", "qa-victory")
+GL.RecordPvP(records[7], "kill", "probable", "Adversaire observé mort après le combat.", "qa-probable-victory")
+records[1].encounters = { count = 12, firstSeen = qaClock - 86400 * 25, lastSeen = qaClock }
 local function hideWindows()
-    for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert" }) do
+    for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert" }) do
         if _G[name] then _G[name]:Hide() end
     end
 end
@@ -194,6 +197,18 @@ function QA.capture(name)
             f.detailScroll:SetVerticalScroll(math.max(0, f.detailBody:GetHeight() - f.detailScroll:GetHeight()))
         end
         return GrudgeLedgerWindow
+    elseif name:find("^honor") or name:find("^chronicle") then
+        if name:find("%-small") then UIParent:SetSize(1024, 600) end
+        local mode = name:find("^honor") and "summary" or "history"
+        GL.ShowJournal(mode)
+        local f = GrudgeLedgerJournal
+        f.period, f.scope, f.kind, f.offset = "all", "character", "all", 0
+        f.search:SetText("")
+        if name:find("%-empty") then f.scope = "legacy" end
+        if name:find("%-year") then f.period, f.year = "year", tonumber(date("%Y", qaClock)) end
+        if name:find("%-notes") then f.kind = "notes" end
+        GL.ShowJournal(mode)
+        return f
     elseif name == "journal-horde-friends" then
         GL.ShowLedger(records[1].key)
         GrudgeLedgerWindow.filters.friend.scripts.OnClick()
@@ -211,6 +226,10 @@ function QA.capture(name)
         GL.ShowStatistics("players") GrudgeLedgerStatistics.choices[6].scripts.OnClick()
         return GrudgeLedgerStatistics
     elseif name == "guilds" then GL.ShowGuilds(record) return GrudgeLedgerGuilds
+    elseif name == "note-edit" or name == "note-delete" then
+        GL.EditNote(record, record.notes[1])
+        if name == "note-delete" then GrudgeLedgerNote.remove.scripts.OnClick() end
+        return GrudgeLedgerNote
     elseif name == "note" then GL.EditNote(record) GrudgeLedgerNote.edit:SetText("Une bonne équipe au monastère.\n\nJoueur patient, consignes claires et partage équitable du butin. À retrouver pour une prochaine sortie.") return GrudgeLedgerNote
     elseif name == "settings" then SlashCmdList.GRUDGELEDGER("settings") return GrudgeLedgerSettings
     elseif name == "corrections" then GL.ShowLedger(record.key) click("Corriger le PvP") GrudgeLedgerWindow:Hide() return GrudgeLedgerCorrections

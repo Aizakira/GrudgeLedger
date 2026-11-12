@@ -90,10 +90,15 @@ assert(rowFor(record.key).classIcon.texture:find("QuestionMark"), "missing icon 
 -- Pagination must compose with filters and return to the first page on a change.
 for i = 1, 12 do add("Paged" .. i, "Horde", "enemy") end
 click(f.filters.enemy) click(f.factions.Horde)
-assert(f.next.enabled and #f.rows == 8)
+assert(f.next.enabled and #f.rows > 0)
 local firstKey = f.rows[1].key
 click(f.next)
-assert(f.rows[1].key ~= firstKey and not f.next.enabled)
+assert(f.rows[1].key ~= firstKey)
+for page = 2, math.ceil(13 / #f.rows) - 1 do
+    assert(f.next.enabled, "remaining filtered records must be reachable")
+    click(f.next)
+end
+assert(not f.next.enabled, "pagination ends after all 13 filtered records")
 click(f.factions.Alliance)
 assert(f.rows[1].key == allianceEnemy.key and not f.next.enabled)
 

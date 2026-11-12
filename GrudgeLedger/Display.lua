@@ -44,6 +44,53 @@ local function newFriendEncounter(record, unit)
     return not previous or now - previous > 600
 end
 
+local function partyWarning(record, unit)
+    if not record or not GL.db or GL.Settings().partyWarnings ~= true then return end
+    local _, instanceType = GL.Safe(IsInInstance)
+    local count = GL.Clean(GL.Safe(GetNumGroupMembers), "number")
+    if (instanceType ~= "none" and instanceType ~= "party") or GL.Safe(IsInRaid) ~= false
+        or not count or count < 2 or count > 5 or count % 1 ~= 0 then return end
+    if not unit or (not unit:match("^nameplate%d+$") and GL.Safe(UnitIsVisible, unit) ~= true) then return end
+    local me = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    if not me or record.guid == me or GL.Safe(UnitIsUnit, unit, "player") == true or isGroupmate(record, unit) then return end
+    local relation, pvp = GL.Relation(record), record.pvp or {}
+    if relation ~= "warning" and relation ~= "enemy" then return end
+    local confirmed = (pvp.deaths or 0) + (pvp.aggressions or 0) > 0
+    if not confirmed and (pvp.probableDeaths or 0) + (pvp.probableAggressions or 0) <= 0 then return end
+    local name = GL.Clean(record.fullName or record.name, "string")
+    -- Only the name and a fixed summary leave the personal journal, never notes.
+    if not name or name == "" or #name > 120 or name:find("[%z\1-\31\127|{}]") then return end
+    local now = GL.Clean(GL.Now(), "number")
+    if not now or now ~= now or now <= 0 or now == math.huge then return end
+    record.partyPresence = type(record.partyPresence) == "table" and record.partyPresence or {}
+    local presence = record.partyPresence[me]
+    if type(presence) ~= "table" then presence = {} record.partyPresence[me] = presence end
+    GL.db.partyWarningLastAttempt = type(GL.db.partyWarningLastAttempt) == "table" and GL.db.partyWarningLastAttempt or {}
+    -- Rebase future timestamps after a clock rollback rather than releasing
+    -- every cooldown. Each opponent/character stores only two timestamps.
+    local function timestamp(value)
+        value = GL.Clean(value, "number")
+        if value and value >= 0 and value < math.huge then return math.min(value, now) end
+    end
+    local previous = timestamp(presence.seenAt)
+    local attempt = timestamp(presence.attemptAt)
+    local globalAttempt = timestamp(GL.db.partyWarningLastAttempt[me])
+    presence.seenAt, presence.attemptAt = now, attempt
+    GL.db.partyWarningLastAttempt[me] = globalAttempt
+    if (previous and now - previous <= 600) or (attempt and now - attempt < 1800)
+        or (globalAttempt and now - globalAttempt < 60) then return end
+    -- ponytail: no message queue. A crowded encounter never drains a backlog;
+    -- failed/unavailable sends can retry only after a genuine new encounter.
+    local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
+    if type(send) ~= "function" then return end
+    presence.attemptAt, GL.db.partyWarningLastAttempt[me] = now, now
+    local message = "[Grudge Ledger] Attention, " .. name .. (confirmed
+        and " : agression PvP enregistrée dans mon journal."
+        or " : implication PvP probable dans mon journal (à confirmer).")
+    local ok = pcall(send, message, "PARTY")
+    if not ok then GL.Debug("Avertissement de groupe refusé par le jeu ; aucun nouvel essai pendant cette rencontre.") end
+end
+
 local function guildLabel(record, relation)
     if not record.guild then return nil end
     if GL.RelationSource(record) == "guild" and relation ~= "neutral" then
@@ -175,6 +222,7 @@ local function updateMarker(entry, reuseObservation)
     -- Refresh membership as well as identity: guild rules can change while the
     -- same player stays visible, and leaving a guild must remove its marker.
     local record = identity and GL.RecordSeen(identity, true)
+    partyWarning(record, entry.unit)
     local relation = record and GL.Relation(record)
     local guildKey = record and inheritedGuildKey(record)
     if record and (relation == "friend" or entry.recordKey ~= record.key or entry.relation ~= relation or entry.guildKey ~= guildKey) and alert then
@@ -381,6 +429,7 @@ local function observe(unit, notify, reuseObservation)
     if identity then
         GL.Trace("observed", identity, unit)
         local record = GL.RecordSeen(identity, true)
+        partyWarning(record, unit)
         if notify or (record and GL.Relation(record) == "friend") then alert(identity, unit) end
     elseif notify then
         GL.Trace("unreadable", nil, unit)
@@ -451,6 +500,7 @@ function D.Tooltip(tooltip)
     unit = GL.Clean(unit, "string")
     local identity = unit and GL.Identity(unit)
     local record = identity and GL.RecordSeen(identity, true)
+    partyWarning(record, unit)
     if record and GL.Relation(record) == "friend" then alert(identity, unit) end
     if not record or tooltip._grudgeLedgerKey == record.key then return end
     tooltip._grudgeLedgerKey = record.key

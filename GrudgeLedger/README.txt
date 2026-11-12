@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.5.12
+GRUDGE LEDGER — 0.6.0
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -6,6 +6,40 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.6.0 : bilan personnel et chronique
+
+/gl bilan : tableau d'honneur, morts, victoires, agressions, némésis et adversaire
+le plus vaincu. Faits confirmés et événements probables restent séparés.
+Choisir personnage actuel, compte ou archives sans auteur ; toutes les dates,
+sept jours, trente jours ou une année civile. Ce sont les événements observés,
+pas une carrière complète. Les anciennes données sans auteur ne sont jamais
+attribuées au personnage actuel. Les rencontres non datées restent un souvenir
+du compte, pas un chiffre annuel. La carte annuelle est consultable dans l'addon.
+
+/gl chronique : historique global, avec filtres et recherche validée par Entrée
+ou OK. Une même mort partagée entre plusieurs agresseurs compte une fois si
+l'identifiant de l'événement est disponible. Les événements corrigés et ceux des
+champs de bataille sont exclus des totaux. Les archives sans identifiant ne
+permettent pas toujours de reconnaître une même mort.
+
+L'index recherche plusieurs mots dans les noms, guildes, notes, zones, races et
+classes. Le tri, les filtres et la seconde ligne sont configurables. Les notes
+peuvent être modifiées ou supprimées, avec confirmation avant suppression.
+
+Réglages : avertissement de groupe facultatif, désactivé par défaut. Seul un
+ancien agresseur avec un événement PvP est annoncé dans un petit groupe, hors
+champs de bataille/arènes/raids. Aucun envoi de note personnelle. Limites : une
+annonce par minute pour le groupe, trente minutes par personne, et plus de dix
+minutes sans présence observée avant une nouvelle annonce. Pas de file d'attente.
+
+Le solde automatique conserve -10 par mort et +1 par victoire : deux morts
+demandent vingt victoires, sans annuler d'autres dettes ou les choix personnels.
+Les boutons de gestes rapides restent disponibles. Le partage de guilde et les
+primes sont réservés à une future version ; le radar druide reste en pause.
+
+Validation hors jeu : 25 scripts de tests et 39 vues contrôlées. Un /reload charge
+les changements Lua ; le rendu, les sons et les API restent à vérifier en jeu.
 
 0.5.12 : calculs et affichage plus légers
 

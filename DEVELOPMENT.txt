@@ -1,4 +1,4 @@
-Grudge Ledger 0.5.12 — sources et tests
+Grudge Ledger 0.6.0 — sources et tests
 
 Le dossier GrudgeLedger est le seul dossier à installer dans Interface/AddOns.
 Les tests utilisent Lua 5.1 via Lupa, sans lancer WoW.
@@ -17,13 +17,47 @@ Aucune donnée SavedVariables n’est incluse.
 Les noms et identifiants des tests sont des exemples simulés.
 Les icônes, clics, sons et API effectives doivent aussi être vérifiés dans WoW.
 
+Direction produit retenue, 12 novembre 2026
+------------------------------------------
+Le journal reste personnel : reconnaître ses amis et ses adversaires, conserver
+ses notes et comprendre ses rencontres PvP en monde ouvert. Un groupe partagé
+ne suffit pas à créer une amitié. Les champs de bataille et arènes ne doivent
+pas alimenter ces rancunes. Une mort vaut dix victoires dans le solde automatique,
+sans annuler les autres agressions ou avis négatifs ; les choix personnels restent
+prioritaires. Les gestes rapides bisou/crachat restent disponibles.
+
+Priorités de cette passe : bilan PvP du personnage, périodes et rétrospective
+annuelle, historique global, recherche multicritère, tri et présentation de
+l'index, modification/suppression des notes et avertissement de groupe facultatif
+fortement limité. Le rendu reste un livre ancien lisible, avec des chiffres et
+des contrôles sobres. Le style d'Overlord sert de référence, sans copie de ses
+images ni promesse d'une note esthétique objective.
+
+Les statistiques représentent uniquement les événements observés par l'addon,
+pas la carrière complète du joueur. Une mort impliquant plusieurs adversaires
+ne compte qu'une fois dans le bilan si son identifiant commun est disponible.
+Les déductions restent séparées des faits confirmés. Les événements anciens sans
+personnage d'origine ne sont pas attribués artificiellement au personnage actuel.
+Les statistiques de rencontre non datées ne deviennent pas des bilans annuels.
+
+À garder pour plus tard, sans implémentation dans cette passe :
+- Partage facultatif entre membres d'une même guilde, sans publication globale.
+  Notes personnelles et notes partagées devront être clairement séparées.
+- Primes communautaires : récompense fixée librement (or, échange ou aucune),
+  objectif explicite et suivi, proposés et acceptés par les joueurs. Le journal
+  et une capture restent des indices déclaratifs, jamais une preuve infalsifiable.
+  Aucun paiement automatique ni diffusion de la liste privée par défaut.
+- Détecteur druide : chantier en pause ; conserver l'expérience et ses limites,
+  sans transformer un test ponctuel en promesse de détection continue fiable.
+- Évolution des illustrations et du grimoire après retours sur le vrai client.
+
 Revue visuelle facultative hors jeu (Windows, polices Arial/Georgia) :
   python -m pip install Pillow==12.1.1
   python visual-qa/render.py
 Le rendu provient des cadres Lua réels exécutés avec des API simulées.
 Polices/textures natives approximées ; exemples fictifs, aucune capture du jeu.
 
-Le renderer vérifie 27 vues (dont les deux styles de police) : états rempli, filtré, vide, petit écran, bas de
+Le renderer vérifie 39 vues (dont les deux styles de police, le bilan et la chronique) : états rempli, filtré, vide, petit écran, bas de
 défilement, texture du livre absente, toutes les textures de parchemin absentes, fenêtres secondaires, minimap et alertes. La vue journal-transparent exporte
 un PNG détouré et un aperçu sur damier clair ; elle vérifie les coins transparents
 et l'absence de peinture au-delà du livre. Il échoue si un contrôle
@@ -42,7 +76,7 @@ Les tests ne prétendent pas simuler le moteur natif : ils modélisent les noms
 à partir de la géométrie carte/curseur, avec une latence de rendu de 1/2 images.
 Une réussite locale valide le protocole, pas la disponibilité du moteur WoW.
 
-22 scripts de tests, dont 144 cas du détecteur druide : API absentes/protégées,
+25 scripts de tests, dont 144 cas du détecteur druide : API absentes/protégées,
 cache trompeur, correspondance exacte et ambiguïtés, propriétaire d'un familier,
 relecture absente, échelles et dimensions différentes, timeout, interruptions,
 erreur à chaque mutation et restauration (y compris un setter sans effet),

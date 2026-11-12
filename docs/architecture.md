@@ -1,6 +1,6 @@
 # Architecture and performance
 
-Review for 0.5.12, 12 November 2026. This describes the implementation and its
+Review for 0.6.0, 12 November 2026. This describes the implementation and its
 limits, not a guarantee of live-client performance.
 
 ## Runtime and ownership
@@ -32,6 +32,60 @@ a second scoring system. Confirmed and inferred events stay distinguishable.
 Source files belong in `Interface/AddOns/GrudgeLedger`; the game's SavedVariables
 belong in `WTF`. Tests, previews and benchmarks use fictional records. Neither
 packaging nor deployment should copy journals into the addon or repository.
+
+## Personal journal contracts in 0.6.0
+
+New history entries and notes retain the observing character's GUID and name.
+Legacy events remain unattributed: current-character summaries exclude them,
+while account and legacy scopes keep them accessible. Confirmed and probable
+events stay separate. A shared death identifier deduplicates one death involving
+several opponents; confirmed evidence takes precedence over a probable version.
+An old entry without that identifier cannot safely be deduplicated. Corrected
+and battleground-excluded events remain auditable but do not affect totals.
+
+Core builds a lazy session index referencing existing events and notes. Statistics
+do not require chronological sorting; the chronicle sorts only when requested.
+One summary result is cached, keyed by character, scope and period, invalidated
+by relevant mutations. Rolling windows expire with time; future events are not
+counted early. Indexing is not persisted, so no extra migration or duplicate
+saved history is required. Editing/deleting notes invalidates derived data and
+checks that the note belongs to the selected record. Deleted note text is not
+resurrected through a second copy in the chronicle.
+
+Search matches all query words literally across the supported fields. Chronicle
+search commits on Enter/OK to avoid repeated large history scans while typing.
+Existing list patterns provide sort and detail choices; no table framework or
+runtime dependency was introduced. Existing scores keep death -10 / victory +1.
+
+Party warnings reuse observed units and existing display polling. They require
+explicit opt-in, a small party, visible PvP evidence and an eligible instance.
+Friends, teammates, self and mere manual enemy labels are excluded. Per-character
+presence/attempt timestamps survive reloads; global attempts are limited to one
+per minute, individual attempts to one per thirty minutes, with more than ten
+minutes of absence before repeating. There is no queue. Messages contain only a
+sanitized name and fixed evidence summary, never notes. No new timer was added.
+
+Synthetic Windows / Python 3.11 / Lupa Lua 5.1 measurements on 12 November 2026:
+
+| Recorded events | Cold personal summary | Cached summary | Chronicle query | History text search |
+| --- | ---: | ---: | ---: | ---: |
+| 1,000 | 1.27 ms | 0.008 ms | 0.25 ms | 1.53 ms |
+| 10,000 | 21.75 ms | 0.013 ms | 3.88 ms | 23.43 ms |
+| 100,000 | 545.31 ms | 0.046 ms | 111.93 ms | 328.87 ms |
+
+These are median mocked synchronous operations, not real-client FPS. Cold summary
+invalidates the index each time; chronicle timings reuse the populated index.
+At 100,000 events, cold work can still visibly pause the UI. The current ceiling
+is linear scanning plus on-demand chronological sorting, not constant-time
+history processing. If real usage reaches it, profile and incrementally aggregate
+or archive with user consent; never silently delete memories. The index references
+existing events rather than duplicating their text. Native rendering is unmeasured.
+
+The three new checks cover provenance, multi-attacker deaths, corrections,
+merges, calendar boundaries, cache expiry, note ownership and deletion, search,
+UI navigation, drafts and party-warning exclusions/cooldowns. The display workload
+still makes 1,600 metadata reads and zero stable texture writes for 80 known plates
+over ten simulated seconds. Radar and guild-network sharing are unchanged/deferred.
 
 ## Changes in 0.5.12
 
@@ -117,8 +171,8 @@ SavedVariables are touched by the benchmark.
 fresh actions, unavailable data, guild mutation/correction/merge invalidation,
 copy isolation and large social-history updates. Existing integration tests load
 the TOC and exercise menu -> database -> markers -> alerts -> journal together.
-The complete suite currently has 22 scripts; CI runs it on Windows and Linux,
-with 27 offline UI views on Windows. Native appearance, sounds, targeting and
+The complete suite currently has 25 scripts; CI runs it on Windows and Linux,
+with 39 offline UI views on Windows. Native appearance, sounds, targeting and
 protected APIs still need a real-client smoke test.
 
 Changes go through a branch and pull request. Passing CI does not merge a PR or
