@@ -48,6 +48,49 @@ Le bouton personnel **« Neutre » devient « Automatique »** : il restaure le 
 Un **médaillon gris** identifie les personnes connues neutres dans le journal et sur leurs barres de noms. Elles ne déclenchent ni popup ni son. Les inconnus ne reçoivent pas de marqueur.
 
 
+## 0.6.0 : tableau d'honneur et chronique personnelle
+
+Le bouton **Bilan & récit**, `/gl bilan` et `/gl chronique` ouvrent deux nouvelles
+pages. Le bilan présente les victoires, morts et agressions observées, la némésis
+et l'adversaire le plus vaincu. La chronique rassemble les événements de toutes
+les fiches, avec date, lieu, personne et explication. Les faits confirmés restent
+séparés des déductions probables.
+
+- **Périodes et origine** : toutes les dates, sept ou trente derniers jours, année
+  civile ; personnage actuel, compte entier ou archives sans personnage identifié.
+  Les anciennes données ne sont pas attribuées artificiellement au personnage
+  actuel. Une carte annuelle décrit seulement les événements enregistrés, sans
+  export d'image pour l'instant. Le classement des amis recroisés reste explicitement
+  une mémoire du compte sur toute la durée, faute de dates pour chaque rencontre.
+- **Comptage** : une mort avec plusieurs adversaires ne compte qu'une fois dans le
+  bilan lorsque son identifiant commun existe. Les archives sans cet identifiant
+  ne permettent pas toujours ce regroupement. Les événements corrigés ou exclus
+  comme champs de bataille ne gonflent pas les totaux.
+- **Recherche et présentation** : plusieurs mots combinés dans les noms, guildes,
+  notes, zones, races et classes ; filtres de relation, faction et présence de
+  notes ; tri et seconde ligne configurables. La recherche dans la chronique
+  attend Entrée ou OK pour éviter un recalcul à chaque lettre.
+- **Notes personnelles** : navigation, modification et suppression avec confirmation,
+  en préservant les brouillons lors des changements de police.
+- **Avertissement de groupe facultatif** : désactivé par défaut dans les réglages.
+  Il concerne un ancien agresseur avec des événements PvP, observé à proximité,
+  en petit groupe uniquement. Ni ami, ni coéquipier, ni simple classement manuel
+  sans événement PvP. Aucune note privée n'est envoyée. Limites : une annonce par
+  minute, trente minutes par personne et plus de dix minutes sans présence observée
+  avant un nouvel avertissement. Pas de messages différés ni d'annonce en champ
+  de bataille, arène ou raid.
+
+La règle **une mort = dix victoires** est conservée et testée : deux morts demandent
+vingt victoires, sans effacer les autres dettes ni les décisions personnelles.
+Le partage de rancunes et les primes entre membres d'une guilde restent des idées
+pour plus tard. Le radar druide demeure en pause. Aucun service externe ajouté.
+
+![Aperçu hors jeu du tableau d'honneur, données fictives](docs/honor.png)
+
+La version est vérifiée par 25 scripts de tests et 39 vues hors jeu. Les mesures
+et limites des grands journaux sont dans la [revue d'architecture](docs/architecture.md).
+La validation du rendu, des sons et des alertes sur le vrai client reste nécessaire.
+
 ## 0.5.12 : alléger les observations et l'affichage
 
 Les vérifications périodiques partagent les informations d'identité pendant

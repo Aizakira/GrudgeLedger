@@ -46,6 +46,46 @@ The personal **“Neutre” button is now “Automatique”**: it restores scori
 A **gray medallion** marks known neutral people in the journal and on their visible nameplates. Neutral contacts do not trigger popups or sounds; unknown players remain unmarked.
 
 
+## 0.6.0: personal PvP summary and chronicle
+
+**Bilan & récit**, `/gl bilan` and `/gl chronique` open two new pages. The summary
+shows observed victories, deaths and aggressions, your nemesis and most defeated
+opponent. The chronicle combines events across records with dates, places, people
+and explanations. Confirmed facts stay separate from probable inferences.
+
+- **Period and character filters:** all time, rolling seven/thirty days or a calendar
+  year; current character, whole account or legacy records without an identified
+  author. Old events are never silently assigned to the current character. Annual
+  cards cover recorded events only; image export is not implemented. Most-seen
+  friends are explicitly account-wide, all-time memories because individual
+  encounter timestamps were not retained.
+- **Counting:** a death involving several opponents counts once in the summary
+  when its shared event identifier exists. Legacy events without identifiers cannot
+  always be deduplicated. Corrected and excluded battleground events do not inflate
+  the totals.
+- **Search and layout:** combine words across names, guilds, notes, zones, races
+  and classes; filter by relation, faction and notes; choose sorting and the index's
+  second line. Chronicle search runs on Enter/OK instead of on every keystroke.
+- **Personal notes:** browse, edit and delete with confirmation; font changes
+  preserve drafts.
+- **Optional party warning:** disabled by default. A nearby past aggressor with
+  PvP evidence can trigger a short party message, in small groups only. Friends,
+  teammates and manual enemy tags without PvP evidence do not qualify. Private
+  notes are never sent. Limits: one message per minute overall, thirty minutes
+  per person and more than ten minutes without observed presence before another
+  warning. No delayed queue, battleground, arena or raid announcements.
+
+The **one death = ten victories** rule is preserved and tested: two deaths require
+twenty victories without clearing other debts or personal decisions. Guild sharing
+and friendly bounties remain future ideas. Druid radar work stays paused. No external
+service is added.
+
+![Offline honor-board preview with synthetic records](docs/honor.png)
+
+Validation covers 25 test scripts and 39 offline UI views. See the
+[architecture review](docs/architecture.md) for measurements and large-journal limits.
+Native appearance, sounds and alerts still need real-client validation.
+
 ## 0.5.12: reduce repeated observation and UI work
 
 Polling shares identity metadata for less than half a second, with live GUID

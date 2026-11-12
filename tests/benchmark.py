@@ -80,6 +80,11 @@ for people in (100, 1000, 10000):
     memory = lua.eval("collectgarbage('count')") - before
     row = {"people": people, "events": people * 10, "synthetic_db_kib": round(memory)}
     row["guild_stats_rebuild_ms"] = timed(lua, "GL.SetGuildReaction('Guild0', 'warning', nil, 'Forever'); GL.GuildStatistics()")
+    row["personal_summary_cold_ms"] = timed(lua, "GL.SetGuildReaction('Guild0', 'warning', nil, 'Forever'); GL.PersonalStatistics({scope='all'})")
+    row["personal_summary_warm_ms"] = timed(lua, "GL.PersonalStatistics({scope='all'})")
+    row["global_history_ms"] = timed(lua, "GL.JournalEvents({scope='all'})")
+    row["history_search_ms"] = timed(lua, "GL.JournalEvents({scope='all', query='Guild1 Example'})")
+    row["contact_search_ms"] = timed(lua, "GL.SearchPlayers({query='Guild1', sort='deaths'})")
     row["hidden_change_ms"] = timed(lua, "GL.Emit('CHANGED')")
     lua.execute("GL.ShowLedger()")
     row["open_ledger_change_ms"] = timed(lua, "GL.Emit('CHANGED')")

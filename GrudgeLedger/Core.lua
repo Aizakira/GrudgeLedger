@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.5.12", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.6.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -9,13 +9,18 @@ local guildSightings = {}
 local traceLast = {}
 local observations, observationCount = {}, 0
 local guildStatistics
+local journalIndex, journalSorted, personalStatistics
 local socialTotals = setmetatable({}, { __mode = "k" })
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true,
     groupTracking = true, socialTracking = true, minimapAngle = 225, readableFont = false,
-    quickGestures = true, detectionLog = true,
+    quickGestures = true, detectionLog = true, partyWarnings = false,
+    listSort = "recent", listDetail = "identity",
 }
+local listSorts = { recent = true, name = true, reputation = true, kills = true, deaths = true, encounters = true }
+local listDetails = { identity = true, guild = true, pvp = true, notes = true }
+local function invalidateJournal() journalIndex, journalSorted, personalStatistics = nil, nil, nil end
 
 function GL.Clean(value, kind)
     if issecretvalue then
@@ -96,6 +101,7 @@ function GL.On(event, fn)
     table.insert(listeners[event], fn)
 end
 function GL.Emit(event, ...)
+    if event == "CHANGED" then invalidateJournal() end
     for _, fn in ipairs(listeners[event] or {}) do
         local ok, err = pcall(fn, ...)
         if not ok then GL.Debug(event .. ": " .. tostring(err)) end
@@ -297,6 +303,7 @@ function GL.Get(identity)
 end
 
 local function merge(provisional, record)
+    invalidateJournal()
     guildStatistics, socialTotals[record] = nil, nil
     if provisional.encounters then
         record.encounters = record.encounters or { count = 0, seen = {}, since = GL.Now() }
@@ -331,6 +338,22 @@ local function merge(provisional, record)
                 if type(previous) ~= "number" or not (previous >= seen and previous < math.huge) then
                     record.friendPresence[character] = seen
                 end
+            end
+        end
+    end
+    if type(provisional.partyPresence) == "table" then
+        record.partyPresence = type(record.partyPresence) == "table" and record.partyPresence or {}
+        for character, visit in pairs(provisional.partyPresence) do
+            if type(character) == "string" and type(visit) == "table" then
+                local current = type(record.partyPresence[character]) == "table" and record.partyPresence[character] or {}
+                for _, field in ipairs({ "seenAt", "attemptAt" }) do
+                    local at = GL.Clean(visit[field], "number")
+                    if at and at >= 0 and at < math.huge then
+                        local previous = GL.Clean(current[field], "number")
+                        current[field] = previous and previous >= at and previous < math.huge and previous or at
+                    end
+                end
+                record.partyPresence[character] = current
             end
         end
     end
@@ -462,10 +485,16 @@ function GL.RelationConfidence(record)
         and record.pvp.deaths or record.pvp.aggressions
     return (confirmed or 0) > 0 and "confirmed" or "probable"
 end
+local function currentActor()
+    local name, surname = GL.Safe(UnitName, "player")
+    local actor = GL.IdentityFromName(name, surname, GL.Safe(UnitGUID, "player"))
+    return actor and actor.guid, actor and actor.fullName
+end
 local function history(record, kind, extra)
     local entry = extra or {}
     local now, zone = GL.Now(), GL.Where()
     entry.time, entry.kind, entry.zone = entry.time or now, kind, entry.zone or zone
+    entry.actorGUID, entry.actorName = currentActor()
     -- Snapshot the explicitly tracked quest, never guess which quest the player is doing.
     -- ponytail: absent/protected quest APIs simply omit context; old events are not enriched.
     if entry.time == now and entry.zone == zone then
@@ -487,6 +516,7 @@ local function history(record, kind, extra)
     end
     table.insert(record.history, entry)
     guildStatistics = nil
+    invalidateJournal()
 end
 local reactionScores = { friend = 1, enemy = -10, warning = -1, neutral = 0 }
 local function guildIdentity(value, realm)
@@ -637,14 +667,46 @@ function GL.AdjustReputation(identity, delta, reason, source)
     GL.Emit("CHANGED", record)
     return record
 end
-function GL.AddNote(identity, text)
+local function noteText(text)
     text = GL.Clean(text, "string")
-    if not text or not text:find("%S") then return false, "La note est vide." end
-    if #text > 2000 then return false, "La note est trop longue (2000 octets maximum)." end
+    if not text or not text:find("%S") then return nil, "La note est vide." end
+    if #text > 2000 then return nil, "La note est trop longue (2000 octets maximum)." end
+    return text
+end
+function GL.AddNote(identity, text)
+    local err
+    text, err = noteText(text)
+    if not text then return false, err end
     local record = GL.Remember(identity)
     if not record then return false, "Identité du joueur indisponible." end
-    table.insert(record.notes, { time = GL.Now(), text = text })
+    local actorGUID, actorName = currentActor()
+    table.insert(record.notes, { time = GL.Now(), text = text, actorGUID = actorGUID, actorName = actorName })
     guildStatistics = nil -- a note makes a formerly group-only record personal
+    GL.Emit("CHANGED", record)
+    return true
+end
+local function findNote(identity, note)
+    local record = GL.Get(identity)
+    if record and type(note) == "table" then
+        for index, entry in ipairs(record.notes) do if entry == note then return record, index end end
+    end
+end
+function GL.UpdateNote(identity, note, text)
+    local record = findNote(identity, note)
+    if not record then return false, "Cette note n'appartient plus à cette fiche." end
+    local value, err = noteText(text)
+    if not value then return false, err end
+    if note.text ~= value then
+        note.text, note.updatedAt = value, GL.Now()
+        GL.Emit("CHANGED", record)
+    end
+    return true
+end
+function GL.DeleteNote(identity, note)
+    local record, index = findNote(identity, note)
+    if not record then return false, "Cette note n'appartient plus à cette fiche." end
+    table.remove(record.notes, index)
+    guildStatistics = nil
     GL.Emit("CHANGED", record)
     return true
 end
@@ -696,6 +758,7 @@ function GL.VoidPvP(identity, event, silent)
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
     guildStatistics = nil
+    invalidateJournal()
     record.pvp[field] = math.max(0, (record.pvp[field] or 0) - 1)
     refreshReputation(record)
     if not silent then GL.Emit("CHANGED", record) end
@@ -758,9 +821,231 @@ function GL.RecordGroup(identity, sessionId, zone)
     GL.Emit("CHANGED", record)
     return record
 end
+
+local function queryWords(query)
+    local words = {}
+    query = GL.Clean(query, "string") or ""
+    for word in query:sub(1, 512):lower():gmatch("%S+") do words[#words + 1] = word end
+    return words
+end
+local function matchesWords(text, words)
+    text = text:lower()
+    for _, word in ipairs(words) do if not text:find(word, 1, true) then return false end end
+    return true
+end
+local function recordText(record, notes)
+    local parts = {}
+    for _, field in ipairs({ "fullName", "name", "surname", "guild", "class", "className", "race", "raceName", "lastZone", "faction" }) do
+        if type(record[field]) == "string" then parts[#parts + 1] = record[field] end
+    end
+    if notes then
+        for _, note in ipairs(record.notes or {}) do
+            if type(note) == "table" and type(note.text) == "string" then parts[#parts + 1] = note.text end
+        end
+    end
+    return table.concat(parts, "\n")
+end
+function GL.SearchPlayers(options)
+    options = type(options) == "table" and options or {}
+    local result, words = {}, queryWords(options.query)
+    for _, record in pairs(GL.db and GL.db.players or {}) do
+        local faction = record.faction or "unknown"
+        if (not GL.IsGroupOnly(record) or record.key == options.selectedKey)
+            and (not options.relation or options.relation == "all" or GL.Relation(record) == options.relation)
+            and (not options.faction or options.faction == "all" or faction == options.faction)
+            and (not options.notesOnly or #record.notes > 0)
+            and (#words == 0 or matchesWords(recordText(record, true), words)) then result[#result + 1] = record end
+    end
+    local sort = listSorts[options.sort] and options.sort or "recent"
+    local function value(record)
+        if sort == "name" then return (record.fullName or record.name or record.key):lower() end
+        if sort == "reputation" then return record.reputation or 0 end
+        if sort == "kills" or sort == "deaths" then return record.pvp[sort] or 0 end
+        if sort == "encounters" then return record.encounters and record.encounters.count or 0 end
+        return record.lastSeen or 0
+    end
+    table.sort(result, function(a, b)
+        local av, bv = value(a), value(b)
+        if av ~= bv then if sort == "name" then return av < bv end return av > bv end
+        return a.key < b.key
+    end)
+    return result
+end
+
+local function eventTime(event)
+    local at = GL.Clean(event.time, "number")
+    return at and at >= 0 and at < math.huge and at or 0
+end
+local function eventActor(event)
+    local guid = GL.Clean(event.actorGUID, "string")
+    return guid and guid:match("^Player%-%w") and #guid <= 128 and guid or nil
+end
+local function indexedJournal()
+    if journalIndex then return journalIndex end
+    local rows = {}
+    for _, record in pairs(GL.db and GL.db.players or {}) do
+        for index, event in ipairs(record.history or {}) do
+            if type(event) == "table" then
+                rows[#rows + 1] = { record = record, event = event, at = eventTime(event), actor = eventActor(event), sequence = index }
+            end
+        end
+        for index, note in ipairs(record.notes or {}) do
+            if type(note) == "table" and type(note.text) == "string" then
+                rows[#rows + 1] = { record = record, at = eventTime(note), actor = eventActor(note), sequence = #record.history + index, event = {
+                    kind = "note", time = note.time, text = note.text, updatedAt = note.updatedAt,
+                    actorGUID = note.actorGUID, actorName = note.actorName, note = note,
+                } }
+            end
+        end
+    end
+    -- ponytail: one session-only index, built on demand and invalidated on writes.
+    -- The history stays authoritative; no timer or persisted duplicate event log.
+    journalIndex = rows
+    return rows
+end
+local function inScope(author, scope, actor)
+    return scope == "all" or scope == "legacy" and not author or scope == "character" and actor and author == actor
+end
+local function periodFilter(options)
+    local now = GL.Now()
+    local period = options.period or "all"
+    local year = tonumber(options.year)
+    if not year or year % 1 ~= 0 or year < 1970 or year > 9999 then year = tonumber(GL.Safe(date, "%Y", now)) end
+    local span = period == "week" and 7 * 86400 or period == "month" and 30 * 86400
+    return function(event, at)
+        at = at or eventTime(event)
+        if at > now then return false end
+        if span then return at >= now - span and at <= now end
+        if period == "year" then return at > 0 and year and tonumber(GL.Safe(date, "%Y", at)) == year end
+        return true
+    end, tostring(period) .. ":" .. tostring(year) .. ":" .. (span and tostring(now) or "")
+end
+function GL.JournalYears()
+    local years, present = {}, {}
+    local current = tonumber(GL.Safe(date, "%Y", GL.Now()))
+    if current then present[current] = true end
+    local now = GL.Now()
+    for _, row in ipairs(indexedJournal()) do
+        if row.at > 0 and row.at <= now then
+            local year = tonumber(GL.Safe(date, "%Y", row.at))
+            if year then present[year] = true end
+        end
+    end
+    for year in pairs(present) do years[#years + 1] = year end
+    table.sort(years, function(a, b) return a > b end)
+    return years
+end
+function GL.JournalEvents(options)
+    options = type(options) == "table" and options or {}
+    local result, words, texts = {}, queryWords(options.query), {}
+    local within = periodFilter(options)
+    local actor, scope, kind = currentActor(), options.scope or "all", options.kind or "all"
+    local rows = indexedJournal()
+    if not journalSorted then
+        table.sort(rows, function(a, b)
+            if a.at ~= b.at then return a.at > b.at end
+            if a.record.key ~= b.record.key then return a.record.key < b.record.key end
+            return a.sequence > b.sequence
+        end)
+        journalSorted = true
+    end
+    for _, row in ipairs(rows) do
+        local event, record = row.event, row.record
+        local category = pvpFields[event.kind] and "pvp" or event.kind == "note" and "notes" or "social"
+        if not GL.IsGroupOnly(record) and within(event, row.at) and inScope(row.actor, scope, actor)
+            and (kind == "all" or kind == category or kind == event.kind) then
+            local match = true
+            if #words > 0 then
+                texts[record] = texts[record] or recordText(record)
+                local parts = { texts[record] }
+                for _, field in ipairs({ "text", "zone", "subzone", "guild", "questTitle", "evidence" }) do
+                    if type(event[field]) == "string" then parts[#parts + 1] = event[field] end
+                end
+                match = matchesWords(table.concat(parts, "\n"), words)
+            end
+            if match then result[#result + 1] = { record = record, event = event } end
+        end
+    end
+    return result
+end
+
+local function pvpEventKey(row, byOpponent)
+    local event = row.event
+    -- IDs link participants in one death. Without an ID we must count entries
+    -- separately: matching timestamps do not prove that two reports are one death.
+    if type(event.eventId) ~= "string" or event.eventId == "" then return event end
+    return (row.actor or "legacy") .. "\031" .. event.kind .. "\031"
+        .. ((byOpponent or event.kind ~= "death") and row.record.key or "") .. "\031" .. event.eventId
+end
+local function statisticsCopy(stats)
+    local result = {}
+    for key, value in pairs(stats) do
+        if key == "mostKilled" or key == "mostDeaths" then result[key] = { record = value.record, value = value.value }
+        else result[key] = value end
+    end
+    return result
+end
+function GL.PersonalStatistics(options)
+    options = type(options) == "table" and options or {}
+    local within, periodKey = periodFilter(options)
+    local actor, actorName = currentActor()
+    local scope = options.scope or "character"
+    local key = periodKey .. ":" .. scope .. ":" .. (actor or "unknown")
+    local now, nextAt = GL.Now()
+    if personalStatistics and personalStatistics.key == key and now >= personalStatistics.at
+        and (not personalStatistics.nextAt or now < personalStatistics.nextAt) then return statisticsCopy(personalStatistics.value) end
+    local stats = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0,
+        aggressions = 0, probableAggressions = 0, events = 0, unknownActorEvents = 0,
+        unlinkedEvents = 0, currentActor = actor, actorName = actorName, scope = scope }
+    local counted, unknown, ranked, rankings = {}, {}, {}, { kill = {}, death = {} }
+    for _, row in ipairs(indexedJournal()) do
+        local event, record = row.event, row.record
+        local fields = pvpFields[event.kind]
+        local at = row.at
+        if fields and not event.voided and at > now and (not nextAt or at < nextAt) then nextAt = at end
+        if fields and not event.voided and fields[event.confidence] and within(event, at) then
+            local id = pvpEventKey(row)
+            if not row.actor and not unknown[id] then
+                unknown[id], stats.unknownActorEvents = true, stats.unknownActorEvents + 1
+            end
+            if inScope(row.actor, scope, actor) then
+                local previous = counted[id]
+                if not previous or event.confidence == "confirmed" then counted[id] = event end
+                if not stats.firstAt or at < stats.firstAt then stats.firstAt = at end
+                if not stats.lastAt or at > stats.lastAt then stats.lastAt = at end
+                if event.confidence == "confirmed" and rankings[event.kind] then
+                    local rankID = pvpEventKey(row, true)
+                    if not ranked[rankID] then
+                        ranked[rankID] = true
+                        local rank = rankings[event.kind][record.key] or { record = record, value = 0 }
+                        rank.value = rank.value + 1
+                        rankings[event.kind][record.key] = rank
+                    end
+                end
+            end
+        end
+    end
+    for id, event in pairs(counted) do
+        local field = pvpFields[event.kind][event.confidence]
+        stats[field], stats.events = stats[field] + 1, stats.events + 1
+        if type(id) == "table" then stats.unlinkedEvents = stats.unlinkedEvents + 1 end
+    end
+    for kind, records in pairs(rankings) do
+        local field = kind == "kill" and "mostKilled" or "mostDeaths"
+        for _, row in pairs(records) do
+            local best = stats[field]
+            if not best or row.value > best.value or row.value == best.value and row.record.key < best.record.key then stats[field] = row end
+        end
+    end
+    -- One bounded result cache; changing a filter replaces it. Rolling windows
+    -- expire each server second, so events at the boundary never linger in totals.
+    personalStatistics = { key = key, value = stats, at = now, nextAt = nextAt }
+    return statisticsCopy(stats)
+end
 function GL.Settings() return GL.db and GL.db.settings or defaults end
 function GL.SetSetting(key, value)
     if not GL.db or defaults[key] == nil or type(value) ~= type(defaults[key]) then return false end
+    if key == "listSort" and not listSorts[value] or key == "listDetail" and not listDetails[value] then return false end
     if type(value) == "number" then
         if value ~= value or value == math.huge or value == -math.huge then return false end
         if key == "alertCooldown" then value = math.max(15, math.min(3600, value))
@@ -772,6 +1057,7 @@ function GL.SetSetting(key, value)
     return true
 end
 function GL.InitDB()
+    invalidateJournal()
     observations, observationCount, guildStatistics = {}, 0, nil
     socialTotals = setmetatable({}, { __mode = "k" })
     guildSightings = {}
@@ -786,6 +1072,8 @@ function GL.InitDB()
     for key, value in pairs(defaults) do
         if type(GL.db.settings[key]) ~= type(value) then GL.db.settings[key] = value end
     end
+    if not listSorts[GL.db.settings.listSort] then GL.db.settings.listSort = defaults.listSort end
+    if not listDetails[GL.db.settings.listDetail] then GL.db.settings.listDetail = defaults.listDetail end
     for key, record in pairs(GL.db.players) do
         if type(key) == "string" and type(record) == "table" then
             record.key = key
