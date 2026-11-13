@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.8.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.8.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -1340,6 +1340,12 @@ function GL.InitDB()
     GL.db.aliases = type(GL.db.aliases) == "table" and GL.db.aliases or {}
     GL.db.guilds = type(GL.db.guilds) == "table" and GL.db.guilds or {}
     GL.db.settings = type(GL.db.settings) == "table" and GL.db.settings or {}
+    -- Start the new reading style once per account, including older journals.
+    -- A later explicit choice of the native game font survives reloads.
+    if not GL.db.grimoireFontDefaultApplied then
+        GL.db.settings.readableFont = defaults.readableFont
+        GL.db.grimoireFontDefaultApplied = true
+    end
     for key, value in pairs(defaults) do
         local saved = settingValue(key, GL.db.settings[key])
         if saved == nil then saved = value end

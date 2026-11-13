@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.8.1
+GRUDGE LEDGER — 0.8.2
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -6,6 +6,12 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.8.2 — Police du journal
+
+Au premier chargement de cette version, le journal adopte « Grimoire · PT Serif ».
+Vous pouvez ensuite choisir la police du jeu dans Réglages > Apparence > Classique.
+Votre choix est mémorisé pour le compte.
 
 0.8.1 — Lecture du journal
 

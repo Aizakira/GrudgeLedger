@@ -20,9 +20,12 @@ assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
 local fontDir = "Interface\\AddOns\\GrudgeLedger\\Media\\Fonts\\PTSerif-"
-assert(GL.Settings().readableFont == false, "existing grimoire presentation is the default")
-GrudgeLedgerDB = {settings = {readableFont = true}} -- preference saved by an earlier session
 GL.InitDB()
+assert(GL.Settings().readableFont == false, "fresh accounts start with the grimoire")
+GrudgeLedgerDB = {settings = {readableFont = true, sounds = false}} -- pre-0.8.2 account
+GL.InitDB()
+assert(GL.Settings().readableFont == false and GL.Settings().sounds == false,
+    "existing journals adopt PT Serif without resetting other preferences")
 local record = GL.SetReaction(GL.Identity("target"), "friend")
 GL.AddNote(record, string.rep("Longue note lisible. ", 40))
 GL.ShowLedger(record.key)
@@ -32,6 +35,8 @@ local f, note = GrudgeLedgerWindow, GrudgeLedgerNote
 note.edit:SetText(string.rep("Brouillon non enregistré. ", 40))
 SlashCmdList.GRUDGELEDGER("settings")
 local settings = GrudgeLedgerSettings
+assert(settings.grimoire.active and not settings.classic.active and note.edit:GetFont() == fontDir .. "Regular.ttf")
+settings.classic:GetScript("OnClick")(settings.classic)
 assert(settings.classic.active and f.wordmark:IsShown() and not f.title:IsShown() and note.edit.fontObject == "ChatFontNormal")
 assert(select(2, f.rows[1].name:GetFont()) == 16)
 assert(select(2, f.detailText:GetFont()) == 15 and select(2, note.edit:GetFont()) == 15)

@@ -1599,8 +1599,8 @@ showSettings = function()
         end
         local p = f.pages.appearance
         settingText(p, "Police de lecture", 356, 209, 266, 16)
-        f.classic = button(p, "Classique", 356, -243, 127, function() GL.SetSetting("readableFont", true) end, true, true)
-        f.grimoire = button(p, "Grimoire · PT Serif", 491, -243, 145, function() GL.SetSetting("readableFont", false) end, true, true)
+        f.grimoire = button(p, "Grimoire · PT Serif", 356, -243, 145, function() GL.SetSetting("readableFont", false) end, true, true)
+        f.classic = button(p, "Classique", 509, -243, 127, function() GL.SetSetting("readableFont", true) end, true, true)
         check("appearance", "compactMode", "Espacement compact", 282, 266)
         f.readingLabel = settingText(p, "", 356, 326, 142, 13)
         button(p, "−", 500, -317, 29, function() GL.SetSetting("readingScale", (GL.Settings().readingScale or 1) - 0.05) end, nil, true)
