@@ -32,10 +32,10 @@ native client button frame. No Blizzard artwork was copied into this texture.
 
 No personal player database or guild list is distributed with this addon.
 
-Spectral, designed by Production Type, supplies the journal's book typography.
+PT Serif, designed by ParaType, supplies the journal's book typography.
 The three unmodified TrueType files in Media/Fonts are distributed under the
 SIL Open Font License 1.1; the full license is included in Media/Fonts/OFL.txt.
-https://github.com/google/fonts/tree/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/spectral
+https://github.com/google/fonts/tree/29b4ec6df2522a8aee279414b78a07910b065874/ofl/ptserif
 
 Forever death-recap fields were checked against Blizzard's public API documentation
 and the client observations documented by GudaAddons/HeadHunter. The reader and
@@ -50,8 +50,8 @@ The quiet parchment (Media/JournalPaper.tga) and the dark leather dialog frame
 as RGBA TGA textures. Both are distributed under GPLv3.
 
 The campaign register's background (JournalBookSurface), title plaque,
-medallion, settings and close buttons are independent layers. WoW renders the
-title, labels, names and values at runtime. The original layered PNG assets
+medallion, settings and close buttons are independent layers. The wordmark has
+its own texture. WoW renders the labels, names and values at runtime. The original layered PNG assets
 were generated for this project using OpenAI's image tool. They can be exported
 to uncompressed RGBA TGA with art/campaign/export.py in the source repository.
 The original campaign artwork is distributed under GPLv3.

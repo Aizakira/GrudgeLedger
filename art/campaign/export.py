@@ -10,6 +10,7 @@ sizes = {
     "JournalButtons": (512, 512),
     "JournalDialog": (512, 512),
     "JournalTitlePlate": (512, 64),
+    "JournalWordmark": (512, 128),
     "JournalMedallion": (128, 128),
     "JournalSettings": (64, 64),
     "JournalClose": (64, 64),

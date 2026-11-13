@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.8.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.8.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -12,6 +12,7 @@ local guildStatistics
 local journalIndex, journalSorted, personalStatistics
 local breakdownStatistics = {}
 local socialTotals = setmetatable({}, { __mode = "k" })
+local lastInteraction = setmetatable({}, { __mode = "k" })
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
@@ -242,6 +243,24 @@ local function refreshReputation(record)
     record.reputation = GL.AutomaticBalance(record)
     if record.reactionSource == "emote" or record.reactionSource == "automatic" then record.reaction = scoreRelation(record.reputation) end
 end
+local interactionKinds = {kill=true, death=true, aggression=true, grouped=true, group=true,
+    reaction=true, reputation=true, trade=true, note=true}
+local function interactionTime(value, now)
+    return type(value) == "number" and value > 0 and value <= now and value or 0
+end
+local function rebuildInteraction(record)
+    local now = GL.Now()
+    local at = interactionTime(record.lastDirectEncounterAt, now)
+    for _, e in ipairs(record.history) do
+        if type(e) == "table" and interactionKinds[e.kind] and not e.voided and e.voidReason ~= "battleground" then
+            at = math.max(at, interactionTime(e.time, now))
+        end
+    end
+    for _, note in ipairs(record.notes) do
+        if type(note) == "table" then at = math.max(at, interactionTime(note.time, now), interactionTime(note.updatedAt, now)) end
+    end
+    lastInteraction[record] = at
+end
 local function normalize(record)
     socialTotals[record] = nil
     record.notes = type(record.notes) == "table" and record.notes or {}
@@ -267,6 +286,10 @@ local function normalize(record)
         end
         record.encounters = e
     end
+    -- Older journals kept the last real sighting, without a separate visit start.
+    local visit = interactionTime(record.lastDirectEncounterAt or record.lastEncounterAt, GL.Now())
+    record.lastDirectEncounterAt = visit > 0 and visit or nil
+    rebuildInteraction(record)
     if record.reaction and not record.reactionSource then
         record.reactionSource = "manual"
         for i = #record.history, 1, -1 do
@@ -325,6 +348,8 @@ local function merge(provisional, record)
         record.lastEncounterAt, record.lastEncounterZone, record.lastEncounterSubzone =
             provisional.lastEncounterAt, provisional.lastEncounterZone, provisional.lastEncounterSubzone
     end
+    if (provisional.lastDirectEncounterAt or 0) > (record.lastDirectEncounterAt or 0) then record.lastDirectEncounterAt = provisional.lastDirectEncounterAt end
+    lastInteraction[record] = math.max(lastInteraction[record] or 0, lastInteraction[provisional] or 0)
     if provisional.encounters then
         record.encounters = record.encounters or { count = 0, seen = {}, since = GL.Now() }
         local a, b = record.encounters, provisional.encounters
@@ -466,13 +491,19 @@ function GL.RecordSeen(identity, visible)
         record.encounters = record.encounters or { count = 0, seen = {}, since = GL.Now() }
         local visits, now = record.encounters, GL.Now()
         local previous = visits.seen[me]
-        if not previous or now - previous > 600 then visits.count = visits.count + 1 end
+        local newVisit = not previous or now - previous > 600
+        if newVisit then
+            visits.count = visits.count + 1
+            record.lastDirectEncounterAt = math.max(record.lastDirectEncounterAt or 0, now)
+            lastInteraction[record] = math.max(lastInteraction[record] or 0, now)
+        end
         visits.seen[me] = now
         -- Editing a note also calls Remember; only a public observation is a sighting.
         if record.lastEncounterAt ~= now or record.lastEncounterZone ~= record.lastZone then
             record.lastEncounterAt, record.lastEncounterZone = now, record.lastZone
             record.lastEncounterSubzone = cleanName(GL.Safe(GetSubZoneText))
         end
+        if newVisit then GL.Emit("CONTACT_SEEN", record) end
     end
     return record
 end
@@ -542,6 +573,7 @@ local function history(record, kind, extra)
         entry.race, entry.raceName, entry.class, entry.className = record.race, record.raceName, record.class, record.className
     end
     table.insert(record.history, entry)
+    lastInteraction[record] = math.max(lastInteraction[record] or 0, interactionTime(entry.time, now))
     guildStatistics = nil
     invalidateJournal()
 end
@@ -737,6 +769,7 @@ function GL.AddNote(identity, text)
     if not record then return false, "Identité du joueur indisponible." end
     local actorGUID, actorName = currentActor()
     table.insert(record.notes, { time = GL.Now(), text = text, actorGUID = actorGUID, actorName = actorName })
+    lastInteraction[record] = math.max(lastInteraction[record] or 0, record.notes[#record.notes].time)
     guildStatistics = nil -- a note makes a formerly group-only record personal
     GL.Emit("CHANGED", record)
     return true
@@ -754,6 +787,7 @@ function GL.UpdateNote(identity, note, text)
     if not value then return false, err end
     if note.text ~= value then
         note.text, note.updatedAt = value, GL.Now()
+        lastInteraction[record] = math.max(lastInteraction[record] or 0, note.updatedAt)
         GL.Emit("CHANGED", record)
     end
     return true
@@ -762,6 +796,7 @@ function GL.DeleteNote(identity, note)
     local record, index = findNote(identity, note)
     if not record then return false, "Cette note n'appartient plus à cette fiche." end
     table.remove(record.notes, index)
+    rebuildInteraction(record)
     guildStatistics = nil
     GL.Emit("CHANGED", record)
     return true
@@ -826,6 +861,7 @@ function GL.VoidPvP(identity, event, silent)
     if not found then return false, "Cet événement n'appartient pas à cette fiche." end
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
+    if event.time == lastInteraction[record] then rebuildInteraction(record) end
     event.voidedByGUID, event.voidedByName = currentActor()
     guildStatistics = nil
     invalidateJournal()
@@ -952,7 +988,7 @@ function GL.SearchPlayers(options)
         if sort == "reputation" then return record.reputation or 0 end
         if sort == "kills" or sort == "deaths" then return record.pvp[sort] or 0 end
         if sort == "encounters" then return record.encounters and record.encounters.count or 0 end
-        return record.lastEncounterAt or 0
+        return lastInteraction[record] or 0
     end
     table.sort(result, function(a, b)
         local av, bv = value(a), value(b)

@@ -15,30 +15,33 @@ end
 
 local function plain(text) return tostring(text or ""):gsub("|", "||") end
 local journalFonts = {}
-local fontDir = media .. "Fonts\\Spectral-"
+local fontDir = media .. "Fonts\\PTSerif-"
 local locale = GetLocale and GetLocale()
 local nativeScript = locale == "koKR" or locale == "zhCN" or locale == "zhTW"
-local function journalFont(region, decorative, size)
-    journalFonts[region] = { decorative, size }
+local function journalFont(region, decorative, size, italic)
+    journalFonts[region] = { decorative, size, italic }
     local r, g, b, a = GL.Safe(region.GetTextColor, region)
     local spacing = GL.Safe(region.GetSpacing, region)
     local settings = GL.Settings()
-    local wordmark = decorative == "wordmark"
-    local heading = wordmark or decorative == "GameFontNormalLarge" or decorative:match("^Fancy%d+Font$")
-    local classic = settings.readableFont and not wordmark
+    local heading = decorative == "GameFontNormalLarge" or decorative:match("^Fancy%d+Font$")
+    local classic = settings.readableFont
     region:SetFontObject(classic and "ChatFontNormal" or (heading and "GameFontNormalLarge" or decorative))
     local nativePath, _, flags = region:GetFont()
     local pixels = size * (settings.readingScale or 1)
-    local face = wordmark and "SemiBoldItalic" or heading and "SemiBold" or "Regular"
+    local face = italic and "Italic" or heading and "Bold" or "Regular"
     local loaded = false
-    if not classic and (not nativeScript or wordmark) then
-        -- Forever's SetFont can return nothing on success. Older clients return a boolean.
-        local ok, result = pcall(region.SetFont, region, fontDir .. face .. ".ttf", pixels, "")
-        loaded = ok and result ~= false
+    if not classic and not nativeScript then
+        local path = fontDir .. face .. ".ttf"
+        local ok, result = pcall(region.SetFont, region, path, pixels, "")
+        -- On Forever a successful SetFont can have no return value. Check the applied face.
+        if ok and result ~= false then
+            local applied = result == nil and GL.Safe(region.GetFont, region)
+            loaded = result ~= nil or (type(applied) == "string" and applied:gsub("/", "\\"):lower() == path:lower())
+        end
     end
     if not loaded and nativePath then region:SetFont(nativePath, pixels, flags) end
     if region.SetShadowOffset then
-        region:SetShadowOffset(wordmark and 1 or 0, wordmark and -1 or 0)
+        region:SetShadowOffset(0, 0)
     end
     if r then region:SetTextColor(r, g, b, a) end
     if spacing then region:SetSpacing(spacing) end
@@ -230,8 +233,12 @@ local function bookWindow(name, title)
     f.title:SetSize(289, 51)
     f.title:SetJustifyH("CENTER")
     GL.Safe(f.title.SetJustifyV, f.title, "MIDDLE")
-    journalFont(f.title, "wordmark", 34)
+    journalFont(f.title, "GameFontNormalLarge", 31)
     f.title:SetTextColor(1, 0.83, 0.49)
+    f.wordmark = f:CreateTexture(nil, "ARTWORK")
+    f.wordmark:SetPoint("CENTER", f.title, "CENTER", 0, 0)
+    f.wordmark:SetSize(248, 62)
+    if f.wordmark:SetTexture(media .. "JournalWordmark") ~= false then f.title:Hide() end
     f.indexPaper = f:CreateTexture(nil, "BACKGROUND", nil, -1)
     f.indexPaper:SetPoint("TOPLEFT", 25, -145)
     f.indexPaper:SetSize(295, 520)

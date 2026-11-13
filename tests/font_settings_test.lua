@@ -19,7 +19,7 @@ assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
-local fontDir = "Interface\\AddOns\\GrudgeLedger\\Media\\Fonts\\Spectral-"
+local fontDir = "Interface\\AddOns\\GrudgeLedger\\Media\\Fonts\\PTSerif-"
 assert(GL.Settings().readableFont == false, "existing grimoire presentation is the default")
 GrudgeLedgerDB = {settings = {readableFont = true}} -- preference saved by an earlier session
 GL.InitDB()
@@ -32,8 +32,8 @@ local f, note = GrudgeLedgerWindow, GrudgeLedgerNote
 note.edit:SetText(string.rep("Brouillon non enregistré. ", 40))
 SlashCmdList.GRUDGELEDGER("settings")
 local settings = GrudgeLedgerSettings
-assert(settings.classic.active and f.title:GetFont() == fontDir .. "SemiBoldItalic.ttf" and note.edit.fontObject == "ChatFontNormal")
-assert(select(2, f.title:GetFont()) == 34 and select(2, f.rows[1].name:GetFont()) == 16)
+assert(settings.classic.active and f.wordmark:IsShown() and not f.title:IsShown() and note.edit.fontObject == "ChatFontNormal")
+assert(select(2, f.rows[1].name:GetFont()) == 16)
 assert(select(2, f.detailText:GetFont()) == 15 and select(2, note.edit:GetFont()) == 15)
 local draft, text, color = note.edit:GetText(), f.detailText:GetText(), {f.detailText:GetTextColor()}
 local readableHeight = note.edit:GetHeight()
@@ -50,21 +50,28 @@ choose(false)
 assert(f.title.fontObject == "GameFontNormalLarge" and f.detailTitle.fontObject == "GameFontNormalLarge")
 assert(f.rows[1].name.fontObject == "GameFontNormalLarge" and note.edit.fontObject == "QuestFont_Large")
 assert(settings.title.fontObject == "GameFontNormalLarge", "book section titles switch too")
-assert(f.detailTitle:GetFont() == fontDir .. "SemiBold.ttf" and f.rows[1].name:GetFont() == fontDir .. "SemiBold.ttf")
+assert(f.detailTitle:GetFont() == fontDir .. "Bold.ttf" and f.rows[1].name:GetFont() == fontDir .. "Bold.ttf")
 assert(note.edit:GetFont() == fontDir .. "Regular.ttf" and f.total:GetFont() == fontDir .. "Regular.ttf")
-assert(f.navigation.ledger.caption:GetFont() == fontDir .. "SemiBold.ttf")
+assert(f.hint:GetFont() == fontDir .. "Italic.ttf" and f.detailSource:GetFont() == fontDir .. "Italic.ttf")
+assert(f.navigation.ledger.caption:GetFont() == fontDir .. "Bold.ttf")
 local tab = f.navigation.ledger
 assert(not tab.normalFont and not tab.highlightFont and not tab.disabledFont,
     "a native button state font would replace the themed caption on hover or disable")
 tab:SetText("Journal") tab:SetEnabled(false) tab:SetEnabled(true)
-assert(tab.caption:GetText() == "Journal" and tab.caption:GetFont() == fontDir .. "SemiBold.ttf")
+assert(tab.caption:GetText() == "Journal" and tab.caption:GetFont() == fontDir .. "Bold.ttf")
 local unavailable = f:CreateFontString()
 function unavailable:SetFont(path, size, flags)
-    if path:find("Spectral", 1, true) then error("Font asset unavailable") end
+    if path:find("PTSerif", 1, true) then error("Font asset unavailable") end
     setFont(self, path, size, flags)
 end
 GL.UITheme.journalFont(unavailable, "GameFontHighlight", 14)
 assert(unavailable:GetFont() == "Classic" and select(2, unavailable:GetFont()) == 14)
+function unavailable:SetFont(path, size, flags)
+    if path:find("PTSerif", 1, true) then return end -- no error, but original face remained active
+    setFont(self, path, size, flags)
+end
+GL.UITheme.journalFont(unavailable, "GameFontHighlight", 13)
+assert(unavailable:GetFont() == "Classic" and select(2, unavailable:GetFont()) == 13)
 assert(note.edit:GetHeight() > readableHeight, "wrapped text is measured again immediately")
 f.detailScroll:SetVerticalScroll(100000)
 note.scroll:SetVerticalScroll(100000)
@@ -94,5 +101,13 @@ GL.SetSetting("compactMode", true)
 assert(f.detailText:GetSpacing() == 2)
 GL.SetSetting("compactMode", false)
 assert(f.detailText:GetSpacing() == 4)
+GL.SetSetting("readableFont", false)
+for _, locale in ipairs({"koKR", "zhCN", "zhTW", "ruRU"}) do
+    GetLocale = function() return locale end
+    assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
+    local field = f:CreateFontString()
+    GL.UITheme.journalFont(field, "GameFontHighlight", 16)
+    assert(field:GetFont() == (locale == "ruRU" and fontDir .. "Regular.ttf" or "Classic"), locale)
+end
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS font settings: persisted choice, immediate reversible native fonts, sizes/colors/spacing, scroll clamping, drafts, hidden and newly created windows")

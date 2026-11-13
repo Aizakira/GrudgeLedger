@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.8.0
+GRUDGE LEDGER — 0.8.1
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -6,6 +6,13 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.8.1 — Lecture du journal
+
+En ouvrant le Journal, la personne avec qui vous avez interagi en dernier figure en tête.
+Une recherche validée avec Entrée ou OK retrouve votre tri préféré. Effacer la recherche
+rétablit la chronologie. Dans Réglages > Apparence, choisissez Grimoire pour la nouvelle
+typographie. Le titre doré du livre apparaît dans les deux modes de lecture.
 
 0.8.0 — Rencontres et monde ouvert
 
@@ -23,7 +30,7 @@ Une fois le joueur hors de vue, sa fiche utilise ses emblèmes connus.
 Les dégâts et les morts causés par un familier peuvent être attribués à son
 maître lorsque son identité est établie. La fiche précise la preuve.
 Dans Bilan, « Par zone » regroupe les victoires et les morts au lieu du combat.
-Pour le lettrage du parchemin, choisissez Réglages > Apparence > Grimoire.
+Dans Réglages > Apparence, « Grimoire · PT Serif » utilise des titres gras et des annotations en italique. « Classique » conserve la police du jeu.
 
 0.7.1 — Registre de campagne
 

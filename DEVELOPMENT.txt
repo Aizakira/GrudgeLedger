@@ -51,11 +51,11 @@ Les statistiques de rencontre non datées ne deviennent pas des bilans annuels.
   sans transformer un test ponctuel en promesse de détection continue fiable.
 - Évolution des illustrations et du grimoire après retours sur le vrai client.
 
-Revue visuelle facultative hors jeu (Windows, Spectral fourni avec l’addon) :
+Revue visuelle facultative hors jeu (Windows, PT Serif fourni avec l’addon) :
   python -m pip install Pillow==12.1.1
   python visual-qa/render.py
 Le rendu provient des cadres Lua réels exécutés avec des API simulées.
-Le style Grimoire utilise les trois fichiers Spectral livrés au jeu. Le style
+Le style Grimoire utilise les trois fichiers PT Serif livrés au jeu. Le style
 Classique utilise la police native de lecture, remplacée par Arial si le cache
 de développement ne la contient pas. Les personnages des aperçus sont fictifs.
 

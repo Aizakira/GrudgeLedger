@@ -156,6 +156,8 @@ assert(activeTab.active and activeTab.selection:IsShown() and activeTab.selectio
 assert(contrast(activeTab.caption.color, activeTab.normalSurface.color) >= 4.5,
     "reenabling an active parchment tab restores light text on its dark selection")
 assert(ledger.seal.texture:match("JournalMedallion$") and ledger.title:GetText() == "Grudge Ledger")
+assert(ledger.wordmark.texture:match("JournalWordmark$") and ledger.wordmark:IsShown() and not ledger.title:IsShown(),
+    "the independent gold wordmark replaces the visible title exactly once")
 assert(ledger.closeButton.normalTexture.texture:match("JournalClose$") and ledger.settingsButton.normalTexture.texture:match("JournalSettings$"))
 ledger.bookSurface:Hide()
 click(ledger.closeButton)

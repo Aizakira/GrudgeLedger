@@ -33,9 +33,11 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 Le registre de campagne réunit le Journal, les Classements, les Guildes et le Bilan. Dans le Journal, filtrez les rencontres par avis et faction, puis ouvrez une fiche pour consulter le solde automatique, la dernière rencontre, l’histoire et les notes. Les portraits de race et les icônes de classe utilisent l’identité connue du jeu.
 
-Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartouche, la roue dentée et la croix sont des éléments indépendants. Le jeu dessine les textes et gère les clics. Le lettrage doré, les titres et le texte du grimoire utilisent les polices Spectral fournies avec l’addon. L’aperçu hors jeu utilise des personnages fictifs.
+Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartouche, la roue dentée et la croix sont des éléments indépendants. Le lettrage doré est une texture indépendante. Le jeu affiche les noms et le contenu du livre en PT Serif, avec des titres gras et des annotations en italique. Le réglage Classique utilise la police native du jeu. L’aperçu hors jeu utilise des personnages fictifs.
 
 La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous pouvez agrandir le texte, choisir la police de lecture et compacter l’espacement. Le guide de première ouverture est accessible depuis **Données et aide**.
+
+La colonne de gauche présente les contacts du plus récemment au plus anciennement rencontré ou annoté. Une interaction comme un combat, un geste ou un échange actualise aussi ce classement. Validez une recherche pour utiliser votre tri préféré. Vider le champ rétablit la chronologie.
 
 ### Depuis la 0.8.0
 

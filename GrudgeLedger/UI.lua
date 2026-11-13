@@ -8,7 +8,7 @@ local selectedKey, filter, offset = nil, "all", 0
 local factionFilter = "all"
 local notesOnly = false
 local listSort, listDetail = "recent", "identity"
-local sortChoices = { { "recent", "Dernière rencontre" }, { "name", "Nom" }, { "reputation", "Réputation" }, { "kills", "Victoires" }, { "deaths", "Morts" }, { "encounters", "Nb de rencontres" } }
+local sortChoices = { { "recent", "Dernière interaction" }, { "name", "Nom" }, { "reputation", "Réputation" }, { "kills", "Victoires" }, { "deaths", "Morts" }, { "encounters", "Nb de rencontres" } }
 local detailChoices = { { "identity", "Identité" }, { "guild", "Guilde" }, { "pvp", "PvP confirmé" }, { "notes", "Notes" } }
 local drafts = {}
 local guildDrafts = {}
@@ -1600,7 +1600,7 @@ showSettings = function()
         local p = f.pages.appearance
         settingText(p, "Police de lecture", 356, 209, 266, 16)
         f.classic = button(p, "Classique", 356, -243, 127, function() GL.SetSetting("readableFont", true) end, true, true)
-        f.grimoire = button(p, "Grimoire", 491, -243, 116, function() GL.SetSetting("readableFont", false) end, true, true)
+        f.grimoire = button(p, "Grimoire · PT Serif", 491, -243, 145, function() GL.SetSetting("readableFont", false) end, true, true)
         check("appearance", "compactMode", "Espacement compact", 282, 266)
         f.readingLabel = settingText(p, "", 356, 326, 142, 13)
         button(p, "−", 500, -317, 29, function() GL.SetSetting("readingScale", (GL.Settings().readingScale or 1) - 0.05) end, nil, true)
@@ -1765,7 +1765,10 @@ local function buildLedger()
         local identity = GL.Identity("target")
         if not identity then GL.Print("Sélectionne un joueur pour ouvrir sa fiche.") return end
         local record = GL.Remember(identity)
-        if record then GL.ShowLedger(record.key) end
+        if record then
+            if GL.Safe(UnitIsVisible, "target") == true then GL.RecordSeen(identity, true) end
+            GL.ShowLedger(record.key)
+        end
     end, nil, false)
     f.search = CreateFrame("EditBox", nil, f)
     f.search:SetPoint("TOPLEFT", 36, -155)
@@ -1773,14 +1776,17 @@ local function buildLedger()
     f.search:SetAutoFocus(false)
     f.search:SetMaxLetters(100)
     styleInput(f.search, false, false)
-    local function applySearch() f.query = f.search:GetText() offset = 0 f.search:ClearFocus() refresh() end
+    local function applySearch() f.query = f.search:GetText():match("^%s*(.-)%s*$") offset = 0 f.search:ClearFocus() refresh() end
     f.search:SetScript("OnEnterPressed", applySearch)
     f.searchButton = button(f, "OK", 159, -155, 28, applySearch)
     f.searchButton.caption:SetWidth(26) f.searchButton.caption:ClearAllPoints() f.searchButton.caption:SetPoint("CENTER")
     f.searchHint = label(f.search, "Nom, guilde, note…", nil, 8, -6, 107)
     f.searchHint:SetTextColor(unpack(theme.muted))
     f.search:SetScript("OnTextChanged", function(self)
-        if self:GetText() == "" then f.searchHint:Show() else f.searchHint:Hide() end
+        if self:GetText():find("%S") then f.searchHint:Hide() else
+            f.searchHint:Show()
+            if f.query and f.query ~= "" then f.query, offset = "", 0 refresh() end
+        end
     end)
     f.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     local openMenu
@@ -1819,7 +1825,8 @@ local function buildLedger()
     f.factionFilter, f.factions = filterMenu(173, { { "Toutes factions", "all" }, { "Alliance", "Alliance" },
         { "Horde", "Horde" }, { "Inconnue", "unknown" } }, function(value) factionFilter = value end)
     f.rows = {}
-    f.sort = button(f, "Dernière rencontre", 149, -229, 158, function()
+    f.sort = button(f, "Dernière interaction", 149, -229, 158, function()
+        if not f.query or f.query == "" then return end
         for i, choice in ipairs(sortChoices) do
             if choice[1] == listSort then listSort = sortChoices[i % #sortChoices + 1][1] break end
         end
@@ -1931,6 +1938,7 @@ local function buildLedger()
     f.detailGuild:SetTextColor(unpack(theme.ink)) f.detailGuild:SetHeight(22)
     GL.Safe(f.detailGuild.SetWordWrap, f.detailGuild, false)
     f.detailSource = label(f, "", nil, 753, -196, 166)
+    journalFont(f.detailSource, "GameFontHighlight", 13, true)
     f.detailSource:SetJustifyH("RIGHT") f.detailSource:SetHeight(39) f.detailSource:SetTextColor(unpack(theme.inkMuted))
     f.actions, f.reactions = {}, {}
     for _, option in ipairs({ { "Ami", "friend", 356, 74 }, { "Méfiance", "warning", 434, 100 }, { "Ennemi", "enemy", 538, 89 }, { "Automatique", "neutral", 631, 123 } }) do
@@ -2005,7 +2013,7 @@ local function buildLedger()
     f.formula = label(f.counters, "", nil, 6, -128, 546)
     f.formula:SetTextColor(unpack(theme.ink)) f.formula:SetJustifyH("CENTER") f.formula:SetHeight(22)
     f.scoreContext = label(f.counters, "", nil, 6, -151, 546)
-    journalFont(f.scoreContext, "GameFontHighlightSmall", 11) f.scoreContext:SetTextColor(unpack(theme.inkMuted)) f.scoreContext:SetJustifyH("CENTER") f.scoreContext:SetHeight(17)
+    journalFont(f.scoreContext, "GameFontHighlightSmall", 11, true) f.scoreContext:SetTextColor(unpack(theme.inkMuted)) f.scoreContext:SetJustifyH("CENTER") f.scoreContext:SetHeight(17)
     f.detailScroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
     f.detailScroll:SetPoint("TOPLEFT", 356, -379)
     f.detailScroll:SetSize(544, 190)
@@ -2054,7 +2062,7 @@ local function buildLedger()
     f.detailScroll:SetScrollChild(f.detailBody)
     local hint = label(f, "Votre choix personnel reste prioritaire.", nil, 356, -640, 360)
     f.hint = hint
-    journalFont(hint, "GameFontHighlightSmall", 12)
+    journalFont(hint, "GameFontHighlightSmall", 12, true)
     hint:SetHeight(20)
     hint:SetTextColor(unpack(theme.inkMuted))
     local first = CreateFrame("Frame", nil, f)
@@ -2098,7 +2106,8 @@ refresh = function(focusSelected)
     layoutIndex(ledger, GL.Settings().compactMode)
     local selected = currentRecord()
     selectedKey = selected and selected.key
-    listSort = GL.Settings().listSort or listSort
+    local searched = ledger.query ~= nil and ledger.query ~= ""
+    listSort = searched and GL.Settings().listSort or "recent"
     listDetail = GL.Settings().listDetail or listDetail
     local records = GL.SearchPlayers({ query = ledger.query or "", relation = filter, faction = factionFilter,
         notesOnly = notesOnly, sort = listSort, selectedKey = selectedKey })
@@ -2175,7 +2184,8 @@ refresh = function(focusSelected)
     ledger.factionFilter:SetText(factionNames[factionFilter] or (factionFilter == "unknown" and "Inconnue" or "Toutes factions"))
     ledger.previous:SetEnabled(offset > 0)
     ledger.next:SetEnabled(offset + ledger.pageSize < #records)
-    for _, choice in ipairs(sortChoices) do if choice[1] == listSort then ledger.sort:SetText("Tri : " .. choice[2]) end end
+    ledger.sort:SetEnabled(searched)
+    for _, choice in ipairs(sortChoices) do if choice[1] == listSort then ledger.sort:SetText(choice[2]) end end
     for _, choice in ipairs(detailChoices) do if choice[1] == listDetail then ledger.detail:SetText("Détail : " .. choice[2]) end end
     UI.selectButton(ledger.notesOnly, notesOnly)
     renderDetail()
@@ -2470,10 +2480,18 @@ GL.On("READY", function()
 end)
 
 GL.On("CHANGED", function() if ledger then ledger.historyPage.cache = nil end refresh() end)
+local sightingRefreshPending
+GL.On("CONTACT_SEEN", function()
+    if not ledger or not ledger:IsShown() or listSort ~= "recent" or sightingRefreshPending then return end
+    if C_Timer and C_Timer.After then
+        sightingRefreshPending = true
+        C_Timer.After(0.2, function() sightingRefreshPending = nil refresh() end)
+    else refresh() end
+end)
 GL.On("CHANGED", refreshGuilds)
 GL.On("CHANGED", refreshCorrections)
 GL.On("SETTINGS", function()
-    for region, fonts in pairs(journalFonts) do journalFont(region, fonts[1], fonts[2]) end
+    for region, fonts in pairs(journalFonts) do journalFont(region, fonts[1], fonts[2], fonts[3]) end
     refresh()
     if ledger then renderDetail() end
     if settingsWindow then settingsWindow:SyncControls() end

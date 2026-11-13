@@ -165,7 +165,37 @@ GL.RecordSeen(ib, true)
 eq(GL.SearchPlayers({ sort = "recent" })[1], ibRecord, "recent sighting sorting reads live metadata")
 now = now + 30
 GL.AddNote(ia, "Updated after coming home")
-eq(GL.SearchPlayers({ sort = "recent" })[1], ibRecord, "editing a contact cannot promote it above a more recent encounter")
+eq(GL.SearchPlayers({ sort = "recent" })[1], iaRecord, "a new note is a real journal interaction")
+now = now + 1 GL.RecordSeen(ib, true) GL.RecordSeen(icRecord) GL.Remember(icRecord)
+eq(GL.SearchPlayers()[1], iaRecord, "continuous observation and passive metadata do not overtake the note")
+now = now + 1 GL.RecordTrade(ib, "Échange") -- disabled by default
+eq(GL.SearchPlayers()[1], iaRecord, "an untracked trade cannot reorder the journal")
+GL.SetSetting("tradeTracking", true) GL.RecordTrade(ib, "Échange")
+eq(GL.SearchPlayers()[1], ibRecord, "completed trade updates recency")
+now = now + 1 GL.RecordGroup(ia, "known-group", "Zone")
+eq(GL.SearchPlayers()[1], iaRecord, "a recorded group with a known person updates recency")
+now = now + 1 GL.AdjustReputation(ib, -1, "/spit", "emote")
+eq(GL.SearchPlayers()[1], ibRecord, "a directed gesture updates recency")
+now = now + 1 GL.RecordPvP(icRecord, "death", "confirmed", "witness", "newest-fight")
+eq(GL.SearchPlayers()[1], icRecord, "a death outranks an older gesture")
+assert(GL.VoidPvP(icRecord, icRecord.history[#icRecord.history]))
+eq(GL.SearchPlayers()[1], ibRecord, "a voided result no longer sets order")
+now = now + 1 GL.UpdateNote(ia, iaRecord.notes[#iaRecord.notes], "Revised")
+eq(GL.SearchPlayers()[1], iaRecord, "editing a note updates journal recency")
+GL.DeleteNote(ia, iaRecord.notes[#iaRecord.notes])
+eq(GL.SearchPlayers()[1], ibRecord, "deleting a note removes its timestamp")
+-- Legacy histories can be out of order. Ties have a stable identity key,
+-- and neither invalid/future dates nor a passive lastSeen supply an interaction.
+local newest = now + 1
+now = newest
+iaRecord.history[#iaRecord.history + 1] = {kind="reputation", time=newest}
+iaRecord.history[#iaRecord.history + 1] = {kind="reaction", time=newest - 10}
+ibRecord.history[#ibRecord.history + 1] = {kind="reaction", time=newest}
+icRecord.history[#icRecord.history + 1] = {kind="trade", time=now + 50000}
+icRecord.lastSeen = now + 60000
+GL.InitDB()
+eq(GL.SearchPlayers()[1], iaRecord, "legacy equal timestamps sorted deterministically")
+eq(GL.SearchPlayers()[2], ibRecord, "legacy recovery scans the original timestamp of every relevant event")
 local grouped = GL.Remember(person("GroupOnly"))
 grouped.groupCount, grouped.history = 1, { { kind = "grouped", time = now } }
 eq(#GL.SearchPlayers(), 3, "group-only records do not pollute list")

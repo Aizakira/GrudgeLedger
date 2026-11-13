@@ -193,6 +193,24 @@ click(ledger.reset)
 assert(ledger.search:GetText() == "" and ledger.query == "" and ledger.filters.all.active and ledger.factions.all.active)
 assert(not ledger.notesOnly.active and GL.Settings().listSort == "name" and GL.Settings().listDetail == "guild",
     "reset clears search filters without discarding display preferences")
+GL.SetSetting("listSort", "reputation")
+now = now + 1 GL.RecordPvP(a, "death", "confirmed", "witness", "chronology-test")
+assert(ledger.rows[1].key == a.key and ledger.sort:GetText() == "Dernière interaction" and not ledger.sort:IsEnabled())
+ledger.search:SetText("Golden")
+assert(ledger.rows[1].key == a.key and not ledger.sort:IsEnabled(), "typing alone preserves chronology")
+click(ledger.searchButton)
+assert(ledger.sort:IsEnabled() and ledger.sort:GetText() == "Réputation" and ledger.rows[1].key ~= a.key)
+ledger.search:SetText(" ")
+assert(ledger.query == "" and ledger.rows[1].key == a.key and not ledger.sort:IsEnabled(), "clearing text immediately restores chronology")
+now = now + 601 GL.RecordSeen(b, true)
+assert(ledger.rows[1].key == b.key, "new direct visit reorders an already open journal")
+now = now + 1
+local visible = UnitIsVisible
+UnitIsVisible = function(unit) return unit == "target" end
+click(ledger.addTarget)
+local added = GL.Get(GL.Identity("target"))
+assert(added and ledger.rows[1].key == added.key, "adding a visible target starts its first encounter")
+UnitIsVisible = visible
 for i = 1, 12 do GL.SetReaction(person("AAAA" .. i), "enemy") end
 GL.ShowLedger(b.key)
 local found

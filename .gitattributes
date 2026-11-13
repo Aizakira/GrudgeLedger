@@ -2,3 +2,5 @@
 *.tga binary
 *.png binary
 *.ttf binary
+# Keep the upstream font license byte-for-byte, including its two trailing spaces.
+GrudgeLedger/Media/Fonts/OFL.txt -text whitespace=-blank-at-eol

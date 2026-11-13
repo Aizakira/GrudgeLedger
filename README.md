@@ -31,9 +31,11 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 
 The campaign register brings together the journal, rankings, guilds and personal PvP summary. Filter contacts by relationship and faction, then open a record to see its automatic score, latest encounter, history or notes. Race portraits and class icons use identity information supplied by the game.
 
-The leather, cloth and parchment share a decorative background. The medallion, title plaque, settings and close buttons have independent textures. WoW renders the text and handles clicks. The gold wordmark, headings and journal text use the bundled Spectral fonts. The offline preview uses fictional contacts.
+The leather, cloth and parchment share a decorative background. The medallion, title plaque, settings and close buttons have independent textures. The gold wordmark is a separate texture. WoW renders names and journal entries in PT Serif, with bold headings and italic annotations. Classic mode uses the native game font. The offline preview uses fictional contacts.
 
 Open the cog or use `/gl settings` to set the font, text size and spacing. The first-use guide can be opened again from **Données et aide**.
+
+The index opens with the most recent interaction first. A new encounter, fight, gesture, trade or note can move a contact up. Submitting a search restores the preferred result order. Clearing it returns the index to chronological order.
 
 ### New in 0.8.0
 

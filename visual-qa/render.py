@@ -51,7 +51,7 @@ def font(size, face=None):
 @lru_cache(maxsize=32)
 def font_path(face):
     name = (face or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
-    if name.startswith("spectral-"):
+    if name.startswith("ptserif-"):
         return ADDON / "Media" / "Fonts" / face.replace("\\", "/").rsplit("/", 1)[-1]
     candidates = {"frizqt__.ttf": ("FRIZQT__.TTF", "georgia.ttf"),
                   "morpheus.ttf": ("MORPHEUS.TTF", "georgia.ttf"),
