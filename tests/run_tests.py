@@ -8,11 +8,15 @@ from lupa.lua51 import LuaRuntime
 
 addon = work / "GrudgeLedger"
 for name, expected_width, expected_height, transparent in (
-    ("LedgerIcon.tga", 256, 256, True), ("LedgerBook.tga", 256, 256, True),
+    ("LedgerBook.tga", 256, 256, True),
+    ("JournalMedallion.tga", 128, 128, True), ("JournalSettings.tga", 64, 64, True),
+    ("JournalClose.tga", 64, 64, True),
+    ("JournalTitlePlate.tga", 512, 64, True),
     ("RelationFriend.tga", 128, 128, True), ("RelationWarning.tga", 128, 128, True), ("RelationEnemy.tga", 128, 128, True),
     ("RelationNeutral.tga", 128, 128, True),
     ("JournalIllustration.tga", 512, 256, True), ("JournalPaper.tga", 512, 512, False),
     ("JournalBookSurface.tga", 1024, 1024, True),
+    ("JournalButtons.tga", 512, 512, True),
     ("GestureKiss.tga", 128, 128, False),
 ):
     texture = (addon / "Media" / name).read_bytes()
@@ -24,9 +28,9 @@ for name, expected_width, expected_height, transparent in (
     assert len(texture) >= pixels + width * height * 4
     alpha = texture[pixels + 3:pixels + width * height * 4:4]
     if transparent:
-        # The resampled book retains its generated alpha (up to 3/255 at corners).
-        corner_limit = 3 if name == "JournalBookSurface.tga" else 0
-        assert all(alpha[y * width + x] <= corner_limit for x in (0, width - 1) for y in (0, height - 1)), "artwork corners must be transparent"
+        # Resampling preserves generated alpha; allow an imperceptible 3/255 fringe.
+        corner_limit = 3 if name in ("JournalBookSurface.tga", "JournalButtons.tga") else 0
+        assert all(alpha[y * width + x] <= corner_limit for x in (0, width - 1) for y in (0, height - 1)), name + ": artwork corners must be transparent"
     else:
         assert all(a == 255 for a in alpha), "opaque artwork must remain opaque"
     assert any(alpha), "artwork must not be empty"

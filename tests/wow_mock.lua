@@ -66,6 +66,7 @@ function methods:SetEnabled(v)
     local callback = self.scripts[v and "OnEnable" or "OnDisable"]
     if changed and callback then callback(self) end
 end
+function methods:IsEnabled() return self.enabled end
 function methods:SetToplevel(v) self.topLevel = v end
 function methods:Raise() self.raised = (self.raised or 0) + 1 end
 function methods:SetChecked(v) self.checked = v end
@@ -80,6 +81,7 @@ function methods:GetCenter() return 100, 100 end
 function methods:GetEffectiveScale() return 1 end
 function methods:SetTextColor(r, g, b) self.color = { r, g, b } end
 function methods:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
+function methods:SetVertexColor(r, g, b, a) self.vertexColor = { r, g, b, a } end
 function methods:SetNormalFontObject(value) self.normalFont = value end
 function methods:SetHighlightFontObject(value) self.highlightFont = value end
 function methods:SetDisabledFontObject(value) self.disabledFont = value end
@@ -91,6 +93,7 @@ function methods:SetHitRectInsets(...) self.hitRectInsets = { ... } end
 function methods:SetNormalTexture(value) self.normalTexture = value end
 function methods:GetNormalTexture() return type(self.normalTexture) == "table" and self.normalTexture or nil end
 function methods:SetHighlightTexture(value) self.highlightTexture = value end
+function methods:LockHighlight() self.highlightLocked = true end
 function methods:SetPushedTexture(value) self.pushedTexture = value end
 function methods:SetDisabledTexture(value) self.disabledTexture = value end
 function methods:SetFontString(value) self.fontString = value end
@@ -102,7 +105,7 @@ function methods:HookScript(event, fn)
 end
 function methods:RegisterEvent(event) self.events[event] = true end
 function methods:UnregisterEvent(event) self.events[event] = nil end
-for _, name in ipairs({ "SetFrameStrata", "SetClampedToScreen", "EnableMouse", "SetMovable", "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetAllPoints", "SetJustifyH", "SetSpacing", "SetAutoFocus", "SetMaxLetters", "SetMultiLine", "SetFontObject", "SetTextInsets", "ClearAllPoints", "RegisterForClicks", "SetTexture", "SetAlpha" }) do
+for _, name in ipairs({ "SetFrameStrata", "SetClampedToScreen", "EnableMouse", "SetMovable", "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetAllPoints", "SetJustifyH", "SetSpacing", "SetAutoFocus", "SetMaxLetters", "SetMultiLine", "SetFontObject", "SetTextInsets", "ClearAllPoints", "RegisterForClicks", "SetTexture", "SetAlpha", "SetDrawLayer" }) do
     methods[name] = function() end
 end
 local function newRegion(parent, name)

@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.6.0
+GRUDGE LEDGER — 0.7.0
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -6,6 +6,13 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.7.0 — Registre de campagne
+
+Ouvrez le livre avec /gl. L’onglet Journal présente les rencontres et les notes.
+Classements, Guildes et Bilan sont accessibles depuis le même bandeau.
+La roue dentée ouvre les réglages de lecture, les alertes et le guide.
+Les fiches restent dans les SavedVariables de votre compte.
 
 0.6.0 : bilan personnel et chronique
 

@@ -16,6 +16,7 @@ end
 function methods:GetStringHeight() return self:GetNumLines() * (select(2, self:GetFont()) + self:GetSpacing()) end
 
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
+assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
 assert(GL.Settings().readableFont == false, "existing grimoire presentation is the default")
@@ -24,13 +25,14 @@ GL.InitDB()
 local record = GL.SetReaction(GL.Identity("target"), "friend")
 GL.AddNote(record, string.rep("Longue note lisible. ", 40))
 GL.ShowLedger(record.key)
+GrudgeLedgerWindow.detailTabs.notes:GetScript("OnClick")(GrudgeLedgerWindow.detailTabs.notes)
 GL.EditNote(record)
 local f, note = GrudgeLedgerWindow, GrudgeLedgerNote
 note.edit:SetText(string.rep("Brouillon non enregistré. ", 40))
 SlashCmdList.GRUDGELEDGER("settings")
 local settings, check = GrudgeLedgerSettings, GrudgeLedgerSettings.checks.readableFont
 assert(check:GetChecked() and f.title.fontObject == "ChatFontNormal" and note.edit.fontObject == "ChatFontNormal")
-assert(select(2, f.title:GetFont()) == 24 and select(2, f.rows[1].name:GetFont()) == 16)
+assert(select(2, f.title:GetFont()) == 30 and select(2, f.rows[1].name:GetFont()) == 16)
 assert(select(2, f.detailText:GetFont()) == 15 and select(2, note.edit:GetFont()) == 15)
 local draft, text, color = note.edit:GetText(), f.detailText:GetText(), {f.detailText:GetTextColor()}
 local readableHeight = f.detailBody:GetHeight()
@@ -40,9 +42,9 @@ local function choose(value)
     assert(GL.Settings().readableFont == value and GrudgeLedgerDB.settings.readableFont == value)
 end
 choose(false)
-assert(f.title.fontObject == "Fancy24Font" and f.detailTitle.fontObject == "Fancy24Font")
-assert(f.rows[1].name.fontObject == "Fancy16Font" and note.edit.fontObject == "QuestFont_Large")
-assert(settings.title.fontObject == "Fancy18Font", "secondary window titles switch too")
+assert(f.title.fontObject == "GameFontNormalLarge" and f.detailTitle.fontObject == "GameFontNormalLarge")
+assert(f.rows[1].name.fontObject == "GameFontNormalLarge" and note.edit.fontObject == "QuestFont_Large")
+assert(settings.title.fontObject == "GameFontNormalLarge", "book section titles switch too")
 assert(f.detailBody:GetHeight() > readableHeight, "wrapped text is measured again immediately")
 f.detailScroll:SetVerticalScroll(100000)
 note.scroll:SetVerticalScroll(100000)
@@ -64,5 +66,13 @@ assert(GrudgeLedgerGuilds.title.fontObject == "ChatFontNormal", "later-created w
 assert(not GL.SetSetting("readableFont", "true"), "setting validates its type")
 GL.InitDB()
 assert(GL.Settings().readableFont and check:GetChecked(), "choice survives database reload")
+GL.SetSetting("readingScale", 1.25)
+assert(select(2, f.detailText:GetFont()) == 18.75 and select(2, f.rows[1].name:GetFont()) == 20,
+    "reading scale applies to content and index names")
+assert(note.edit:GetText() == draft, "resizing text preserves an unsaved draft")
+GL.SetSetting("compactMode", true)
+assert(f.detailText:GetSpacing() == 2)
+GL.SetSetting("compactMode", false)
+assert(f.detailText:GetSpacing() == 4)
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS font settings: persisted choice, immediate reversible native fonts, sizes/colors/spacing, scroll clamping, drafts, hidden and newly created windows")

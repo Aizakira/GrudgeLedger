@@ -31,13 +31,11 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 ![Aperçu hors jeu du journal sur parchemin, avec des personnages fictifs](docs/journal.png)
 
-Le journal est un livre ouvert : deux pages de parchemin vieilli, du cuir rouge cousu, des tranches de feuilles et de fines ferrures. L’index conserve les icônes et les libellés de relation, avec une encre sombre lisible. Le classement et la prise de notes restent en haut ; les actions moins fréquentes passent au pied de la page. L’inspiration vient d’Overlord, avec des illustrations originales. Cet aperçu provient du véritable agencement Lua, simulé hors jeu avec des personnages fictifs ; les polices et icônes natives sont approximées.
+Le registre de campagne réunit le Journal, les Classements, les Guildes et le Bilan. Dans le Journal, filtrez les rencontres par avis et faction, puis ouvrez une fiche pour consulter le solde automatique, la dernière rencontre, l’histoire et les notes. Les portraits de race et les icônes de classe utilisent l’identité connue du jeu.
 
-Les titres, les noms et le texte de la fiche utilisent désormais les familles calligraphiques natives de WoW (Morpheus pour l’alphabet latin). Les notes se lisent et se saisissent en 15 pixels ; les commandes et petites indications conservent une police compacte.
+Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartouche, la roue dentée et la croix sont des éléments indépendants. Le jeu dessine les textes et gère les clics. L’aperçu ci-dessus utilise des personnages fictifs et des polices de substitution pour le rendu hors jeu.
 
-Le livre suit le contour transparent de son illustration, sans ombre noire rectangulaire. Les boutons partagent une écriture dorée sur le cuir ou une encre brune sur le parchemin, un trait discret et des états de survol, clic, désactivation et sélection distincts.
-
-Dans **Réglages** (`/gl settings`), cocher **« Police classique (plus lisible) »** remplace la calligraphie par la police native du chat, aux mêmes tailles. Décocher rétablit le style grimoire. Le changement est immédiat pour les titres, les noms et les notes, conserve les brouillons et reste sauvegardé. Les boutons compacts restent inchangés.
+La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous pouvez agrandir le texte, choisir la police de lecture et compacter l’espacement. Le guide de première ouverture est accessible depuis **Données et aide**.
 
 ## Solde de rancune
 

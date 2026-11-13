@@ -29,13 +29,11 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 
 ![Offline preview of the ancient-book journal, with synthetic example records](docs/journal.png)
 
-The journal is an open, aged book with two parchment pages, stitched red leather, layered page edges and restrained brass corners. The index keeps a relationship icon, explicit label and dark readable ink. Classification and note-taking stay at the top; less frequent actions sit at the foot of the page. Its visual direction was inspired by Overlord, using original artwork. This preview is rendered from the actual Lua layout outside WoW, with synthetic records and approximated native fonts/icons.
+The campaign register brings together the journal, rankings, guilds and personal PvP summary. Filter contacts by relationship and faction, then open a record to see its automatic score, latest encounter, history or notes. Race portraits and class icons use identity information supplied by the game.
 
-The book follows its transparent artwork outline, without a rectangular black shadow. Shared buttons use gold lettering on leather and brown ink on parchment, with subtle underlines and separate hover, pressed, disabled and selected states.
+The leather, cloth and parchment share a decorative background. The medallion, title plaque, settings and close buttons have independent textures. WoW renders the text and handles clicks. The offline preview above uses fictional contacts and substitute fonts.
 
-Titles, names and journal text use WoW’s native calligraphic font families (Morpheus for the Latin alphabet). Notes use a 15-pixel reading/editing font; compact controls and small labels retain their regular font.
-
-In **Settings** (`/gl settings`), enable **“Police classique (plus lisible)”** to use the native chat font at the same sizes instead of calligraphy. Disable it to restore the grimoire style. Titles, names and notes update immediately, drafts are preserved, and the choice is saved. Compact buttons keep their regular font.
+Open the cog or use `/gl settings` to set the font, text size and spacing. The first-use guide can be opened again from **Données et aide**.
 
 ## Grudge balance
 

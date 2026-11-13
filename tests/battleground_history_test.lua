@@ -102,10 +102,13 @@ assert(fresh ~= only and fresh.reputation == -1 and #fresh.history == 1 and GL.G
 assert(#only.history == 6 and #GL.db.battlegroundArchive == 2 and changes == 1)
 
 -- Mixed histories explain the exclusion in both journal and correction UI.
+assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 GL.ShowLedger(mixed.key)
+GrudgeLedgerWindow.detailTabs.history.scripts.OnClick(GrudgeLedgerWindow.detailTabs.history, "LeftButton")
 assert(GrudgeLedgerWindow.detailText:GetText():find("champ de bataille, non comptabilisé", 1, true))
-for _, child in ipairs(GrudgeLedgerWindow.children) do
+GrudgeLedgerWindow.tools.scripts.OnClick()
+for _, child in ipairs(GrudgeLedgerWindow.toolsMenu.children) do
     if child.text == "Corriger le PvP" then child.scripts.OnClick(child, "LeftButton") end
 end
 local row = GrudgeLedgerCorrections.rows[3]

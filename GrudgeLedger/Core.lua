@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.6.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon",
+GrudgeLedger = { version = "0.7.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -10,17 +10,20 @@ local traceLast = {}
 local observations, observationCount = {}, 0
 local guildStatistics
 local journalIndex, journalSorted, personalStatistics
+local breakdownStatistics = {}
 local socialTotals = setmetatable({}, { __mode = "k" })
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true,
     groupTracking = true, socialTracking = true, minimapAngle = 225, readableFont = false,
     quickGestures = true, detectionLog = true, partyWarnings = false,
-    listSort = "recent", listDetail = "identity",
+    listSort = "recent", listDetail = "identity", readingScale = 1, compactMode = false, guideSeen = false,
 }
 local listSorts = { recent = true, name = true, reputation = true, kills = true, deaths = true, encounters = true }
 local listDetails = { identity = true, guild = true, pvp = true, notes = true }
-local function invalidateJournal() journalIndex, journalSorted, personalStatistics = nil, nil, nil end
+local function invalidateJournal()
+    journalIndex, journalSorted, personalStatistics, breakdownStatistics = nil, nil, nil, {}
+end
 
 function GL.Clean(value, kind)
     if issecretvalue then
@@ -205,8 +208,7 @@ end
 local function scoreRelation(score)
     return score > 0 and "friend" or score <= -10 and "enemy" or score < 0 and "warning" or "neutral"
 end
-local function refreshReputation(record)
-    if record.reaction and record.reactionSource ~= "emote" and record.reactionSource ~= "automatic" then return end
+function GL.AutomaticBalance(record)
     -- Histories remain authoritative and untouched. Replay only new entries;
     -- normalization/merges discard this session-only subtotal before replaying.
     local events = record.history or {}
@@ -232,13 +234,21 @@ local function refreshReputation(record)
     -- point at a time but cannot by themselves make an opponent a friend.
     local score = balance < 0 and math.min(0, social) + balance
         or social < 0 and math.min(0, social + balance) or social
-    record.reputation = math.max(-100, math.min(100, score))
+    return math.max(-100, math.min(100, score)), balance
+end
+local function refreshReputation(record)
+    if record.reaction and record.reactionSource ~= "emote" and record.reactionSource ~= "automatic" then return end
+    record.reputation = GL.AutomaticBalance(record)
     if record.reactionSource == "emote" or record.reactionSource == "automatic" then record.reaction = scoreRelation(record.reputation) end
 end
 local function normalize(record)
     socialTotals[record] = nil
     record.notes = type(record.notes) == "table" and record.notes or {}
     record.history = type(record.history) == "table" and record.history or {}
+    local seen = GL.Clean(record.lastEncounterAt, "number")
+    record.lastEncounterAt = seen and seen >= 0 and seen < math.huge and seen or nil
+    record.lastEncounterZone = record.lastEncounterAt and cleanName(record.lastEncounterZone) or nil
+    record.lastEncounterSubzone = record.lastEncounterAt and cleanName(record.lastEncounterSubzone) or nil
     if record.encounters ~= nil then
         local e = type(record.encounters) == "table" and record.encounters or {}
         local function nonnegative(value, fallback)
@@ -305,6 +315,10 @@ end
 local function merge(provisional, record)
     invalidateJournal()
     guildStatistics, socialTotals[record] = nil, nil
+    if (provisional.lastEncounterAt or 0) > (record.lastEncounterAt or 0) then
+        record.lastEncounterAt, record.lastEncounterZone, record.lastEncounterSubzone =
+            provisional.lastEncounterAt, provisional.lastEncounterZone, provisional.lastEncounterSubzone
+    end
     if provisional.encounters then
         record.encounters = record.encounters or { count = 0, seen = {}, since = GL.Now() }
         local a, b = record.encounters, provisional.encounters
@@ -448,6 +462,11 @@ function GL.RecordSeen(identity, visible)
         local previous = visits.seen[me]
         if not previous or now - previous > 600 then visits.count = visits.count + 1 end
         visits.seen[me] = now
+        -- Editing a note also calls Remember; only a public observation is a sighting.
+        if record.lastEncounterAt ~= now or record.lastEncounterZone ~= record.lastZone then
+            record.lastEncounterAt, record.lastEncounterZone = now, record.lastZone
+            record.lastEncounterSubzone = cleanName(GL.Safe(GetSubZoneText))
+        end
     end
     return record
 end
@@ -495,6 +514,7 @@ local function history(record, kind, extra)
     local now, zone = GL.Now(), GL.Where()
     entry.time, entry.kind, entry.zone = entry.time or now, kind, entry.zone or zone
     entry.actorGUID, entry.actorName = currentActor()
+    entry.opponentName = record.fullName
     -- Snapshot the explicitly tracked quest, never guess which quest the player is doing.
     -- ponytail: absent/protected quest APIs simply omit context; old events are not enriched.
     if entry.time == now and entry.zone == zone then
@@ -513,6 +533,7 @@ local function history(record, kind, extra)
         -- Snapshot once: later guild changes must never reassign old PvP events.
         entry.guild, entry.guildRealm, entry.guildObservedAt = record.guild, record.realm, record.guildSeenAt
         entry.guildSource = not record.guild and "unknown" or record.guildSeenAt == entry.time and "observed" or "last-known"
+        entry.race, entry.raceName, entry.class, entry.className = record.race, record.raceName, record.class, record.className
     end
     table.insert(record.history, entry)
     guildStatistics = nil
@@ -767,6 +788,7 @@ function GL.VoidPvP(identity, event, silent)
     if not found then return false, "Cet événement n'appartient pas à cette fiche." end
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
+    event.voidedByGUID, event.voidedByName = currentActor()
     guildStatistics = nil
     invalidateJournal()
     record.pvp[field] = math.max(0, (record.pvp[field] or 0) - 1)
@@ -843,10 +865,20 @@ local function matchesWords(text, words)
     for _, word in ipairs(words) do if not text:find(word, 1, true) then return false end end
     return true
 end
-local function recordText(record, notes)
+local historySearchFields = { "opponentName", "zone", "subzone", "guild", "questTitle", "evidence" }
+local function recordText(record, notes, past)
     local parts = {}
-    for _, field in ipairs({ "fullName", "name", "surname", "guild", "class", "className", "race", "raceName", "lastZone", "faction" }) do
+    for _, field in ipairs({ "fullName", "name", "surname", "guild", "class", "className", "race", "raceName", "lastZone", "lastEncounterZone", "lastEncounterSubzone", "faction" }) do
         if type(record[field]) == "string" then parts[#parts + 1] = record[field] end
+    end
+    if past then
+        for _, event in ipairs(record.history or {}) do
+            if type(event) == "table" then
+                for _, field in ipairs(historySearchFields) do
+                    if type(event[field]) == "string" then parts[#parts + 1] = event[field] end
+                end
+            end
+        end
     end
     if notes then
         for _, note in ipairs(record.notes or {}) do
@@ -864,7 +896,7 @@ function GL.SearchPlayers(options)
             and (not options.relation or options.relation == "all" or GL.Relation(record) == options.relation)
             and (not options.faction or options.faction == "all" or faction == options.faction)
             and (not options.notesOnly or #record.notes > 0)
-            and (#words == 0 or matchesWords(recordText(record, true), words)) then result[#result + 1] = record end
+            and (#words == 0 or matchesWords(recordText(record, true, true), words)) then result[#result + 1] = record end
     end
     local sort = listSorts[options.sort] and options.sort or "recent"
     local function value(record)
@@ -968,7 +1000,8 @@ function GL.JournalEvents(options)
             if #words > 0 then
                 texts[record] = texts[record] or recordText(record)
                 local parts = { texts[record] }
-                for _, field in ipairs({ "text", "zone", "subzone", "guild", "questTitle", "evidence" }) do
+                if type(event.text) == "string" then parts[#parts + 1] = event.text end
+                for _, field in ipairs(historySearchFields) do
                     if type(event[field]) == "string" then parts[#parts + 1] = event[field] end
                 end
                 match = matchesWords(table.concat(parts, "\n"), words)
@@ -1052,16 +1085,90 @@ function GL.PersonalStatistics(options)
     personalStatistics = { key = key, value = stats, at = now, nextAt = nextAt }
     return statisticsCopy(stats)
 end
+function GL.PvPBreakdown(options, dimension)
+    if dimension ~= "race" and dimension ~= "class" then return {} end
+    options = type(options) == "table" and options or {}
+    local within, periodKey = periodFilter(options)
+    local actor, scope, now = currentActor(), options.scope or "character", GL.Now()
+    local key = periodKey .. ":" .. scope .. ":" .. (actor or "unknown")
+    local cached = breakdownStatistics[dimension]
+    if not cached or cached.key ~= key or now < cached.at or cached.nextAt and now >= cached.nextAt then
+        local active, corrected, buckets, nextAt = {}, {}, {}
+        for _, row in ipairs(indexedJournal()) do
+            local event = row.event
+            if (event.kind == "kill" or event.kind == "death") and pvpFields[event.kind][event.confidence]
+                and event.voidReason ~= "battleground" and inScope(row.actor, scope, actor) then
+                if row.at > now and (not nextAt or row.at < nextAt) then nextAt = row.at end
+                if within(event, row.at) then
+                    local token, name = cleanName(event[dimension]), cleanName(event[dimension .. "Name"])
+                    local category = token or name and "name:" .. name:lower() or "unknown"
+                    local label = name or token or "Inconnue"
+                    local counts = event.voided and corrected or active
+                    local id = pvpEventKey(row)
+                    local previous = counts[id]
+                    if not previous or event.confidence == "confirmed" and previous.confidence ~= "confirmed" then
+                        counts[id] = { key = category, label = label, kind = event.kind, confidence = event.confidence }
+                    elseif event.confidence == previous.confidence and previous.key ~= category then
+                        -- One own death stays one death, including multiple aggressors.
+                        -- Missing snapshots cannot prove a category; otherwise a mixed
+                        -- group has no single race/class to which we can attribute it.
+                        previous.key = (previous.key == "unknown" or category == "unknown") and "unknown" or "mixed"
+                        previous.label = previous.key == "unknown" and "Inconnue" or "Groupe mixte"
+                    elseif event.confidence == previous.confidence and label < previous.label then
+                        previous.label = label
+                    end
+                end
+            end
+        end
+        for _, counts in ipairs({ active, corrected }) do
+            for _, entry in pairs(counts) do
+                local bucket = buckets[entry.key] or { key = entry.key, label = entry.label, kills = 0, deaths = 0,
+                    probableKills = 0, probableDeaths = 0, correctedKills = 0, correctedDeaths = 0 }
+                local field = counts == corrected and (entry.kind == "kill" and "correctedKills" or "correctedDeaths")
+                    or pvpFields[entry.kind][entry.confidence]
+                bucket[field] = bucket[field] + 1
+                if entry.label < bucket.label then bucket.label = entry.label end
+                buckets[entry.key] = bucket
+            end
+        end
+        local rows = {}
+        for _, bucket in pairs(buckets) do rows[#rows + 1] = bucket end
+        table.sort(rows, function(a, b)
+            local av, bv = a.kills + a.deaths + a.probableKills + a.probableDeaths, b.kills + b.deaths + b.probableKills + b.probableDeaths
+            if av ~= bv then return av > bv end
+            if a.label ~= b.label then return a.label < b.label end
+            return a.key < b.key
+        end)
+        -- ponytail: only two small cached results, replaced when their filters change.
+        -- Snapshots are never backfilled from a player's later identity or guild.
+        cached = { key = key, at = now, nextAt = nextAt, rows = rows }
+        breakdownStatistics[dimension] = cached
+    end
+    local result = {}
+    for _, row in ipairs(cached.rows) do
+        local copy = {}
+        for field, value in pairs(row) do copy[field] = value end
+        result[#result + 1] = copy
+    end
+    return result
+end
 function GL.Settings() return GL.db and GL.db.settings or defaults end
-function GL.SetSetting(key, value)
-    if not GL.db or defaults[key] == nil or type(value) ~= type(defaults[key]) then return false end
-    if key == "listSort" and not listSorts[value] or key == "listDetail" and not listDetails[value] then return false end
+local function settingValue(key, value)
+    if defaults[key] == nil or type(value) ~= type(defaults[key]) then return nil end
+    if key == "listSort" and not listSorts[value] or key == "listDetail" and not listDetails[value] then return nil end
     if type(value) == "number" then
-        if value ~= value or value == math.huge or value == -math.huge then return false end
+        if value ~= value or value == math.huge or value == -math.huge then return nil end
         if key == "alertCooldown" then value = math.max(15, math.min(3600, value))
         elseif key == "iconSize" then value = math.max(12, math.min(40, value))
+        elseif key == "readingScale" then value = math.max(0.85, math.min(1.25, value))
         elseif key == "minimapAngle" then value = value % 360 end
     end
+    return value
+end
+function GL.SetSetting(key, value)
+    if not GL.db then return false end
+    value = settingValue(key, value)
+    if value == nil then return false end
     GL.db.settings[key] = value
     GL.Emit("SETTINGS")
     return true
@@ -1080,10 +1187,10 @@ function GL.InitDB()
     GL.db.guilds = type(GL.db.guilds) == "table" and GL.db.guilds or {}
     GL.db.settings = type(GL.db.settings) == "table" and GL.db.settings or {}
     for key, value in pairs(defaults) do
-        if type(GL.db.settings[key]) ~= type(value) then GL.db.settings[key] = value end
+        local saved = settingValue(key, GL.db.settings[key])
+        if saved == nil then saved = value end
+        GL.db.settings[key] = saved
     end
-    if not listSorts[GL.db.settings.listSort] then GL.db.settings.listSort = defaults.listSort end
-    if not listDetails[GL.db.settings.listDetail] then GL.db.settings.listDetail = defaults.listDetail end
     for key, record in pairs(GL.db.players) do
         if type(key) == "string" and type(record) == "table" then
             record.key = key

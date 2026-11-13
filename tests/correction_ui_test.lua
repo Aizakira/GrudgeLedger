@@ -3,6 +3,7 @@ getmetatable(UIParent).__index.HighlightText = function(self) self.highlighted =
 function GetBuildInfo() return "1.16.0", "63690", "Nov 1 2026", 16001 end
 C_AddOns = { IsAddOnLoaded = function(name) return name == "TidyPlates_ThreatPlates" end }
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
+assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
 GL.InitDB()
@@ -23,7 +24,12 @@ GL.RecordAggression(first, "confirmed", "Preuve directe |cff00ff00", "aggression
 local latest = record.history[#record.history]
 local historyLength = #record.history
 GL.ShowLedger(record.key)
-click(button(GrudgeLedgerWindow, "Corriger le PvP"))
+local function openCorrections()
+    click(GrudgeLedgerWindow.tools)
+    assert(GrudgeLedgerWindow.toolsMenu:IsShown())
+    click(button(GrudgeLedgerWindow.toolsMenu, "Corriger le PvP"))
+end
+openCorrections()
 local f = GrudgeLedgerCorrections
 assert(f:IsShown() and f.topLevel and f.raised > 0)
 assert(f.rows[1].title:GetText():find("Agression (confirmé)", 1, true))
@@ -48,16 +54,17 @@ originalUndo()
 assert(record.pvp.aggressions == 0 and f.status:GetText():find("déjà annulé", 1, true), "stale callbacks cannot subtract twice")
 assert(not GL.RecordAggression(first, "confirmed", "same observation", "aggression"), "correction retains event dedup")
 GL.ShowLedger(record.key)
+click(GrudgeLedgerWindow.detailTabs.history)
 assert(GrudgeLedgerWindow.detailText:GetText():find("annulé", 1, true), "main history also annotates cancellation")
 assert(#record.notes == 1 and record.notes[1].text == "PRIVATE note inside journal", "notes unaffected")
 
 GL.ShowLedger(other.key)
-click(button(GrudgeLedgerWindow, "Corriger le PvP"))
+openCorrections()
 click(f.rows[1].undo)
 assert(other.pvp.deaths == 0 and other.reaction == "friend" and other.reputation == 1, "manual opinion unchanged")
 local empty = GL.Remember(GL.IdentityFromName("Nobody", "Else", "Player-1-empty"))
 GL.ShowLedger(empty.key)
-click(button(GrudgeLedgerWindow, "Corriger le PvP"))
+openCorrections()
 assert(f.total:GetText() == "Aucun événement PvP." and not f.rows[1]:IsShown())
 assert(not f.rows[1].undo.scripts.OnClick, "empty rows discard stale callbacks")
 
@@ -68,7 +75,8 @@ mock.cvars.nameplateShowFriendlyPlayers = 0
 mock.cvars.nameplateShowEnemies = 1
 mock.cvars.nameplateShowAll = "PRIVATE invalid CVar value"
 SlashCmdList.GRUDGELEDGER("settings")
-click(button(GrudgeLedgerSettings, "Diagnostic"))
+click(GrudgeLedgerSettings.tabs.data)
+click(button(GrudgeLedgerSettings.pages.data, "Diagnostic"))
 local d = GrudgeLedgerDiagnostic
 local text = d.edit:GetText()
 assert(d:IsShown() and d.edit.focus and d.edit.highlighted and d.topLevel)

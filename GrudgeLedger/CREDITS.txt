@@ -12,12 +12,11 @@ by Grudgebook's documented use of observable units, targets and honor signals:
 https://www.curseforge.com/wow/addons/grudgebook
 Grudgebook's addon files are not bundled and it is not a runtime dependency.
 
-The red grimoire medallion (Media/LedgerIcon.tga) was generated for this addon
-using OpenAI's built-in image generation tool. Its borderless book variant
-(Media/LedgerBook.tga) was edited with the same tool for the native minimap button.
-Both were converted to uncompressed 256x256 RGBA TGA textures and are included
-under the same GPLv3 distribution terms. The minimap's frame uses native client
-textures and the standard LibDBIcon button dimensions, with no library dependency.
+The borderless minimap book (Media/LedgerBook.tga) uses the client's native
+minimap ring. The JournalMedallion texture includes an illustrated brass ring
+and is used on the journal. Both illustrations were generated for this addon
+using OpenAI's image tool and are distributed under GPLv3.
+
 The relationship markers (Media/RelationFriend.tga, RelationWarning.tga and
 RelationEnemy.tga) were generated and edited using the same OpenAI tool: a green
 heart, an orange watchful eye and a red broken heart. They are included as
@@ -47,11 +46,12 @@ OpenAI's built-in image tool, then converted to uncompressed RGBA TGA. They are
 distributed under the same GPLv3 terms. The illustration has a transparent
 background; the reading paper is opaque. No text is baked into either asset.
 
-The open journal surface (Media/JournalBookSurface.tga, 1024x1024, displayed at
-960x700) was generated and refined with OpenAI's built-in image tool for 0.4.0.
-It combines aged parchment, stitched red leather and brass corners. All labels
-and controls remain native Lua UI elements; no text is baked into the artwork.
-It is distributed under the same GPLv3 terms; no Overlord artwork is included.
+The campaign register's background (JournalBookSurface), title plaque,
+medallion, settings and close buttons are independent layers. WoW renders the
+title, labels, names and values at runtime. The original layered PNG assets
+were generated for this project using OpenAI's image tool. They can be exported
+to uncompressed RGBA TGA with art/campaign/export.py in the source repository.
+The original campaign artwork is distributed under GPLv3.
 
 The neutral silver medallion (Media/RelationNeutral.tga, 128x128 RGBA) was
 generated using OpenAI's built-in image tool for 0.4.3 and is distributed
