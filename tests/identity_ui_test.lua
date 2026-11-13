@@ -73,8 +73,8 @@ click(f.filters.warning) click(f.factions.Horde)
 assert(f.rows[1].key == warning.key)
 click(f.filters.friend) click(f.factions.unknown)
 assert(f.rows[1].key == unknown.key and not f.rows[2]:IsShown(), "neutral is known, not unknown")
-assert(f.rows[1].classIcon.texture:find("QuestionMark") and not f.rows[1].classIcon.atlas,
-    "recycled rows reset known atlases for unknown identities")
+assert(not f.rows[1].classIcon.texture and not f.rows[1].classIcon.atlas and f.rows[1].raceIcon.texture == GL.icon,
+    "recycled rows clear old class badges and show a neutral medallion for completely unknown identities")
 assert(f.rows[1].raceIcon.texCoord[1] == 0 and f.rows[1].raceIcon.texCoord[2] == 1)
 click(f.factions.Horde)
 f.search:SetText("No match")
@@ -92,9 +92,12 @@ GL.ShowLedger(hordeFriend.key)
 row = assert(rowFor(hordeFriend.key))
 assert(row.identity:GetText():find("Mage", 1, true))
 assert(row.classIcon.texture:find("UI%-CharacterCreate%-Classes") and row.classIcon.texCoord[1] == 0.25)
+assert(row.raceIcon.texture == row.classIcon.texture and row.raceIcon.texCoord[1] == 0.25,
+    "class-only contacts use their class emblem as the main image")
 C_Texture, GetClassAtlas, CLASS_ICON_TCOORDS = nil, nil, nil
 GL.ShowLedger(record.key)
-assert(rowFor(record.key).classIcon.texture:find("QuestionMark"), "missing icon APIs never prevent labels")
+assert(not rowFor(record.key).classIcon.texture and rowFor(record.key).raceIcon.texture:find("INV_BannerPVP_02"),
+    "missing atlas APIs fall back to the player's faction")
 
 -- Pagination must compose with filters and return to the first page on a change.
 for i = 1, 12 do add("Paged" .. i, "Horde", "enemy") end
@@ -175,4 +178,45 @@ click(f.historyPage.rows[1].details)
 assert(GrudgeLedgerCorrections.proof:GetText():find("Guilde mémorisée : Old Guild (Realm One)",1,true))
 assert(GL.VoidPvP(guildRecord, guildRecord.history[1]))
 assert(GrudgeLedgerCorrections.proof:GetText():find("Guilde mémorisée : Old Guild",1,true) and not GrudgeLedgerCorrections.confirm.enabled)
-print("PASS identity UI: combined faction/relation/search filters, counts, paging, detail selection, observed race/class, secret partials, identity merge, persistence, localized legacy labels, native icon fallbacks and historical guild display")
+-- The same physical slot can show different contacts when the target, filter or page changes.
+local unitFor = { [record.guid] = "nameplate1" }
+local painted = 0
+units.nameplate1 = units.target
+function UnitTokenFromGUID(guid) return unitFor[guid] end
+function UnitIsVisible(unit) return units[unit] and not units[unit].distant end
+function SetPortraitTexture(texture, unit, square)
+    assert(square) painted = painted + 1
+    texture:SetTexture("face:" .. UnitGUID(unit))
+end
+GrudgeLedgerCorrections:Hide()
+GL.ShowLedger(record.key)
+row = assert(rowFor(record.key))
+assert(row.raceIcon.texture == "face:" .. record.guid and f.raceIcon.texture == row.raceIcon.texture)
+local watcher
+for _, frame in ipairs(mock.frames) do if frame.events.PORTRAITS_UPDATED then watcher = frame end end
+local function portraitEvent(event, unit)
+    mock.Fire(event, unit)
+    local update = watcher.scripts.OnUpdate
+    if update then update(watcher, 0.016) end
+end
+local before = painted
+portraitEvent("UNIT_PORTRAIT_UPDATE", "nameplate1")
+assert(painted > before, "a changed live appearance repaints the open book")
+units.nameplate1, units.target = { guid = "Player-1-different" }, nil
+portraitEvent("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+assert(f.raceIcon.texture:find("INV_BannerPVP_02") and row.raceIcon.texture == f.raceIcon.texture, "recycled unit token cannot paint a different face")
+unitFor[record.guid] = secret
+units.target = { guid = record.guid, distant = true }
+portraitEvent("PLAYER_TARGET_CHANGED")
+assert(f.raceIcon.texture:find("INV_BannerPVP_02"), "invisible units retain a fallback")
+units.target.distant = false
+portraitEvent("PLAYER_TARGET_CHANGED")
+assert(f.raceIcon.texture == "face:" .. record.guid, "valid target fallback for an unavailable GUID resolver")
+function SetPortraitTexture() error("restricted") end
+portraitEvent("UNIT_PORTRAIT_UPDATE", "target")
+assert(f.raceIcon.texture:find("INV_BannerPVP_02"), "restricted texture access clears the live slot")
+f:Hide()
+mock.Fire("PORTRAITS_UPDATED")
+assert(not watcher.scripts.OnUpdate, "closed book does not poll portraits")
+assert(record.portraitUnit == nil and record.portrait == nil, "no portrait texture or token is persisted")
+print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

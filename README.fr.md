@@ -33,9 +33,11 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 Le registre de campagne réunit le Journal, les Classements, les Guildes et le Bilan. Dans le Journal, filtrez les rencontres par avis et faction, puis ouvrez une fiche pour consulter le solde automatique, la dernière rencontre, l’histoire et les notes. Les portraits de race et les icônes de classe utilisent l’identité connue du jeu.
 
-Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartouche, la roue dentée et la croix sont des éléments indépendants. Le jeu dessine les textes et gère les clics. L’aperçu ci-dessus utilise des personnages fictifs et des polices de substitution pour le rendu hors jeu.
+Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartouche, la roue dentée et la croix sont des éléments indépendants. Le jeu dessine les textes et gère les clics. Le lettrage doré, les titres et le texte du grimoire utilisent les polices Spectral fournies avec l’addon. L’aperçu hors jeu utilise des personnages fictifs.
 
 La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous pouvez agrandir le texte, choisir la police de lecture et compacter l’espacement. Le guide de première ouverture est accessible depuis **Données et aide**.
+
+La version 0.7.2 affiche le portrait actuel d’un contact lorsque Forever permet de le voir. À distance, sa fiche reprend un emblème de race, de classe ou de faction. Le Bilan regroupe aussi les combats par zone. Les attaques d’un familier sont rattachées à son maître si le jeu fournit leur lien.
 
 Depuis la version 0.7.1, l’onglet Histoire permet de consulter chaque événement
 et de vérifier son attribution avant de l’annuler. L’onglet Notes permet

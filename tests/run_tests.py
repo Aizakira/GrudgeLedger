@@ -7,6 +7,10 @@ sys.path.insert(0, str(work / "test-runtime"))
 from lupa.lua51 import LuaRuntime
 
 addon = work / "GrudgeLedger"
+font_dir = addon / "Media" / "Fonts"
+assert "SIL OPEN FONT LICENSE" in (font_dir / "OFL.txt").read_text(encoding="utf-8")
+for face in ("Regular", "SemiBold", "SemiBoldItalic"):
+    assert (font_dir / f"Spectral-{face}.ttf").read_bytes()[:4] == b"\x00\x01\x00\x00", f"Missing or invalid Spectral {face} font"
 for name, expected_width, expected_height, transparent in (
     ("LedgerBook.tga", 256, 256, True),
     ("JournalMedallion.tga", 128, 128, True), ("JournalSettings.tga", 64, 64, True),

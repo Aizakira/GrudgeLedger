@@ -47,6 +47,8 @@ click(f.dimensionButtons.race)
 assert(f.breakdownRows[1].kills:GetText() == "0 / 1" and f.breakdownRows[1].deaths:GetText() == "1 / 0",
     "breakdown must agree with the scoped summary and keep probable facts distinct")
 assert(f.breakdownInfo:GetText():find("1 rapport annulé", 1, true))
+click(f.dimensionButtons.zone)
+assert(f.dimension == "zone" and f.breakdown:IsShown() and f.breakdownRows[1].name:GetText() ~= "")
 click(f.dimensionButtons.class)
 assert(f.dimension == "class" and f.breakdownRows[1]:IsShown())
 assert(not f.search:IsShown() and not f.kindButton:IsShown(), "history controls must not imply they affect the summary")

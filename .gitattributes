@@ -1,3 +1,4 @@
 * text=auto eol=lf
 *.tga binary
 *.png binary
+*.ttf binary

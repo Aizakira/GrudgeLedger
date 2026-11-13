@@ -31,9 +31,11 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 
 The campaign register brings together the journal, rankings, guilds and personal PvP summary. Filter contacts by relationship and faction, then open a record to see its automatic score, latest encounter, history or notes. Race portraits and class icons use identity information supplied by the game.
 
-The leather, cloth and parchment share a decorative background. The medallion, title plaque, settings and close buttons have independent textures. WoW renders the text and handles clicks. The offline preview above uses fictional contacts and substitute fonts.
+The leather, cloth and parchment share a decorative background. The medallion, title plaque, settings and close buttons have independent textures. WoW renders the text and handles clicks. The gold wordmark, headings and journal text use the bundled Spectral fonts. The offline preview uses fictional contacts.
 
 Open the cog or use `/gl settings` to set the font, text size and spacing. The first-use guide can be opened again from **Données et aide**.
+
+In 0.7.2, visible contacts can show their current in-game portrait. When a player is unavailable, their record uses a race, class or faction emblem. The personal summary also groups fights by zone. Combat and death evidence from pets can be attributed to their owners when the client supplies the link.
 
 In 0.7.1, open an event in **Histoire** to review its attribution before cancelling it. Use **Notes** to write, edit and browse a player's notes. In the summary, **Mon année** opens the chronicle for the selected year. Each guild page shows its rule and any individual exceptions. Type `/gl version` to check which version Forever has loaded.
 

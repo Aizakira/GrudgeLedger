@@ -6,6 +6,7 @@ GL.Tracker = T
 
 local frame = CreateFrame("Frame")
 local plates, recentCredits = {}, {}
+local petOwners, petSlots, nextPetSlot = {}, {}, 1
 local fight, lastFight
 local pendingDeath, lastDeathAt, lastRecapStamp
 local duel, deathHandled, registered = false, false, false
@@ -20,12 +21,13 @@ local function bool(fn, ...)
     return GL.Clean(GL.Safe(fn, ...), "boolean")
 end
 
-local function hostileFlags(value)
+local function hasFlag(value, bit)
     local flags = GL.Clean(value, "number")
-    local bit = COMBATLOG_OBJECT_REACTION_HOSTILE or 64
     return flags and flags >= 0 and flags <= 4294967295 and flags % 1 == 0
         and flags % (bit * 2) >= bit
 end
+
+local function hostileFlags(value) return hasFlag(value, COMBATLOG_OBJECT_REACTION_HOSTILE or 64) end
 
 local function playerGUID()
     return GL.Clean(GL.Safe(UnitGUID, "player"), "string")
@@ -58,7 +60,7 @@ local function nextID(kind)
 end
 
 local function identityForGUID(guid, name, encounter)
-    if not guid or not guid:match("^Player%-") or guid == playerGUID() then return nil end
+    if not guid or #guid > 128 or not guid:match("^Player%-%w") or guid == playerGUID() then return nil end
     for _, unit in ipairs(units()) do
         local identity = GL.Identity(unit)
         if identity and identity.guid == guid then return identity end
@@ -68,10 +70,58 @@ local function identityForGUID(guid, name, encounter)
         if enemy.identity.guid == guid then return enemy.identity end
     end
     -- Recap names can be Given-Realm, not Forever's Given Family.
+    name = name or GL.Clean(GL.Safe(UnitNameFromGUID, guid), "string")
     if name and not name:find(" ", 1, true) then name = name:match("^[^%-]+") end
     local identity = GL.IdentityFromName(name, nil, guid)
     if identity and identity.guild then return identity end
     return GL.Get("guid:" .. guid) or identity
+end
+
+-- Pet GUIDs carry no owner ID. Use an explicit summon or the native UnitOwner
+-- tooltip line. Matching by a pet name would confuse two hunters with the same pet.
+local function rememberPet(guid, owner)
+    if not petOwners[guid] then
+        local oldest = petSlots[nextPetSlot]
+        if oldest then petOwners[oldest] = nil end
+        petSlots[nextPetSlot] = guid
+        nextPetSlot = nextPetSlot % 64 + 1
+    end
+    petOwners[guid] = { owner = owner, at = GL.Now() }
+end
+
+local function petOwner(guid, unit, encounter)
+    if not guid or not (guid:match("^Pet%-") or guid:match("^Creature%-")) then return end
+    local cached = petOwners[guid]
+    local age = cached and GL.Now() - cached.at
+    -- ponytail: bound ownership lookups to 64 recent units; failed reads are
+    -- retried after one second as nameplates and tooltip data arrive asynchronously.
+    if age and age >= 0 and age < (cached.owner and 120 or 1) then return cached.owner end
+    local info = C_TooltipInfo
+    unit = unit or GL.Clean(GL.Safe(UnitTokenFromGUID, guid), "string")
+    local tip = info and (unit and GL.Safe(info.GetUnit, unit) or GL.Safe(info.GetHyperlink, "unit:" .. guid))
+    local lines = type(tip) == "table" and GL.Clean(tip.guid, "string") == guid and GL.Clean(tip.lines, "table")
+    local ownerType = Enum and Enum.TooltipDataLineType and Enum.TooltipDataLineType.UnitOwner
+    local owner
+    for _, line in ipairs(lines or {}) do
+        line = GL.Clean(line, "table")
+        if line and ownerType and GL.Clean(line.type, "number") == ownerType then
+            owner = identityForGUID(GL.Clean(line.guid, "string"), nil, encounter)
+            if owner then break end
+        end
+    end
+    rememberPet(guid, owner)
+    return owner
+end
+
+local function petSource(guid, flags)
+    return guid and (guid:match("^Pet%-") or petOwners[guid]
+        or (guid:match("^Creature%-") and hasFlag(flags, COMBATLOG_OBJECT_CONTROL_PLAYER or 256)))
+end
+
+local function attacker(guid, name, flags, encounter)
+    local direct = identityForGUID(guid, name, encounter)
+    if direct then return direct end
+    if petSource(guid, flags) then return petOwner(guid, nil, encounter), true end
 end
 
 local function creditKill(identity, confidence, evidence)
@@ -100,7 +150,14 @@ local function recentAttackers(f, age)
             candidates[key] = enemy.identity
         end
     end
+    for key, attack in pairs(f.petAttackers or {}) do
+        if now - attack.at <= age then candidates[key] = attack.owner end
+    end
     return candidates
+end
+
+local function unresolvedAttack(f)
+    return f.pve or (f.unknownPets and next(f.unknownPets))
 end
 
 local function observeHealth()
@@ -114,7 +171,7 @@ local function observeHealth()
     local maximum = GL.Clean(GL.Safe(UnitHealthMax, "player"), "number")
     local now = GL.Now()
     if health and maximum and f.health and f.maxHealth == maximum and f.healthAt
-        and now - f.healthAt <= 2 and health < f.health and not f.pve and not f.damageLogged then
+        and now - f.healthAt <= 2 and health < f.health and not unresolvedAttack(f) and not f.damageLogged then
         local candidates = recentAttackers(f, 2)
         if next(candidates) and not f.pendingAggression then
             f.pendingAggression = { candidates = candidates, at = now }
@@ -134,11 +191,14 @@ local function tryAggression()
     local age = GL.Now() - pending.at
     if age < 1 then return end -- give explicit combat-log evidence priority
     f.pendingAggression = nil
-    if age <= 3 and not f.pve and not f.damageLogged then
+    if age <= 3 and not unresolvedAttack(f) and not f.damageLogged then
         local candidates = recentAttackers(f, 2)
         for key, identity in pairs(pending.candidates) do
             if candidates[key] then
-                recordAggression(f, identity, "probable", "Baisse de santé pendant que cet adversaire PvP en combat vous ciblait ; participation déduite, source de dégâts non confirmée.")
+                local pet = f.petAttackers and f.petAttackers[key]
+                local evidence = pet and GL.Now() - pet.at <= 2 and "Votre santé a baissé pendant que le familier de ce joueur vous ciblait en combat."
+                    or "Baisse de santé pendant que cet adversaire PvP en combat vous ciblait ; participation déduite, source de dégâts non confirmée."
+                recordAggression(f, identity, "probable", evidence)
             end
         end
     end
@@ -160,8 +220,21 @@ function T.Observe(unit, reuseObservation)
     local engaged = bool(UnitAffectingCombat, unit) == true
     local targetingMe = bool(UnitIsUnit, unit .. "target", "player") == true
     if not identity then
-        -- A visible attacking NPC makes a fallback death attribution unsafe.
-        if hostile and targetingMe and engaged and bool(UnitIsPlayer, unit) == false then f.pve = true end
+        if hostile and targetingMe and engaged and bool(UnitIsPlayer, unit) == false then
+            local guid = GL.Clean(GL.Safe(UnitGUID, unit), "string")
+            local controlled = bool(UnitPlayerControlled, unit)
+            local owner = controlled and petOwner(guid, unit, f)
+            if owner and bool(UnitIsPVP, "player") == true then
+                if f.unknownPets then f.unknownPets[guid] = nil end
+                f.petAttackers = f.petAttackers or {}
+                f.petAttackers[owner.key] = { owner = owner, at = GL.Now() }
+            elseif controlled and guid then
+                f.unknownPets = f.unknownPets or {}
+                f.unknownPets[guid] = true
+            else
+                f.pve = true
+            end
+        end
         return
     end
     if not hostile then
@@ -204,7 +277,7 @@ end
 
 local function tryKills()
     local f = combatSession()
-    if not enabled() or not f or f.otherCombatant or f.pve then return end
+    if not enabled() or not f or f.otherCombatant or unresolvedAttack(f) then return end
     -- Honor is shared. Even a named honor line is not personal killing-blow proof.
     -- ponytail: only infer isolated solo encounters; crowded/group fights need CLE proof.
     local grouped = GL.Clean(GL.Safe(GetNumGroupMembers), "number")
@@ -218,6 +291,9 @@ local function tryKills()
     end
     if count ~= 1 or not candidate or candidate.credited then return end
     local e = candidate
+    for _, attack in pairs(f.petAttackers or {}) do
+        if attack.owner.guid ~= e.identity.guid and now - attack.at <= 6 then return end
+    end
     if not e.deadAt or not e.signalAt or not e.targetingMeAt or not e.targetedAt then return end
     if now - e.deadAt < 1 or now - e.deadAt > 3 then return end
     if math.abs(e.signalAt - e.deadAt) > 2 or e.deadAt - e.aliveAt > 3 then return end
@@ -266,6 +342,10 @@ local function readRecap(death)
         if event then
             local kind = GL.Clean(event.event, "string")
             local stamp = GL.Clean(event.timestamp, "number")
+            -- Clients can expose timestamps in session time rather than server time.
+            if stamp and death.uptime and math.abs(stamp - death.uptime) < math.abs(stamp - death.at) then
+                stamp = death.at + (stamp - death.uptime)
+            end
             local amount = GL.Clean(event.amount, "number")
             if stamp and stamp >= death.at - 10 and stamp <= death.at + 1
                 and (not death.previousAt or stamp > death.previousAt)
@@ -274,7 +354,7 @@ local function readRecap(death)
                 rows[#rows + 1] = {
                     guid = GL.Clean(event.sourceGUID, "string"), name = GL.Clean(event.sourceName, "string"),
                     flags = GL.Clean(event.sourceFlags, "number"), overkill = GL.Clean(event.overkill, "number"),
-                    kind = kind,
+                    kind = kind, at = stamp, health = GL.Clean(event.currentHP, "number"),
                 }
             end
         end
@@ -291,43 +371,53 @@ local function resolveDeath()
     local rows, stamp = readRecap(death)
     if not rows and C_DeathRecap and type(C_DeathRecap.GetRecapEvents) == "function"
         and GL.Now() - death.at < 2 then return end
-    pendingDeath = nil
-    local participants, lethal = death.candidates, death.confirmed
+    local participants, lethal, lethalPet = death.candidates, death.confirmed, death.pet
     if rows then
-        lastRecapStamp = stamp
         participants = {} -- explicit sources replace, rather than extend, guesses
-        local otherLethal
+        local otherLethal, waitingForOwner
         for _, row in ipairs(rows) do
-            local identity = hostileFlags(row.flags) and identityForGUID(row.guid, row.name, death.fight)
+            local identity, viaPet
+            if hostileFlags(row.flags) then identity, viaPet = attacker(row.guid, row.name, row.flags, death.fight) end
             local fatal = row.kind == "SPELL_INSTAKILL" or (row.overkill and row.overkill >= 0 and row.overkill < math.huge)
+                or (row.health == 0 and row.at == stamp)
             if identity then
                 participants[identity.guid or identity.key] = identity
-                recordAggression(death.fight, identity, "confirmed", "Récapitulatif de mort : dégâts reçus de ce joueur hostile.")
-                if fatal then lethal = lethal or identity end
-            elseif fatal then otherLethal = true end
+                recordAggression(death.fight, identity, "confirmed", viaPet and "Le récapitulatif attribue les dégâts au familier de ce joueur."
+                    or "Récapitulatif de mort : dégâts reçus de ce joueur hostile.")
+                if fatal and not lethal then lethal, lethalPet = identity, viaPet end
+            else
+                if viaPet then waitingForOwner = true end
+                if fatal then otherLethal = true end
+            end
         end
+        if waitingForOwner and C_TooltipInfo and GL.Now() - death.at < 2 then return end
+        lastRecapStamp = stamp
         if otherLethal and not lethal then participants = {} end
     end
+    pendingDeath = nil
     if lethal then participants[lethal.guid or lethal.key] = lethal end
     -- ponytail: reuse per-person death counters for participation in one fatal attack.
     -- Only an explicit lethal hit is confirmed; other participants remain probable.
     for _, identity in pairs(participants) do
         local confirmed = lethal and (identity.guid or identity.key) == (lethal.guid or lethal.key)
-        local evidence = confirmed and "Dégâts létaux explicitement attribués à ce joueur."
+        local pet = death.fight.petAttackers and death.fight.petAttackers[identity.key]
+        local evidence = confirmed and (lethalPet and "Le familier de ce joueur vous a porté le coup fatal."
+            or "Dégâts létaux explicitement attribués à ce joueur.")
+            or (not rows and pet and death.at - pet.at <= 5 and "Le familier de ce joueur vous ciblait en combat juste avant votre mort. Le coup fatal reste incertain.")
             or "Participation probable à l'attaque ayant causé votre mort ; le coup fatal n'est pas attribué à ce joueur."
         GL.RecordPvP(identity, "death", confirmed and "confirmed" or "probable", evidence, death.id)
     end
 end
 
-function T.OnDeath(confirmed)
-    if pendingDeath and confirmed then pendingDeath.confirmed = confirmed return end
+function T.OnDeath(confirmed, viaPet)
+    if pendingDeath and confirmed then pendingDeath.confirmed, pendingDeath.pet = confirmed, viaPet return end
     if deathHandled then return end
     -- Freeze the encounter before waiting for a delayed recap. Later sightings cannot join it.
     deathHandled = true
     local f, now = combatSession(), GL.Now()
     if enabled() then
         local candidates = {}
-        if f and not f.pve then
+        if f and not unresolvedAttack(f) then
             if f.damageLogged then
                 for _, enemy in pairs(f.enemies) do
                     if enemy.damageAt and now - enemy.damageAt <= 5 then
@@ -339,7 +429,8 @@ function T.OnDeath(confirmed)
             end
         end
         pendingDeath = { at = now, previousAt = lastDeathAt, id = nextID("death"), candidates = candidates,
-            confirmed = confirmed, fight = f or { id = nextID("fight"), enemies = {} } }
+            uptime = GL.Clean(GL.Safe(GetTime), "number"), confirmed = confirmed, pet = viaPet,
+            fight = f or { id = nextID("fight"), enemies = {} } }
         resolveDeath()
     end
     lastDeathAt = now
@@ -363,12 +454,16 @@ function T.OnCombatLog(...)
     local me = playerGUID()
     if not sub or not me then return end
     local srcName, dstName = GL.Clean(args[5], "string"), GL.Clean(args[9], "string")
-    if sub == "PARTY_KILL" and src == me then
+    if sub == "SPELL_SUMMON" and src and src:match("^Player%-") and hostileFlags(args[6])
+        and dst and (dst:match("^Pet%-") or dst:match("^Creature%-")) then
+        local owner = identityForGUID(src, srcName)
+        if owner then rememberPet(dst, owner) end
+    elseif sub == "PARTY_KILL" and src == me then
         creditKill(identityForGUID(dst, dstName), "confirmed", "Journal de combat : coup fatal personnel (PARTY_KILL).")
     -- Only health-damage payloads contain overkill. LEECH/DRAIN use powerType in
     -- that position, and durability damage is not damage to the player either.
     elseif dst == me and (damageEvents[sub] or sub == "SPELL_INSTAKILL") then
-        local identity = identityForGUID(src, srcName)
+        local identity, viaPet = attacker(src, srcName, args[6])
         local f = combatSession()
         if not identity and f then f.pve = true end
         local hostile = hostileFlags(args[6])
@@ -376,7 +471,8 @@ function T.OnCombatLog(...)
             -- Initial damage can arrive before PLAYER_REGEN_DISABLED.
             if not fight then fight = { enemies = {}, id = nextID("fight") } end
             f = fight
-            recordAggression(f, identity, "confirmed", "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").")
+            recordAggression(f, identity, "confirmed", viaPet and "Le journal de combat attribue les dégâts au familier de ce joueur."
+                or "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").")
             local enemy = f.enemies[identity.key] or { identity = identity }
             enemy.damageAt = GL.Now()
             f.enemies[identity.key] = enemy
@@ -386,7 +482,7 @@ function T.OnCombatLog(...)
         if f then f.damageLogged, f.pendingAggression = true, nil end
         local overkill = GL.Clean(args[sub == "SWING_DAMAGE" and 13 or 16], "number")
         if identity and hostile and (sub == "SPELL_INSTAKILL" or (overkill and overkill >= 0)) then
-            T.OnDeath(identity)
+            T.OnDeath(identity, viaPet)
         end
     end
 end
@@ -448,6 +544,7 @@ end
 function T.HandleEvent(event, arg)
     if not GL.db then return end
     if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+        petOwners, petSlots, nextPetSlot = {}, {}, 1
         fight, lastFight, plates, duel, duelPendingUntil, pendingDeath = nil, nil, {}, false, nil, nil
         honorBaseline = GL.Clean(GL.Safe(GetPVPSessionStats), "number")
         deathHandled = bool(UnitIsDeadOrGhost, "player") == true

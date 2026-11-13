@@ -14,6 +14,7 @@ function methods:SetTexture(value) self.texture, self.requestedTexture, self.col
 function methods:SetMaxLines(value) self.maxLines = value end
 function methods:SetWordWrap(value) self.wordWrap = value end
 function methods:SetAlpha(value) self.alpha = value end
+function methods:SetDrawLayer(layer, sublevel) self.drawLayer, self.sublevel = layer, sublevel end
 function methods:SetJustifyV(value) self.justifyV = value end
 function methods:HighlightText() self.highlighted = true end
 function methods:GetEffectiveScale() return self.effectiveScale or 1 end
@@ -145,6 +146,9 @@ for _, control in pairs(ledger.navigation) do
 end
 local activeTab = ledger.detailTabs.summary
 assert(activeTab.active and activeTab.selection:IsShown())
+assert(activeTab.normalTexture.drawLayer == "BACKGROUND" and activeTab.disabledTexture.drawLayer == "BACKGROUND")
+assert(activeTab.skin.drawLayer == "ARTWORK" and activeTab.selection.drawLayer == "ARTWORK" and activeTab.selection.sublevel == 1,
+    "an active tab's illustrated brass border draws above the native button fill")
 activeTab:SetEnabled(false)
 assert(activeTab.selection.alpha < 1, "disabled active tab visibly dims its selection")
 activeTab:SetEnabled(true)

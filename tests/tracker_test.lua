@@ -7,6 +7,7 @@ local function fixture(saved)
     instanceType = "none"
     function IsInInstance() return instanceType ~= "none", instanceType end
     C_DeathRecap, C_NamePlate, C_CombatLog = nil, nil, nil
+    C_TooltipInfo, Enum, UnitTokenFromGUID, UnitNameFromGUID, UnitPlayerControlled, GetTime = nil, nil, nil, nil, nil, nil
     unitData = { player = { guid = "Player-1-self", name = "Testeur", surname = "Exemple", dead = false, isPlayer = true, health = 1000, maxHealth = 1000 } }
     local function unit(token)
         if unitData[token] then return unitData[token] end
@@ -789,6 +790,107 @@ test("fatal NPC recap preserves player aggression without attributing PvP death"
     assert(total("probableDeaths") == 0 and total("deaths") == 0)
     fixture() recapAPI({ recapRow(npc, 0) }) T.HandleEvent("PLAYER_DEAD")
     assert(count() == 0, "a PvE-only recap never creates a player record")
+end)
+
+local function petTooltip(pet, owner)
+    Enum = { TooltipDataLineType = { UnitOwner = 16 } }
+    local data = { guid = pet.guid, lines = {
+        { type = 2, guid = pet.guid }, { type = 16, guid = owner.guid } } }
+    C_TooltipInfo = {
+        GetHyperlink = function(link) if link == "unit:" .. pet.guid then return data end end,
+        GetUnit = function(unit) if UnitGUID(unit) == pet.guid then return data end end,
+    }
+    UnitNameFromGUID = function(guid) if guid == owner.guid then return owner.name .. " " .. owner.surname end end
+    return data
+end
+
+test("pet-only attack with no combat log or owner in sight resolves the lethal recap", function()
+    local owner = opponent("hunter", "Denis", "Chassebois")
+    local pet = { guid = "Pet-1-wolf", name = "Griffe" }
+    petTooltip(pet, owner)
+    GetTime = function() return 32.5 end
+    local first, last = recapRow(pet, -1, 32.1), recapRow(pet, -1, 32.4)
+    last.currentHP = 0 -- exact lethal damage even when no overkill was supplied
+    recapAPI({last, first})
+    T.HandleEvent("PLAYER_DEAD")
+    T.HandleEvent("PLAYER_DEAD")
+    local record = assert(GL.Get("guid:" .. owner.guid))
+    assert(count() == 1 and record.pvp.deaths == 1 and record.pvp.aggressions == 1)
+    assert(GL.Relation(record) == "enemy" and record.history[2].evidence:find("familier", 1, true))
+end)
+
+test("hunter and multiple summons in the same attack leave one aggression and death", function()
+    local owner = opponent("bm")
+    local a, b = {guid="Pet-1-A", name="Féroce", surname=""}, {guid="Creature-1-B", name="Féroce", surname=""}
+    for _, pet in ipairs({a, b}) do cle("SPELL_SUMMON", owner, pet, nil, 64) end
+    cle("SWING_DAMAGE", a, unitData.player, -1, 64)
+    cle("SPELL_DAMAGE", owner, unitData.player, -1, 64)
+    recapAPI({recapRow(a), recapRow(b, 1)})
+    cle("SPELL_DAMAGE", b, unitData.player, 1, 64)
+    T.HandleEvent("PLAYER_DEAD")
+    local record = assert(GL.Get("guid:" .. owner.guid))
+    assert(count() == 1 and record.pvp.deaths == 1 and record.pvp.aggressions == 1)
+    assert(record.history[2].evidence:find("familier", 1, true))
+end)
+
+test("late owner on a recycled unit token is retried before finalizing a recap", function()
+    local owner = opponent("late-owner")
+    local pet = {guid="Pet-1-late", name="Griffe"}
+    petTooltip(pet, owner)
+    unitData.nameplate1 = opponent("unrelated")
+    UnitTokenFromGUID = function() return "nameplate1" end
+    C_TooltipInfo.GetHyperlink = nil
+    recapAPI({recapRow(pet, 0)})
+    T.HandleEvent("PLAYER_DEAD")
+    assert(count() == 0)
+    unitData.nameplate1 = pet
+    now = now + 1
+    T.Poll()
+    assert(GL.Get("guid:" .. owner.guid).pvp.deaths == 1 and total("aggressions") == 1 and count() == 1)
+end)
+
+test("hostile pet independently targeting the player supports only a probable death", function()
+    local owner = opponent("away") owner.combat, owner.target = false, nil
+    local pet = {guid="Pet-1-visible",name="Griffe",hostile=true,combat=true,target="player",dead=false,isPlayer=false}
+    UnitPlayerControlled = function(u) return UnitGUID(u) == pet.guid end
+    start(owner)
+    unitData.nameplate1 = pet
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    now = now + 1
+    petTooltip(pet, owner)
+    T.Poll()
+    unitData.player.health = 850
+    now = now + 1
+    T.Poll()
+    now = now + 1
+    T.Poll()
+    unitData.nameplate1, unitData.target = nil, nil -- captured before both leave
+    T.HandleEvent("PLAYER_DEAD")
+    local r = assert(GL.Get("guid:" .. owner.guid))
+    assert(count() == 1 and r.pvp.probableDeaths == 1 and r.pvp.deaths == 0)
+    assert(r.pvp.probableAggressions == 1 and r.history[1].evidence:find("familier", 1, true))
+end)
+
+test("unknown pet, recycled tooltip, secret owner and friendly pets never accuse a nearby hunter", function()
+    for _, failure in ipairs({"no-owner", "recycled", "friendly", "secret", "npc-owner", "untrusted-line", "instance", "duel"}) do
+        fixture()
+        local bystander = start(opponent("bystander"))
+        local pet = {guid="Pet-1-mystery",name="Griffe"}
+        local data = petTooltip(pet, bystander)
+        if failure == "no-owner" then C_TooltipInfo = nil
+        elseif failure == "recycled" then data.guid = "Pet-1-recycled"
+        elseif failure == "secret" then data.lines[2].guid = secret
+        elseif failure == "npc-owner" then data.lines[2].guid = "Creature-1-villager"
+        elseif failure == "untrusted-line" then data.lines[2].type = 0
+        elseif failure == "instance" then instanceType = "pvp"
+        elseif failure == "duel" then T.HandleEvent("DUEL_INBOUNDS") end
+        local fatal = recapRow(pet, 1)
+        if failure == "friendly" then fatal.sourceFlags = 16 end
+        recapAPI({fatal})
+        T.HandleEvent("PLAYER_DEAD")
+        now = now + 2 T.Poll()
+        assert(count() == 0, failure)
+    end
 end)
 
 test("explicit CLE fatal source stays primary and recap cannot duplicate aggression", function()

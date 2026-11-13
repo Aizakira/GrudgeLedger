@@ -51,6 +51,8 @@ def font(size, face=None):
 @lru_cache(maxsize=32)
 def font_path(face):
     name = (face or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if name.startswith("spectral-"):
+        return ADDON / "Media" / "Fonts" / face.replace("\\", "/").rsplit("/", 1)[-1]
     candidates = {"frizqt__.ttf": ("FRIZQT__.TTF", "georgia.ttf"),
                   "morpheus.ttf": ("MORPHEUS.TTF", "georgia.ttf"),
                   "arialn.ttf": ("ARIALN.TTF", "arial.ttf")}
@@ -420,7 +422,7 @@ def main():
               "honor-largeprint-small", "settings-readable-alerts-largeprint-small"]
     views += ["journal-compact", "journal-history-page2", "journal-history-filter", "correction-voided",
               "honor-annual", "honor-annual-empty", "honor-annual-largeprint-small", "honor-podium",
-              "honor-races", "honor-classes", "guild-exceptions", "guild-rankings-largeprint-small",
+              "honor-races", "honor-classes", "honor-zones", "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.

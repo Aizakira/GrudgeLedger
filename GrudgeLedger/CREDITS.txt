@@ -32,6 +32,11 @@ native client button frame. No Blizzard artwork was copied into this texture.
 
 No personal player database or guild list is distributed with this addon.
 
+Spectral, designed by Production Type, supplies the journal's book typography.
+The three unmodified TrueType files in Media/Fonts are distributed under the
+SIL Open Font License 1.1; the full license is included in Media/Fonts/OFL.txt.
+https://github.com/google/fonts/tree/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/spectral
+
 Forever death-recap fields were checked against Blizzard's public API documentation
 and the client observations documented by GudaAddons/HeadHunter. The reader and
 validation logic here are independently implemented; no HeadHunter files are bundled.

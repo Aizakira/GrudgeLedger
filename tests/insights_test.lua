@@ -137,7 +137,7 @@ assert(not f:IsShown() and GrudgeLedgerWindow:IsShown())
 assert(GrudgeLedgerWindow.detailTitle:GetText():find(selected.fullName, 1, true))
 GL.ShowStatistics("players") f.groups[2].scripts.OnClick()
 assert(f.rows[1].item.record.key == b.key)
-assert(f.rows[1].value:GetText() == "1 rencontre" and f.rows[1].rank:GetText() == "1")
+assert(f.rows[1].value:GetText() == "1" and f.rows[1].rank:GetText() == "1")
 assert(f.columnValue:GetText() == "Rencontres" and f.scope:GetText():find("Toutes périodes", 1, true))
 GL.Get(b).faction = "Alliance"
 f.factionButton.scripts.OnClick()
@@ -160,7 +160,13 @@ f.manage.scripts.OnClick()
 assert(GrudgeLedgerGuilds:IsShown() and f:IsShown(), "the guild editor must return to the rankings when closed")
 GrudgeLedgerGuilds:Hide()
 f.choices[2].scripts.OnClick()
-assert(f.offset == 0 and not f.selected and not f.guildActions[1].enabled)
+assert(f.offset == 0)
+if f.rows[1]:IsShown() and not f.rows[2]:IsShown() then
+    assert(f.selected == f.rows[1].item and f.guildActions[1].enabled and f.guildDetail.name:GetText() == f.selected.name,
+        "a single guild result opens its sheet automatically")
+else
+    assert(not f.selected and not f.guildActions[1].enabled)
+end
 assert(#GL.GuildStatistics() == allGuilds, "UI filtering must not modify the cached guilds")
 for _, row in ipairs(f.rows) do if row:IsShown() then assert(row.item.friends > 0) end end
 assert(not f.factionButton:IsShown())

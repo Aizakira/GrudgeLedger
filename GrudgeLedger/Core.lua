@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.7.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.7.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -234,7 +234,7 @@ function GL.AutomaticBalance(record)
     -- point at a time but cannot by themselves make an opponent a friend.
     local score = balance < 0 and math.min(0, social) + balance
         or social < 0 and math.min(0, social + balance) or social
-    return math.max(-100, math.min(100, score)), balance
+    return math.max(-100, math.min(100, score)), balance, social
 end
 local function refreshReputation(record)
     if record.reaction and record.reactionSource ~= "emote" and record.reactionSource ~= "automatic" then return end
@@ -257,7 +257,12 @@ local function normalize(record)
         e.count, e.since = nonnegative(e.count, 0), nonnegative(e.since, GL.Now())
         e.seen = type(e.seen) == "table" and e.seen or {}
         for character, at in pairs(e.seen) do
-            if type(character) ~= "string" or not nonnegative(at) then e.seen[character] = nil end
+            if type(character) ~= "string" or not nonnegative(at) then
+                e.seen[character] = nil
+            elseif at > (record.lastEncounterAt or 0) then
+                -- Older versions saved the sighting time per character, without a location.
+                record.lastEncounterAt, record.lastEncounterZone, record.lastEncounterSubzone = at, nil, nil
+            end
         end
         record.encounters = e
     end
@@ -657,12 +662,7 @@ function GL.PlayerStatistics(metric)
         elseif metric == "friendsRecent" or metric == "enemiesRecent" then
             local match = metric == "friendsRecent" and relation == "friend"
                 or metric == "enemiesRecent" and (relation == "warning" or relation == "enemy")
-            if match then
-                -- lastSeen also changes on manual edits and group updates; these are real observations.
-                for _, at in pairs(record.encounters and record.encounters.seen or {}) do
-                    if type(at) == "number" and at > value and at < math.huge then value = at end
-                end
-            end
+            value = match and record.lastEncounterAt or 0
         elseif metric == "friendsGrouped" then value = relation == "friend" and record.groupCount or 0
         else value = record.pvp[metric] or 0 end
         if type(value) == "number" and value > 0 and value < math.huge then result[#result + 1] = { record = record, value = value } end
@@ -921,7 +921,7 @@ function GL.SearchPlayers(options)
         if sort == "reputation" then return record.reputation or 0 end
         if sort == "kills" or sort == "deaths" then return record.pvp[sort] or 0 end
         if sort == "encounters" then return record.encounters and record.encounters.count or 0 end
-        return record.lastSeen or 0
+        return record.lastEncounterAt or 0
     end
     table.sort(result, function(a, b)
         local av, bv = value(a), value(b)
@@ -1117,7 +1117,7 @@ function GL.PersonalStatistics(options)
     return statisticsCopy(stats)
 end
 function GL.PvPBreakdown(options, dimension)
-    if dimension ~= "race" and dimension ~= "class" then return {} end
+    if dimension ~= "race" and dimension ~= "class" and dimension ~= "zone" then return {} end
     options = type(options) == "table" and options or {}
     local within, periodKey = periodFilter(options)
     local actor, scope, now = currentActor(), options.scope or "character", GL.Now()
@@ -1132,6 +1132,7 @@ function GL.PvPBreakdown(options, dimension)
                 if row.at > now and (not nextAt or row.at < nextAt) then nextAt = row.at end
                 if within(event, row.at) then
                     local token, name = cleanName(event[dimension]), cleanName(event[dimension .. "Name"])
+                    if dimension == "zone" and token == "?" then token = nil end
                     local category = token or name and "name:" .. name:lower() or "unknown"
                     local label = name or token or "Inconnue"
                     local counts = event.voided and corrected or active
@@ -1144,7 +1145,7 @@ function GL.PvPBreakdown(options, dimension)
                         -- Missing snapshots cannot prove a category; otherwise a mixed
                         -- group has no single race/class to which we can attribute it.
                         previous.key = (previous.key == "unknown" or category == "unknown") and "unknown" or "mixed"
-                        previous.label = previous.key == "unknown" and "Inconnue" or "Groupe mixte"
+                        previous.label = previous.key == "unknown" and "Inconnue" or dimension == "zone" and "Plusieurs lieux" or "Groupe mixte"
                     elseif event.confidence == previous.confidence and label < previous.label then
                         previous.label = label
                     end
@@ -1170,7 +1171,7 @@ function GL.PvPBreakdown(options, dimension)
             if a.label ~= b.label then return a.label < b.label end
             return a.key < b.key
         end)
-        -- ponytail: only two small cached results, replaced when their filters change.
+        -- ponytail: one result per dimension, replaced when its filters change.
         -- Snapshots are never backfilled from a player's later identity or guild.
         cached = { key = key, at = now, nextAt = nextAt, rows = rows }
         breakdownStatistics[dimension] = cached

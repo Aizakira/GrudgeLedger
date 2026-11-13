@@ -19,6 +19,7 @@ assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
+local fontDir = "Interface\\AddOns\\GrudgeLedger\\Media\\Fonts\\Spectral-"
 assert(GL.Settings().readableFont == false, "existing grimoire presentation is the default")
 GrudgeLedgerDB = {settings = {readableFont = true}} -- preference saved by an earlier session
 GL.InitDB()
@@ -31,8 +32,8 @@ local f, note = GrudgeLedgerWindow, GrudgeLedgerNote
 note.edit:SetText(string.rep("Brouillon non enregistré. ", 40))
 SlashCmdList.GRUDGELEDGER("settings")
 local settings = GrudgeLedgerSettings
-assert(settings.classic.active and f.title.fontObject == "ChatFontNormal" and note.edit.fontObject == "ChatFontNormal")
-assert(select(2, f.title:GetFont()) == 30 and select(2, f.rows[1].name:GetFont()) == 16)
+assert(settings.classic.active and f.title:GetFont() == fontDir .. "SemiBoldItalic.ttf" and note.edit.fontObject == "ChatFontNormal")
+assert(select(2, f.title:GetFont()) == 34 and select(2, f.rows[1].name:GetFont()) == 16)
 assert(select(2, f.detailText:GetFont()) == 15 and select(2, note.edit:GetFont()) == 15)
 local draft, text, color = note.edit:GetText(), f.detailText:GetText(), {f.detailText:GetTextColor()}
 local readableHeight = note.edit:GetHeight()
@@ -41,10 +42,29 @@ local function choose(value)
     control:GetScript("OnClick")(control)
     assert(GL.Settings().readableFont == value and GrudgeLedgerDB.settings.readableFont == value)
 end
+local setFont = methods.SetFont
+function methods:SetFont(path, size, flags)
+    setFont(self, path, size, flags) -- Forever's SetFont has no documented return values.
+end
 choose(false)
 assert(f.title.fontObject == "GameFontNormalLarge" and f.detailTitle.fontObject == "GameFontNormalLarge")
 assert(f.rows[1].name.fontObject == "GameFontNormalLarge" and note.edit.fontObject == "QuestFont_Large")
 assert(settings.title.fontObject == "GameFontNormalLarge", "book section titles switch too")
+assert(f.detailTitle:GetFont() == fontDir .. "SemiBold.ttf" and f.rows[1].name:GetFont() == fontDir .. "SemiBold.ttf")
+assert(note.edit:GetFont() == fontDir .. "Regular.ttf" and f.total:GetFont() == fontDir .. "Regular.ttf")
+assert(f.navigation.ledger.caption:GetFont() == fontDir .. "SemiBold.ttf")
+local tab = f.navigation.ledger
+assert(not tab.normalFont and not tab.highlightFont and not tab.disabledFont,
+    "a native button state font would replace the themed caption on hover or disable")
+tab:SetText("Journal") tab:SetEnabled(false) tab:SetEnabled(true)
+assert(tab.caption:GetText() == "Journal" and tab.caption:GetFont() == fontDir .. "SemiBold.ttf")
+local unavailable = f:CreateFontString()
+function unavailable:SetFont(path, size, flags)
+    if path:find("Spectral", 1, true) then error("Font asset unavailable") end
+    setFont(self, path, size, flags)
+end
+GL.UITheme.journalFont(unavailable, "GameFontHighlight", 14)
+assert(unavailable:GetFont() == "Classic" and select(2, unavailable:GetFont()) == 14)
 assert(note.edit:GetHeight() > readableHeight, "wrapped text is measured again immediately")
 f.detailScroll:SetVerticalScroll(100000)
 note.scroll:SetVerticalScroll(100000)

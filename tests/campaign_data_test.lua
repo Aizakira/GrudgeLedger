@@ -114,8 +114,11 @@ eq(merged.lastEncounterAt, now, "identity merge retains latest true observation"
 eq(merged.lastEncounterZone, "MergePlace", "identity merge retains its observed place")
 merged.lastEncounterAt = "invalid"
 GL.InitDB()
-eq(merged.lastEncounterAt, nil, "invalid observation time is not inferred")
+eq(merged.lastEncounterAt, now, "legacy observation restored from the last recorded sighting")
 eq(merged.lastEncounterZone, nil, "a place without observed time is not presented as a sighting")
+merged.encounters.seen, merged.lastEncounterAt = {}, nil
+GL.InitDB()
+eq(merged.lastEncounterAt, nil, "notes and group timestamps never stand in for an unknown sighting")
 
 reset()
 provisional.race, provisional.class = "Orc", "WARRIOR"
@@ -209,4 +212,18 @@ eq(breakdown({ period = "year", year = 2025 }, "race").Orc.correctedKills, 1, "h
 breakdown(nil, "race")
 now = anchor + 5
 eq(breakdown(nil, "race").Troll.probableKills, 1, "future event becomes eligible without a write")
+reset()
+zone = "Vallée de Strangleronce"
+add(a, "death", "probable", "one-death")
+add(b, "death", "confirmed", "one-death")
+zone = "?"
+local _, unknownPlace = add(c, "kill", "confirmed", "unmapped")
+zone = "Hurlevent"
+GL.RecordSeen(c, true)
+local places = breakdown(nil, "zone")
+eq(places["Vallée de Strangleronce"].deaths, 1, "confirmed fatal hit wins over other participants")
+eq(places.unknown.kills, 1, "new sightings cannot supply an old combat location")
+eq(places["Hurlevent"], nil, "peaceful visits never count as combat")
+assert(GL.VoidPvP(c, unknownPlace, true))
+eq(breakdown(nil, "zone").unknown.correctedKills, 1, "corrected fight is excluded from zone wins")
 print("PASS campaign data: validated settings, historical search, observed encounters, identity snapshots, deduplicated race/class PvP, corrections, scopes and periods")

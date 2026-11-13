@@ -163,6 +163,9 @@ eq(GL.SearchPlayers({ sort = "encounters" })[1], iaRecord, "lifetime encounter s
 now = now + 1
 GL.RecordSeen(ib, true)
 eq(GL.SearchPlayers({ sort = "recent" })[1], ibRecord, "recent sighting sorting reads live metadata")
+now = now + 30
+GL.AddNote(ia, "Updated after coming home")
+eq(GL.SearchPlayers({ sort = "recent" })[1], ibRecord, "editing a contact cannot promote it above a more recent encounter")
 local grouped = GL.Remember(person("GroupOnly"))
 grouped.groupCount, grouped.history = 1, { { kind = "grouped", time = now } }
 eq(#GL.SearchPlayers(), 3, "group-only records do not pollute list")

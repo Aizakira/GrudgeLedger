@@ -250,6 +250,7 @@ function QA.capture(name)
         if name == "honor-podium" then f.dimensionButtons.opponents:Click() end
         if name == "honor-races" then f.dimensionButtons.race:Click() end
         if name == "honor-classes" then f.dimensionButtons.class:Click() end
+        if name == "honor-zones" then f.dimensionButtons.zone:Click() end
         f.period, f.scope, f.kind, f.offset = "all", "character", "all", 0
         f.search:SetText("")
         if name:find("%-empty") then f.scope = "legacy" end

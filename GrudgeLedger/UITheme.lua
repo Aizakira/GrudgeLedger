@@ -15,15 +15,31 @@ end
 
 local function plain(text) return tostring(text or ""):gsub("|", "||") end
 local journalFonts = {}
+local fontDir = media .. "Fonts\\Spectral-"
+local locale = GetLocale and GetLocale()
+local nativeScript = locale == "koKR" or locale == "zhCN" or locale == "zhTW"
 local function journalFont(region, decorative, size)
     journalFonts[region] = { decorative, size }
     local r, g, b, a = GL.Safe(region.GetTextColor, region)
     local spacing = GL.Safe(region.GetSpacing, region)
     local settings = GL.Settings()
-    local font = decorative:match("^Fancy%d+Font$") and "GameFontNormalLarge" or decorative
-    region:SetFontObject(settings.readableFont and "ChatFontNormal" or font)
-    local path, _, flags = region:GetFont()
-    if path then region:SetFont(path, size * (settings.readingScale or 1), flags) end
+    local wordmark = decorative == "wordmark"
+    local heading = wordmark or decorative == "GameFontNormalLarge" or decorative:match("^Fancy%d+Font$")
+    local classic = settings.readableFont and not wordmark
+    region:SetFontObject(classic and "ChatFontNormal" or (heading and "GameFontNormalLarge" or decorative))
+    local nativePath, _, flags = region:GetFont()
+    local pixels = size * (settings.readingScale or 1)
+    local face = wordmark and "SemiBoldItalic" or heading and "SemiBold" or "Regular"
+    local loaded = false
+    if not classic and (not nativeScript or wordmark) then
+        -- Forever's SetFont can return nothing on success. Older clients return a boolean.
+        local ok, result = pcall(region.SetFont, region, fontDir .. face .. ".ttf", pixels, "")
+        loaded = ok and result ~= false
+    end
+    if not loaded and nativePath then region:SetFont(nativePath, pixels, flags) end
+    if region.SetShadowOffset then
+        region:SetShadowOffset(wordmark and 1 or 0, wordmark and -1 or 0)
+    end
     if r then region:SetTextColor(r, g, b, a) end
     if spacing then region:SetSpacing(spacing) end
 end
@@ -55,15 +71,18 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     normal:SetAlpha(paper and 0.15 or 0)
     b.normalSurface = normal
     b:SetNormalTexture(normal)
+    normal:SetDrawLayer("BACKGROUND", 0)
     local pushed = surface(b, paper and theme.selection or theme.brass, 1)
-    pushed:SetAlpha(paper and 0.65 or 0.18)
+    pushed:SetAlpha(paper and 0.24 or 0.18)
     b:SetPushedTexture(pushed)
+    pushed:SetDrawLayer("ARTWORK", 2)
     local disabled = surface(b, paper and theme.paper or theme.background, 1)
     disabled:SetAlpha(paper and 0.08 or 0)
     b:SetDisabledTexture(disabled)
-    -- Keep native state fills underneath the illustrated skin, including when
-    -- the client cannot load the texture. No extra frame or update handler.
-    local skin = b:CreateTexture(nil, "BORDER")
+    disabled:SetDrawLayer("BACKGROUND", 0)
+    -- Native button setters may choose their own layer. The gold skin sits above
+    -- normal/disabled fills; only the translucent press feedback goes over it.
+    local skin = b:CreateTexture(nil, "ARTWORK")
     skin:SetAllPoints()
     skin:SetTexture(media .. "JournalButtons")
     skin:SetTexCoord(36 / 1254, 1218 / 1254, (paper and 880 or 150) / 1254, (paper and 1130 or 402) / 1254)
@@ -80,9 +99,6 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     GL.Safe(caption.SetWordWrap, caption, false)
     GL.Safe(caption.SetMaxLines, caption, 1)
     b:SetFontString(caption)
-    b:SetNormalFontObject("GameFontHighlightSmall")
-    b:SetHighlightFontObject("GameFontHighlightSmall")
-    b:SetDisabledFontObject("GameFontDisableSmall")
     b:SetText(text)
     journalFont(caption, "GameFontHighlightSmall", 12)
     caption:SetTextColor(unpack(paper and theme.ink or theme.brass))
@@ -104,7 +120,7 @@ end
 
 local function selectButton(control, active)
     if not control.selection then
-        control.selection = control:CreateTexture(nil, "BORDER", nil, 1)
+        control.selection = control:CreateTexture(nil, "ARTWORK", nil, 1)
         control.selection:SetAllPoints()
         control.selection:SetTexture(media .. "JournalButtons")
         control.selection:SetTexCoord(36 / 1254, 1218 / 1254, 514 / 1254, 768 / 1254)
@@ -214,7 +230,8 @@ local function bookWindow(name, title)
     f.title:SetSize(289, 51)
     f.title:SetJustifyH("CENTER")
     GL.Safe(f.title.SetJustifyV, f.title, "MIDDLE")
-    journalFont(f.title, "GameFontNormalLarge", 30)
+    journalFont(f.title, "wordmark", 34)
+    f.title:SetTextColor(1, 0.83, 0.49)
     f.indexPaper = f:CreateTexture(nil, "BACKGROUND", nil, -1)
     f.indexPaper:SetPoint("TOPLEFT", 25, -145)
     f.indexPaper:SetSize(295, 520)
