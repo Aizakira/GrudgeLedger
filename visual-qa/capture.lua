@@ -321,11 +321,12 @@ function QA.capture(name)
         return f
     elseif name == "alert-preview" then GL.Display.PreviewAlert("enemy") return GrudgeLedgerAlertPreview
     elseif name == "guide" then GL.ShowGuide() return GrudgeLedgerGuide
-    elseif name == "corrections" or name == "correction-voided" then
-        GL.ShowLedger(record.key)
+    elseif name == "corrections" or name == "correction-voided" or name == "confirm-kill" then
+        GL.ShowLedger(name == "confirm-kill" and records[7].key or record.key)
         click("Corriger le PvP")
         local details = GrudgeLedgerWindow.historyPage.rows[1].details
         details:Click()
+        if name == "confirm-kill" then assert(GrudgeLedgerCorrections.attest:IsShown()) end
         if name == "correction-voided" then GrudgeLedgerCorrections.confirm:Click() details:Click() end
         return GrudgeLedgerCorrections
     elseif name == "diagnostic" then SlashCmdList.GRUDGELEDGER("debug") return GrudgeLedgerDiagnostic

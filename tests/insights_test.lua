@@ -101,6 +101,7 @@ assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 GL.ShowStatistics("guilds")
 local f = GrudgeLedgerStatistics
 assert(f:IsShown() and f.rows[1].item)
+assert(f.selected == f.rows[1].item and f.guildDetail.name:GetText() == f.selected.name)
 assert(f.tabs.guilds.selection:IsShown() and not f.tabs.players.selection:IsShown())
 f.groups[2].scripts.OnClick()
 assert(f.groups[3]:GetText() == "Mes règles" and f.choices[4].metric == "probableDeaths")
@@ -150,20 +151,28 @@ assert(f.rows[1].item.record.key == promoted.key, "unknown factions remain separ
 f.factionButton.scripts.OnClick()
 for i = 1, 10 do GL.SetReaction(identity("Fixture" .. i, "Fixture " .. i), "enemy") end
 local allGuilds = #GL.GuildStatistics()
-GL.ShowStatistics("guilds") f.next.scripts.OnClick()
+GL.ShowStatistics("guilds")
+local secondGuild = f.rows[2].item
+assert(secondGuild and not GL.GetGuildRule(secondGuild.name, secondGuild.realm))
+f.rows[2].scripts.OnClick(f.rows[2])
+GL.Emit("CHANGED")
+assert(f.selected.key == secondGuild.key and f.guildDetail.name:GetText() == secondGuild.name)
+assert(not GL.GetGuildRule(secondGuild.name, secondGuild.realm), "previewing a guild never defines a rule")
+f.next.scripts.OnClick()
 assert(f.offset == #f.rows and f.rows[1].item and f.previous.enabled)
 f.rows[1].scripts.OnClick(f.rows[1])
 assert(f.guildActions[1].enabled)
 f.previous.scripts.OnClick()
-assert(not f.selected and not f.guildActions[1].enabled, "guild actions cannot affect a selected row from another page")
+assert(f.selected == f.rows[1].item and f.guildDetail.name:GetText() == f.selected.name,
+    "paging updates the highlighted guild, its sheet and its action target together")
 f.manage.scripts.OnClick()
 assert(GrudgeLedgerGuilds:IsShown() and f:IsShown(), "the guild editor must return to the rankings when closed")
 GrudgeLedgerGuilds:Hide()
 f.choices[2].scripts.OnClick()
 assert(f.offset == 0)
-if f.rows[1]:IsShown() and not f.rows[2]:IsShown() then
+if f.rows[1]:IsShown() then
     assert(f.selected == f.rows[1].item and f.guildActions[1].enabled and f.guildDetail.name:GetText() == f.selected.name,
-        "a single guild result opens its sheet automatically")
+        "the first visible guild opens when changing ranking")
 else
     assert(not f.selected and not f.guildActions[1].enabled)
 end

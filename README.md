@@ -37,6 +37,12 @@ Open the cog or use `/gl settings` to set the font, text size and spacing. The f
 
 The index opens with the most recent interaction first. A new encounter, fight, gesture, trade or note can move a contact up. Submitting a search restores the preferred result order. Clearing it returns the index to chronological order.
 
+### New in 0.9.1
+
+The Journal opens the most recent contact on first use with an existing ledger. Guilds shows the first matching guild, and the PvP summary puts personal rivals directly below the counters. Press Enter or click the magnifying glass to search the Journal.
+
+In outdoor PvP, a personal killing-blow event can confirm a victory even when the combat log is unavailable. A matching later signal upgrades the original entry. To correct a past victory that you witnessed, open **History → Verify → I dealt the killing blow**. The original fight stays in place and the history identifies your personal confirmation.
+
 ### New in 0.8.0
 
 - **Journal → Face-à-face** shows this character’s confirmed outcomes against a contact, the current streak and the most recent win following a loss. Each victory still counts as +1. New combat history can show levels, health at first PvP observation, distinct opponents and pet or NPC involvement.

@@ -85,6 +85,9 @@ end
 
 local function identityForGUID(guid, name, encounter)
     if not guid or #guid > 128 or not guid:match("^Player%-%w") or guid == playerGUID() then return nil end
+    local token = GL.Clean(GL.Safe(UnitTokenFromGUID, guid), "string")
+    local visible = token and GL.Identity(token)
+    if visible and visible.guid == guid then return visible end
     for _, unit in ipairs(units()) do
         local identity = GL.Identity(unit)
         if identity and identity.guid == guid then return identity end
@@ -177,15 +180,43 @@ local function combatSnapshot(f, identity, viaPet)
         opponents = f.opponentCount, pve = f.npcPressure, pet = viaPet }
 end
 
-local function creditKill(identity, confidence, evidence)
+local function creditKill(identity, confidence, evidence, native)
     if not enabled() or not identity then return end
     local key = identity.guid or identity.key
-    local previous = recentCredits["kill:" .. key]
-    if previous and GL.Now() - previous < 4 then return end
-    recentCredits["kill:" .. key] = GL.Now()
+    local now, previous = GL.Now(), recentCredits[key] or (identity.alias and recentCredits[identity.alias])
+    -- The native event identifies each kill, even without a visible resurrection.
+    -- Coalesce its other evidence for ten seconds and same-tick native repeats.
+    if previous and now >= previous.at and now - previous.at <= 10
+        and not (native and previous.nativeAt and now > previous.nativeAt) then
+        if identity.guid and previous == recentCredits[identity.alias] then
+            GL.Remember(identity)
+            recentCredits[identity.alias], recentCredits[key] = nil, previous
+        end
+        if confidence == "confirmed" and previous.event.confidence == "probable" and not previous.event.voided then
+            GL.ConfirmKill(identity, previous.event, evidence)
+        end
+        if native then previous.nativeAt = now end
+        return
+    end
     local f = combatSession()
     observeOpponent(f, identity.guid)
-    return GL.RecordPvP(identity, "kill", confidence, evidence, nextID("kill"), combatSnapshot(f, identity))
+    local record, event = GL.RecordPvP(identity, "kill", confidence, evidence, nextID("kill"), combatSnapshot(f, identity))
+    if event then recentCredits[key] = { at = now, nativeAt = native and now, event = event } end
+    return record
+end
+
+-- Forever exposes this native event independently of restricted combat-log access.
+-- https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua
+local function personalKill(src, dst, name, evidence, native)
+    src, dst = GL.Clean(src, "string"), GL.Clean(dst, "string")
+    if not src or not dst or not dst:match("^Player%-%w") or not enabled() then return end
+    local me = playerGUID()
+    if not me or dst == me then return end
+    if src ~= me then
+        if src ~= GL.Clean(GL.Safe(UnitGUID, "pet"), "string") then return end
+        evidence = "Votre familier a porté le coup fatal à ce joueur."
+    end
+    creditKill(identityForGUID(dst, name), "confirmed", evidence, native)
 end
 
 local function recordAggression(f, identity, confidence, evidence, viaPet)
@@ -327,7 +358,8 @@ function T.Observe(unit, reuseObservation)
         else enemy.targetingMeAt, enemy.targetedAt = nil, nil end
         if enemy.dead then
             enemy.signalAt = nil enemy.deadAt = nil enemy.credited = nil
-            recentCredits["kill:" .. (identity.guid or identity.key)] = nil
+            recentCredits[identity.guid or identity.key] = nil
+            if identity.alias then recentCredits[identity.alias] = nil end
         end
         enemy.aliveAt, enemy.dead = now, false
     elseif dead == true and enemy.dead == false then
@@ -528,12 +560,22 @@ function T.OnCombatLog(...)
         and dst and (dst:match("^Pet%-") or dst:match("^Creature%-")) then
         local owner = identityForGUID(src, srcName)
         if owner then rememberPet(dst, owner) end
-    elseif sub == "PARTY_KILL" and src == me then
-        creditKill(identityForGUID(dst, dstName), "confirmed", "Journal de combat : coup fatal personnel (PARTY_KILL).")
-    elseif src == me and fight and not deathHandled and damageEvents[sub] and hostileFlags(args[10]) then
-        observeOpponent(fight, dst, nil, true)
-        if dst and dst:match("^Creature%-") and hasFlag(args[10], COMBATLOG_OBJECT_CONTROL_NPC or 512)
-            and not petOwners[dst] then fight.npcPressure = true end
+    elseif sub == "PARTY_KILL" then
+        personalKill(src, dst, dstName, "Journal de combat : coup fatal personnel (PARTY_KILL).")
+    elseif dst ~= me and hostileFlags(args[10]) and (damageEvents[sub] or sub == "SPELL_INSTAKILL") then
+        if src == me and fight and not deathHandled then
+            observeOpponent(fight, dst, nil, true)
+            if dst and dst:match("^Creature%-") and hasFlag(args[10], COMBATLOG_OBJECT_CONTROL_NPC or 512)
+                and not petOwners[dst] then fight.npcPressure = true end
+        end
+        -- Zero overkill is ambiguous across clients. Require a strictly positive
+        -- surplus here; PARTY_KILL can still confirm an exact-zero killing blow.
+        local amountAt = sub == "SWING_DAMAGE" and 12 or 15
+        local amount, excess = GL.Clean(args[amountAt], "number"), GL.Clean(args[amountAt + 1], "number")
+        if sub == "SPELL_INSTAKILL" or (sub ~= "ENVIRONMENTAL_DAMAGE" and amount and excess
+            and excess > 0 and excess <= amount and amount < math.huge) then
+            personalKill(src, dst, dstName, "Le journal de combat vous attribue les dégâts mortels.")
+        end
     -- Only health-damage payloads contain overkill. LEECH/DRAIN use powerType in
     -- that position, and durability damage is not damage to the player either.
     elseif dst == me and (damageEvents[sub] or sub == "SPELL_INSTAKILL") then
@@ -652,16 +694,17 @@ function T.Poll()
     tryAggression()
     tryKills()
     local now = GL.Now()
-    for key, when in pairs(recentCredits) do if now - when > 10 then recentCredits[key] = nil end end
+    for key, credit in pairs(recentCredits) do if now < credit.at or now - credit.at > 10 then recentCredits[key] = nil end end
 end
 
-function T.HandleEvent(event, arg)
+function T.HandleEvent(event, arg, second)
     if not GL.db then return end
     if event == "PLAYER_LOGOUT" or event == "PLAYER_LEAVING_WORLD" then
         groupWorldActive = false
         stopGroupTime(GL.Now())
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         if event == "PLAYER_ENTERING_WORLD" then groupWorldActive = true end
+        recentCredits = {}
         petOwners, petSlots, nextPetSlot = {}, {}, 1
         fight, lastFight, plates, duel, duelPendingUntil, pendingDeath = nil, nil, {}, false, nil, nil
         honorBaseline = GL.Clean(GL.Safe(GetPVPSessionStats), "number")
@@ -712,6 +755,7 @@ function T.HandleEvent(event, arg)
         arg = GL.Clean(arg, "string")
         if event == "UNIT_HEALTH" and arg == "player" then T.Poll() else T.Observe(arg) end
     elseif event == "PLAYER_DEAD" then T.OnDeath()
+    elseif event == "PARTY_KILL" then personalKill(arg, second, nil, "Le jeu vous attribue le coup fatal (PARTY_KILL).", true)
     elseif event == "PLAYER_PVP_KILLS_CHANGED" then T.OnHonorCount()
     elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then T.OnHonorMessage(arg)
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then T.OnCombatLog() end
@@ -728,6 +772,7 @@ GL.On("READY", function()
         "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_TARGET", "UNIT_FLAGS", "UNIT_HEALTH", "UNIT_NAME_UPDATE", "PLAYER_GUILD_UPDATE",
         "PLAYER_PVP_KILLS_CHANGED", "CHAT_MSG_COMBAT_HONOR_GAIN", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED", "DUEL_INBOUNDS", "DUEL_OUTOFBOUNDS", "DUEL_FINISHED",
     }
+    T.nativeKillEvent = pcall(frame.RegisterEvent, frame, "PARTY_KILL")
     for _, event in ipairs(events) do pcall(frame.RegisterEvent, frame, event) end
     -- Forever may reject registration even when the getter exists.
     if (C_CombatLog and C_CombatLog.GetCurrentEventInfo) or CombatLogGetCurrentEventInfo then

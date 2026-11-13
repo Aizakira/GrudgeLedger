@@ -168,8 +168,8 @@ local function combatDetails(event, compact)
     if #parts > 0 then return table.concat(parts, compact and " · " or "\n", 1, compact and math.min(2, #parts) or #parts) end
 end
 local function realmLabel(realm)
-    local region, shard, rules = (realm or ""):match("^CAMWOW%s+(%w+)%s+Realm%s+(%d+)%s*(.*)$")
-    if region then return "Forever " .. region .. " · " .. shard .. (rules ~= "" and " " .. rules or "") end
+    local region, shard, rules = (realm or ""):match("^CAMWOW%s*([%u]+%d*)%s*Realm%s*(%d+)%s*(%a*)$")
+    if region then return region .. " · " .. shard .. (rules ~= "" and " " .. rules or "") end
     return plain(realm)
 end
 local gestureNames = {
@@ -229,12 +229,10 @@ local function bookNavigation(f, selected)
         { "guilds", L("Guildes"), function() GL.ShowStatistics("guilds") end },
         { "journal", L("Bilan"), function() GL.ShowJournal("summary") end },
     }) do
-        local b = button(f, entry[2], 40 + (i - 1) * 221, -99, 216, entry[3], true)
-        b:SetHeight(31)
-        journalFont(b.caption, "GameFontNormalLarge", 16)
-        b.caption:ClearAllPoints()
-        b.caption:SetPoint("CENTER")
-        b.caption:SetHeight(24)
+        local b = button(f, entry[2], 76 + (i - 1) * 204, -96, 196, entry[3], true)
+        b:SetHeight(38)
+        journalFont(b.caption, "GameFontNormalLarge", 19)
+        b.caption:SetHeight(32)
         f.navigation[entry[1]] = b
         UI.selectButton(b, entry[1] == selected)
     end
@@ -504,13 +502,23 @@ local function refreshStatistics()
             end
         end
     end
+    f.columnBand:SetWidth(guild and 211 or 548)
     f.columnValue:SetWidth(guild and 87 or 145)
     moveTo(f.columnValue, guild and 478 or 608, 255)
     showIf(f.guildDetail, guild)
-    if guild and #rows == 1 and (not f.selected or f.selected.key ~= rows[1].key) then
-        f.selected, f.guildDetail.offset, f.guildDetail.exceptionsOnly = rows[1], 0, false
-    end
     local selected
+    if guild then
+        selected = rows[f.offset + 1]
+        if f.selected then
+            for i = f.offset + 1, math.min(f.offset + rankingPageSize, #rows) do
+                if rows[i].key == f.selected.key then selected = rows[i] break end
+            end
+        end
+        if not selected or not f.selected or selected.key ~= f.selected.key then
+            f.guildDetail.offset, f.guildDetail.exceptionsOnly = 0, false
+        end
+    end
+    f.selected = selected
     for i, row in ipairs(f.rows) do
         local item = rows[f.offset + i]
         row.item = item
@@ -536,7 +544,6 @@ local function refreshStatistics()
             if guild then
                 row.meta:SetText(realmLabel(item.realm))
                 row.value:SetText(choice[1] == "rules" and relationNames[GL.GetGuildRule(item.name, item.realm).reaction] or tostring(value))
-                if f.selected and f.selected.key == item.key then selected = item end
             else
                 local faction, _, class = identityLabels(item.record)
                 identityIcons(row, item.record)
@@ -549,7 +556,6 @@ local function refreshStatistics()
             row:Show()
         else row:Hide() end
     end
-    f.selected = selected
     if guild then
         local members = selected and GL.GuildMembers(selected.name, selected.realm) or {}
         local detail = f.guildDetail
@@ -638,10 +644,10 @@ function GL.ShowStatistics(mode)
         f.manage = button(f, "", 36, -620, 256, function()
             if f.mode == "guilds" then GL.ShowGuilds() else GL.ShowJournal("summary") end
         end)
-        f.heading = label(f, "", "large", 356, -154, 548)
+        f.heading = label(f, "", "large", 372, -165, 532)
         journalFont(f.heading, "GameFontNormalLarge", 21)
         f.heading:SetTextColor(unpack(theme.ink))
-        f.description = label(f, "", nil, 356, -183, 548)
+        f.description = label(f, "", nil, 372, -194, 532)
         f.description:SetHeight(32)
         f.description:SetTextColor(unpack(theme.inkMuted))
         f.factionButton = button(f, "", 356, -225, 155, function()
@@ -654,7 +660,10 @@ function GL.ShowStatistics(mode)
         end, nil, true)
         f.scope = label(f, "", nil, 642, -232, 262)
         f.scope:SetJustifyH("RIGHT") f.scope:SetTextColor(unpack(theme.inkMuted))
-        f.columnName = label(f, "", nil, 365, -255, 135) f.columnName:SetTextColor(unpack(theme.inkMuted))
+        f.columnBand = f:CreateTexture(nil, "BORDER")
+        f.columnBand:SetPoint("TOPLEFT", 356, -251) f.columnBand:SetHeight(25)
+        f.columnBand:SetColorTexture(0.44, 0.28, 0.13, 0.18)
+        f.columnName = label(f, "", nil, 365, -255, 135) f.columnName:SetTextColor(unpack(theme.ink))
         f.columnValue = label(f, "", nil, 608, -255, 145)
         f.columnValue:SetJustifyH("RIGHT") f.columnValue:SetTextColor(unpack(theme.inkMuted))
         f.columnExtra = bookText(f, 774, 255, 130, 21, 12, "")
@@ -789,12 +798,18 @@ local function refreshJournal()
                 showIf(metric.value, value > 0) showIf(metric.qualifier, value > 0)
             end
         end
-        for _, entry in ipairs({ { "mostDeaths", L("Némésis"), "mort confirmée", "morts confirmées" }, { "mostKilled", L("Le plus vaincu"), "victoire confirmée", "victoires confirmées" } }) do
-            local item, control = stats[entry[1]], f.recaps[entry[1]]
+        for key, control in pairs(f.recaps) do
+            local item = stats[key]
             control.record = item and item.record
-            control.name:SetText(entry[1] == "mostDeaths" and L("Votre pire antagoniste") or L("Votre adversaire le plus vaincu"))
-            control.detail:SetText(item and (plain(item.record.fullName) .. " · " .. counted(item.value, entry[3], entry[4]))
-                or (entry[1] == "mostDeaths" and L("Aucune mort confirmée") or L("Aucune victoire confirmée")))
+            local deaths = key == "mostDeaths"
+            control.name:SetText(item and plain(item.record.fullName)
+                or (deaths and L("Aucune mort confirmée") or L("Aucune victoire confirmée")))
+            moveTo(control.name, item and 54 or 10, item and 27 or 36)
+            control.name:SetWidth(item and 207 or 250)
+            control.detail:SetText(item and counted(item.value, deaths and "mort confirmée" or "victoire confirmée",
+                deaths and "morts confirmées" or "victoires confirmées") or "")
+            if item then identityIcons(control, item.record) else portraitRows[control] = nil end
+            showIf(control.raceIcon, item ~= nil) showIf(control.classIcon, item ~= nil)
             control:SetEnabled(item ~= nil)
         end
         local unknown = stats.unknownActorEvents or 0
@@ -826,7 +841,7 @@ local function refreshJournal()
         f.zoneTracking:SetText(GL.Settings().zoneTime and L("Suspendre le suivi du temps") or L("Mesurer le temps par zone"))
         f.zoneBack:SetText(L("‹ Toutes les zones"))
         f.breakdownLabel:SetText(zoom and plain(f.zoneLabel) or geographic and L("Zone · ouvrir les lieux") or L("Confirmées / probables"))
-        moveTo(f.breakdownLabel, zoom and 484 or 356, 369)
+        moveTo(f.breakdownLabel, zoom and 484 or 356, 451)
         f.breakdownLabel:SetWidth(zoom and 150 or showTime and 176 or 270)
         showIf(f.podium, podium) showIf(f.breakdown, not podium)
         if podium then
@@ -985,9 +1000,9 @@ function GL.ShowJournal(mode)
             f.query, f.kind, f.period, f.scope, f.offset = "", "all", "all", "character", 0 f.search:SetText("") refreshJournal()
         end)
         f.help = label(f, "", nil, 36, -608, 256) f.help:SetTextColor(unpack(theme.muted)) f.help:SetHeight(46) journalFont(f.help, "GameFontHighlightSmall", 12)
-        f.heading = label(f, "", "large", 356, -154, 548) f.heading:SetTextColor(unpack(theme.ink))
+        f.heading = label(f, "", "large", 372, -165, 532) f.heading:SetTextColor(unpack(theme.ink))
         journalFont(f.heading, "GameFontNormalLarge", 21)
-        f.subtitle = label(f, "", nil, 356, -183, 548) f.subtitle:SetTextColor(unpack(theme.inkMuted))
+        f.subtitle = label(f, "", nil, 372, -194, 532) f.subtitle:SetTextColor(unpack(theme.inkMuted))
         f.summary = CreateFrame("Frame", nil, f) f.summary:SetAllPoints(f)
         f.history = CreateFrame("Frame", nil, f) f.history:SetAllPoints(f)
         f.story = CreateFrame("Frame", nil, f) f.story:SetAllPoints(f)
@@ -1006,18 +1021,32 @@ function GL.ShowJournal(mode)
             local qualifier = label(card, "", nil, 43, -60, 120) qualifier:SetTextColor(unpack(theme.inkMuted))
             f.metrics[entry[1]], f.metrics[entry[3]] = { value = value, caption = caption }, { value = probable, qualifier = qualifier }
         end
+        f.recaps = {}
+        for i, entry in ipairs({ { "mostDeaths", L("Votre pire antagoniste") }, { "mostKilled", L("Votre adversaire le plus vaincu") } }) do
+            local row = CreateFrame("Button", nil, f.summary)
+            row:SetPoint("TOPLEFT", 356 + (i - 1) * 277, -331) row:SetSize(270, 76)
+            parchmentPanel(row)
+            local title = bookText(row, 10, 5, 250, 21, 14, entry[2], theme.inkMuted)
+            journalFont(title, "QuestFont_Large", 14, true)
+            row.raceIcon = bookIcon(row, 10, 30, 36) row.classIcon = bookIcon(row, 34, 54, 15)
+            row.name = bookText(row, 54, 27, 207, 23, 16)
+            row.detail = bookText(row, 54, 52, 207, 20, 12, "", theme.inkMuted)
+            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+            row:SetScript("OnClick", function(self) if self.record then GL.ShowLedger(self.record.key) end end)
+            f.recaps[entry[1]] = row
+        end
         f.dimensionButtons = {}
         for i, entry in ipairs({ { "opponents", L("Adversaires") }, { "race", L("Par race") }, { "class", L("Par classe") }, { "zone", L("Par zone") } }) do
             local key = entry[1]
-            f.dimensionButtons[key] = button(f.summary, entry[2], 356 + (i - 1) * 132, -331, 122, function() f.dimension, f.breakdownOffset, f.zoneKey = key, 0, nil refreshJournal() end, true, true)
+            f.dimensionButtons[key] = button(f.summary, entry[2], 356 + (i - 1) * 132, -413, 122, function() f.dimension, f.breakdownOffset, f.zoneKey = key, 0, nil refreshJournal() end, true, true)
         end
         f.podium = CreateFrame("Frame", nil, f.summary) f.podium:SetAllPoints(f)
-        bookText(f.podium, 356, 367, 548, 25, 16, L("Vos morts par adversaire"))
-        f.podium.empty = bookText(f.podium, 356, 403, 548, 29, 13, "", theme.inkMuted)
+        bookText(f.podium, 356, 449, 548, 25, 16, L("Vos morts par adversaire"))
+        f.podium.empty = bookText(f.podium, 356, 485, 548, 29, 13, "", theme.inkMuted)
         f.podium.rows = {}
         for i = 1, 3 do
             local row = CreateFrame("Button", nil, f.podium)
-            row:SetPoint("TOPLEFT", 356, -398 - (i - 1) * 41) row:SetSize(548, 39)
+            row:SetPoint("TOPLEFT", 356, -480 - (i - 1) * 41) row:SetSize(548, 39)
             row.raceIcon = bookIcon(row, 2, 2, 30) row.classIcon = bookIcon(row, 23, 21, 13)
             row.name = bookText(row, 43, 5, 242, 26, 15)
             local track = row:CreateTexture(nil, "BACKGROUND")
@@ -1029,19 +1058,19 @@ function GL.ShowJournal(mode)
             f.podium.rows[i] = row
         end
         f.breakdown = CreateFrame("Frame", nil, f.summary) f.breakdown:SetAllPoints(f)
-        f.breakdownLabel = bookText(f.breakdown, 356, 369, 270, 23, 12, "", theme.inkMuted)
-        f.breakdownTime = bookText(f.breakdown, 539, 369, 96, 23, 12, L("Présence"), theme.inkMuted)
-        f.zoneBack = button(f.breakdown, L("‹ Toutes les zones"), 356, -365, 125, function()
+        f.breakdownLabel = bookText(f.breakdown, 356, 451, 270, 23, 12, "", theme.inkMuted)
+        f.breakdownTime = bookText(f.breakdown, 539, 451, 96, 23, 12, L("Présence"), theme.inkMuted)
+        f.zoneBack = button(f.breakdown, L("‹ Toutes les zones"), 356, -447, 125, function()
             f.zoneKey, f.breakdownOffset = nil, 0 refreshJournal()
         end, nil, true)
         f.zoneTracking = button(f.summary, "", 36, -620, 256, function()
             GL.SetSetting("zoneTime", not GL.Settings().zoneTime) refreshJournal()
         end)
-        label(f.breakdown, L("Victoires"), nil, 642, -369, 125):SetTextColor(unpack(theme.inkMuted))
-        label(f.breakdown, L("Morts"), nil, 787, -369, 117):SetTextColor(unpack(theme.inkMuted))
+        label(f.breakdown, L("Victoires"), nil, 642, -451, 125):SetTextColor(unpack(theme.inkMuted))
+        label(f.breakdown, L("Morts"), nil, 787, -451, 117):SetTextColor(unpack(theme.inkMuted))
         f.breakdownRows = {}
         for i = 1, 5 do
-            local row = CreateFrame("Button", nil, f.breakdown) row:SetPoint("TOPLEFT", 356, -394 - (i - 1) * 24) row:SetSize(548, 22)
+            local row = CreateFrame("Button", nil, f.breakdown) row:SetPoint("TOPLEFT", 356, -476 - (i - 1) * 24) row:SetSize(548, 22)
             surface(row, theme.selection):SetAlpha(i % 2 == 0 and 0.35 or 0)
             row.name = label(row, "", nil, 5, -2, 270) row.name:SetTextColor(unpack(theme.ink))
             row.time = bookText(row, 183, 2, 96, 20, 12, "", theme.inkMuted)
@@ -1054,20 +1083,10 @@ function GL.ShowJournal(mode)
             for _, text in ipairs({ row.name, row.kills, row.deaths }) do text:SetHeight(20) GL.Safe(text.SetWordWrap, text, false) end
             f.breakdownRows[i] = row
         end
-        f.breakdownEmpty = label(f.breakdown, "", nil, 356, -415, 548) f.breakdownEmpty:SetTextColor(unpack(theme.inkMuted))
-        f.breakdownInfo = label(f.breakdown, "", nil, 356, -522, 410) f.breakdownInfo:SetTextColor(unpack(theme.inkMuted)) journalFont(f.breakdownInfo, "GameFontHighlightSmall", 12)
-        f.breakdownPrevious = button(f.breakdown, "<", 808, -516, 42, function() f.breakdownOffset = math.max(0, f.breakdownOffset - #f.breakdownRows) refreshJournal() end, nil, true)
-        f.breakdownNext = button(f.breakdown, ">", 862, -516, 42, function() f.breakdownOffset = f.breakdownOffset + #f.breakdownRows refreshJournal() end, nil, true)
-        f.recaps = {}
-        for i, key in ipairs({ "mostDeaths", "mostKilled" }) do
-            local row = CreateFrame("Button", nil, f.summary) row:SetPoint("TOPLEFT", 356 + (i - 1) * 277, -553) row:SetSize(270, 70)
-            parchmentPanel(row)
-            row.name = bookText(row, 8, 5, 254, 25, 15)
-            row.detail = bookText(row, 8, 34, 254, 34, 11, "", theme.inkMuted) GL.Safe(row.detail.SetWordWrap, row.detail, true)
-            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-            row:SetScript("OnClick", function(self) if self.record then GL.ShowLedger(self.record.key) end end)
-            f.recaps[key] = row
-        end
+        f.breakdownEmpty = label(f.breakdown, "", nil, 356, -497, 548) f.breakdownEmpty:SetTextColor(unpack(theme.inkMuted))
+        f.breakdownInfo = label(f.breakdown, "", nil, 356, -604, 410) f.breakdownInfo:SetTextColor(unpack(theme.inkMuted)) journalFont(f.breakdownInfo, "GameFontHighlightSmall", 12)
+        f.breakdownPrevious = button(f.breakdown, "<", 808, -598, 42, function() f.breakdownOffset = math.max(0, f.breakdownOffset - #f.breakdownRows) refreshJournal() end, nil, true)
+        f.breakdownNext = button(f.breakdown, ">", 862, -598, 42, function() f.breakdownOffset = f.breakdownOffset + #f.breakdownRows refreshJournal() end, nil, true)
         f.coverage = label(f.summary, "", nil, 356, -645, 548) f.coverage:SetTextColor(unpack(theme.inkMuted)) journalFont(f.coverage, "GameFontHighlightSmall", 12) f.coverage:SetHeight(17)
         f.storyScroll = CreateFrame("ScrollFrame", nil, f.story, "UIPanelScrollFrameTemplate") f.storyScroll:SetPoint("TOPLEFT", 356, -221) f.storyScroll:SetSize(536, 405)
         f.storyBody = CreateFrame("Frame", nil, f.storyScroll) f.storyBody:SetSize(531, 405)
@@ -1173,6 +1192,7 @@ local function eventCertainty(e)
     if e.kind == "trade" then return L("Échange confirmé") end
     if e.voidReason == "battleground" then return L("Champ de bataille · exclu") end
     if e.voided then return L("Annulé · exclu") end
+    if e.playerConfirmedAt then return L("Témoignage") end
     if pvpNames[e.kind] then return e.confidence == "confirmed" and L("Confirmé") or e.confidence == "probable" and L("Probable") or L("Certitude inconnue") end
     return e.source == "emote" and L("Geste") or e.kind == "grouped" and L("Groupe") or L("Journal")
 end
@@ -1184,6 +1204,7 @@ local function eventAction(e)
 end
 
 local function eventReason(e)
+    if e.playerConfirmedAt then return L("Coup fatal confirmé manuellement le %s."):format(stamp(e.playerConfirmedAt)) end
     if e.confidence == "probable" then
         return ({ death = L("Indices de participation à l'attaque ; coup fatal non identifié."), kill = L("Mort observée après un combat ; victoire à confirmer."),
             aggression = L("Attaque soupçonnée ; source des dégâts non confirmée.") })[e.kind]
@@ -1195,6 +1216,7 @@ local function refreshCorrections()
     if not f or not f:IsShown() or not f.event then return end
     local e = f.event
     f.certainty:SetText(eventCertainty(e))
+    showIf(f.attest, e.kind == "kill" and e.confidence == "probable" and not e.voided)
     f.effect:SetText(e.voided and L("Ce fait reste dans l’histoire. Il est exclu des statistiques et du solde automatique.")
         or pvpNames[e.kind] and L("Annuler retire ce fait des statistiques et du solde automatique. Il reste lisible dans l’histoire.")
         or L("Cet événement reste dans votre journal personnel."))
@@ -1231,9 +1253,10 @@ inspectEvent = function(record, e)
         f.proof = label(body, "", nil, 0, 0, 498) f.proof:SetTextColor(unpack(theme.ink))
         f.scroll:SetScrollChild(body) f.body = body
         f.effect = field(26, -334, 532, 49, 13)
-        f.keep = button(f, L("Conserver"), 40, -396, 219, function() f:Hide() end, true, true)
+        f.keep = button(f, L("Fermer"), 24, -396, 105, function() f:Hide() end, true, true)
         UI.selectButton(f.keep, true)
-        f.confirm = button(f, L("Annuler cet événement"), 280, -396, 268, nil, nil, true)
+        f.attest = button(f, L("J’ai porté le coup fatal"), 135, -396, 210, nil, nil, true)
+        f.confirm = button(f, L("Annuler cet événement"), 351, -396, 211, nil, nil, true)
     end
     local f = correctionWindow
     f.identity, f.event = { key=record.key, guid=record.guid, alias=record.alias }, e
@@ -1251,6 +1274,9 @@ inspectEvent = function(record, e)
     f.proof:SetText(#evidence > 0 and table.concat(evidence, "\n") or L("Aucune précision enregistrée."))
     f.body:SetHeight(math.max(77, f.proof:GetStringHeight() + 8)) f.scroll:SetVerticalScroll(0)
     local identity = f.identity
+    f.attest:SetScript("OnClick", function()
+        if f.event == e and f:IsShown() and GL.ConfirmKill(identity, e) then inspectEvent(record, e) end
+    end)
     f.confirm:SetScript("OnClick", function()
         if f.event ~= e or not f:IsShown() then return end
         local ok, err = GL.VoidPvP(identity, e)
@@ -1314,6 +1340,7 @@ local function showDiagnostic(private)
         { "GetGuildInfo", GetGuildInfo }, { "CombatLogGetCurrentEventInfo", CombatLogGetCurrentEventInfo },
         { "C_ChatInfo.PerformEmote", C_ChatInfo and C_ChatInfo.PerformEmote }, { "DoEmote", DoEmote },
     }) do lines[#lines + 1] = api[1] .. " : " .. (type(api[2]) == "function" and L("oui") or L("non")) end
+    lines[#lines + 1] = L("Coup fatal · événement PARTY_KILL : ") .. (GL.Tracker and GL.Tracker.nativeKillEvent and L("oui") or L("non"))
     lines[#lines + 1] = L("\nRéglages :")
     for _, key in ipairs({ "markers", "nameColor", "friendAlerts", "enemyAlerts", "sounds", "pvpTracking", "groupTracking", "socialTracking", "tradeTracking" }) do
         lines[#lines + 1] = key .. " : " .. (GL.Clean(GL.Settings()[key], "boolean") == true and L("oui") or L("non"))
@@ -1797,7 +1824,7 @@ local function buildLedger()
     ledger = f
     bookNavigation(f, "ledger")
     f.detailTab, f.query = "summary", ""
-    f.addTarget = button(f, L("Ajouter la cible"), 189, -155, 118, function()
+    f.addTarget = button(f, L("Ajouter la cible"), 195, -155, 112, function()
         local identity = GL.Identity("target")
         if not identity then GL.Print(L("Sélectionne un joueur pour ouvrir sa fiche.")) return end
         local record = GL.Remember(identity)
@@ -1808,15 +1835,26 @@ local function buildLedger()
     end, nil, false)
     f.search = CreateFrame("EditBox", nil, f)
     f.search:SetPoint("TOPLEFT", 36, -155)
-    f.search:SetSize(121, 26)
+    f.search:SetSize(154, 26)
     f.search:SetAutoFocus(false)
     f.search:SetMaxLetters(100)
     styleInput(f.search, false, false)
+    f.search:SetTextInsets(28, 6, 3, 3)
     local function applySearch() f.query = f.search:GetText():match("^%s*(.-)%s*$") offset = 0 f.search:ClearFocus() refresh() end
     f.search:SetScript("OnEnterPressed", applySearch)
-    f.searchButton = button(f, "OK", 159, -155, 28, applySearch)
-    f.searchButton.caption:SetWidth(26) f.searchButton.caption:ClearAllPoints() f.searchButton.caption:SetPoint("CENTER")
-    f.searchHint = label(f.search, L("Nom, guilde, note…"), nil, 8, -6, 107)
+    f.searchButton = CreateFrame("Button", nil, f.search)
+    f.searchButton:SetPoint("LEFT", 3, 0) f.searchButton:SetSize(23, 23)
+    f.searchButton:SetNormalTexture("Interface\\Common\\UI-Searchbox-Icon")
+    f.searchButton:SetScript("OnClick", applySearch)
+    f.searchButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L("Nom, guilde, note…")) GameTooltip:Show()
+    end)
+    f.searchButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    f.searchHint = label(f.search, L("Rechercher…"), nil, 28, -4, 120)
+    f.searchHint:SetHeight(19)
+    GL.Safe(f.searchHint.SetJustifyV, f.searchHint, "MIDDLE")
+    GL.Safe(f.searchHint.SetWordWrap, f.searchHint, false)
     f.searchHint:SetTextColor(unpack(theme.muted))
     f.search:SetScript("OnTextChanged", function(self)
         if self:GetText():find("%S") then f.searchHint:Hide() else
@@ -2127,9 +2165,11 @@ local function layoutIndex(f, compact)
         row:SetPoint("TOPLEFT", 32, -301 - (i - 1) * (compact and 36 or 53))
         row:SetHeight(compact and 34 or 51)
         row.name:ClearAllPoints() row.name:SetPoint("TOPLEFT", compact and 34 or 52, compact and -7 or -4)
-        row.name:SetWidth(compact and 168 or 218)
-        row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 210, compact and -8 or -29)
-        row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 193, compact and -6 or -28)
+        row.name:SetWidth(compact and 168 or 145)
+        row.identity:SetWidth(198)
+        row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 215, compact and -8 or -6)
+        row.relation:SetWidth(58)
+        row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 200, -6)
         row.relationIcon:SetSize(compact and 22 or 16, compact and 22 or 16)
         for _, detail in ipairs({ row.raceIcon, row.classIcon, row.identity }) do
             if compact then detail:Hide() else detail:Show() end
@@ -2147,15 +2187,22 @@ refresh = function(focusSelected)
     listDetail = GL.Settings().listDetail or listDetail
     local records = GL.SearchPlayers({ query = ledger.query or "", relation = filter, faction = factionFilter,
         notesOnly = notesOnly, sort = listSort, selectedKey = selectedKey })
-    local selectionVisible = false
+    local selectionIndex
     for index, record in ipairs(records) do
         if selectedKey == record.key then
-            selectionVisible = true
-            if focusSelected == true then offset = math.floor((index - 1) / ledger.pageSize) * ledger.pageSize end
+            selectionIndex = index
+            break
         end
     end
-    if not selectionVisible then selectedKey = nil end
     offset = math.min(offset, math.max(0, math.floor((#records - 1) / ledger.pageSize) * ledger.pageSize))
+    if focusSelected and selectionIndex then
+        offset = math.floor((selectionIndex - 1) / ledger.pageSize) * ledger.pageSize
+    elseif not selectionIndex or selectionIndex <= offset or selectionIndex > offset + ledger.pageSize then
+        selectedKey = records[offset + 1] and records[offset + 1].key
+        ledger.detailTab = "summary"
+        ledger.detailScroll:SetVerticalScroll(0)
+        ledger.toolsMenu:Hide()
+    end
     for i, row in ipairs(ledger.rows) do
         local record = i <= ledger.pageSize and records[offset + i]
         if record then
@@ -2202,12 +2249,9 @@ refresh = function(focusSelected)
     if #records == 0 and ledger.filtersActive then
         blank.title:SetText(L("Aucun contact ne correspond"))
         blank.body:SetText(L("Élargissez votre recherche ou effacez les filtres pour retrouver toutes vos fiches."))
-    elseif #records == 0 then
+    else
         blank.title:SetText(L("Votre livre commence ici"))
         blank.body:SetText(L("Ciblez un joueur pour ouvrir sa première fiche. Vous pourrez y inscrire votre avis ou une note personnelle."))
-    else
-        blank.title:SetText(L("Ouvrir une fiche"))
-        blank.body:SetText(L("Choisissez un nom dans l’index pour lire votre histoire commune."))
     end
     blank.action:SetText(ledger.filtersActive and L("Effacer les filtres") or L("Ajouter la cible"))
     for value, control in pairs(ledger.filters) do
@@ -2229,13 +2273,14 @@ end
 
 function GL.ShowLedger(key)
     if not GL.db then return end
+    local record = key and GL.Get(key)
+    if key and not record then return end
     buildLedger()
     ledger.closeMenu()
     if statisticsWindow then statisticsWindow:Hide() end
     if journalWindow then journalWindow:Hide() end
     if key then
-        local record = GL.Get(key)
-        selectedKey = record and record.key or nil
+        selectedKey = record.key
         filter, factionFilter, offset, notesOnly = "all", "all", 0, false
         ledger.query, ledger.detailTab = "", "summary"
         ledger.historyPage.kind, ledger.historyPage.offset = "all", 0
@@ -2243,7 +2288,7 @@ function GL.ShowLedger(key)
         ledger.detailScroll:SetVerticalScroll(0)
     end
     showBook(ledger)
-    refresh(key ~= nil)
+    refresh(true)
     if not key and not GL.Settings().guideSeen then GL.ShowGuide() end
 end
 
@@ -2515,20 +2560,20 @@ GL.On("READY", function()
     positionMinimap()
 end)
 
-GL.On("CHANGED", function() if ledger then ledger.historyPage.cache = nil end refresh() end)
+GL.On("CHANGED", function() if ledger then ledger.historyPage.cache = nil end refresh(true) end)
 local sightingRefreshPending
 GL.On("CONTACT_SEEN", function()
     if not ledger or not ledger:IsShown() or listSort ~= "recent" or sightingRefreshPending then return end
     if C_Timer and C_Timer.After then
         sightingRefreshPending = true
-        C_Timer.After(0.2, function() sightingRefreshPending = nil refresh() end)
-    else refresh() end
+        C_Timer.After(0.2, function() sightingRefreshPending = nil refresh(true) end)
+    else refresh(true) end
 end)
 GL.On("CHANGED", refreshGuilds)
 GL.On("CHANGED", refreshCorrections)
 GL.On("SETTINGS", function()
     for region, fonts in pairs(journalFonts) do journalFont(region, fonts[1], fonts[2], fonts[3]) end
-    refresh()
+    refresh(true)
     if ledger then renderDetail() end
     if settingsWindow then settingsWindow:SyncControls() end
     refreshStatistics() refreshJournal()

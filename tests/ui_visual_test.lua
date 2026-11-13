@@ -138,12 +138,25 @@ assert(ledger.rows[1].name.wordWrap == false and ledger.rows[1].name.maxLines ==
 assert(ledger.rows[1].selection:IsShown() and ledger.reactions.friend.selection:IsShown())
 assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] > 0.9)
 assert(ledger.bookSurface.texture:find("JournalBookSurface", 1, true) and ledger.bookSurface.allPoints == ledger)
-for _, control in pairs(ledger.navigation) do
+local previousTab
+for _, key in ipairs({"ledger", "players", "guilds", "journal"}) do
+    local control = ledger.navigation[key]
+    local x, y = control.anchor[2], control.anchor[3]
+    assert(control.caption.anchor[1] == "CENTER" and control.caption.justifyV == "MIDDLE",
+        "center the glyphs inside each tab as well as the caption box")
+    assert(control.caption:GetHeight() >= control.caption.font[2] * 1.25 + 2, "room for large print")
+    if previousTab then
+        assert(previousTab.anchor[3] == y and previousTab:GetHeight() == control:GetHeight())
+        assert(x > previousTab.anchor[2] + previousTab:GetWidth(), "leave a gap between tab faces")
+    end
+    previousTab = control
     assert(control.selection:IsShown() == control.active)
     assert(contrast(control.caption.color, control.normalSurface.color) >= 4.5,
         "navigation labels remain readable in active and inactive states")
     assert(control.pushedTexture.alpha > 0 and control.highlightTexture, "navigation keeps interaction feedback")
 end
+assert(ledger.navigation.ledger.anchor[2] == ledger:GetWidth() - previousTab.anchor[2] - previousTab:GetWidth(),
+    "balance the tabs between the covers")
 local activeTab = ledger.detailTabs.summary
 assert(activeTab.active and activeTab.selection:IsShown())
 assert(activeTab.normalTexture.drawLayer == "BACKGROUND" and activeTab.disabledTexture.drawLayer == "BACKGROUND")
@@ -177,7 +190,10 @@ for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
     assert(row.name:GetText() == GL.Get(identity.key).fullName, "no cryptic prefix in the player's name")
     assert(row.relationIcon:IsShown() and row.relationIcon.texture:find(icons[relation], 1, true))
     assert(ledger.detailIcon.texture:find(icons[relation], 1, true))
-    assert(row.identity.anchor[2] + row.identity:GetWidth() < row.relation.anchor[2])
+    assert(row.name.anchor[2] + row.name:GetWidth() < row.relationIcon.anchor[2])
+    assert(row.identity.anchor[3] + row.identity:GetHeight() <= row.relation.anchor[3],
+        "identity and relationship occupy separate lines")
+    assert(row.identity.anchor[2] + row.identity:GetWidth() <= row:GetWidth())
     assert(row.relation.anchor[2] + row.relation:GetWidth() < row:GetWidth())
     assert(contrast(row.bg.color, row.name.color) >= 4.5 and contrast(row.bg.color, row.relation.color) >= 4.5,
         "selected index labels need readable light ink on leather")
@@ -196,7 +212,11 @@ assert(ledger.actions[1].enabled, "typing does not commit search before validati
 ledger.search.scripts.OnEnterPressed(ledger.search)
 assert(ledger.empty:IsShown())
 for _, control in pairs(ledger.reactions) do assert(not control.selection:IsShown() and not control.enabled) end
-assert(ledger.actions[1].caption.color[1] == 0.50, "empty selection has a distinct disabled appearance")
+local disabled = ledger.actions[1]
+local tint = disabled.skin.vertexColor[1]
+-- Median parchment face from JournalButtons.tga, tinted as it is in game.
+assert(tint < 1 and contrast(disabled.caption.color, {234/255*tint, 198/255*tint, 147/255*tint}) >= 4.5,
+    "disabled actions stay legible on the dimmed parchment")
 click(ledger.reset)
 assert(not ledger.empty:IsShown())
 GL.ShowLedger(identity.key)

@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.9.0
+GRUDGE LEDGER — 0.9.1
 
 Interface en français, anglais ou espagnol selon la langue du jeu. Anglais par défaut pour les autres langues.
 The interface follows your WoW text language: English, French or Spanish.
@@ -11,6 +11,14 @@ Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Wort
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
+0.9.1 — Journal et victoires PvP
+
+Le Journal et les Guildes ouvrent une fiche quand la liste contient des résultats.
+Un coup fatal attribué à votre personnage ou à son familier peut confirmer une
+victoire déjà détectée. Pour une ancienne victoire probable dont vous avez été
+témoin, ouvrez Histoire > Vérifier > J’ai porté le coup fatal. La confirmation
+personnelle compte une victoire à la date du combat et garde sa provenance.
+
 0.8.2 — Police du journal
 
 Au premier chargement de cette version, le journal adopte « Grimoire · PT Serif ».
@@ -20,7 +28,7 @@ Votre choix est mémorisé pour le compte.
 0.8.1 — Lecture du journal
 
 En ouvrant le Journal, la personne avec qui vous avez interagi en dernier figure en tête.
-Une recherche validée avec Entrée ou OK retrouve votre tri préféré. Effacer la recherche
+Une recherche validée avec Entrée ou la loupe retrouve votre tri préféré. Effacer la recherche
 rétablit la chronologie. Dans Réglages > Apparence, choisissez Grimoire pour la nouvelle
 typographie. Le titre doré du livre apparaît dans les deux modes de lecture.
 

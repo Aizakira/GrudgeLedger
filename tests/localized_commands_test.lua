@@ -14,7 +14,7 @@ GL.ShowLedger(contact.key)
 local book = GrudgeLedgerWindow
 assert(book.detailTitle:GetText() == "Aqua Water" and book.detailGuild:GetText() == "Ennemis")
 assert(book.detailText:GetText():find("Notes personnelles", 1, true))
-assert(book.searchHint:GetText() == "Nombre, hermandad, nota…")
+assert(book.searchHint:GetText() == "Buscar…")
 command("resumen") assert(GrudgeLedgerJournal.mode == "summary")
 command("historial") assert(GrudgeLedgerJournal.mode == "history")
 command("ajustes") assert(GrudgeLedgerSettings:IsShown())

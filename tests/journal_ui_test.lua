@@ -42,6 +42,9 @@ assert(f.metrics.deaths.value:GetText() == "1" and f.metrics.kills.value:GetText
 assert(f.metrics.probableKills.value:GetText() == "1" and f.metrics.probableKills.qualifier:GetText() == "probable", "probable wins stay separate")
 assert(f.coverage:GetText():find("1 sans auteur connu", 1, true))
 assert(f.recaps.mostDeaths.record == ra and not f.recaps.mostKilled.record)
+assert(f.recaps.mostDeaths.name:GetText() == ra.fullName and f.recaps.mostDeaths.detail:GetText() == "1 mort confirmée")
+assert(f.recaps.mostDeaths.raceIcon:IsShown() and not f.recaps.mostKilled.raceIcon:IsShown())
+assert(f.recaps.mostKilled.name:GetText() == "Aucune victoire confirmée" and not f.recaps.mostKilled:IsEnabled())
 assert(f.podium:IsShown() and f.podium.rows[1].record == ra and not f.podium.rows[2]:IsShown())
 click(f.dimensionButtons.race)
 assert(f.breakdownRows[1].kills:GetText() == "0 / 1" and f.breakdownRows[1].deaths:GetText() == "1 / 0",

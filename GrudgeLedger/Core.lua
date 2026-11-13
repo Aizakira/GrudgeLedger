@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON, private = ...
-GrudgeLedger = { version = "0.9.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.9.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local translations = private and private.translations
@@ -594,6 +594,7 @@ local function history(record, kind, extra)
     lastInteraction[record] = math.max(lastInteraction[record] or 0, interactionTime(entry.time, now))
     guildStatistics = nil
     invalidateJournal()
+    return entry
 end
 local reactionScores = { friend = 1, enemy = -10, warning = -1, neutral = 0 }
 local function guildIdentity(value, realm)
@@ -849,9 +850,9 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat)
     local field = pvpFields[kind][confidence]
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
-    history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, combat = combatContext(combat) })
+    local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, combat = combatContext(combat) })
     GL.Emit("CHANGED", record)
-    return record
+    return record, event
 end
 function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     if GL.IsPvPInstance() then return nil end
@@ -868,15 +869,36 @@ function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     GL.Emit("CHANGED", record)
     return record
 end
+local function hasEvent(record, event)
+    for _, entry in ipairs(record.history) do if entry == event then return true end end
+end
+
+function GL.ConfirmKill(identity, event, evidence)
+    local record = GL.Get(identity)
+    if not record or type(event) ~= "table" or event.kind ~= "kill" or event.voided
+        or event.confidence ~= "probable" or not hasEvent(record, event) or (record.pvp.probableKills or 0) < 1 then return false end
+    if evidence then
+        event.evidence = evidence
+    else
+        event.confirmedByGUID, event.confirmedByName = currentActor()
+        event.playerConfirmedAt = GL.Now()
+    end
+    event.confidence = "confirmed"
+    record.pvp.probableKills = record.pvp.probableKills - 1
+    record.pvp.kills = record.pvp.kills + 1
+    -- Both kinds of victory already earned one point. Only the evidence and its totals change.
+    guildStatistics = nil
+    GL.Emit("CHANGED", record)
+    return true
+end
+
 function GL.VoidPvP(identity, event, silent)
     local record = GL.Get(identity)
     if not record or type(event) ~= "table" or event.voided then return false, L("Événement indisponible ou déjà annulé.") end
     local fields = pvpFields[event.kind]
     local field = fields and fields[event.confidence]
     if not field then return false, L("Seul un événement PvP peut être corrigé ici.") end
-    local found = false
-    for _, entry in ipairs(record.history) do if entry == event then found = true break end end
-    if not found then return false, L("Cet événement n'appartient pas à cette fiche.") end
+    if not hasEvent(record, event) then return false, L("Cet événement n'appartient pas à cette fiche.") end
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
     if event.time == lastInteraction[record] then rebuildInteraction(record) end

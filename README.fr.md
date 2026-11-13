@@ -39,6 +39,12 @@ La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous 
 
 La colonne de gauche présente les contacts du plus récemment au plus anciennement rencontré ou annoté. Une interaction comme un combat, un geste ou un échange actualise aussi ce classement. Validez une recherche pour utiliser votre tri préféré. Vider le champ rétablit la chronologie.
 
+### Depuis la 0.9.1
+
+Le Journal ouvre la fiche la plus récente à la première consultation d’un livre déjà rempli. Guildes affiche la première guilde du classement et le Bilan présente vos adversaires marquants juste après les compteurs. Pour rechercher dans le Journal, appuyez sur Entrée ou cliquez sur la loupe.
+
+En PvP sauvage, un coup fatal attribué par le jeu peut confirmer une victoire même si le journal de combat est indisponible. Une preuve reçue après une première estimation confirme la même ligne. Pour corriger une ancienne victoire dont vous avez été témoin, ouvrez **Histoire → Vérifier → J’ai porté le coup fatal**. La date du combat est conservée et l’origine de la confirmation apparaît dans son historique.
+
 ### Depuis la 0.8.0
 
 - **Journal → Face-à-face** présente les résultats confirmés de ce personnage contre le contact sélectionné, sa série en cours et sa dernière victoire après une défaite. Une revanche compte pour une victoire (+1). Dans **Histoire**, les nouveaux combats peuvent préciser les adversaires observés, les niveaux, votre vie au premier signal et la présence d’un monstre ou d’un familier.

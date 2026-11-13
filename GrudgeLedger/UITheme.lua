@@ -3,7 +3,8 @@ local GL = GrudgeLedger
 local media = "Interface\\AddOns\\GrudgeLedger\\Media\\"
 local theme = { paper = { 0.94, 0.87, 0.72 }, muted = { 0.73, 0.64, 0.51 }, gold = { 0.52, 0.38, 0.20 }, brass = { 0.91, 0.77, 0.48 },
     background = { 0.075, 0.045, 0.035 }, panel = { 0.115, 0.075, 0.055 }, red = { 0.30, 0.075, 0.075 },
-    ink = { 0.20, 0.13, 0.08 }, inkMuted = { 0.36, 0.25, 0.16 }, selection = { 0.91, 0.80, 0.62 }, disabledInk = { 0.50, 0.44, 0.36 } }
+    ink = { 0.20, 0.13, 0.08 }, inkMuted = { 0.36, 0.25, 0.16 }, selection = { 0.91, 0.80, 0.62 },
+    disabledInk = { 0.24, 0.19, 0.13 }, disabledGold = { 0.89, 0.80, 0.65 } }
 
 local function surface(parent, color, inset, sublevel)
     local texture = parent:CreateTexture(nil, "BACKGROUND", nil, sublevel or 0)
@@ -22,6 +23,8 @@ local function journalFont(region, decorative, size, italic)
     journalFonts[region] = { decorative, size, italic }
     local r, g, b, a = GL.Safe(region.GetTextColor, region)
     local spacing = GL.Safe(region.GetSpacing, region)
+    local horizontal = GL.Safe(region.GetJustifyH, region)
+    local vertical = GL.Safe(region.GetJustifyV, region)
     local settings = GL.Settings()
     local heading = decorative == "GameFontNormalLarge" or decorative:match("^Fancy%d+Font$")
     local classic = settings.readableFont
@@ -45,6 +48,8 @@ local function journalFont(region, decorative, size, italic)
     end
     if r then region:SetTextColor(r, g, b, a) end
     if spacing then region:SetSpacing(spacing) end
+    if horizontal then region:SetJustifyH(horizontal) end
+    if vertical then region:SetJustifyV(vertical) end
 end
 local function label(parent, text, size, x, y, width)
     local f = parent:CreateFontString(nil, "OVERLAY", size == "large" and "GameFontNormalLarge" or "GameFontHighlight")
@@ -56,6 +61,17 @@ local function label(parent, text, size, x, y, width)
     if width then f:SetWidth(width) end
     f:SetText(text or "")
     return f
+end
+
+local function updateButtonState(b)
+    local enabled = b:IsEnabled()
+    local tint = enabled and 1 or (b.paper and 0.88 or 0.76)
+    b.skin:SetVertexColor(tint, tint, tint)
+    if b.selection then b.selection:SetAlpha(enabled and 1 or 0.86) end
+    local light = b.paper and not b.active
+    b.caption:SetTextColor(unpack(enabled and (light and theme.ink or theme.brass)
+        or (light and theme.disabledInk or theme.disabledGold)))
+    b.edge:SetColorTexture(unpack(enabled and theme.gold or theme.disabledInk))
 end
 
 local function button(parent, text, x, y, width, callback, selectable, paper)
@@ -95,28 +111,21 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     highlight:SetPoint("BOTTOMRIGHT", -1, 1)
     highlight:SetColorTexture(0.57, 0.39, 0.18, 0.22)
     b:SetHighlightTexture(highlight)
-    local caption = label(b, text, nil, 7, -6, width - 14)
+    local caption = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     b.caption = caption
-    caption:SetJustifyH("CENTER")
-    caption:SetHeight(16)
-    GL.Safe(caption.SetWordWrap, caption, false)
-    GL.Safe(caption.SetMaxLines, caption, 1)
     b:SetFontString(caption)
     b:SetText(text)
     journalFont(caption, "GameFontHighlightSmall", 12)
-    caption:SetTextColor(unpack(paper and theme.ink or theme.brass))
-    b:SetScript("OnEnable", function()
-        skin:SetVertexColor(1, 1, 1)
-        caption:SetTextColor(unpack(b.active and theme.brass or (paper and theme.ink or theme.brass)))
-        if b.selection then b.selection:SetAlpha(1) end
-        edge:SetColorTexture(unpack(theme.gold))
-    end)
-    b:SetScript("OnDisable", function()
-        skin:SetVertexColor(0.55, 0.55, 0.55)
-        if b.selection then b.selection:SetAlpha(0.45) end
-        if paper then caption:SetTextColor(unpack(theme.disabledInk)) else caption:SetTextColor(0.52, 0.50, 0.46) end
-        edge:SetColorTexture(0.28, 0.24, 0.19, 1)
-    end)
+    caption:ClearAllPoints()
+    caption:SetPoint("CENTER")
+    caption:SetSize(width - 14, 22)
+    caption:SetJustifyH("CENTER")
+    GL.Safe(caption.SetJustifyV, caption, "MIDDLE")
+    GL.Safe(caption.SetWordWrap, caption, false)
+    GL.Safe(caption.SetMaxLines, caption, 1)
+    b:SetScript("OnEnable", updateButtonState)
+    b:SetScript("OnDisable", updateButtonState)
+    updateButtonState(b)
     b:SetScript("OnClick", callback)
     return b
 end
@@ -131,9 +140,7 @@ local function selectButton(control, active)
     control.active = active
     control.normalSurface:SetColorTexture(unpack(active and theme.red or (control.paper and theme.paper or theme.panel)))
     control.normalSurface:SetAlpha(active and 1 or 0.15)
-    local enabled = control:IsEnabled()
-    control.selection:SetAlpha(enabled and 1 or 0.45)
-    control.caption:SetTextColor(unpack(not enabled and theme.disabledInk or (active and theme.brass or (control.paper and theme.ink or theme.brass))))
+    updateButtonState(control)
     if active then control.selection:Show() else control.selection:Hide() end
 end
 

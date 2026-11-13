@@ -44,6 +44,14 @@ local allianceEnemy = add("AllianceEnemy", "Alliance", "enemy")
 local warning = add("Caution", "Horde", "warning")
 local unknown = add("Unknown", nil, "friend")
 local neutral = add("NeutralFaction", "Neutral", "friend")
+GL.SetSetting("guideSeen", true)
+local latest = GL.SearchPlayers({sort = "recent"})[1]
+local events, observedAt = #latest.history, latest.lastEncounterAt
+GL.ShowLedger()
+local opened = GrudgeLedgerWindow
+assert(opened.rows[1].key == latest.key and opened.rows[1].selection:IsShown() and opened.detailTitle:GetText() == latest.fullName,
+    "a populated journal opens the first entry in chronological order")
+assert(#latest.history == events and latest.lastEncounterAt == observedAt, "reading a profile is not a new encounter")
 GL.ShowLedger(dwarf.key)
 local f = GrudgeLedgerWindow
 local function click(button) button.scripts.OnClick(button, "LeftButton") end
@@ -90,7 +98,8 @@ click(f.relationFilter) assert(f.filters.friend.parent:IsShown())
 click(f.filters.friend) assert(not f.filters.friend.parent:IsShown())
 click(f.factionFilter) click(f.factions.Horde)
 assert(f.total:GetText() == "1 personne" and f.rows[1].key == hordeFriend.key)
-assert(not f.actions[1].enabled, "a filtered-out record must not remain the active detail")
+assert(f.actions[1].enabled and f.rows[1].selection:IsShown() and f.detailTitle:GetText() == hordeFriend.fullName,
+    "filtering replaces an excluded contact with the first visible profile")
 click(f.rows[1])
 assert(f.detailIdentity:GetText():find("Horde", 1, true))
 click(f.filters.enemy)
@@ -107,7 +116,7 @@ assert(f.rows[1].raceIcon.texCoord[1] == 0 and f.rows[1].raceIcon.texCoord[2] ==
 click(f.factions.Horde)
 f.search:SetText("No match")
 click(f.searchButton)
-assert(f.empty:IsShown() and not f.rows[1]:IsShown())
+assert(f.empty:IsShown() and f.emptyPage:IsShown() and not f.rows[1]:IsShown() and not f.actions[1].enabled)
 f.search:SetText("HordeFriend")
 click(f.searchButton)
 assert(f.rows[1].key == hordeFriend.key and not f.empty:IsShown())
@@ -133,13 +142,16 @@ click(f.filters.enemy) click(f.factions.Horde)
 assert(f.next.enabled and #f.rows > 0)
 local firstKey = f.rows[1].key
 click(f.next)
-assert(f.rows[1].key ~= firstKey)
+assert(f.rows[1].key ~= firstKey and f.rows[1].selection:IsShown() and f.detailTitle:GetText() == GL.Get(f.rows[1].key).fullName)
 for page = 2, math.ceil(13 / f.pageSize) - 1 do
     assert(f.next.enabled, "remaining filtered records must be reachable")
     click(f.next)
 end
 assert(not f.next.enabled, "pagination ends after all 13 filtered records")
+local finalContact = f.detailTitle:GetText()
 GL.SetSetting("compactMode", true)
+assert(f.previous.enabled and f.detailTitle:GetText() == finalContact, "changing density keeps the current contact and its page")
+click(f.previous)
 assert(f.pageSize == 9 and f.rows[9]:IsShown() and not f.rows[8].raceIcon:IsShown())
 click(f.next)
 assert(not f.next.enabled and f.rows[4]:IsShown() and not f.rows[5]:IsShown())

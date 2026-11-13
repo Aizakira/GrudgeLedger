@@ -1,5 +1,5 @@
 -- Executes the actual Core and Tracker with deterministic WoW API fixtures.
-local now, unitData, groupSize, honor, secret, instanceType, GL, T
+local now, unitData, groupSize, honor, secret, instanceType, GL, T, nativeFrame
 local passed = 0
 
 local function fixture(saved)
@@ -45,9 +45,13 @@ local function fixture(saved)
         local original = _G[name]
         _G[name] = function(...) original(...) after(...) end
     end
+    nativeFrame = nil
     function CreateFrame()
         return { scripts = {},
-            RegisterEvent = function(_, event) if event == "COMBAT_LOG_EVENT_UNFILTERED" then error("Forbidden on Forever") end end,
+            RegisterEvent = function(frame, event)
+                if event == "COMBAT_LOG_EVENT_UNFILTERED" then error("Forbidden on Forever") end
+                if event == "PARTY_KILL" then nativeFrame = frame end
+            end,
             UnregisterEvent = function() end,
             SetScript = function(self, event, fn) self.scripts[event] = fn end }
     end
@@ -86,9 +90,9 @@ local function killedTarget()
     now = now + 1
     T.Poll()
 end
-local function cle(kind, src, dst, overkill, sourceFlags)
+local function cle(kind, src, dst, overkill, sourceFlags, targetFlags)
     local args = { now, kind, false, src.guid, src.name .. " " .. src.surname, sourceFlags or 0, 0,
-        dst.guid, dst.name .. " " .. dst.surname, 0, 0 }
+        dst.guid, dst.name .. " " .. dst.surname, targetFlags or 0, 0 }
     if kind == "SWING_DAMAGE" then args[12], args[13] = 300, overkill
     else args[12], args[13], args[14], args[15], args[16] = 1, "Sort", 1, 300, overkill end
     T.OnCombatLog(unpack(args, 1, kind == "SWING_DAMAGE" and 13 or 16))
@@ -252,7 +256,119 @@ test("solo observed death plus honor count gives probable kill", function()
     T.HandleEvent("CHAT_MSG_COMBAT_HONOR_GAIN", e.name .. " " .. e.surname .. " dies.")
     cle("PARTY_KILL", unitData.player, e)
     T.Poll()
-    assert(total("probableKills") + total("kills") == 1, "late confirmation double-counted")
+    assert(total("probableKills") == 0 and total("kills") == 1, "late confirmation must upgrade in place")
+end)
+
+test("Forever native PARTY_KILL works even when the client rejects combat-log registration", function()
+    local e = start()
+    assert(T.nativeKillEvent and nativeFrame and nativeFrame.scripts.OnEvent)
+    local function fire(attacker, victim) nativeFrame.scripts.OnEvent(nativeFrame, "PARTY_KILL", attacker, victim) end
+    fire(secret, e.guid) fire(unitData.player.guid, secret)
+    fire(nil, e.guid) fire("Player-1-stranger", e.guid)
+    fire(unitData.player.guid, "Creature-1-npc") fire(unitData.player.guid, unitData.player.guid)
+    assert(total("kills") == 0 and #GL.errors == 0)
+    groupSize = 3
+    fire(unitData.player.guid, e.guid)
+    cle("PARTY_KILL", unitData.player, e)
+    assert(total("kills") == 1 and total("probableKills") == 0 and #GL.errors == 0)
+end)
+
+test("only our verified pet killing blow counts for us", function()
+    local e, pet = start(), {guid="Pet-1-mine", name="Loup", surname="Bleu"}
+    unitData.pet = pet
+    T.HandleEvent("PARTY_KILL", "Pet-1-foreign", e.guid)
+    cle("SPELL_DAMAGE", {guid="Pet-1-foreign",name="Other",surname="Pet"}, e, 120, 0, 64)
+    assert(total("kills") == 0)
+    T.HandleEvent("PARTY_KILL", pet.guid, e.guid)
+    cle("PARTY_KILL", pet, e)
+    local r = GL.Get("guid:" .. e.guid)
+    assert(r.pvp.kills == 1 and r.history[#r.history].evidence:find("familier",1,true))
+end)
+
+test("ambiguous, protected or non-health amounts cannot confirm an outgoing kill", function()
+    local e = start()
+    for _, kind in ipairs({"SPELL_DRAIN","SPELL_LEECH","SPELL_MISSED","ENVIRONMENTAL_DAMAGE"}) do
+        cle(kind, unitData.player, e, 100, 0, 64)
+    end
+    for _, excess in ipairs({-1,0,301,secret,math.huge}) do cle("SWING_DAMAGE", unitData.player, e, excess, 0, 64) end
+    cle("SPELL_DAMAGE", unitData.player, e, 5, 0, 16)
+    assert(total("kills") == 0)
+    cle("SPELL_PERIODIC_DAMAGE", unitData.player, e, 5, 0, 64)
+    cle("PARTY_KILL", unitData.player, e)
+    assert(total("kills") == 1)
+    local second = opponent("next")
+    cle("SWING_DAMAGE", unitData.player, second, 12, 0, 64)
+    cle("SPELL_INSTAKILL", unitData.player, opponent("third"), nil, 0, 64)
+    assert(total("kills") == 3)
+end)
+
+test("deferred native proof updates only the same defeat; a later life can earn another", function()
+    local e = start()
+    killedTarget()
+    local r = GL.Get("guid:" .. e.guid)
+    local first, n = r.history[#r.history], #r.history
+    local time, id = first.time, first.eventId
+    now = now + 6
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    assert(#r.history == n and r.pvp.kills == 1 and r.pvp.probableKills == 0)
+    assert(first.time == time and first.eventId == id and not first.playerConfirmedAt)
+    e.dead = false
+    T.Poll()
+    killedTarget()
+    assert(r.pvp.kills == 1 and r.pvp.probableKills == 1)
+    local second = r.history[#r.history]
+    assert(second.eventId ~= first.eventId and GL.VoidPvP(r, second))
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    assert(r.pvp.kills == 1 and r.pvp.probableKills == 0)
+end)
+
+test("native killing-blow attribution works without honor and respects opt-out and exclusions", function()
+    local e = opponent("remote", "Feri", "Exemple")
+    UnitNameFromGUID = function(guid) if guid == e.guid then return "Feri Exemple" end end
+    for _, scope in ipairs({"pvp","arena"}) do
+        instanceType = scope T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    end
+    instanceType = "none"
+    GL.SetSetting("pvpTracking", false) T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    GL.SetSetting("pvpTracking", true) T.HandleEvent("DUEL_INBOUNDS")
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    assert(count() == 0)
+    T.HandleEvent("DUEL_FINISHED")
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    assert(total("kills") == 1 and GL.Get("guid:" .. e.guid).fullName == "Feri Exemple")
+end)
+
+test("a named probable then the victim's visible GUID point to the same event", function()
+    local e = opponent("named")
+    local guid = e.guid
+    e.guid = nil
+    start(e)
+    killedTarget()
+    assert(total("probableKills") == 1)
+    e.guid = guid
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, guid)
+    local r = assert(GL.Get("guid:" .. guid))
+    assert(r.pvp.kills == 1 and total("probableKills") == 0 and count() == 1)
+end)
+
+test("native blows resolve exact victim GUIDs without a target, including two rapidly repeated wins", function()
+    local victim = opponent("same-first", "Feri", "Second")
+    local friend = opponent("friend", "Feri", "Premier")
+    friend.hostile = false
+    unitData.mouseover = friend
+    GL.SetReaction(GL.Identity("mouseover"), "friend")
+    UnitTokenFromGUID = function() return "mouseover" end -- recycled, unrelated unit
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, victim.guid)
+    assert(total("kills") == 0 and count() == 1, "an unresolved GUID must never become the mouseover")
+    UnitNameFromGUID = function(guid) if guid == victim.guid then return "Feri Second" end end
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, victim.guid)
+    local r = assert(GL.Get("guid:" .. victim.guid))
+    UnitNameFromGUID = nil
+    now = now + 3
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, victim.guid)
+    cle("PARTY_KILL", unitData.player, victim)
+    assert(r.pvp.kills == 2 and GL.Get("guid:" .. friend.guid).pvp.kills == 0)
 end)
 
 test("a corpse first seen after death never qualifies", function()

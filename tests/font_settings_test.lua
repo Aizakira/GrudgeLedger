@@ -5,7 +5,12 @@ function methods:SetFontObject(name)
     self.font = {(name:find("Fancy") or name == "QuestFont_Large") and "Morpheus" or "Classic",
         tonumber(name:match("Fancy(%d+)Font")) or (name == "QuestFont_Large" and 15 or 12), ""}
     self.color, self.spacing = {1, 1, 1, 1}, 0
+    self.horizontal, self.vertical = "LEFT", "TOP"
 end
+function methods:SetJustifyH(value) self.horizontal = value end
+function methods:SetJustifyV(value) self.vertical = value end
+function methods:GetJustifyH() return self.horizontal end
+function methods:GetJustifyV() return self.vertical end
 function methods:GetFont() return unpack(self.font or {"Classic", 12, ""}) end
 function methods:GetTextColor() return unpack(self.color or {1, 1, 1, 1}) end
 function methods:SetSpacing(value) self.spacing = value end
@@ -60,6 +65,8 @@ assert(note.edit:GetFont() == fontDir .. "Regular.ttf" and f.total:GetFont() == 
 assert(f.hint:GetFont() == fontDir .. "Italic.ttf" and f.detailSource:GetFont() == fontDir .. "Italic.ttf")
 assert(f.navigation.ledger.caption:GetFont() == fontDir .. "Bold.ttf")
 local tab = f.navigation.ledger
+assert(tab.caption:GetJustifyV() == "MIDDLE" and tab.caption:GetJustifyH() == "CENTER",
+    "applying the font preset must retain the alignment of previously created tabs")
 assert(not tab.normalFont and not tab.highlightFont and not tab.disabledFont,
     "a native button state font would replace the themed caption on hover or disable")
 tab:SetText("Journal") tab:SetEnabled(false) tab:SetEnabled(true)
