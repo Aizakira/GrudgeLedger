@@ -119,6 +119,23 @@ local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
 local function counted(n, singular, plural)
     return n .. " " .. (n > 1 and (plural or singular .. "s") or singular)
 end
+local function combatDetails(event, compact)
+    local c = event.combat
+    if type(c) ~= "table" then return end
+    local parts = {}
+    if c.pet then parts[#parts + 1] = "Familier impliqué" end
+    if type(c.opponents) == "number" and c.opponents > (compact and 1 or 0) then
+        parts[#parts + 1] = counted(c.opponents, "adversaire observé", "adversaires observés")
+    end
+    if c.pve then parts[#parts + 1] = compact and "Monstre engagé" or "Monstre engagé pendant le combat" end
+    if type(c.healthPct) == "number" then parts[#parts + 1] = (compact and "Vie au premier signal : " or "Votre vie au premier signal JcJ : ") .. c.healthPct .. " %" end
+    if type(c.playerLevel) == "number" and type(c.opponentLevel) == "number" then
+        local difference = c.opponentLevel - c.playerLevel
+        local levels = "Niveaux : vous " .. c.playerLevel .. ", adversaire " .. c.opponentLevel
+        parts[#parts + 1] = levels .. (difference ~= 0 and (" (%+d)"):format(difference) or "")
+    elseif type(c.opponentLevel) == "number" then parts[#parts + 1] = "Adversaire de niveau " .. c.opponentLevel end
+    if #parts > 0 then return table.concat(parts, compact and " · " or "\n", 1, compact and math.min(2, #parts) or #parts) end
+end
 local function realmLabel(realm)
     local region, shard, rules = (realm or ""):match("^CAMWOW%s+(%w+)%s+Realm%s+(%d+)%s*(.*)$")
     if region then return "Forever " .. region .. " · " .. shard .. (rules ~= "" and " " .. rules or "") end
@@ -131,7 +148,20 @@ local gestureNames = {
     RUDE = "Geste grossier", INSULT = "Insulte", TAUNT = "Provocation", MOCK = "Moquerie", SPIT = "Crachat",
     SLAP = "Gifle", GLARE = "Regard noir", ANGRY = "Colère", FROWN = "Froncement de sourcils", BOO = "Huée", SNUB = "Dédain",
 }
+local function groupDurationText(seconds)
+    local minutes = math.floor(seconds / 60)
+    if minutes < 1 then return "< 1 min" end
+    if minutes < 60 then return minutes .. " min" end
+    return ("%d h %02d"):format(math.floor(minutes / 60), minutes % 60)
+end
 local function eventTitle(event)
+    if event.kind == "grouped" and GL.GroupDuration then
+        local seconds = GL.GroupDuration(event)
+        if seconds > 0 then
+            return "En groupe · " .. groupDurationText(seconds) .. " en ligne"
+        end
+    end
+    if event.kind == "trade" then return "Échange terminé" end
     local confirmed = event.confidence == "confirmed"
     if event.kind == "death" then return confirmed and "Vous a tué" or "Participation possible à votre mort" end
     if event.kind == "kill" then return confirmed and "Vous l'avez vaincu" or "Victoire probable contre ce joueur" end
@@ -360,7 +390,8 @@ local statisticsChoices = {
             { "friendsSeen", "Amis les plus recroisés", "Tes amis actuels que tu as rencontrés le plus souvent.", "rencontre", "Rencontres", encounterHelp },
             { "reputation", "Affinités les plus fortes", "Tes amis classés selon leur solde positif actuel.", "point", "Solde actuel", "Les avis, les gestes et les faits PvP alimentent le solde. Un ami désigné par un avis de guilde peut avoir un solde nul." },
             { "friendsRecent", "Amis vus récemment", "Tes amis actuels, du plus récemment aperçu au plus ancien.", "date", "Dernière observation", recentHelp },
-            { "friendsGrouped", "Compagnons de groupe", "Les amis actuels avec lesquels tu as partagé le plus de sessions de groupe.", "session", "Sessions partagées", "Sessions enregistrées, y compris avant l'amitié ; ni durée ni donjons terminés. Partager un groupe ne rend personne ami automatiquement." },
+            { "friendsGrouped", "Compagnons de groupe", "Les amis actuels avec lesquels tu as partagé le plus de sessions de groupe.", "session", "Sessions partagées", "Ouvrez la fiche pour lire la durée en ligne des sessions mesurées. Partager un groupe ne rend personne ami automatiquement." },
+            { "friendsOnline", "Temps passé en groupe", "Les amis avec lesquels vous avez passé le plus de temps en groupe, tous deux en ligne.", "durée", "Temps en groupe", "Les durées commencent lorsque le suivi observe les deux joueurs connectés. Les anciennes sessions et les champs de bataille sont exclus du calcul." },
         } },
         { name = "Combats", entries = {
             { "deaths", "Ceux qui m'ont le plus tué", "Les joueurs auxquels le plus de tes morts sont attribuées avec confirmation.", "mort", "Morts confirmées", confirmedHelp },
@@ -459,6 +490,7 @@ local function refreshStatistics()
             row.name:SetText(plain(guild and item.name or item.record.fullName))
             row.name:SetTextColor(unpack(relation and inkColors[relation] or theme.ink))
             row.value:SetText(choice[4] == "date" and date("%d/%m/%y %H:%M", value)
+                or choice[4] == "durée" and groupDurationText(value)
                 or (choice[1] == "grudge" and "−" or choice[1] == "reputation" and "+" or "") .. value)
             row:SetWidth(guild and 211 or 548)
             row.name:SetWidth(guild and 188 or 208)
@@ -563,7 +595,7 @@ function GL.ShowStatistics(mode)
             end, true)
             journalFont(f.groups[i].caption, "GameFontNormalLarge", 14)
         end
-        for i = 1, 4 do
+        for i = 1, 5 do
             f.choices[i] = button(f, "", 54, -195 - (i - 1) * 32, 237, function()
                 f.choice, f.offset, f.selected = i, 0, nil refreshStatistics()
             end, true)
@@ -677,7 +709,7 @@ GL.On("CHANGED", refreshStatistics)
 
 local journalPeriods = { { "all", "Toutes périodes" }, { "week", "7 derniers jours" }, { "month", "30 derniers jours" }, { "year", "Année" } }
 local journalScopes = { { "character", "Ce personnage" }, { "all", "Tout le compte" }, { "legacy", "Auteur inconnu" } }
-local journalKinds = { { "all", "Tous les événements" }, { "pvp", "Rencontres PvP" }, { "social", "Avis et gestes" }, { "notes", "Notes personnelles" } }
+local journalKinds = { { "all", "Tous les événements" }, { "pvp", "Rencontres PvP" }, { "social", "Avis et groupes" }, { "notes", "Notes personnelles" }, { "trade", "Échanges" } }
 local function choiceLabel(choices, key)
     for _, entry in ipairs(choices) do if entry[1] == key then return entry[2] end end
     return key
@@ -708,6 +740,8 @@ local function refreshJournal()
     end
     f.heading:SetText(({ summary = "Votre tableau d’honneur", history = "La chronique de vos rencontres", story = "Votre récit de campagne", year = "Une année de rencontres" })[f.mode])
     f.subtitle:SetText(scope .. " · " .. period)
+    showIf(f.copyAnnual, annual)
+    if not annual then f.cardCopy:Hide() end
     local stats
     if not history then
         options.query, options.kind = "", "pvp"
@@ -739,7 +773,30 @@ local function refreshJournal()
         end
         f.coverage:SetText(coverage)
         local podium = f.dimension == "opponents"
-        local breakdown = not podium and GL.PvPBreakdown(options, f.dimension) or {}
+        local geographic = f.dimension == "zone"
+        local zoom = geographic and f.zoneKey
+        options.zone = zoom
+        local breakdown = not podium and GL.PvPBreakdown(options, zoom and "subzone" or f.dimension) or {}
+        local exposure, partial = {}
+        if geographic and GL.ZoneTimes then exposure, partial = GL.ZoneTimes(options) end
+        if geographic and not zoom then
+            local known, peaceful = {}, {}
+            for _, item in ipairs(breakdown) do known[item.key] = true end
+            for place, seconds in pairs(exposure) do
+                if not known[place] then peaceful[#peaceful + 1] = {key = place, label = place, kills = 0, probableKills = 0,
+                    deaths = 0, probableDeaths = 0, correctedKills = 0, correctedDeaths = 0, seconds = seconds} end
+            end
+            table.sort(peaceful, function(a, b) return a.seconds > b.seconds or a.seconds == b.seconds and a.key < b.key end)
+            for _, item in ipairs(peaceful) do breakdown[#breakdown + 1] = item end
+        end
+        local showTime = geographic and not zoom and (GL.Settings().zoneTime or next(exposure) ~= nil)
+        showIf(f.zoneBack, zoom) showIf(f.breakdownTime, showTime)
+        showIf(f.zoneTracking, geographic and GL.ZoneTimes ~= nil)
+        f.zoneTracking:SetText(GL.Settings().zoneTime and "Suspendre le suivi du temps" or "Mesurer le temps par zone")
+        f.zoneBack:SetText("‹ Toutes les zones")
+        f.breakdownLabel:SetText(zoom and plain(f.zoneLabel) or geographic and "Zone · ouvrir les lieux" or "Confirmées / probables")
+        moveTo(f.breakdownLabel, zoom and 484 or 356, 369)
+        f.breakdownLabel:SetWidth(zoom and 150 or showTime and 176 or 270)
         showIf(f.podium, podium) showIf(f.breakdown, not podium)
         if podium then
             for i, control in ipairs(f.podium.rows) do
@@ -761,7 +818,17 @@ local function refreshJournal()
         for i, row in ipairs(f.breakdownRows) do
             local item = breakdown[f.breakdownOffset + i]
             if item then
+                row.zone = geographic and not zoom and item.key ~= "mixed" and item.key ~= "unknown" and item or nil
+                row:EnableMouse(row.zone ~= nil)
                 row.name:SetText(plain(item.label))
+                row.name:SetWidth(showTime and 177 or 270)
+                local seconds = exposure[item.key]
+                showIf(row.time, showTime)
+                if showTime then
+                    local minutes = seconds and math.floor(seconds / 60)
+                    row.time:SetText(not minutes and "—" or minutes == 0 and "< 1 min" or minutes < 60 and minutes .. " min"
+                        or ("%d h %02d"):format(math.floor(minutes / 60), minutes % 60))
+                end
                 row.kills:SetText(item.kills .. " / " .. item.probableKills)
                 row.deaths:SetText(item.deaths .. " / " .. item.probableDeaths)
                 row:Show()
@@ -770,8 +837,9 @@ local function refreshJournal()
         for key, control in pairs(f.dimensionButtons) do
             UI.selectButton(control, key == f.dimension)
         end
-        f.breakdownEmpty:SetText(#breakdown == 0 and "Aucune victoire ni mort enregistrée pour cette sélection." or "")
+        f.breakdownEmpty:SetText(#breakdown == 0 and (zoom and "Aucun combat enregistré dans cette zone pour cette sélection." or "Aucune victoire ni mort enregistrée pour cette sélection.") or "")
         f.breakdownInfo:SetText(corrected > 0 and counted(corrected, "rapport annulé", "rapports annulés") .. ", hors totaux" or "")
+        if showTime and partial then f.breakdownInfo:SetText("Durées minimales · archives de présence partielles") end
         f.breakdownPrevious:SetEnabled(f.breakdownOffset > 0)
         f.breakdownNext:SetEnabled(f.breakdownOffset + #f.breakdownRows < #breakdown)
     elseif annual then
@@ -789,6 +857,11 @@ local function refreshJournal()
         end
         card.probable:SetText("Faits probables · " .. counted(stats.probableKills, "victoire") .. " · " .. counted(stats.probableDeaths, "mort") .. " · " .. counted(stats.probableAggressions, "agression"))
         card.coverage:SetText(stats.events > 0 and counted(stats.events, "fait PvP conservé", "faits PvP conservés") .. " · Hors champs de bataille et arènes." or "Aucun fait PvP conservé pour cette année et cette sélection.")
+        local text = table.concat({ "Grudge Ledger · " .. period .. " · " .. scope,
+            "Confirmés : " .. counted(stats.kills, "victoire") .. ", " .. counted(stats.deaths, "mort") .. ", " .. counted(stats.aggressions, "agression") .. ".",
+            "Probables : " .. counted(stats.probableKills, "victoire") .. ", " .. counted(stats.probableDeaths, "mort") .. ", " .. counted(stats.probableAggressions, "agression") .. "." }, "\n")
+        if text ~= f.annualText then f.cardCopy:Hide() end
+        f.annualText = text
     elseif f.mode == "story" then
         local story = {
             "Vous avez remporté " .. counted(stats.kills, "victoire confirmée", "victoires confirmées") .. " et subi " .. counted(stats.deaths, "mort confirmée", "morts confirmées") .. ".", "" }
@@ -821,7 +894,7 @@ local function refreshJournal()
                 row.name:SetText((hasTime and date("%H:%M", event.time) .. "  ·  " or "") .. plain(record.fullName))
                 row.action:SetText(plain(title):gsub("[\r\n]+", " "))
                 row.meta:SetText((hasTime and date("%d/%m/%Y", event.time) or "Date inconnue") .. (place and (" · " .. plain(place)) or "") .. author)
-                row.context:SetText(event.questTitle and "Quête suivie · " .. plain(event.questTitle)
+                row.context:SetText(event.kind == "trade" and plain((event.evidence or ""):gsub("\n", " · ")) or combatDetails(event, true) or event.questTitle and "Quête suivie · " .. plain(event.questTitle)
                     or event.guild and "Guilde lors du combat · " .. plain(event.guild) or "")
                 row.stripe:SetColorTexture(unpack(inkColors[GL.Relation(record)] or inkColors.neutral)) row:Show()
             else row:Hide() end
@@ -830,12 +903,12 @@ local function refreshJournal()
         f.total:SetText(#events == 0 and "Aucun événement" or (f.offset + 1) .. "–" .. math.min(f.offset + #f.rows, #events) .. " / " .. #events)
         f.previous:SetEnabled(f.offset > 0) f.next:SetEnabled(f.offset + #f.rows < #events)
     end
-    f.help:ClearAllPoints() f.help:SetPoint("TOPLEFT", 36, history and -608 or annual and -396 or -465) f.help:SetHeight(history and 46 or 180)
+    f.help:ClearAllPoints() f.help:SetPoint("TOPLEFT", 36, history and -608 or annual and -396 or -465) f.help:SetHeight(history and 46 or annual and 60 or 180)
     f.help:SetText(history and "Cliquez sur un événement pour ouvrir sa fiche. Validez la recherche avec Entrée ou OK."
         or annual and "Cette carte résume les faits PvP conservés pour l’année et les personnages choisis."
         or f.mode == "story" and "Choisissez une période et les personnages dont vous souhaitez relire les combats."
         or f.dimension == "opponents" and "Seules les morts confirmées figurent au podium. Cliquez sur un adversaire pour ouvrir sa fiche."
-        or f.dimension == "zone" and "Victoires et morts au lieu du combat. Chaque colonne distingue les faits confirmés des probables. Une mort impliquant plusieurs adversaires compte une seule fois."
+        or f.dimension == "zone" and "Cliquez sur une zone pour lire ses sous-zones. Victoires et morts : confirmées / probables. Le temps mesure la présence en monde ouvert depuis l’activation, hors absences et instances."
         or "Les colonnes distinguent les faits confirmés et probables.\n\nLa race et la classe sont celles relevées au combat. « Inconnue » signifie que l'information manque.")
 end
 
@@ -901,7 +974,7 @@ function GL.ShowJournal(mode)
         f.dimensionButtons = {}
         for i, entry in ipairs({ { "opponents", "Adversaires" }, { "race", "Par race" }, { "class", "Par classe" }, { "zone", "Par zone" } }) do
             local key = entry[1]
-            f.dimensionButtons[key] = button(f.summary, entry[2], 356 + (i - 1) * 132, -331, 122, function() f.dimension, f.breakdownOffset = key, 0 refreshJournal() end, true, true)
+            f.dimensionButtons[key] = button(f.summary, entry[2], 356 + (i - 1) * 132, -331, 122, function() f.dimension, f.breakdownOffset, f.zoneKey = key, 0, nil refreshJournal() end, true, true)
         end
         f.podium = CreateFrame("Frame", nil, f.summary) f.podium:SetAllPoints(f)
         bookText(f.podium, 356, 367, 548, 25, 16, "Vos morts par adversaire")
@@ -921,14 +994,26 @@ function GL.ShowJournal(mode)
             f.podium.rows[i] = row
         end
         f.breakdown = CreateFrame("Frame", nil, f.summary) f.breakdown:SetAllPoints(f)
-        label(f.breakdown, "Confirmées / probables", nil, 356, -369, 270):SetTextColor(unpack(theme.inkMuted))
+        f.breakdownLabel = bookText(f.breakdown, 356, 369, 270, 23, 12, "", theme.inkMuted)
+        f.breakdownTime = bookText(f.breakdown, 539, 369, 96, 23, 12, "Présence", theme.inkMuted)
+        f.zoneBack = button(f.breakdown, "‹ Toutes les zones", 356, -365, 125, function()
+            f.zoneKey, f.breakdownOffset = nil, 0 refreshJournal()
+        end, nil, true)
+        f.zoneTracking = button(f.summary, "", 36, -620, 256, function()
+            GL.SetSetting("zoneTime", not GL.Settings().zoneTime) refreshJournal()
+        end)
         label(f.breakdown, "Victoires", nil, 642, -369, 125):SetTextColor(unpack(theme.inkMuted))
         label(f.breakdown, "Morts", nil, 787, -369, 117):SetTextColor(unpack(theme.inkMuted))
         f.breakdownRows = {}
         for i = 1, 5 do
-            local row = CreateFrame("Frame", nil, f.breakdown) row:SetPoint("TOPLEFT", 356, -394 - (i - 1) * 24) row:SetSize(548, 22)
+            local row = CreateFrame("Button", nil, f.breakdown) row:SetPoint("TOPLEFT", 356, -394 - (i - 1) * 24) row:SetSize(548, 22)
             surface(row, theme.selection):SetAlpha(i % 2 == 0 and 0.35 or 0)
             row.name = label(row, "", nil, 5, -2, 270) row.name:SetTextColor(unpack(theme.ink))
+            row.time = bookText(row, 183, 2, 96, 20, 12, "", theme.inkMuted)
+            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+            row:SetScript("OnClick", function(self)
+                if self.zone then f.zoneKey, f.zoneLabel, f.breakdownOffset = self.zone.key, self.zone.label, 0 refreshJournal() end
+            end)
             row.kills = label(row, "", nil, 286, -2, 125) row.kills:SetTextColor(unpack(theme.ink))
             row.deaths = label(row, "", nil, 431, -2, 117) row.deaths:SetTextColor(unpack(theme.ink))
             for _, text in ipairs({ row.name, row.kills, row.deaths }) do text:SetHeight(20) GL.Safe(text.SetWordWrap, text, false) end
@@ -995,6 +1080,18 @@ function GL.ShowJournal(mode)
             f.period, f.kind, f.query, f.offset = "year", "pvp", "", 0
             f.search:SetText("") GL.ShowJournal("history")
         end, nil, true)
+        f.cardCopy = CreateFrame("Frame", nil, f)
+        f.cardCopy:SetPoint("TOPLEFT", 36, -502) f.cardCopy:SetSize(256, 145)
+        local copyField = CreateFrame("EditBox", nil, f.cardCopy)
+        copyField:SetPoint("TOPLEFT") copyField:SetSize(256, 115) copyField:SetMultiLine(true)
+        copyField:SetAutoFocus(false) styleInput(copyField, true)
+        copyField:SetScript("OnEscapePressed", function() f.cardCopy:Hide() end)
+        f.cardCopy:SetScript("OnHide", function() copyField:ClearFocus() end)
+        label(f.cardCopy, "Ctrl+C pour copier.", nil, 0, -119, 256):SetTextColor(unpack(theme.muted))
+        f.cardCopy:Hide()
+        f.copyAnnual = button(f, "Copier le bilan annuel", 36, -464, 256, function()
+            f.cardCopy:Show() copyField:SetText(f.annualText) copyField:SetFocus() copyField:HighlightText()
+        end, true)
         f.rows = {}
         for i = 1, 5 do
             local row = CreateFrame("Button", nil, f.history) row:SetPoint("TOPLEFT", 356, -216 - (i - 1) * 80) row:SetSize(548, 76)
@@ -1038,6 +1135,7 @@ local function eventPlace(e)
 end
 
 local function eventCertainty(e)
+    if e.kind == "trade" then return "Échange confirmé" end
     if e.voidReason == "battleground" then return "Champ de bataille · exclu" end
     if e.voided then return "Annulé · exclu" end
     if pvpNames[e.kind] then return e.confidence == "confirmed" and "Confirmé" or e.confidence == "probable" and "Probable" or "Certitude inconnue" end
@@ -1111,6 +1209,8 @@ inspectEvent = function(record, e)
     local evidence = {}
     if eventReason(e) then evidence[#evidence+1] = eventReason(e) end
     if e.evidence and e.evidence ~= "" then evidence[#evidence+1] = plain(e.evidence) end
+    local combat = combatDetails(e)
+    if combat then evidence[#evidence+1] = combat end
     if e.questTitle then evidence[#evidence+1] = "Quête suivie : " .. plain(e.questTitle) end
     if e.guildSource and e.guild then evidence[#evidence+1] = "Guilde mémorisée : " .. plain(e.guild) .. (e.guildRealm and " (" .. plain(e.guildRealm) .. ")" or "") .. (e.guildSource == "last-known" and " — observée auparavant" or "") end
     f.proof:SetText(#evidence > 0 and table.concat(evidence, "\n") or "Aucune précision enregistrée.")
@@ -1180,7 +1280,7 @@ local function showDiagnostic(private)
         { "C_ChatInfo.PerformEmote", C_ChatInfo and C_ChatInfo.PerformEmote }, { "DoEmote", DoEmote },
     }) do lines[#lines + 1] = api[1] .. " : " .. (type(api[2]) == "function" and "oui" or "non") end
     lines[#lines + 1] = "\nRéglages :"
-    for _, key in ipairs({ "markers", "nameColor", "friendAlerts", "enemyAlerts", "sounds", "pvpTracking", "groupTracking", "socialTracking" }) do
+    for _, key in ipairs({ "markers", "nameColor", "friendAlerts", "enemyAlerts", "sounds", "pvpTracking", "groupTracking", "socialTracking", "tradeTracking" }) do
         lines[#lines + 1] = key .. " : " .. (GL.Clean(GL.Settings()[key], "boolean") == true and "oui" or "non")
     end
     lines[#lines + 1] = "\nAffichage des noms :"
@@ -1203,11 +1303,11 @@ local function showDiagnostic(private)
 end
 
 local noteEditor, selectNote
-local historyKinds = { {"all", "Tous les événements"}, {"pvp", "Combats PvP"}, {"social", "Avis et gestes"}, {"group", "Groupes"}, {"voided", "Événements annulés"} }
+local historyKinds = { {"all", "Tous les événements"}, {"pvp", "Combats PvP"}, {"social", "Avis et gestes"}, {"group", "Groupes"}, {"trade", "Échanges"}, {"voided", "Événements annulés"} }
 local function includeHistory(e, kind)
     return kind == "all" or kind == "pvp" and pvpNames[e.kind]
         or kind == "social" and (e.kind == "reaction" or e.kind == "reputation")
-        or kind == "group" and (e.kind == "grouped" or e.kind == "group") or kind == "voided" and e.voided
+        or kind == "group" and (e.kind == "grouped" or e.kind == "group") or kind == "trade" and e.kind == "trade" or kind == "voided" and e.voided
 end
 
 local function renderHistory(p, record)
@@ -1238,8 +1338,9 @@ local function renderHistory(p, record)
             row.title:SetText(eventAction(e))
             row.badge:SetText(eventCertainty(e))
             row.badge:SetTextColor(unpack(e.voided and theme.inkMuted or e.confidence == "probable" and inkColors.warning or theme.ink))
-            local hint = e.questTitle and ("Quête suivie : " .. plain(e.questTitle)) or eventReason(e)
+            local hint = combatDetails(e, true) or e.questTitle and ("Quête suivie : " .. plain(e.questTitle)) or eventReason(e)
             if not hint and e.source ~= "emote" and not pvpNames[e.kind] and e.evidence ~= "Avis personnel" then hint = plain(e.evidence) end
+            if e.kind == "trade" then hint = plain((e.evidence or ""):gsub("\n", " · ")) end
             row.hint:SetText(hint or "")
             local icon = ({death="Ability_Rogue_FeignDeath", kill="Ability_DualWield", aggression="Ability_Warrior_Charge"})[e.kind]
             row.icon:SetTexture(icon and ("Interface\\Icons\\" .. icon) or GL.icon)
@@ -1268,16 +1369,16 @@ local function renderDetail()
         UI.selectButton(control, record and GL.Relation(record) == reaction)
     end
     local showHistory, showNotes = record and tab == "history", record and tab == "notes"
+    local summary = tab == "summary" and record ~= nil
     if showHistory then ledger.historyPage:Show() else ledger.historyPage:Hide() end
     if not showNotes and noteWindow then noteWindow:Hide() end
     if showHistory or showNotes or not record then ledger.detailScroll:Hide() else ledger.detailScroll:Show() end
     for i = 1, 5 do
         local control = ledger.actions[i]
-        if showHistory or showNotes or not record then control:Hide() else control:Show() end
+        showIf(control, summary)
     end
-    if showHistory or showNotes or not record then ledger.hint:Hide() ledger.tools:Hide() ledger.toolsMenu:Hide()
+    if not summary then ledger.hint:Hide() ledger.tools:Hide() ledger.toolsMenu:Hide()
     else ledger.hint:Show() ledger.tools:Show() end
-    local summary = tab == "summary" and record ~= nil
     if summary then ledger.counters:Show() else ledger.counters:Hide() end
     ledger.detailScroll:ClearAllPoints()
     ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -450 or -283)
@@ -1356,6 +1457,21 @@ local function renderDetail()
             lines[#lines + 1] = "Agressions : " .. counted(pvp.aggressions or 0, "confirmée") .. ", " .. counted(pvp.probableAggressions or 0, "probable") .. "."
             if guildRule and guildRule.note and guildRule.note ~= "" then lines[#lines + 1] = "Note de guilde : " .. plain(guildRule.note) end
             if (record.groupCount or 0) > 0 then lines[#lines + 1] = subdued(tostring(record.groupCount) .. " session(s) de groupe mémorisée(s).") end
+        elseif tab == "matchup" then
+            local duels = GL.ContactMatchup(record)
+            lines = { "|cff653c20Vos combats confirmés avec ce joueur|r",
+                counted(duels.kills, "victoire") .. "   ·   " .. counted(duels.deaths, "défaite") }
+            if duels.run > 1 then
+                lines[#lines + 1] = "Série en cours : " .. counted(duels.run, duels.lastKind == "kill" and "victoire" or "défaite") .. " de suite."
+            end
+            if duels.comeback then lines[#lines + 1] = "Dernière revanche : " .. eventDate(duels.comeback) end
+            if duels.closeDeaths then lines[#lines + 1] = "Deux défaites à trois minutes d’intervalle ou moins le " .. eventDate(duels.closeDeaths) .. "." end
+            if #duels.recent > 0 then
+                lines[#lines + 1] = "\n|cff653c20Derniers résultats datés|r"
+                for _, event in ipairs(duels.recent) do
+                    lines[#lines + 1] = eventDate(event) .. "   ·   " .. (event.kind == "kill" and "Victoire" or "Défaite") .. "   ·   " .. plain(eventPlace(event))
+                end
+            else lines[#lines + 1] = "\nAucun combat confirmé et daté pour ce personnage." end
         elseif tab == "history" then
             renderHistory(ledger.historyPage, record)
         elseif tab == "notes" then
@@ -1492,6 +1608,7 @@ showSettings = function()
         button(p, "100 %", 569, -317, 68, function() GL.SetSetting("readingScale", 1) end, nil, true)
         check("appearance", "markers", "Icônes près des noms", 368, 272)
         check("appearance", "nameColor", "Colorer aussi le nom", 402, 272)
+        check("appearance", "chatBadges", "Marquer les contacts dans le chat", 482, 272, 640)
         range(p, "iconSize", "Taille des icônes", 356, 457, 258, 12, 40, 1, function(n) return math.floor(n + .5) .. " px" end)
         settingText(p, "Aperçu des marqueurs", 640, 213, 261, 17)
         for i, data in ipairs({{"friend", "Oriane · Ami"}, {"warning", "Hélène · Méfiance"}, {"enemy", "Bastian · Ennemi"}, {"neutral", "Neutre"}}) do
@@ -1517,10 +1634,12 @@ showSettings = function()
         end
         button(p, "Activer le repérage", 356, -586, 222, enableRecognition, nil, true)
         settingText(p, "Le repérage utilise les barres de nom compatibles.", 590, 586, 315, 13, theme.inkMuted)
+        check("appearance", "compactTooltips", "Infobulle compacte (Maj pour les détails)", 626)
         p = f.pages.alerts
         check("alerts", "friendAlerts", "Signaler un ami", 217, 268)
         check("alerts", "enemyAlerts", "Signaler une menace", 251, 268)
         check("alerts", "sounds", "Jouer un son", 285, 268)
+        check("alerts", "indirectAlerts", "Signaux indirects de menace", 318, 268)
         range(p, "alertCooldown", "Délai des menaces", 356, 350, 261, 15, 3600, 15, delayText)
         settingText(p, "Tester au-dessus du chat", 638, 213, 275, 17)
         for i, entry in ipairs({{"enemy", "Aperçu d’une menace"}, {"friend", "Aperçu d’un ami"}}) do
@@ -1536,14 +1655,14 @@ showSettings = function()
             if relation == "enemy" then f.testEnemy = b else f.testFriend = b end
         end
         f.testStatus = settingText(p, "", 638, 396, 269, 13, theme.inkMuted)
-        settingText(p, "Une nouvelle alerte d’ami demande plus de 10 minutes sans observation. Les amis du groupe restent silencieux.", 356, 452, 547, 14)
+        settingText(p, "Un signal indirect indique une voix entendue ou la cible d’un équipier proche. Les amis du groupe restent silencieux ; les autres amis sont signalés après 10 min d’absence.", 356, 439, 547, 13)
         check("alerts", "partyWarnings", "Prévenir mon groupe d’un ancien agresseur", 534)
         settingText(p, "Petit groupe en monde ouvert ou donjon. Un message au plus par minute et par personne toutes les 30 minutes.", 356, 582, 547, 13, theme.inkMuted)
         p = f.pages.relations
         check("relations", "pvpTracking", "Enregistrer le PvP en monde ouvert", 217)
         check("relations", "socialTracking", "Noter mes gestes envers les joueurs", 257)
         check("relations", "groupTracking", "Compter les groupes avec mes contacts", 297)
-        settingText(p, "Seuls les joueurs déjà inscrits cumulent des groupes partagés.", 389, 333, 516, 13, theme.inkMuted)
+        check("relations", "tradeTracking", "Consigner les échanges réussis avec mes contacts", 337)
         settingText(p, "Comment évolue une rancune ?", 356, 388, 544, 18)
         for i, rule in ipairs({{"Il vous tue","−10"}, {"Il vous agresse","−1"}, {"Vous le vainquez","+1"}}) do
             local x = 358+(i-1)*183
@@ -1856,7 +1975,7 @@ local function buildLedger()
     end)
     f.toolsMenu:Hide()
     f.detailTabs = {}
-    for i, entry in ipairs({ { "summary", "Synthèse" }, { "history", "Histoire" }, { "notes", "Notes" } }) do
+    for i, entry in ipairs({ { "summary", "Synthèse" }, { "history", "Histoire" }, { "notes", "Notes" }, { "matchup", "Face-à-face" } }) do
         local key = entry[1]
         f.detailTabs[key] = button(f, entry[2], 356 + (i - 1) * 115, -242, 110, function()
             f.detailTab = key f.detailScroll:SetVerticalScroll(0) renderDetail()
@@ -1897,7 +2016,7 @@ local function buildLedger()
     p.heading:SetHeight(32) GL.Safe(p.heading.SetWordWrap, p.heading, false)
     p.kind, p.offset, p.rows, p.options = "all", 0, {}, {}
     p.menu = CreateFrame("Frame", nil, p)
-    p.menu:SetPoint("TOPLEFT", 348, -30) p.menu:SetSize(208, 145)
+    p.menu:SetPoint("TOPLEFT", 348, -30) p.menu:SetSize(208, #historyKinds * 28 + 5)
     p.menu:SetFrameStrata("FULLSCREEN_DIALOG") p.menu:EnableMouse(true) p.menu:SetToplevel(true)
     surface(p.menu, theme.gold) surface(p.menu, theme.panel, 1) p.menu:Hide()
     p.filter = button(p, "Tous les événements", 348, -1, 208, function() toggleMenu(p.menu) end, nil, true)

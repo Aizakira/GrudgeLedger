@@ -35,6 +35,13 @@ The leather, cloth and parchment share a decorative background. The medallion, t
 
 Open the cog or use `/gl settings` to set the font, text size and spacing. The first-use guide can be opened again from **Données et aide**.
 
+### New in 0.8.0
+
+- **Journal → Face-à-face** shows this character’s confirmed outcomes against a contact, the current streak and the most recent win following a loss. Each victory still counts as +1. New combat history can show levels, health at first PvP observation, distinct opponents and pet or NPC involvement.
+- **Bilan → Par zone** opens the combat breakdown for each district. The optional zone clock measures connected outdoor time from activation and pauses while AFK or in instances. **Mon année** can prepare a text copy of the selected confirmed and probable totals.
+- The friends ranking includes observed time grouped together. An optional trade history records completed exchanges with existing contacts, including items and money given and received.
+- Optional indirect alerts distinguish a known threat heard nearby or targeted by a visible party member from a direct sighting. Appearance settings offer local relationship icons in chat and compact tooltips with Shift for details. The new indirect alerts, badges, compact tooltips, trade history and zone clock are off by default.
+
 In 0.7.2, visible contacts can show their current in-game portrait. When a player is unavailable, their record uses a race, class or faction emblem. The personal summary also groups fights by zone. Combat and death evidence from pets can be attributed to their owners when the client supplies the link.
 
 In 0.7.1, open an event in **Histoire** to review its attribution before cancelling it. Use **Notes** to write, edit and browse a player's notes. In the summary, **Mon année** opens the chronicle for the selected year. Each guild page shows its rule and any individual exceptions. Type `/gl version` to check which version Forever has loaded.

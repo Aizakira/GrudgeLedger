@@ -49,6 +49,11 @@ assert(f.breakdownRows[1].kills:GetText() == "0 / 1" and f.breakdownRows[1].deat
 assert(f.breakdownInfo:GetText():find("1 rapport annulé", 1, true))
 click(f.dimensionButtons.zone)
 assert(f.dimension == "zone" and f.breakdown:IsShown() and f.breakdownRows[1].name:GetText() ~= "")
+local area = f.breakdownRows[1].name:GetText()
+click(f.breakdownRows[1])
+assert(f.zoneKey == area and f.zoneBack:IsShown() and f.breakdownLabel:GetText() == area)
+click(f.zoneBack)
+assert(not f.zoneKey and not f.zoneBack:IsShown())
 click(f.dimensionButtons.class)
 assert(f.dimension == "class" and f.breakdownRows[1]:IsShown())
 assert(not f.search:IsShown() and not f.kindButton:IsShown(), "history controls must not imply they affect the summary")
@@ -65,7 +70,12 @@ click(f.periodButtons.all)
 click(f.tabs.year)
 assert(f.annual:IsShown() and f.annual.metrics.deaths:GetText() == "1" and f.annual.metrics.kills:GetText() == "0")
 assert(f.yearButton.enabled and not f.periodButtons.week:IsShown() and f.annual.recaps.mostDeaths.record == ra)
+click(f.copyAnnual)
+assert(f.cardCopy.children[1].highlighted == f.annualText)
+assert(f.cardCopy:IsShown() and f.annualText:find("1 mort", 1, true) and not f.annualText:find("Alpha", 1, true)
+    and not f.annualText:find("Golden Library", 1, true) and not f.annualText:find("dungeon", 1, true))
 f.year = 2025 GL.ShowJournal("year")
+assert(not f.cardCopy:IsShown(), "a previous selection must not remain available as the new year's copy")
 assert(f.annual.metrics.deaths:GetText() == "0" and f.annual.coverage:GetText():find("Aucun fait PvP", 1, true) and not f.annual.recaps.mostDeaths.enabled)
 f.year = 2026 GL.ShowJournal("year")
 click(f.annual.events)
@@ -130,6 +140,31 @@ GrudgeLedgerGuide:Hide()
 GL.ShowLedger()
 assert(not GrudgeLedgerGuide:IsShown(), "later openings do not interrupt the journal")
 GL.ShowLedger(ra.key)
+click(ledger.detailTabs.matchup)
+assert(ledger.detailScroll:IsShown() and not ledger.tools:IsShown())
+assert(ledger.detailText:GetText():find("0 victoire   ·   1 défaite", 1, true),
+    "face-to-face excludes the other character, unknown author, probable and corrected outcomes")
+do
+    local opponent = person("Rematch")
+    local start = now
+    local contact = GL.RecordPvP(opponent, "death", "confirmed", nil, "first")
+    now = start + 180
+    GL.RecordPvP(opponent, "death", "confirmed", nil, "second")
+    now = start + 600
+    GL.RecordPvP(opponent, "kill", "confirmed", nil, "revenge")
+    now = start + 601
+    GL.RecordPvP(opponent, "kill", "confirmed", nil, "another")
+    local last = contact.history[#contact.history]
+    table.insert(contact.history, 1, last) -- duplicate upon legacy identity merge
+    local balance = GL.AutomaticBalance(contact)
+    local m = GL.ContactMatchup(contact)
+    assert(m.kills == 2 and m.deaths == 2 and m.run == 2 and m.lastKind == "kill")
+    assert(m.recent[1] == last and #m.recent == 4 and m.closeDeaths.eventId == "second" and m.comeback.eventId == "revenge")
+    assert(GL.AutomaticBalance(contact) == balance and balance == -18)
+    assert(GL.VoidPvP(contact, last))
+    assert(GL.ContactMatchup(contact).run == 1, "correcting an event takes effect on the next read")
+end
+click(ledger.detailTabs.summary)
 assert(ledger.reactions[GL.Relation(ra)].active and not ledger.reactions.neutral.active,
     "automatic PvP danger must select the real dangerous relation, not neutral")
 click(ledger.reactions.friend)

@@ -13,6 +13,7 @@ local styles = {
 }
 local visible, markers, lastAlert, pendingNames = {}, {}, {}, {}
 local guildBursts = {}
+local signals, latestSignal = {}, nil
 local toast, previewToast, elapsed = nil, nil, 0
 local alert
 local lastSound
@@ -117,6 +118,13 @@ local function alertTitle(record, relation)
 end
 
 local function refreshToastText(frame, record)
+    if frame.signal then
+        local age = math.max(0, GL.Now() - frame.signalAt)
+        frame.title:SetText("Signal indirect · " .. styles[frame.relation].label)
+        frame.name:SetText(record.fullName or record.name)
+        frame.note:SetText(frame.signal .. (age == 0 and " · à l’instant" or (" · il y a " .. age .. " s")) .. "\nDistance inconnue")
+        return
+    end
     frame.title:SetText(alertTitle(record, frame.relation))
     local name = record.fullName or record.name or "Joueur connu"
     if record.guild and GL.RelationSource(record) ~= "guild" then name = name .. " <" .. record.guild .. ">" end
@@ -133,7 +141,8 @@ local function validateToast()
     if not record or GL.Relation(record) ~= toast.relation or GL.RelationSource(record) ~= toast.source
         or inheritedGuildKey(record) ~= toast.guildKey
         or GL.Now() >= toast.expires or not GL.Settings()[alertSetting(toast.relation)]
-        or (toast.relation == "friend" and isGroupmate(record)) then toast:Hide()
+        or (toast.signal and not GL.Settings().indirectAlerts)
+        or ((toast.signal or toast.relation == "friend") and isGroupmate(record)) then toast:Hide()
     else refreshToastText(toast, record) end
 end
 
@@ -403,7 +412,7 @@ alert = function(identity, unit)
     if relation ~= "friend" and lastAlert[key] and now - lastAlert[key] < (settings.alertCooldown or 180) then GL.Trace("cooldown", identity, unit) return end
     validateToast()
     -- Guild crowds must not displace an equally serious personal/PvP warning.
-    if toast and toast:IsShown() and (styles[toast.relation].priority > style.priority
+    if toast and toast:IsShown() and not toast.signal and (styles[toast.relation].priority > style.priority
         or (groupGuild and relation ~= "friend" and not toast.guildBurst and styles[toast.relation].priority == style.priority)) then GL.Trace("priority", identity, unit) return end
     lastAlert[key] = now
     local burstKey, burst
@@ -430,6 +439,7 @@ alert = function(identity, unit)
     local frame = makeToast()
     if previewToast and previewToast:IsShown() then previewToast:Hide() end
     frame.key, frame.relation, frame.source, frame.expires = record.key, relation, source, now + 6
+    frame.signal, frame.signalAt = nil, nil
     frame.guildKey, frame.guildBurst = guildKey, burst
     frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
     styleToast(frame, style)
@@ -445,10 +455,61 @@ alert = function(identity, unit)
     end
 end
 
+local signalSources = { say = "Parole entendue", yell = "Cri entendu", partyTarget = "Cible d’un équipier proche" }
+local function indirectSignal(guid, source)
+    local settings = GL.Settings()
+    if not settings.indirectAlerts or not settings.enemyAlerts or GL.IsPvPInstance() then return end
+    guid = GL.Clean(guid, "string")
+    local me = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    if not me or not guid or #guid > 128 or not guid:match("^Player%-%w") or guid == me then return end
+    local record = GL.Get("guid:" .. guid)
+    if not record or record.guid ~= guid then return end
+    local relation = GL.Relation(record)
+    if (relation ~= "enemy" and relation ~= "warning") or isGroupmate(record) then return end
+    local now = GL.Now()
+    local cooldown = math.max(15, settings.alertCooldown or 180)
+    local seen = record.encounters and record.encounters.seen[me]
+    if seen and now >= seen and now - seen < cooldown then return end
+    local previous = signals[guid]
+    if previous and now >= previous and now - previous < cooldown then
+        signals[guid] = now
+        return
+    end
+    validateToast()
+    if (toast and toast:IsShown()) or (latestSignal and now >= latestSignal and now - latestSignal < 15) then return end
+    -- ponytail: cap temporary hints at 64 contacts and one banner per 15 s.
+    -- Only known threats reach this path; it never records sightings or PvP.
+    local count, oldest = 0, nil
+    for key, at in pairs(signals) do
+        if now < at or now - at >= cooldown then signals[key] = nil
+        else
+            count = count + 1
+            if not oldest or at < signals[oldest] then oldest = key end
+        end
+    end
+    if count >= 64 then signals[oldest] = nil end
+    signals[guid], latestSignal = now, now
+    if previewToast and previewToast:IsShown() then previewToast:Hide() end
+    local frame = makeToast()
+    frame.key, frame.relation, frame.source = record.key, relation, GL.RelationSource(record)
+    frame.guildKey, frame.guildBurst = inheritedGuildKey(record), nil
+    frame.signal, frame.signalAt, frame.expires = signalSources[source], now, now + 6
+    frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
+    styleToast(frame, styles[relation])
+    frame.stripe:SetColorTexture(0.74, 0.57, 0.32, 1)
+    frame.title:SetTextColor(0.94, 0.80, 0.57)
+    refreshToastText(frame, record)
+    frame:Show()
+    GL.Trace("indirect", record, source)
+    local sounds = SOUNDKIT or {}
+    local sound = sounds.MAP_PING or sounds.IG_MAINMENU_OPTION_CHECKBOX_ON or sounds.IG_QUEST_LOG_OPEN
+    if sound and settings.sounds then GL.Safe(PlaySound, sound, "Master") end
+end
+
 local function observe(unit, notify, reuseObservation)
     unit = GL.Clean(unit, "string")
     if not unit or not GL.db or GL.IsPvPInstance() then return end
-    if not notify and GL.Safe(UnitIsVisible, unit) ~= true then return end
+    if not unit:match("^nameplate%d+$") and (not notify or UnitIsVisible) and GL.Safe(UnitIsVisible, unit) ~= true then return end
     local identity = GL.Identity(unit, reuseObservation)
     if identity then
         GL.Trace("observed", identity, unit)
@@ -519,11 +580,12 @@ function D.Refresh(changedRecord)
 end
 
 function D.Tooltip(tooltip)
-    if not GL.db or tooltip ~= GameTooltip then return end
+    if not GL.db or tooltip ~= GameTooltip or GL.IsPvPInstance() then return end
     local _, unit = GL.Safe(tooltip.GetUnit, tooltip)
     unit = GL.Clean(unit, "string")
     local identity = unit and GL.Identity(unit)
-    local record = identity and GL.RecordSeen(identity, true)
+    local direct = unit and (unit:match("^nameplate%d+$") or not UnitIsVisible or GL.Safe(UnitIsVisible, unit) == true)
+    local record = identity and (direct and GL.RecordSeen(identity, true) or GL.Get(identity))
     partyWarning(record, unit)
     if record and GL.Relation(record) == "friend" then alert(identity, unit) end
     if not record or tooltip._grudgeLedgerKey == record.key then return end
@@ -536,6 +598,11 @@ function D.Tooltip(tooltip)
         style and style.color[3] or 0.85)
     if GL.RelationConfidence(record) == "probable" then
         tooltip:AddLine("? Identification PvP probable — à confirmer", 1, 0.85, 0.3, true)
+    end
+    tooltip._grudgeLedgerExpanded = not GL.Settings().compactTooltips or GL.Safe(IsShiftKeyDown) == true
+    if not tooltip._grudgeLedgerExpanded then
+        tooltip:AddLine("Maj : notes et bilan PvP", 0.8, 0.75, 0.64)
+        return
     end
     local guild = guildLabel(record, relation)
     if guild then tooltip:AddLine(guild, 0.85, 0.85, 0.85, true) end
@@ -564,9 +631,27 @@ local function scanPlates()
     end
 end
 
-function D.OnEvent(_, event, unit)
+function D.OnEvent(_, event, unit, ...)
     if not GL.db then return end
-    if event == "NAME_PLATE_UNIT_ADDED" then addUnit(unit)
+    if event == "CHAT_MSG_SAY" or event == "CHAT_MSG_YELL" then
+        -- In both native events field 12 is the speaker GUID. Never read chat text.
+        indirectSignal(select(11, ...), event == "CHAT_MSG_SAY" and "say" or "yell")
+    elseif event == "UNIT_TARGET" then
+        unit = GL.Clean(unit, "string")
+        if unit and unit:match("^party[1-4]$") and GL.Safe(UnitIsVisible, unit) == true then
+            indirectSignal(GL.Safe(UnitGUID, unit .. "target"), "partyTarget")
+        end
+    elseif event == "MODIFIER_STATE_CHANGED" then
+        unit = GL.Clean(unit, "string")
+        if GL.Settings().compactTooltips and (unit == "LSHIFT" or unit == "RSHIFT") and GameTooltip and GameTooltip._grudgeLedgerKey
+            and GameTooltip:IsShown() and GameTooltip._grudgeLedgerExpanded ~= (GL.Safe(IsShiftKeyDown) == true) then
+            local _, token = GL.Safe(GameTooltip.GetUnit, GameTooltip)
+            if token and GL.Safe(UnitExists, token) then
+                if GameTooltip.RefreshData and (not GameTooltip.GetPrimaryTooltipInfo or GL.Safe(GameTooltip.GetPrimaryTooltipInfo, GameTooltip)) then GL.Safe(GameTooltip.RefreshData, GameTooltip)
+                else GL.Safe(GameTooltip.SetUnit, GameTooltip, token) end
+            end
+        end
+    elseif event == "NAME_PLATE_UNIT_ADDED" then addUnit(unit)
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         unit = GL.Clean(unit, "string")
         if unit then removeUnit(unit) end
@@ -575,6 +660,7 @@ function D.OnEvent(_, event, unit)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         for token in pairs(visible) do removeUnit(token) end
         guildBursts = {}
+        signals, latestSignal = {}, nil
         if toast then toast:Hide() end
         if previewToast then previewToast:Hide() end
         scanPlates()
@@ -583,6 +669,15 @@ function D.OnEvent(_, event, unit)
 end
 
 local eventFrame = CreateFrame("Frame", "GrudgeLedgerDisplayEvents")
+local listening = false
+local function syncSignals()
+    local enabled = GL.Settings().indirectAlerts and GL.Settings().enemyAlerts
+    if listening == enabled then return end
+    listening = enabled
+    local method = enabled and eventFrame.RegisterEvent or eventFrame.UnregisterEvent
+    for _, event in ipairs({ "UNIT_TARGET", "CHAT_MSG_SAY", "CHAT_MSG_YELL" }) do GL.Safe(method, eventFrame, event) end
+    if not enabled then signals, latestSignal = {}, nil end
+end
 eventFrame:SetScript("OnEvent", D.OnEvent)
 eventFrame:SetScript("OnUpdate", function(_, delta)
     elapsed = elapsed + delta
@@ -595,10 +690,11 @@ eventFrame:SetScript("OnUpdate", function(_, delta)
     if previewToast and previewToast:IsShown() and GL.Now() >= previewToast.expires then previewToast:Hide() end
 end)
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
-    "UPDATE_MOUSEOVER_UNIT", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
+    "UPDATE_MOUSEOVER_UNIT", "MODIFIER_STATE_CHANGED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
     GL.Safe(eventFrame.RegisterEvent, eventFrame, event)
 end
 GL.On("READY", function()
+    syncSignals()
     if GameTooltip and GameTooltip.HookScript then
         GL.Safe(GameTooltip.HookScript, GameTooltip, "OnTooltipCleared", function(tt) tt._grudgeLedgerKey = nil end)
         if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
@@ -609,3 +705,4 @@ GL.On("READY", function()
 end)
 GL.On("CHANGED", D.Refresh)
 GL.On("SETTINGS", D.Refresh)
+GL.On("SETTINGS", syncSignals)

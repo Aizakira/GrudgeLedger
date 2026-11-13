@@ -124,22 +124,53 @@ local function attacker(guid, name, flags, encounter)
     if petSource(guid, flags) then return petOwner(guid, nil, encounter), true end
 end
 
+-- Only count identified players engaged with us. A pet uses its owner's GUID.
+-- A recap after death cannot supply the player's health when combat began.
+local function observeOpponent(f, guid, level, live)
+    if not f or not guid or not guid:match("^Player%-%w") then return end
+    if not f.combatants then
+        f.combatants, f.opponentCount = {}, 0
+        if live then
+            local hp = GL.Clean(GL.Safe(UnitHealth, "player"), "number")
+            local max = GL.Clean(GL.Safe(UnitHealthMax, "player"), "number")
+            if hp and max and hp > 0 and hp <= max and max < math.huge then
+                f.firstHealth = math.floor(100 * (hp / max) + 0.5)
+            end
+            f.observerLevel = GL.Clean(GL.Safe(UnitLevel, "player"), "number")
+        end
+    end
+    if not f.combatants[guid] then
+        f.opponentCount = f.opponentCount + 1
+        f.combatants[guid] = true
+    end
+    if level and level > 0 and level < math.huge then f.combatants[guid] = level end
+end
+
+local function combatSnapshot(f, identity, viaPet)
+    if not f or not f.combatants then return end
+    local level = identity.guid and f.combatants[identity.guid]
+    return { healthPct = f.firstHealth, playerLevel = f.observerLevel, opponentLevel = level,
+        opponents = f.opponentCount, pve = f.npcPressure, pet = viaPet }
+end
+
 local function creditKill(identity, confidence, evidence)
     if not enabled() or not identity then return end
     local key = identity.guid or identity.key
     local previous = recentCredits["kill:" .. key]
     if previous and GL.Now() - previous < 4 then return end
     recentCredits["kill:" .. key] = GL.Now()
-    return GL.RecordPvP(identity, "kill", confidence, evidence, nextID("kill"))
+    local f = combatSession()
+    observeOpponent(f, identity.guid)
+    return GL.RecordPvP(identity, "kill", confidence, evidence, nextID("kill"), combatSnapshot(f, identity))
 end
 
-local function recordAggression(f, identity, confidence, evidence)
+local function recordAggression(f, identity, confidence, evidence, viaPet)
     if not f or not identity or not enabled() then return end
     f.aggressions = f.aggressions or {}
     local key = identity.guid or identity.key
     if f.aggressions[key] or (identity.alias and f.aggressions[identity.alias]) then return end
     f.aggressions[key] = true
-    GL.RecordAggression(identity, confidence, evidence, f.id .. ":attack:" .. key)
+    GL.RecordAggression(identity, confidence, evidence, f.id .. ":attack:" .. key, combatSnapshot(f, identity, viaPet))
 end
 
 local function recentAttackers(f, age)
@@ -198,7 +229,7 @@ local function tryAggression()
                 local pet = f.petAttackers and f.petAttackers[key]
                 local evidence = pet and GL.Now() - pet.at <= 2 and "Votre santé a baissé pendant que le familier de ce joueur vous ciblait en combat."
                     or "Baisse de santé pendant que cet adversaire PvP en combat vous ciblait ; participation déduite, source de dégâts non confirmée."
-                recordAggression(f, identity, "probable", evidence)
+                recordAggression(f, identity, "probable", evidence, pet and GL.Now() - pet.at <= 2)
             end
         end
     end
@@ -225,6 +256,7 @@ function T.Observe(unit, reuseObservation)
             local controlled = bool(UnitPlayerControlled, unit)
             local owner = controlled and petOwner(guid, unit, f)
             if owner and bool(UnitIsPVP, "player") == true then
+                observeOpponent(f, owner.guid, nil, true)
                 if f.unknownPets then f.unknownPets[guid] = nil end
                 f.petAttackers = f.petAttackers or {}
                 f.petAttackers[owner.key] = { owner = owner, at = GL.Now() }
@@ -233,6 +265,7 @@ function T.Observe(unit, reuseObservation)
                 f.unknownPets[guid] = true
             else
                 f.pve = true
+                if controlled == false and guid and guid:match("^Creature%-") then f.npcPressure = true end
             end
         end
         return
@@ -262,7 +295,10 @@ function T.Observe(unit, reuseObservation)
     local dead = bool(UnitIsDeadOrGhost, unit)
     if dead == false then
         if engaged then
-            if targetingMe then enemy.targetingMeAt = now end
+            if targetingMe then
+                enemy.targetingMeAt = now
+                observeOpponent(f, identity.guid, identity.level, true)
+            end
             if bool(UnitIsUnit, unit, "target") == true then enemy.targetedAt = now end
         else enemy.targetingMeAt, enemy.targetedAt = nil, nil end
         if enemy.dead then
@@ -372,23 +408,31 @@ local function resolveDeath()
     if not rows and C_DeathRecap and type(C_DeathRecap.GetRecapEvents) == "function"
         and GL.Now() - death.at < 2 then return end
     local participants, lethal, lethalPet = death.candidates, death.confirmed, death.pet
+    local petSources
     if rows then
         participants = {} -- explicit sources replace, rather than extend, guesses
         local otherLethal, waitingForOwner
+        petSources = {}
         for _, row in ipairs(rows) do
             local identity, viaPet
             if hostileFlags(row.flags) then identity, viaPet = attacker(row.guid, row.name, row.flags, death.fight) end
             local fatal = row.kind == "SPELL_INSTAKILL" or (row.overkill and row.overkill >= 0 and row.overkill < math.huge)
                 or (row.health == 0 and row.at == stamp)
             if identity then
-                participants[identity.guid or identity.key] = identity
-                recordAggression(death.fight, identity, "confirmed", viaPet and "Le récapitulatif attribue les dégâts au familier de ce joueur."
-                    or "Récapitulatif de mort : dégâts reçus de ce joueur hostile.")
+                local key = identity.guid or identity.key
+                participants[key] = identity
+                if viaPet then petSources[key] = true end
+                observeOpponent(death.fight, identity.guid)
                 if fatal and not lethal then lethal, lethalPet = identity, viaPet end
             else
                 if viaPet then waitingForOwner = true end
                 if fatal then otherLethal = true end
             end
+        end
+        for key, identity in pairs(participants) do
+            local viaPet = petSources[key]
+            recordAggression(death.fight, identity, "confirmed", viaPet and "Le récapitulatif attribue les dégâts au familier de ce joueur."
+                or "Récapitulatif de mort : dégâts reçus de ce joueur hostile.", viaPet)
         end
         if waitingForOwner and C_TooltipInfo and GL.Now() - death.at < 2 then return end
         lastRecapStamp = stamp
@@ -405,7 +449,9 @@ local function resolveDeath()
             or "Dégâts létaux explicitement attribués à ce joueur.")
             or (not rows and pet and death.at - pet.at <= 5 and "Le familier de ce joueur vous ciblait en combat juste avant votre mort. Le coup fatal reste incertain.")
             or "Participation probable à l'attaque ayant causé votre mort ; le coup fatal n'est pas attribué à ce joueur."
-        GL.RecordPvP(identity, "death", confirmed and "confirmed" or "probable", evidence, death.id)
+        local viaPet = confirmed and lethalPet or (petSources and petSources[identity.guid or identity.key])
+            or (not rows and pet and death.at - pet.at <= 5)
+        GL.RecordPvP(identity, "death", confirmed and "confirmed" or "probable", evidence, death.id, combatSnapshot(death.fight, identity, viaPet))
     end
 end
 
@@ -460,19 +506,28 @@ function T.OnCombatLog(...)
         if owner then rememberPet(dst, owner) end
     elseif sub == "PARTY_KILL" and src == me then
         creditKill(identityForGUID(dst, dstName), "confirmed", "Journal de combat : coup fatal personnel (PARTY_KILL).")
+    elseif src == me and fight and not deathHandled and damageEvents[sub] and hostileFlags(args[10]) then
+        observeOpponent(fight, dst, nil, true)
+        if dst and dst:match("^Creature%-") and hasFlag(args[10], COMBATLOG_OBJECT_CONTROL_NPC or 512)
+            and not petOwners[dst] then fight.npcPressure = true end
     -- Only health-damage payloads contain overkill. LEECH/DRAIN use powerType in
     -- that position, and durability damage is not damage to the player either.
     elseif dst == me and (damageEvents[sub] or sub == "SPELL_INSTAKILL") then
         local identity, viaPet = attacker(src, srcName, args[6])
         local f = combatSession()
-        if not identity and f then f.pve = true end
+        if not identity and f then
+            f.pve = true
+            if src and src:match("^Creature%-") and hasFlag(args[6], COMBATLOG_OBJECT_CONTROL_NPC or 512)
+                and hostileFlags(args[6]) and not viaPet then f.npcPressure = true end
+        end
         local hostile = hostileFlags(args[6])
         if identity and hostile and not deathHandled then
             -- Initial damage can arrive before PLAYER_REGEN_DISABLED.
             if not fight then fight = { enemies = {}, id = nextID("fight") } end
             f = fight
+            observeOpponent(f, identity.guid, nil, true)
             recordAggression(f, identity, "confirmed", viaPet and "Le journal de combat attribue les dégâts au familier de ce joueur."
-                or "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").")
+                or "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").", viaPet)
             local enemy = f.enemies[identity.key] or { identity = identity }
             enemy.damageAt = GL.Now()
             f.enemies[identity.key] = enemy
@@ -487,21 +542,42 @@ function T.OnCombatLog(...)
     end
 end
 
+local groupTimers, groupWorldActive = {}, true
+local function groupTime(timer, now)
+    return math.max(0, math.floor((now or GL.Now()) - timer.started))
+end
+local function stopGroupTime(now, online)
+    for id, timer in pairs(groupTimers) do
+        if not online or not online[id] then
+            timer.event.seconds = GL.GroupDuration(timer.event, now)
+            groupTimers[id] = nil
+        end
+    end
+end
+function GL.GroupDuration(event, now)
+    local seconds = GL.Clean(event.seconds, "number") or 0
+    local timer = event.sessionId and groupTimers[event.sessionId]
+    return (seconds >= 0 and seconds < math.huge and seconds or 0) + (timer and timer.event == event and groupTime(timer, now) or 0)
+end
+
 function T.ScanGroup()
-    if not GL.db or not GL.Settings().groupTracking or GL.IsPvPInstance() then return end
+    local now = GL.Now()
+    if not groupWorldActive or not GL.db or not GL.Settings().groupTracking or GL.IsPvPInstance() then stopGroupTime(now) return end
     local size = GL.Clean(GL.Safe(GetNumGroupMembers), "number")
     local me = playerGUID()
-    if size == nil or not me then return end
+    if size == nil or not me then stopGroupTime(now) return end
     if type(GL.db.tracker) ~= "table" then GL.db.tracker = {} end
     local state = GL.db.tracker
     if type(state.groups) ~= "table" then state.groups = {} end
     if type(state.serial) ~= "number" or state.serial ~= state.serial or state.serial < 0 or state.serial == math.huge then state.serial = 0 end
     local previous, current = type(state.groups[me]) == "table" and state.groups[me] or {}, {}
-    local identified = 0
+    local identified, online = 0, {}
     local raid = bool(IsInRaid) == true
     if size > 0 then
+        local selfOnline = GL.Safe(UnitIsConnected, "player") == true
         for i = 1, raid and math.min(size, 40) or 4 do
-            local identity = GL.Identity((raid and "raid" or "party") .. i)
+            local unit = (raid and "raid" or "party") .. i
+            local identity = GL.Identity(unit)
             if identity then
                 identified = identified + 1
                 local record = GL.Get(identity)
@@ -514,6 +590,19 @@ function T.ScanGroup()
                         GL.RecordGroup(identity, id, GL.Where())
                     end
                     current[record.key] = id
+                    if selfOnline and GL.Safe(UnitIsConnected, unit) == true then
+                        online[id] = true
+                        if not groupTimers[id] then
+                            -- A session may predate this login. Accumulate only intervals observed online.
+                            for n = #record.history, 1, -1 do
+                                local entry = record.history[n]
+                                if type(entry) == "table" and entry.kind == "grouped" and entry.sessionId == id then
+                                    groupTimers[id] = { event = entry, started = now }
+                                    break
+                                end
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -523,6 +612,7 @@ function T.ScanGroup()
         for key, id in pairs(previous) do if not current[key] then current[key] = id end end
     end
     state.groups[me] = current
+    stopGroupTime(now, online)
 end
 
 function T.Poll()
@@ -543,7 +633,11 @@ end
 
 function T.HandleEvent(event, arg)
     if not GL.db then return end
-    if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+    if event == "PLAYER_LOGOUT" or event == "PLAYER_LEAVING_WORLD" then
+        groupWorldActive = false
+        stopGroupTime(GL.Now())
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+        if event == "PLAYER_ENTERING_WORLD" then groupWorldActive = true end
         petOwners, petSlots, nextPetSlot = {}, {}, 1
         fight, lastFight, plates, duel, duelPendingUntil, pendingDeath = nil, nil, {}, false, nil, nil
         honorBaseline = GL.Clean(GL.Safe(GetPVPSessionStats), "number")
@@ -559,7 +653,8 @@ function T.HandleEvent(event, arg)
             T.Poll()
         end
         T.ScanGroup()
-    elseif event == "GROUP_ROSTER_UPDATE" then T.ScanGroup()
+    elseif event == "GROUP_ROSTER_UPDATE" or event == "UNIT_CONNECTION"
+        or event == "PARTY_MEMBER_ENABLE" or event == "PARTY_MEMBER_DISABLE" then T.ScanGroup()
     elseif event == "DUEL_REQUESTED" or event == "DUEL_TO_THE_DEATH_REQUESTED" or event == "DUEL_INBOUNDS" or event == "DUEL_OUTOFBOUNDS" then
         duel = true
         -- Failed/ignored outgoing requests must not disable tracking forever.
@@ -603,7 +698,8 @@ GL.On("READY", function()
     registered = true
     session = tostring(GL.Now()) .. ":" .. tostring(GL.Safe(GetTimePreciseSec) or GL.Safe(GetTime) or 0)
     local events = {
-        "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "GROUP_ROSTER_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+        "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "PLAYER_LOGOUT", "ZONE_CHANGED_NEW_AREA", "GROUP_ROSTER_UPDATE",
+        "UNIT_CONNECTION", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
         "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UPDATE_MOUSEOVER_UNIT",
         "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_TARGET", "UNIT_FLAGS", "UNIT_HEALTH", "UNIT_NAME_UPDATE", "PLAYER_GUILD_UPDATE",
         "PLAYER_PVP_KILLS_CHANGED", "CHAT_MSG_COMBAT_HONOR_GAIN", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED", "DUEL_INBOUNDS", "DUEL_OUTOFBOUNDS", "DUEL_FINISHED",

@@ -37,6 +37,13 @@ Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartou
 
 La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous pouvez agrandir le texte, choisir la police de lecture et compacter l’espacement. Le guide de première ouverture est accessible depuis **Données et aide**.
 
+### Depuis la 0.8.0
+
+- **Journal → Face-à-face** présente les résultats confirmés de ce personnage contre le contact sélectionné, sa série en cours et sa dernière victoire après une défaite. Une revanche compte pour une victoire (+1). Dans **Histoire**, les nouveaux combats peuvent préciser les adversaires observés, les niveaux, votre vie au premier signal et la présence d’un monstre ou d’un familier.
+- **Bilan → Par zone** ouvre le détail des sous-zones. « Mesurer le temps par zone » compte, à partir de son activation, votre présence en monde ouvert, hors absences et instances. **Bilan → Mon année → Copier le bilan annuel** prépare les chiffres confirmés et probables de la sélection pour une copie manuelle.
+- **Classements → Amis → Temps passé en groupe** utilise les nouvelles durées observées avec un contact en ligne. Dans **Réglages → Relations et PvP**, vous pouvez aussi consigner les échanges terminés avec vos contacts. Les objets et les pièces donnés et reçus sont consultables dans **Histoire → Échanges**.
+- **Réglages → Alertes** propose un signal local et discret pour une menace connue qui parle, crie ou devient la cible d’un équipier visible. La bannière indique d’où vient le signal et depuis combien de temps. **Réglages → Apparence** permet d’ajouter les icônes de relation aux noms dans le chat et de réduire les infobulles aux informations essentielles, avec les détails sous Maj. Les signaux indirects, les badges, les infobulles compactes, le suivi des échanges et la mesure du temps par zone sont facultatifs.
+
 La version 0.7.2 affiche le portrait actuel d’un contact lorsque Forever permet de le voir. À distance, sa fiche reprend un emblème de race, de classe ou de faction. Le Bilan regroupe aussi les combats par zone. Les attaques d’un familier sont rattachées à son maître si le jeu fournit leur lien.
 
 Depuis la version 0.7.1, l’onglet Histoire permet de consulter chaque événement

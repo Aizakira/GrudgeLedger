@@ -14,8 +14,11 @@ assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
 GL.InitDB()
 local identity = GL.Identity("target")
-local record = GL.RecordPvP(identity, "death", "probable", "PRIVATE technical evidence: UNIT_DIED", "death")
+local sample = {healthPct = 44, playerLevel = 34, opponentLevel = 39, opponents = 2, pet = true, pve = true, ignored = {}}
+local record = GL.RecordPvP(identity, "death", "probable", "PRIVATE technical evidence: UNIT_DIED", "death", sample)
 local first = record.history[1]
+sample.healthPct = 1
+assert(first.combat.healthPct == 44 and first.combat.ignored == nil, "persist a private copy of observed scalar fields")
 assert(first.questID == 123 and first.questTitle == questTitle and first.subzone == "Quartier commerçant")
 GL.RecordPvP(identity, "kill", "confirmed", "PRIVATE technical evidence: PARTY_KILL", "kill")
 GL.RecordAggression(identity, "confirmed", "PRIVATE technical evidence: SPELL_DAMAGE", "hit")
@@ -46,6 +49,11 @@ local function text(tab)
                 elseif row.event.questTitle and row.event.kind == "death" and row.event.confidence == "probable" then
                     row.details.scripts.OnClick()
                     assert(GrudgeLedgerCorrections.proof:GetText():find("coup fatal non identifié",1,true))
+                    if row.event == first then
+                        local proof = GrudgeLedgerCorrections.proof:GetText()
+                        assert(proof:find("Monstre engagé pendant le combat", 1, true) and proof:find("44 %", 1, true))
+                        assert(proof:find("vous 34, adversaire 39 (+5)", 1, true))
+                    end
                     GrudgeLedgerCorrections.keep.scripts.OnClick()
                 end
             end
@@ -56,6 +64,7 @@ local function text(tab)
     return table.concat(lines,"\n")
 end
 local rendered = text()
+assert(rendered:find("Familier impliqué · 2 adversaires observés", 1, true))
 for _, expected in ipairs({
     "Participation possible à votre mort", "Vous l'avez vaincu",
     "Vous a infligé des dégâts", "Geste demandé : Bisou", "Geste demandé : Crachat",

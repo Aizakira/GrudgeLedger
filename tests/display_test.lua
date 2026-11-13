@@ -303,17 +303,37 @@ D.OnEvent(nil, "NAME_PLATE_UNIT_ADDED", secret)
 D.OnEvent(nil, "NAME_PLATE_UNIT_REMOVED", secret)
 
 -- Tooltips show notes plus separate probable/confirmed counters exactly once.
+local shifted = false
+IsShiftKeyDown = function() return shifted end
 GL.RecordPvP(delayed, "death", "probable", "target", "test-probable")
 GL.RecordPvP(delayed, "kill", "confirmed", "combat log", "test-confirmed")
 GL.AddNote(delayed, "Attention à lui")
 tooltipUnit = "nameplate3"
 tooltipCallback(GameTooltip)
+assert(not GL.Settings().compactTooltips and GameTooltip.lines[#GameTooltip.lines][1]:find("PvP probable", 1, true))
+GL.SetSetting("compactTooltips", true)
+GameTooltip.hooks.OnTooltipCleared(GameTooltip)
+GameTooltip.lines = {}
+tooltipCallback(GameTooltip)
+assert(GameTooltip.lines[#GameTooltip.lines][1]:find("Maj", 1, true))
+function GameTooltip:RefreshData()
+    self.hooks.OnTooltipCleared(self)
+    self.lines = {}
+    tooltipCallback(self)
+end
+shifted = true
+D.OnEvent(nil, "MODIFIER_STATE_CHANGED", "LSHIFT")
 local count = #GameTooltip.lines
 tooltipCallback(GameTooltip)
 assert(#GameTooltip.lines == count)
 local text = ""
 for _, line in ipairs(GameTooltip.lines) do text = text .. tostring(line[1]) end
 assert(text:find("Attention à lui") and text:find("PvP probable") and text:find("PvP confirmé"))
+shifted = false
+D.OnEvent(nil, "MODIFIER_STATE_CHANGED", "LSHIFT")
+assert(#GameTooltip.lines < count and GameTooltip.lines[#GameTooltip.lines][1]:find("Maj", 1, true),
+    "releasing shift restores compact content while hovering")
+shifted = true
 GameTooltip.hooks.OnTooltipCleared(GameTooltip)
 GameTooltip.lines = {}
 tooltipUnit = secret
@@ -603,4 +623,89 @@ local decisions = {}
 for _, event in ipairs(GL.db.detectionLog) do decisions[event.code] = true end
 assert(decisions.observed and decisions.shown and decisions.cooldown and decisions.disabled and decisions.unreadable,
     "actual detection path must explain shown, cooldown, disabled and unreadable outcomes")
+-- Indirect hints are ephemeral. WoW provides the GUID as the 12th chat field.
+local threat = GL.SetReaction(GL.IdentityFromName("Indirect", "Example", "Player-1-indirect"), "enemy")
+local witness = GL.SetReaction(GL.IdentityFromName("Witness", "Example", "Player-1-witness"), "warning")
+local ally = GL.SetReaction(GL.IdentityFromName("Friendly", "Example", "Player-1-friendly"), "friend")
+local function voice(event, guid)
+    D.OnEvent(nil, event, secret, nil,nil,nil,nil,nil,nil,nil,nil,nil,nil, guid)
+end
+local initialHistory, initialPlayers = #threat.history, 0
+for _ in pairs(GL.db.players) do initialPlayers = initialPlayers + 1 end
+GL.SetSetting("enemyAlerts", true)
+assert(not eventFrame.events.CHAT_MSG_SAY and not eventFrame.events.UNIT_TARGET)
+voice("CHAT_MSG_YELL", threat.guid)
+assert(not toast.shown)
+GL.SetSetting("indirectAlerts", true)
+assert(eventFrame.events.CHAT_MSG_SAY and eventFrame.events.UNIT_TARGET)
+voice("CHAT_MSG_SAY", secret)
+voice("CHAT_MSG_SAY", "Player-1-unknown-17")
+voice("CHAT_MSG_SAY", ally.guid)
+IsInInstance = function() return true, "pvp" end
+voice("CHAT_MSG_SAY", threat.guid)
+IsInInstance = function() return false, "none" end
+assert(not toast.shown)
+now = now + 5
+local playBefore = #sounds
+voice("CHAT_MSG_YELL", threat.guid)
+assert(toast.shown and toast.key == threat.key and toast.title.text == "Signal indirect · Ennemi"
+    and toast.note.text:find("Cri entendu",1,true) and #sounds == playBefore + 1 and sounds[#sounds][1] ~= SOUNDKIT.RAID_WARNING)
+now = now + 1; D.Refresh()
+assert(toast.note.text:find("il y a 1 s",1,true) and not threat.encounters and #threat.history == initialHistory)
+assert(not threat.partyPresence and not threat.friendPresence and threat.pvp.aggressions == 0 and threat.pvp.deaths == 0)
+local actualPlayers = 0
+for _ in pairs(GL.db.players) do actualPlayers = actualPlayers + 1 end
+assert(initialPlayers == actualPlayers)
+units.target = { guid=threat.guid, name="Indirect", surname="Example" }
+D.OnEvent(nil, "PLAYER_TARGET_CHANGED")
+assert(toast.shown and not toast.signal and toast.title.text == "Ennemi à proximité"
+    and sounds[#sounds][1] == SOUNDKIT.RAID_WARNING and #threat.history == initialHistory)
+voice("CHAT_MSG_YELL", witness.guid)
+assert(toast.key == threat.key and not toast.signal)
+units.target = nil
+now = now + 7; D.Refresh()
+voice("CHAT_MSG_SAY", threat.guid)
+assert(not toast.shown and #sounds == playBefore + 2, "no downgraded alert after a direct sighting")
+now = now + 30
+units.party1, units.party1target = {guid="Player-1-party", name="Guide"}, {guid=witness.guid, name="Witness"}
+local close = false
+UnitIsVisible = function(u) return u == "party1" and close end
+D.OnEvent(nil, "UNIT_TARGET", "party1")
+assert(not toast.shown)
+close = true
+D.OnEvent(nil, "UNIT_TARGET", "party1")
+assert(toast.shown and toast.signal and toast.key == witness.key and toast.note.text:find("Cible d’un équipier proche",1,true))
+units.target = units.party1target
+D.OnEvent(nil, "PLAYER_TARGET_CHANGED")
+assert(toast.signal and not witness.encounters, "a distant selected unit cannot upgrade a hint to a direct sighting")
+assert(GL.db.detectionLog[#GL.db.detectionLog].code == "indirect" and GL.db.detectionLog[#GL.db.detectionLog].source == "cible du groupe")
+GL.SetSetting("indirectAlerts", false)
+assert(not toast.shown and not eventFrame.events.CHAT_MSG_YELL)
+units.target, units.party1, units.party1target = nil, nil, nil
+GL.SetSetting("alertCooldown", 30)
+GL.SetSetting("sounds", false)
+GL.SetSetting("indirectAlerts", true)
+now = now + 500
+local silent = #sounds
+voice("CHAT_MSG_SAY", threat.guid)
+assert(toast.shown and toast.key == threat.key)
+toast.scripts.OnClick(toast, "RightButton")
+now = now + 10
+voice("CHAT_MSG_YELL", witness.guid)
+assert(not toast.shown, "dismissing a hint does not reset the global 15-second limit")
+now = now + 5
+voice("CHAT_MSG_YELL", witness.guid)
+assert(toast.shown and toast.key == witness.key)
+toast.scripts.OnClick(toast, "RightButton")
+now = now + 5
+voice("CHAT_MSG_SAY", threat.guid)
+now = now + 23
+voice("CHAT_MSG_YELL", threat.guid)
+assert(not toast.shown, "continued indirect contact extends its suppression across sources")
+now = now + 31
+voice("CHAT_MSG_YELL", threat.guid)
+assert(toast.shown and toast.key == threat.key and #sounds == silent)
+GL.SetSetting("enemyAlerts", false)
+assert(not toast.shown and not eventFrame.events.CHAT_MSG_SAY and not eventFrame.events.UNIT_TARGET)
+assert(#GL.errors == 0)
 print("PASS display: existing plates, ThreatPlates, confidence badges/corrections, color restoration, recycling, secret/protected values, cooldowns/sounds, captured clicks, guild inheritance/burst grouping/PvP exemptions, tooltips and missing APIs")

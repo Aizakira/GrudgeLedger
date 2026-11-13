@@ -415,14 +415,14 @@ def main():
               "chronicle", "chronicle-readable", "chronicle-small", "chronicle-empty", "chronicle-notes"]
     views += ["statistics-encounters", "statistics-recent", "statistics-friends", "statistics-friends-recent",
               "statistics-group", "statistics-combat", "statistics-horde", "guild-rankings-combat", "statistics-readable-small"]
-    views += ["journal-history", "journal-notes", "journal-history-small", "journal-notes-readable-small",
+    views += ["journal-history", "journal-matchup", "journal-notes", "journal-history-small", "journal-notes-readable-small",
               "settings-alerts", "settings-relations", "settings-shortcuts", "settings-data", "settings-readable-alerts-small",
               "honor-story", "guide"]
     views += ["journal-largeprint", "journal-history-largeprint-small", "statistics-largeprint",
               "honor-largeprint-small", "settings-readable-alerts-largeprint-small"]
     views += ["journal-compact", "journal-history-page2", "journal-history-filter", "correction-voided",
-              "honor-annual", "honor-annual-empty", "honor-annual-largeprint-small", "honor-podium",
-              "honor-races", "honor-classes", "honor-zones", "guild-exceptions", "guild-rankings-largeprint-small",
+              "honor-annual", "honor-annual-copy", "honor-annual-empty", "honor-annual-largeprint-small", "honor-podium",
+              "honor-races", "honor-classes", "honor-zones", "honor-subzones", "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.

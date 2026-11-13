@@ -226,4 +226,16 @@ eq(places.unknown.kills, 1, "new sightings cannot supply an old combat location"
 eq(places["Hurlevent"], nil, "peaceful visits never count as combat")
 assert(GL.VoidPvP(c, unknownPlace, true))
 eq(breakdown(nil, "zone").unknown.correctedKills, 1, "corrected fight is excluded from zone wins")
+reset()
+zone, subzone = "Zone A", "Dock"
+add(a, "death", "probable", "shared-zones")
+zone, subzone = "Zone B", "Dock"
+add(b, "death", "confirmed", "shared-zones")
+assert(#GL.PvPBreakdown({zone="Zone A"}, "subzone") == 0, "filtering early must not duplicate a shared death")
+local districts = GL.PvPBreakdown({zone="Zone B"}, "subzone")
+assert(#districts == 1 and districts[1].label == "Dock" and districts[1].deaths == 1)
+subzone = "Zone B"
+add(c, "kill", "confirmed", "generic-zone")
+districts = GL.PvPBreakdown({zone="Zone B"}, "subzone")
+assert(#districts == 2 and (districts[1].key == "unknown" or districts[2].key == "unknown"))
 print("PASS campaign data: validated settings, historical search, observed encounters, identity snapshots, deduplicated race/class PvP, corrections, scopes and periods")

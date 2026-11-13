@@ -1120,4 +1120,56 @@ test("entering PvP clears a pending world death before it can be replayed", func
     assert(count() == 0, "an interrupted death must not survive the instance boundary")
 end)
 
+test("fight context snapshots the first observed PvP signal and only evidenced combatants", function()
+    UnitLevel = function(unit) return unitData[unit] and unitData[unit].level end
+    unitData.player.health, unitData.player.level = 550, 35
+    local hunter, other = opponent("hunter"), opponent("second")
+    hunter.level, other.level = 41, 33
+    start(hunter)
+    cle("SPELL_DAMAGE", hunter, unitData.player, -1, 64)
+    local hunterRecord = assert(GL.Get("guid:" .. hunter.guid))
+    local hit = hunterRecord.history[#hunterRecord.history].combat
+    assert(hit.healthPct == 55 and hit.playerLevel == 35 and hit.opponentLevel == 41 and hit.opponents == 1 and not hit.pve)
+    local observer = opponent("observer") observer.target = nil
+    unitData.nameplate1 = observer
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    unitData.player.health = 30
+    unitData.nameplate2 = other
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate2")
+    local mob = { guid="Creature-1-wolf", name="Loup", surname="", hostile=true, combat=true, target="player", isPlayer=false }
+    unitData.nameplate3 = mob
+    UnitPlayerControlled = function(unit) return unit ~= "nameplate3" end
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate3")
+    cle("SPELL_DAMAGE", other, unitData.player, 5, 64)
+    local e = assert(GL.Get("guid:" .. other.guid)).history
+    local death = e[#e]
+    assert(death.kind == "death" and death.confidence == "confirmed")
+    assert(death.combat.healthPct == 55 and death.combat.opponentLevel == 33 and death.combat.opponents == 2 and death.combat.pve)
+    assert(hit.opponents == 1 and not hit.pve, "later observations must not change the original aggression")
+    assert(not GL.Get("guid:" .. observer.guid))
+end)
+
+test("recap context attributes multiple pets to one owner and omits unobserved health and levels", function()
+    local hunter = opponent("hunter")
+    local wolf = {guid="Pet-1-wolf", name="Loup"}
+    petTooltip(wolf, hunter)
+    local a, b = recapRow(wolf, -1), recapRow(wolf, 1)
+    recapAPI({a,b})
+    T.HandleEvent("PLAYER_DEAD")
+    local h = assert(GL.Get("guid:" .. hunter.guid)).history
+    assert(h[1].combat.pet and h[2].combat.pet and h[2].combat.opponents == 1)
+    assert(not h[2].combat.healthPct and not h[2].combat.playerLevel and not h[2].combat.opponentLevel)
+end)
+
+test("protected health and unknown levels produce no guessed fight context", function()
+    local e = opponent("unknown")
+    UnitLevel = function() return -1 end
+    unitData.player.health = secret
+    start(e)
+    unitData.player.health = 25
+    cle("SWING_DAMAGE", e, unitData.player, 1, 64)
+    local h = assert(GL.Get("guid:" .. e.guid)).history
+    assert(h[1].combat.opponents == 1 and not h[1].combat.healthPct and not h[1].combat.playerLevel and not h[1].combat.opponentLevel)
+end)
+
 print("PASS: " .. passed .. " tracker scenarios (actual Core.lua + Tracker.lua).")

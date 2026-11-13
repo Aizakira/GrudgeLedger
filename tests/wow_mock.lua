@@ -83,6 +83,7 @@ end
 function methods:GetValue() return self.value end
 function methods:GetChecked() return self.checked end
 function methods:SetFocus() self.focus = true end
+function methods:HighlightText() self.highlighted = self:GetText() end
 function methods:ClearFocus() self.focus = false end
 function methods:SetVerticalScroll(v) self.vertical = v end
 function methods:GetVerticalScroll() return self.vertical or 0 end

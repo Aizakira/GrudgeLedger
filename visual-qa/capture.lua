@@ -191,12 +191,20 @@ record.reaction = nil
 GL.AddNote(record, "Très bon tank au monastère. A pris le temps d'expliquer les mécaniques et de partager le butin.")
 GL.AddNote(record, "Rencontre suivante plus tendue : à recontacter pour éclaircir le malentendu.")
 GL.RecordGroup(record, "qa-group-1", "Monastère écarlate")
+local oldZone, oldSubzone = GetRealZoneText, GetSubZoneText
+local districts = {"Base de Kurzen", "Ruines de Tkashi", "Baie-du-Butin"}
+local district = 1
+GetRealZoneText = function() return "Vallée de Strangleronce" end
+GetSubZoneText = function() return districts[district] end
 for i = 1, 7 do
+    district = (i - 1) % #districts + 1
     GL.RecordPvP(record, "death", i % 2 == 0 and "confirmed" or "probable", "Un seul adversaire hostile vous ciblait avant la mort. Attribution déduite ; aucune confirmation du coup fatal.", "qa-event-" .. i)
 end
 GL.RecordAggression(record, "probable", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack")
 GL.RecordPvP(records[3], "kill", "confirmed", "Coup fatal observé.", "qa-victory")
+district = 2
 GL.RecordPvP(records[7], "kill", "probable", "Adversaire observé mort après le combat.", "qa-probable-victory")
+GetRealZoneText, GetSubZoneText = oldZone, oldSubzone
 for i, r in ipairs(records) do
     r.encounters = { count = 15 - i, seen = { ["Player-1-self"] = qaClock - 3600 * i } }
     r.lastEncounterAt = qaClock - 3600 * i
@@ -223,7 +231,7 @@ function QA.capture(name)
     name = name:gsub("%-readable", "")
     name = name:gsub("%-largeprint", "")
     UIParent:SetSize(1920, 1080)
-    if name == "journal" or name == "journal-compact" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" or name:find("^journal%-history") or name:find("^journal%-notes") then
+    if name == "journal" or name == "journal-compact" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" or name:find("^journal%-history") or name:find("^journal%-notes") or name == "journal-matchup" then
         if name:find("^journal%-small") then UIParent:SetSize(1024, 600) end
         if name:find("%-small$") then UIParent:SetSize(1024, 600) end
         GL.ShowLedger(record.key)
@@ -231,7 +239,7 @@ function QA.capture(name)
         GrudgeLedgerWindow.filters.all.scripts.OnClick()
         GrudgeLedgerWindow.factions.all.scripts.OnClick()
         GL.ShowLedger(record.key)
-        local tab = name:find("%-history") and "history" or name:find("%-notes") and "notes" or "summary"
+        local tab = name:find("%-history") and "history" or name:find("%-notes") and "notes" or name == "journal-matchup" and "matchup" or "summary"
         local f = GrudgeLedgerWindow
         if f.detailTabs then f.detailTabs[tab].scripts.OnClick(f.detailTabs[tab]) end
         if name == "journal-history-page2" then f.historyPage.next:Click() end
@@ -250,13 +258,18 @@ function QA.capture(name)
         if name == "honor-podium" then f.dimensionButtons.opponents:Click() end
         if name == "honor-races" then f.dimensionButtons.race:Click() end
         if name == "honor-classes" then f.dimensionButtons.class:Click() end
-        if name == "honor-zones" then f.dimensionButtons.zone:Click() end
+        if name == "honor-zones" or name == "honor-subzones" then f.dimensionButtons.zone:Click() end
         f.period, f.scope, f.kind, f.offset = "all", "character", "all", 0
         f.search:SetText("")
         if name:find("%-empty") then f.scope = "legacy" end
         if name:find("%-year") then f.period, f.year = "year", tonumber(date("%Y", qaClock)) end
         if name:find("%-notes") then f.kind = "notes" end
         GL.ShowJournal(mode)
+        if name == "honor-subzones" then
+            f.breakdownRows[1]:Click()
+            assert(f.zoneKey == "Vallée de Strangleronce" and f.breakdownRows[3]:IsShown())
+        end
+        if name == "honor-annual-copy" then f.copyAnnual:Click() end
         return f
     elseif name == "journal-horde-friends" then
         GL.ShowLedger(records[1].key)

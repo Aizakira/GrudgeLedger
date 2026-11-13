@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.7.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.8.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -13,10 +13,10 @@ local journalIndex, journalSorted, personalStatistics
 local breakdownStatistics = {}
 local socialTotals = setmetatable({}, { __mode = "k" })
 local defaults = {
-    markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true,
-    sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true,
-    groupTracking = true, socialTracking = true, minimapAngle = 225, readableFont = false,
-    quickGestures = true, detectionLog = true, partyWarnings = false,
+    markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false,
+    sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
+    groupTracking = true, socialTracking = true, tradeTracking = false, minimapAngle = 225, readableFont = false,
+    quickGestures = true, detectionLog = true, partyWarnings = false, chatBadges = false, compactTooltips = false,
     listSort = "recent", listDetail = "identity", readingScale = 1, compactMode = false, guideSeen = false,
 }
 local listSorts = { recent = true, name = true, reputation = true, kills = true, deaths = true, encounters = true }
@@ -60,13 +60,14 @@ local traceReasons = {
     neutral = "Neutre : pas d'alerte", grouped = "Ami dans le groupe", present = "Ami déjà présent ou visibilité non confirmée",
     disabled = "Alerte désactivée", cooldown = "Délai entre alertes", priority = "Alerte plus prioritaire affichée",
     burst = "Regroupé avec l'alerte de guilde", shown = "Fenêtre affichée", protected = "Marqueur : cadre protégé",
+    indirect = "Signal indirect affiché",
 }
 function GL.Trace(code, identity, unit)
     if not GL.db or not GL.Settings().detectionLog or not traceReasons[code] then return end
     local record = identity and GL.Get(identity)
     local key = record and record.key
     local source = type(unit) == "string" and (unit:match("^nameplate%d+$") and "nameplate"
-        or ({ target = "target", mouseover = "mouseover", focus = "focus" })[unit]) or "autre"
+        or ({ target = "target", mouseover = "mouseover", focus = "focus", say = "parole", yell = "cri", partyTarget = "cible du groupe" })[unit]) or "autre"
     local token = code .. ":" .. (key or "inconnu") .. ":" .. source
     local now = GL.Now()
     if traceLast[token] and now >= traceLast[token] and now - traceLast[token] < 30 then return end
@@ -664,6 +665,13 @@ function GL.PlayerStatistics(metric)
                 or metric == "enemiesRecent" and (relation == "warning" or relation == "enemy")
             value = match and record.lastEncounterAt or 0
         elseif metric == "friendsGrouped" then value = relation == "friend" and record.groupCount or 0
+        elseif metric == "friendsOnline" then
+            -- ponytail: total the recorded sessions only when this ranking is open.
+            if relation == "friend" then
+                for _, entry in ipairs(record.history) do
+                    if type(entry) == "table" and entry.kind == "grouped" then value = value + GL.GroupDuration(entry) end
+                end
+            end
         else value = record.pvp[metric] or 0 end
         if type(value) == "number" and value > 0 and value < math.huge then result[#result + 1] = { record = record, value = value } end
     end
@@ -763,7 +771,20 @@ local pvpFields = {
     death = { confirmed = "deaths", probable = "probableDeaths" },
     aggression = { confirmed = "aggressions", probable = "probableAggressions" },
 }
-function GL.RecordPvP(identity, kind, confidence, evidence, eventId)
+local function combatContext(value)
+    if not GL.Clean(value, "table") then return end
+    local function integer(field, low, high)
+        local n = GL.Clean(value[field], "number")
+        if n and n >= low and n <= high and n == math.floor(n) then return n end
+    end
+    local snapshot = {
+        healthPct = integer("healthPct", 0, 100), playerLevel = integer("playerLevel", 1, 1000),
+        opponentLevel = integer("opponentLevel", 1, 1000), opponents = integer("opponents", 1, 10000),
+        pve = GL.Clean(value.pve, "boolean") or nil, pet = GL.Clean(value.pet, "boolean") or nil,
+    }
+    if next(snapshot) then return snapshot end
+end
+function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat)
     if GL.IsPvPInstance() then return nil end
     if kind ~= "kill" and kind ~= "death" then return nil end
     if confidence ~= "confirmed" and confidence ~= "probable" then return nil end
@@ -775,11 +796,11 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId)
     local field = pvpFields[kind][confidence]
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
-    history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId })
+    history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, combat = combatContext(combat) })
     GL.Emit("CHANGED", record)
     return record
 end
-function GL.RecordAggression(identity, confidence, evidence, eventId)
+function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     if GL.IsPvPInstance() then return nil end
     if confidence ~= "confirmed" and confidence ~= "probable" then return nil end
     local record = GL.Remember(identity)
@@ -790,7 +811,7 @@ function GL.RecordAggression(identity, confidence, evidence, eventId)
     local field = pvpFields.aggression[confidence]
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
-    history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId })
+    history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId, combat = combatContext(combat) })
     GL.Emit("CHANGED", record)
     return record
 end
@@ -869,6 +890,16 @@ function GL.RecordGroup(identity, sessionId, zone)
     history(record, "grouped", { sessionId = sessionId, zone = zone })
     GL.Emit("CHANGED", record)
     return record
+end
+
+function GL.RecordTrade(identity, summary)
+    if not GL.Settings().tradeTracking or GL.IsPvPInstance() then return end
+    local record = GL.Get(identity)
+    if not record or GL.IsGroupOnly(record) then return end
+    summary = GL.Clean(summary, "string")
+    if not summary or #summary > 4096 then return end
+    history(record, "trade", { evidence = summary })
+    GL.Emit("CHANGED", record)
 end
 
 local function queryWords(query)
@@ -990,6 +1021,14 @@ function GL.JournalYears()
             if year then present[year] = true end
         end
     end
+    for _, entry in pairs(type(GL.db.zoneExposure) == "table" and GL.db.zoneExposure or {}) do
+        if type(entry) == "table" and type(entry.years) == "table" then
+            for key in pairs(entry.years) do
+                local year = tonumber(key)
+                if year and current and year >= 1970 and year <= current then present[year] = true end
+            end
+        end
+    end
     for year in pairs(present) do years[#years + 1] = year end
     table.sort(years, function(a, b) return a > b end)
     return years
@@ -1010,7 +1049,7 @@ function GL.JournalEvents(options)
     end
     for _, row in ipairs(rows) do
         local event, record = row.event, row.record
-        local category = pvpFields[event.kind] and "pvp" or event.kind == "note" and "notes" or "social"
+        local category = pvpFields[event.kind] and "pvp" or event.kind == "note" and "notes" or event.kind == "trade" and "trade" or "social"
         if not GL.IsGroupOnly(record) and within(event, row.at) and inScope(row.actor, scope, actor)
             and (kind == "all" or kind == category or kind == event.kind) then
             local match = true
@@ -1036,6 +1075,43 @@ local function pvpEventKey(row, byOpponent)
     if type(event.eventId) ~= "string" or event.eventId == "" then return event end
     return (row.actor or "legacy") .. "\031" .. event.kind .. "\031"
         .. ((byOpponent or event.kind ~= "death") and row.record.key or "") .. "\031" .. event.eventId
+end
+function GL.ContactMatchup(record)
+    local actor, now = currentActor(), GL.Now()
+    local result = { kills = 0, deaths = 0, run = 0, recent = {} }
+    if not actor or not record then return result end
+    -- ponytail: only the open contact is read. Rebuild on demand so corrections and
+    -- merged identities take effect without maintaining a second combat ledger.
+    local entries, seen = {}, {}
+    for i, event in ipairs(record.history or {}) do
+        if type(event) == "table" and (event.kind == "kill" or event.kind == "death")
+            and event.confidence == "confirmed" and not event.voided and event.voidReason ~= "battleground"
+            and eventActor(event) == actor then
+            local at = eventTime(event)
+            local key = pvpEventKey({ record = record, actor = actor, event = event }, true)
+            if at <= now and not seen[key] then
+                seen[key] = true
+                local field = pvpFields[event.kind].confirmed
+                result[field] = result[field] + 1
+                if at > 0 then entries[#entries + 1] = { at = at, index = i, event = event } end
+            end
+        end
+    end
+    table.sort(entries, function(a, b)
+        if a.at ~= b.at then return a.at < b.at end
+        return a.index < b.index
+    end)
+    for i, row in ipairs(entries) do
+        local kind, previous = row.event.kind, entries[i - 1]
+        result.run = result.lastKind == kind and result.run + 1 or 1
+        result.lastKind = kind
+        if previous and previous.event.kind == "death" and row.at > previous.at then
+            if kind == "kill" then result.comeback = row.event
+            elseif row.at - previous.at <= 180 then result.closeDeaths = row.event end
+        end
+        if i > #entries - 5 then table.insert(result.recent, 1, row.event) end
+    end
+    return result
 end
 local function statisticsCopy(stats)
     local result = {}
@@ -1117,11 +1193,15 @@ function GL.PersonalStatistics(options)
     return statisticsCopy(stats)
 end
 function GL.PvPBreakdown(options, dimension)
-    if dimension ~= "race" and dimension ~= "class" and dimension ~= "zone" then return {} end
+    local subzones = dimension == "subzone"
+    if dimension ~= "race" and dimension ~= "class" and dimension ~= "zone" and not subzones then return {} end
     options = type(options) == "table" and options or {}
+    local parentZone = subzones and cleanName(options.zone)
+    if subzones and not parentZone then return {} end
     local within, periodKey = periodFilter(options)
     local actor, scope, now = currentActor(), options.scope or "character", GL.Now()
     local key = periodKey .. ":" .. scope .. ":" .. (actor or "unknown")
+    if subzones then key = key .. ":" .. parentZone end
     local cached = breakdownStatistics[dimension]
     if not cached or cached.key ~= key or now < cached.at or cached.nextAt and now >= cached.nextAt then
         local active, corrected, buckets, nextAt = {}, {}, {}
@@ -1132,35 +1212,41 @@ function GL.PvPBreakdown(options, dimension)
                 if row.at > now and (not nextAt or row.at < nextAt) then nextAt = row.at end
                 if within(event, row.at) then
                     local token, name = cleanName(event[dimension]), cleanName(event[dimension .. "Name"])
-                    if dimension == "zone" and token == "?" then token = nil end
+                    local zone = subzones and cleanName(event.zone)
+                    if subzones and (not zone or zone == "?") then zone = "unknown" end
+                    if (dimension == "zone" or subzones) and (token == "?" or token == zone) then token = nil end
                     local category = token or name and "name:" .. name:lower() or "unknown"
                     local label = name or token or "Inconnue"
                     local counts = event.voided and corrected or active
                     local id = pvpEventKey(row)
                     local previous = counts[id]
                     if not previous or event.confidence == "confirmed" and previous.confidence ~= "confirmed" then
-                        counts[id] = { key = category, label = label, kind = event.kind, confidence = event.confidence }
-                    elseif event.confidence == previous.confidence and previous.key ~= category then
-                        -- One own death stays one death, including multiple aggressors.
-                        -- Missing snapshots cannot prove a category; otherwise a mixed
-                        -- group has no single race/class to which we can attribute it.
-                        previous.key = (previous.key == "unknown" or category == "unknown") and "unknown" or "mixed"
-                        previous.label = previous.key == "unknown" and "Inconnue" or dimension == "zone" and "Plusieurs lieux" or "Groupe mixte"
-                    elseif event.confidence == previous.confidence and label < previous.label then
-                        previous.label = label
+                        counts[id] = { key = category, label = label, kind = event.kind, confidence = event.confidence, zone = zone }
+                    elseif event.confidence == previous.confidence then
+                        -- Resolve a shared death before filtering by location. A probable
+                        -- participant cannot create a second death in another district.
+                        if subzones and previous.zone ~= zone then
+                            previous.zone = (zone == "unknown" or previous.zone == "unknown") and "unknown" or "mixed"
+                        end
+                        if previous.key ~= category then
+                            previous.key = (previous.key == "unknown" or category == "unknown") and "unknown" or "mixed"
+                            previous.label = previous.key == "unknown" and "Inconnue" or (dimension == "zone" or subzones) and "Plusieurs lieux" or "Groupe mixte"
+                        elseif label < previous.label then previous.label = label end
                     end
                 end
             end
         end
         for _, counts in ipairs({ active, corrected }) do
             for _, entry in pairs(counts) do
-                local bucket = buckets[entry.key] or { key = entry.key, label = entry.label, kills = 0, deaths = 0,
-                    probableKills = 0, probableDeaths = 0, correctedKills = 0, correctedDeaths = 0 }
-                local field = counts == corrected and (entry.kind == "kill" and "correctedKills" or "correctedDeaths")
-                    or pvpFields[entry.kind][entry.confidence]
-                bucket[field] = bucket[field] + 1
-                if entry.label < bucket.label then bucket.label = entry.label end
-                buckets[entry.key] = bucket
+                if not subzones or entry.zone == parentZone then
+                    local bucket = buckets[entry.key] or { key = entry.key, label = entry.label, kills = 0, deaths = 0,
+                        probableKills = 0, probableDeaths = 0, correctedKills = 0, correctedDeaths = 0 }
+                    local field = counts == corrected and (entry.kind == "kill" and "correctedKills" or "correctedDeaths")
+                        or pvpFields[entry.kind][entry.confidence]
+                    bucket[field] = bucket[field] + 1
+                    if entry.label < bucket.label then bucket.label = entry.label end
+                    buckets[entry.key] = bucket
+                end
             end
         end
         local rows = {}
