@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON, private = ...
-GrudgeLedger = { version = "0.9.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.9.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local translations = private and private.translations
@@ -711,6 +711,7 @@ function GL.PlayerStatistics(metric)
             local match = metric == "friendsSeen" and relation == "friend"
                 or metric == "enemiesSeen" and (relation == "warning" or relation == "enemy")
             value = match and record.encounters and record.encounters.count or 0
+            if type(value) == "number" and value < 2 then value = 0 end
         elseif metric == "friendsRecent" or metric == "enemiesRecent" then
             local match = metric == "friendsRecent" and relation == "friend"
                 or metric == "enemiesRecent" and (relation == "warning" or relation == "enemy")
@@ -892,7 +893,7 @@ function GL.ConfirmKill(identity, event, evidence)
     return true
 end
 
-function GL.VoidPvP(identity, event, silent)
+function GL.VoidPvP(identity, event, silent, reason)
     local record = GL.Get(identity)
     if not record or type(event) ~= "table" or event.voided then return false, L("Événement indisponible ou déjà annulé.") end
     local fields = pvpFields[event.kind]
@@ -902,7 +903,8 @@ function GL.VoidPvP(identity, event, silent)
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
     if event.time == lastInteraction[record] then rebuildInteraction(record) end
-    event.voidedByGUID, event.voidedByName = currentActor()
+    if reason then event.voidReason = reason
+    else event.voidedByGUID, event.voidedByName = currentActor() end
     guildStatistics = nil
     invalidateJournal()
     record.pvp[field] = math.max(0, (record.pvp[field] or 0) - 1)
@@ -1182,24 +1184,28 @@ local function pvpEventKey(row, byOpponent)
     return (row.actor or "legacy") .. "\031" .. event.kind .. "\031"
         .. ((byOpponent or event.kind ~= "death") and row.record.key or "") .. "\031" .. event.eventId
 end
-function GL.ContactMatchup(record)
+function GL.ContactMatchup(record, withHistory)
     local actor, now = currentActor(), GL.Now()
-    local result = { kills = 0, deaths = 0, run = 0, recent = {} }
+    local result = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0,
+        run = 0, recent = {}, indices = withHistory and {} or nil }
     if not actor or not record then return result end
     -- ponytail: only the open contact is read. Rebuild on demand so corrections and
     -- merged identities take effect without maintaining a second combat ledger.
     local entries, seen = {}, {}
     for i, event in ipairs(record.history or {}) do
         if type(event) == "table" and (event.kind == "kill" or event.kind == "death")
-            and event.confidence == "confirmed" and not event.voided and event.voidReason ~= "battleground"
+            and pvpFields[event.kind][event.confidence] and not event.voided and event.voidReason ~= "battleground"
             and eventActor(event) == actor then
             local at = eventTime(event)
             local key = pvpEventKey({ record = record, actor = actor, event = event }, true)
-            if at <= now and not seen[key] then
-                seen[key] = true
-                local field = pvpFields[event.kind].confirmed
-                result[field] = result[field] + 1
-                if at > 0 then entries[#entries + 1] = { at = at, index = i, event = event } end
+            if at <= now then
+                local row = seen[key]
+                if not row then
+                    row = { at = at, index = i, event = event }
+                    seen[key], entries[#entries + 1] = row, row
+                elseif row.event.confidence == "probable" and event.confidence == "confirmed" then
+                    row.at, row.index, row.event = at, i, event
+                end
             end
         end
     end
@@ -1207,15 +1213,28 @@ function GL.ContactMatchup(record)
         if a.at ~= b.at then return a.at < b.at end
         return a.index < b.index
     end)
+    local previous
     for i, row in ipairs(entries) do
-        local kind, previous = row.event.kind, entries[i - 1]
-        result.run = result.lastKind == kind and result.run + 1 or 1
-        result.lastKind = kind
-        if previous and previous.event.kind == "death" and row.at > previous.at then
-            if kind == "kill" then result.comeback = row.event
-            elseif row.at - previous.at <= 180 then result.closeDeaths = row.event end
+        local kind, confidence = row.event.kind, row.event.confidence
+        local field = pvpFields[kind][confidence]
+        result[field] = result[field] + 1
+        if withHistory then result.indices[#entries - i + 1] = row.index end
+        if row.at > 0 and confidence == "confirmed" then
+            result.run = result.lastKind == kind and result.run + 1 or 1
+            result.lastKind = kind
+            if previous and previous.event.kind == "death" and row.at > previous.at then
+                if kind == "kill" then result.comeback = row.event
+                elseif row.at - previous.at <= 180 then result.closeDeaths = row.event end
+            end
+            previous = row
         end
-        if i > #entries - 5 then table.insert(result.recent, 1, row.event) end
+    end
+    for i = #entries, 1, -1 do
+        local row = entries[i]
+        if row.at > 0 and row.event.confidence == "confirmed" then
+            result.recent[#result.recent + 1] = row.event
+            if #result.recent == 5 then break end
+        end
     end
     return result
 end

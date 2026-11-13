@@ -380,6 +380,72 @@ test("a corpse first seen after death never qualifies", function()
     assert(count() == 0)
 end)
 
+test("a different proven killer excludes the shared honor before or after inference", function()
+    for _, late in ipairs({false, true}) do
+        fixture()
+        local e, other = start(), opponent("elsewhere")
+        if not late then T.HandleEvent("PARTY_KILL", other.guid, e.guid) end
+        killedTarget()
+        if late then
+            assert(total("probableKills") == 1)
+            cle("SPELL_DAMAGE", other, e, 10, 64, 64)
+            local r = GL.Get("guid:" .. e.guid)
+            local revoked = r.history[#r.history]
+            assert(revoked.voided and not revoked.voidedByGUID and not revoked.voidedByName)
+            assert(revoked.voidReason == "other-killer" and revoked.evidence and not revoked.evidence:find("un autre joueur", 1, true))
+        end
+        T.Poll()
+        assert(total("probableKills") == 0 and total("kills") == 0, "shared honor cannot beat an explicit foreign killing blow")
+        assert(not GL.Get("guid:" .. other.guid), "another player's kill must not add the killer to the journal")
+        e.dead = false
+        T.Poll()
+        killedTarget()
+        assert(total("probableKills") == 1, "a different attack in the victim's next life can still qualify")
+    end
+end)
+
+test("foreign killing evidence for another victim cannot remove this victim's win", function()
+    local e, other = start(), opponent("elsewhere")
+    killedTarget()
+    T.HandleEvent("PARTY_KILL", other.guid, "Player-1-another")
+    assert(total("probableKills") == 1)
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    T.HandleEvent("PARTY_KILL", other.guid, e.guid)
+    assert(total("kills") == 1, "automatic reconciliation never overwrites a personal killing-blow confirmation")
+end)
+
+test("late CLE corroboration of a continuously observed corpse upgrades the same episode", function()
+    local e = start()
+    killedTarget()
+    local r = assert(GL.Get("guid:" .. e.guid))
+    local n = #r.history
+    for i = 1, 12 do now = now + 1 T.Poll() end
+    cle("PARTY_KILL", unitData.player, e)
+    assert(#r.history == n and r.pvp.kills == 1 and r.pvp.probableKills == 0, "one corpse must not yield two credits")
+    T.HandleEvent("PLAYER_REGEN_ENABLED")
+    for i = 1, 15 do now = now + 1 T.Poll() end
+    cle("PARTY_KILL", unitData.player, e)
+    assert(r.pvp.kills == 1, "the same visible corpse is still the same defeat after combat ends")
+end)
+
+test("a different kill with no continued observation cannot revoke an older estimate", function()
+    local e = start()
+    killedTarget()
+    unitData.target = nil
+    now = now + 8
+    T.HandleEvent("PARTY_KILL", "Player-1-other", e.guid)
+    assert(total("probableKills") == 1, "no observation connects this kill to the earlier defeat")
+end)
+
+test("seeing a corpse after a long polling gap cannot refresh an expired attribution", function()
+    local e = start()
+    killedTarget()
+    now = now + 30
+    T.Poll()
+    T.HandleEvent("PARTY_KILL", "Player-1-other", e.guid)
+    assert(total("probableKills") == 1)
+end)
+
 test("selecting a corpse cannot create personal targeting evidence", function()
     T.HandleEvent("PLAYER_REGEN_DISABLED")
     unitData.nameplate1 = opponent("corpse")

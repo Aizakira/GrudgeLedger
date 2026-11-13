@@ -147,6 +147,9 @@ local function counted(n, singular, plural)
     local many = n > 1 or n == 0 and not frenchNumbers
     return n .. " " .. L(many and (plural or singular .. "s") or singular)
 end
+local function outcomeCount(confirmed, probable)
+    return probable > 0 and L("%d · %d prob."):format(confirmed, probable) or tostring(confirmed)
+end
 local function eventEvidence(event)
     return GL.LocalizeEvidence and GL.LocalizeEvidence(event) or event.evidence
 end
@@ -477,7 +480,9 @@ local function refreshStatistics()
     f.columnValue:SetText(guild and guildColumns[choice[1]] or choice[5])
     showIf(f.relationButton, not guild and f.category == 1)
     f.relationButton:SetText(f.relation and relationNames[f.relation] or L("Tous les avis"))
-    f.columnExtra:SetText(guild and "" or f.category == 2 and L("Groupes") or f.category == 3 and L("Guilde connue") or L("Avis"))
+    local showOpinion = not guild and f.category == 1
+    local showSessions = choice[1] == "friendsOnline"
+    f.columnExtra:SetText(guild and "" or showOpinion and L("Avis") or showSessions and L("Groupes") or L("Guilde connue"))
     f.scope:SetText(guild and f.category ~= 2 and L("Compte · Relations actuelles") or choice[4] == "date" and L("Compte · Dernières observations") or choice[4] == "point" and L("Compte · Soldes actuels") or L("Compte · Toutes périodes"))
     for mode, tab in pairs(f.tabs) do UI.selectButton(tab, mode == f.mode) end
     if guild then f.factionButton:Hide() else f.factionButton:Show() end
@@ -539,8 +544,8 @@ local function refreshStatistics()
             row.meta:SetWidth(guild and 111 or 211)
             moveTo(row.meta, guild and 9 or 45, 28)
             showIf(row.raceIcon, not guild) showIf(row.classIcon, not guild) showIf(row.extra, not guild)
-            showIf(row.icon, not guild)
-            if relation then row.icon:SetTexture(media .. relationIcons[relation]) end
+            showIf(row.icon, showOpinion)
+            if showOpinion then row.icon:SetTexture(media .. relationIcons[relation]) end
             if guild then
                 row.meta:SetText(realmLabel(item.realm))
                 row.value:SetText(choice[1] == "rules" and relationNames[GL.GetGuildRule(item.name, item.realm).reaction] or tostring(value))
@@ -548,8 +553,10 @@ local function refreshStatistics()
                 local faction, _, class = identityLabels(item.record)
                 identityIcons(row, item.record)
                 row.meta:SetText(plain(faction) .. " · " .. plain(class))
-                row.extra:SetText(f.category == 1 and relationNames[relation] or f.category == 2 and tostring(item.record.groupCount or 0) or plain(item.record.guild or L("Inconnue")))
-                row.extra:SetTextColor(unpack(f.category == 1 and inkColors[relation] or theme.ink))
+                moveTo(row.extra, showOpinion and 435 or 418, 5)
+                row.extra:SetWidth(showOpinion and 110 or 130)
+                row.extra:SetText(showOpinion and relationNames[relation] or showSessions and tostring(item.record.groupCount or 0) or plain(item.record.guild or L("Inconnue")))
+                row.extra:SetTextColor(unpack(showOpinion and inkColors[relation] or theme.ink))
             end
             showIf(row.rank, not guild)
             row.bg:SetAlpha(guild and f.selected and f.selected.key == item.key and 0.85 or (i % 2 == 1 and 0.18 or 0.04))
@@ -594,7 +601,7 @@ local function refreshStatistics()
     local emptyHelp = choice[1] == "rules" and L("Vous pouvez ajouter une guilde depuis « Gérer les avis de guilde ».")
         or guild and L("Seules les guildes avec une valeur positive figurent ici.")
         or choice[4] == "date" and L("Il faut au moins une observation enregistrée d'une personne de cette catégorie.")
-        or choice[4] == "rencontre" and L("Les passages anciens ne sont pas reconstitués.")
+        or choice[4] == "rencontre" and L("Ce classement commence à la deuxième rencontre observée sur le compte.")
         or choice[4] == "session" and L("Il faut une session de groupe enregistrée avec un ami.")
         or L("Seules les personnes avec des données pour ce critère figurent ici.")
     f.empty:SetText(#rows == 0 and (L("Aucun résultat dans cette sélection.\n\n") .. emptyHelp .. (not guild and f.faction ~= "all" and L("\nEssaie aussi Toutes les factions.") or "")) or "")
@@ -824,7 +831,7 @@ local function refreshJournal()
         options.zone = zoom
         local breakdown = not podium and GL.PvPBreakdown(options, zoom and "subzone" or f.dimension) or {}
         local exposure, partial = {}
-        if geographic and GL.ZoneTimes then exposure, partial = GL.ZoneTimes(options) end
+        if geographic and not zoom and GL.ZoneTimes then exposure, partial = GL.ZoneTimes(options) end
         if geographic and not zoom then
             local known, peaceful = {}, {}
             for _, item in ipairs(breakdown) do known[item.key] = true end
@@ -875,12 +882,10 @@ local function refreshJournal()
                 local seconds = exposure[item.key]
                 showIf(row.time, showTime)
                 if showTime then
-                    local minutes = seconds and math.floor(seconds / 60)
-                    row.time:SetText(not minutes and "—" or minutes == 0 and "< 1 min" or minutes < 60 and minutes .. " min"
-                        or ("%d h %02d"):format(math.floor(minutes / 60), minutes % 60))
+                    row.time:SetText(seconds and groupDurationText(seconds) or "—")
                 end
-                row.kills:SetText(item.kills .. " / " .. item.probableKills)
-                row.deaths:SetText(item.deaths .. " / " .. item.probableDeaths)
+                row.kills:SetText(outcomeCount(item.kills, item.probableKills))
+                row.deaths:SetText(outcomeCount(item.deaths, item.probableDeaths))
                 row:Show()
             else row:Hide() end
         end
@@ -888,8 +893,10 @@ local function refreshJournal()
             UI.selectButton(control, key == f.dimension)
         end
         f.breakdownEmpty:SetText(#breakdown == 0 and (zoom and L("Aucun combat enregistré dans cette zone pour cette sélection.") or L("Aucune victoire ni mort enregistrée pour cette sélection.")) or "")
-        f.breakdownInfo:SetText(corrected > 0 and counted(corrected, "rapport annulé", "rapports annulés") .. L(", hors totaux") or "")
-        if showTime and partial then f.breakdownInfo:SetText(L("Durées minimales · archives de présence partielles")) end
+        local notices = {}
+        if corrected > 0 then notices[#notices + 1] = counted(corrected, "rapport annulé", "rapports annulés") .. L(", hors totaux") end
+        if showTime and partial then notices[#notices + 1] = L("Durées minimales · archives de présence partielles") end
+        f.breakdownInfo:SetText(table.concat(notices, "\n"))
         f.breakdownPrevious:SetEnabled(f.breakdownOffset > 0)
         f.breakdownNext:SetEnabled(f.breakdownOffset + #f.breakdownRows < #breakdown)
     elseif annual then
@@ -1204,6 +1211,7 @@ local function eventAction(e)
 end
 
 local function eventReason(e)
+    if e.voidReason == "other-killer" then return L("Le jeu a attribué le coup fatal à un autre joueur.") end
     if e.playerConfirmedAt then return L("Coup fatal confirmé manuellement le %s."):format(stamp(e.playerConfirmedAt)) end
     if e.confidence == "probable" then
         return ({ death = L("Indices de participation à l'attaque ; coup fatal non identifié."), kill = L("Mort observée après un combat ; victoire à confirmer."),
@@ -1265,7 +1273,8 @@ inspectEvent = function(record, e)
     f.who:SetText(plain(record.fullName or record.name or record.key))
     f.where:SetText(eventDate(e) .. "   ·   " .. plain(eventPlace(e)))
     local evidence = {}
-    if eventReason(e) then evidence[#evidence+1] = eventReason(e) end
+    local reason = eventReason(e)
+    if reason then evidence[#evidence+1] = reason end
     if e.evidence and e.evidence ~= "" then evidence[#evidence+1] = plain(eventEvidence(e)) end
     local combat = combatDetails(e)
     if combat then evidence[#evidence+1] = combat end
@@ -1365,7 +1374,7 @@ local function showDiagnostic(private)
 end
 
 local noteEditor, selectNote
-local historyKinds = { {"all", L("Tous les événements")}, {"pvp", L("Combats PvP")}, {"social", L("Avis et gestes")}, {"group", L("Groupes")}, {"trade", L("Échanges")}, {"voided", L("Événements annulés")} }
+local historyKinds = { {"all", L("Tous les événements")}, {"pvp", L("Combats PvP")}, {"matchup", L("Mes face-à-face")}, {"social", L("Avis et gestes")}, {"group", L("Groupes")}, {"trade", L("Échanges")}, {"voided", L("Événements annulés")} }
 local function includeHistory(e, kind)
     return kind == "all" or kind == "pvp" and pvpNames[e.kind]
         or kind == "social" and (e.kind == "reaction" or e.kind == "reputation")
@@ -1380,8 +1389,11 @@ local function renderHistory(p, record)
     -- array length, so the CHANGED listener explicitly drops this index.
     if not cache or cache.history ~= history or cache.count ~= #history or cache.kind ~= p.kind then
         cache = { history = history, count = #history, kind = p.kind, indices = {} }
-        for i = #history, 1, -1 do
-            if type(history[i]) == "table" and includeHistory(history[i], p.kind) then cache.indices[#cache.indices + 1] = i end
+        if p.kind == "matchup" then cache.indices = GL.ContactMatchup(record, true).indices
+        else
+            for i = #history, 1, -1 do
+                if type(history[i]) == "table" and includeHistory(history[i], p.kind) then cache.indices[#cache.indices + 1] = i end
+            end
         end
         p.cache = cache
     end
@@ -1431,7 +1443,7 @@ local function renderDetail()
         UI.selectButton(control, record and GL.Relation(record) == reaction)
     end
     local showHistory, showNotes = record and tab == "history", record and tab == "notes"
-    local summary = tab == "summary" and record ~= nil
+    local summary, matchup = tab == "summary" and record ~= nil, tab == "matchup" and record ~= nil
     if showHistory then ledger.historyPage:Show() else ledger.historyPage:Hide() end
     if not showNotes and noteWindow then noteWindow:Hide() end
     if showHistory or showNotes or not record then ledger.detailScroll:Hide() else ledger.detailScroll:Show() end
@@ -1441,10 +1453,12 @@ local function renderDetail()
     end
     if not summary then ledger.hint:Hide() ledger.tools:Hide() ledger.toolsMenu:Hide()
     else ledger.hint:Show() ledger.tools:Show() end
-    if summary then ledger.counters:Show() else ledger.counters:Hide() end
+    showIf(ledger.counters, summary or matchup)
+    showIf(ledger.balancePanel, summary)
+    showIf(ledger.matchupHistory, matchup)
     ledger.detailScroll:ClearAllPoints()
-    ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -450 or -283)
-    ledger.detailScroll:SetHeight(summary and 126 or 293)
+    ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -450 or matchup and -380 or -283)
+    ledger.detailScroll:SetHeight(summary and 126 or matchup and 220 or 293)
     ledger.detailTitle:SetTextColor(unpack(theme.ink))
     local lines = {}
     if not record then
@@ -1471,14 +1485,20 @@ local function renderDetail()
         ledger.detailIdentity:SetText(plain(faction .. " · " .. race .. " · " .. class))
         ledger.detailGuild:SetText(record.guild and plain(record.guild) or L("Guilde non renseignée"))
         ledger.raceIcon:Show() ledger.classIcon:Show() identityIcons(ledger, record)
-        if summary then
+        local duels = matchup and GL.ContactMatchup(record)
+        if summary or matchup then
+            local counts = duels or pvp
             for _, entry in ipairs({ { "kills", "probableKills" }, { "deaths", "probableDeaths" } }) do
                 local card = ledger.metrics[entry[1]]
-                local probable = pvp[entry[2]] or 0
-                local n = pvp[entry[1]] or 0
-                card.value:SetText(n == 1 and L("1 fois") or L("%d fois"):format(n))
+                local probable, n = counts[entry[2]] or 0, counts[entry[1]] or 0
+                local kills = entry[1] == "kills"
+                card.caption:SetText(matchup and (kills and L("Victoires confirmées") or L("Morts confirmées"))
+                    or (kills and L("Vous l’avez vaincu") or L("Vous a tué")))
+                card.value:SetText(matchup and tostring(n) or (n == 1 and L("1 fois") or L("%d fois"):format(n)))
                 card.probable:SetText(probable > 0 and counted(probable, "probable") or "")
             end
+        end
+        if summary then
             local score, raw, gestures = GL.AutomaticBalance(record)
             ledger.balance:SetText(tostring(score))
             ledger.balance:SetTextColor(unpack(score < 0 and inkColors.enemy or score > 0 and inkColors.friend or theme.ink))
@@ -1520,10 +1540,11 @@ local function renderDetail()
             lines[#lines + 1] = L("Agressions : %s, %s."):format(counted(pvp.aggressions or 0, "confirmée"), counted(pvp.probableAggressions or 0, "probable"))
             if guildRule and guildRule.note and guildRule.note ~= "" then lines[#lines + 1] = L("Note de guilde : %s"):format(plain(guildRule.note)) end
             if (record.groupCount or 0) > 0 then lines[#lines + 1] = subdued(L("Sessions de groupe : %d"):format(record.groupCount)) end
-        elseif tab == "matchup" then
-            local duels = GL.ContactMatchup(record)
-            lines = { "|cff653c20" .. L("Vos combats confirmés avec ce joueur") .. "|r",
-                counted(duels.kills, "victoire") .. "   ·   " .. counted(duels.deaths, "défaite") }
+        elseif matchup then
+            local confirmed = duels.kills + duels.deaths
+            local probable = duels.probableKills + duels.probableDeaths
+            ledger.matchupHistory:SetEnabled(confirmed + probable > 0)
+            lines = { subdued(L("Ce personnage · Monde ouvert")) }
             if duels.run > 1 then
                 lines[#lines + 1] = L("Série en cours : %s de suite."):format(counted(duels.run, duels.lastKind == "kill" and "victoire" or "défaite"))
             end
@@ -1534,7 +1555,9 @@ local function renderDetail()
                 for _, event in ipairs(duels.recent) do
                     lines[#lines + 1] = eventDate(event) .. "   ·   " .. (event.kind == "kill" and L("Victoire") or L("Défaite")) .. "   ·   " .. plain(eventPlace(event))
                 end
-            else lines[#lines + 1] = "\n" .. L("Aucun combat confirmé et daté pour ce personnage.") end
+            elseif confirmed > 0 then lines[#lines + 1] = "\n" .. L("Aucun combat confirmé et daté pour ce personnage.")
+            elseif probable > 0 then lines[#lines + 1] = "\n" .. L("Les résultats probables peuvent être vérifiés dans l’histoire.")
+            else lines[#lines + 1] = "\n" .. L("Aucune victoire ni défaite enregistrée avec ce joueur pour ce personnage.") end
         elseif tab == "history" then
             renderHistory(ledger.historyPage, record)
         elseif tab == "notes" then
@@ -2080,17 +2103,22 @@ local function buildLedger()
         journalFont(card.probable, "GameFontHighlightSmall", 11) card.probable:SetTextColor(unpack(theme.inkMuted))
         f.metrics[entry[1]] = card
     end
-    local balanceCaption = label(f.counters, L("Solde automatique"), nil, 32, -98, 238)
+    f.balancePanel = CreateFrame("Frame", nil, f.counters) f.balancePanel:SetAllPoints()
+    local balanceCaption = label(f.balancePanel, L("Solde automatique"), nil, 32, -98, 238)
     journalFont(balanceCaption, "GameFontNormalLarge", 20) balanceCaption:SetTextColor(unpack(theme.ink)) balanceCaption:SetJustifyH("RIGHT")
-    f.balance = label(f.counters, "", nil, 286, -89, 160)
+    f.balance = label(f.balancePanel, "", nil, 286, -89, 160)
     journalFont(f.balance, "GameFontNormalLarge", 31) f.balance:SetTextColor(unpack(inkColors.enemy)) f.balance:SetHeight(44)
-    f.formula = label(f.counters, "", nil, 6, -128, 546)
+    f.formula = label(f.balancePanel, "", nil, 6, -128, 546)
     f.formula:SetTextColor(unpack(theme.ink)) f.formula:SetJustifyH("CENTER") f.formula:SetHeight(22)
-    f.scoreContext = label(f.counters, "", nil, 6, -151, 546)
+    f.scoreContext = label(f.balancePanel, "", nil, 6, -151, 546)
     journalFont(f.scoreContext, "GameFontHighlightSmall", 11, true) f.scoreContext:SetTextColor(unpack(theme.inkMuted)) f.scoreContext:SetJustifyH("CENTER") f.scoreContext:SetHeight(17)
     f.detailScroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
     f.detailScroll:SetPoint("TOPLEFT", 356, -379)
     f.detailScroll:SetSize(544, 190)
+    f.matchupHistory = button(f, L("Voir les combats dans l’histoire"), 356, -619, 293, function()
+        f.detailTab, f.historyPage.kind, f.historyPage.offset = "history", "matchup", 0
+        renderDetail()
+    end, nil, true)
     local p = CreateFrame("Frame", nil, f)
     f.historyPage = p
     p:SetPoint("TOPLEFT", 353, -278) p:SetSize(561, 382)

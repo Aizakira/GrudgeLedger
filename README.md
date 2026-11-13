@@ -37,6 +37,12 @@ Open the cog or use `/gl settings` to set the font, text size and spacing. The f
 
 The index opens with the most recent interaction first. A new encounter, fight, gesture, trade or note can move a contact up. Submitting a search restores the preferred result order. Clearing it returns the index to chronological order.
 
+### New in 0.9.2
+
+**Head-to-head** separates this character’s confirmed and likely outcomes. Open the matching fight history to review the evidence. Shared honor is excluded when the game identifies a different killer in the same encounter. A delayed combat-log confirmation for a continuously observed corpse updates the original victory.
+
+Repeat-encounter rankings start on the second recorded meeting. Indirect alerts identify feuds based on likely PvP events. Zone statistics label likely outcomes and display incomplete time coverage alongside excluded fights.
+
 ### New in 0.9.1
 
 The Journal opens the most recent contact on first use with an existing ledger. Guilds shows the first matching guild, and the PvP summary puts personal rivals directly below the counters. Press Enter or click the magnifying glass to search the Journal.

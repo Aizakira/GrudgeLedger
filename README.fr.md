@@ -39,6 +39,12 @@ La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous 
 
 La colonne de gauche présente les contacts du plus récemment au plus anciennement rencontré ou annoté. Une interaction comme un combat, un geste ou un échange actualise aussi ce classement. Validez une recherche pour utiliser votre tri préféré. Vider le champ rétablit la chronologie.
 
+### Depuis la 0.9.2
+
+**Face-à-face** distingue les résultats confirmés et probables de ce personnage. Ouvrez l’historique associé pour en vérifier la preuve. Une victoire déduite de l’honneur partagé est écartée si le jeu attribue le coup fatal à un autre joueur lors de ce combat. Un coup fatal signalé tardivement pour un adversaire resté mort sous observation complète la victoire déjà inscrite.
+
+Les classements des personnes recroisées commencent à la deuxième rencontre enregistrée. Les signaux indirects précisent si la rancune repose sur un événement PvP probable. Le bilan par zone identifie les résultats probables et signale à la fois les combats annulés et les durées de présence partielles.
+
 ### Depuis la 0.9.1
 
 Le Journal ouvre la fiche la plus récente à la première consultation d’un livre déjà rempli. Guildes affiche la première guilde du classement et le Bilan présente vos adversaires marquants juste après les compteurs. Pour rechercher dans le Journal, appuyez sur Entrée ou cliquez sur la loupe.

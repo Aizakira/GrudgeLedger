@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.9.1
+GRUDGE LEDGER — 0.9.2
 
 Interface en français, anglais ou espagnol selon la langue du jeu. Anglais par défaut pour les autres langues.
 The interface follows your WoW text language: English, French or Spanish.
@@ -10,6 +10,15 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.9.2 — Relire et vérifier un combat
+
+Journal > Face-à-face distingue les combats confirmés des résultats probables de
+ce personnage. « Voir les combats dans l’histoire » ouvre les événements comptés.
+Si le jeu attribue le coup fatal à un autre joueur, une victoire déduite du gain
+d’honneur pour ce même combat est écartée. Les signaux indirects précisent la
+nature probable d’une rancune. Les classements des amis et menaces les plus
+recroisés commencent à la deuxième rencontre enregistrée sur le compte.
 
 0.9.1 — Journal et victoires PvP
 

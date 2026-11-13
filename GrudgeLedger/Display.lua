@@ -120,7 +120,8 @@ end
 local function refreshToastText(frame, record)
     if frame.signal then
         local age = math.max(0, GL.Now() - frame.signalAt)
-        frame.title:SetText(L("Signal indirect · %s"):format(L(styles[frame.relation].label)))
+        local title = GL.RelationConfidence(record) == "probable" and L("Signal indirect · %s (PvP probable)") or L("Signal indirect · %s")
+        frame.title:SetText(title:format(L(styles[frame.relation].label)))
         frame.name:SetText(record.fullName or record.name)
         frame.note:SetText(age == 0 and L("%s · à l’instant\nDistance inconnue"):format(L(frame.signal))
             or L("%s · il y a %d s\nDistance inconnue"):format(L(frame.signal), age))
@@ -589,7 +590,7 @@ function D.Tooltip(tooltip)
     local record = identity and (direct and GL.RecordSeen(identity, true) or GL.Get(identity))
     partyWarning(record, unit)
     if record and GL.Relation(record) == "friend" then alert(identity, unit) end
-    if not record or tooltip._grudgeLedgerKey == record.key then return end
+    if not record or tooltip._grudgeLedgerKey == record.key or GL.IsGroupOnly(record) then return end
     tooltip._grudgeLedgerKey = record.key
     local relation = GL.Relation(record)
     local style = styles[relation]

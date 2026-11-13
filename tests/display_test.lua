@@ -340,6 +340,22 @@ tooltipUnit = secret
 tooltipCallback(GameTooltip)
 assert(#GameTooltip.lines == 0)
 
+do
+    units.party3 = { name = "Former", surname = "Teammate", guid = "Player-1-former" }
+    local id = GL.Identity("party3")
+    local grouped = GL.Remember(id)
+    GL.RecordGroup(id, "former-teammate")
+    tooltipUnit = "party3"
+    tooltipCallback(GameTooltip)
+    assert(GL.IsGroupOnly(grouped) and #GameTooltip.lines == 0 and not GameTooltip._grudgeLedgerKey,
+        "a former groupmate without a grudge has no journal tooltip badge")
+    GL.AddNote(id, "A genuine note")
+    tooltipCallback(GameTooltip)
+    assert(GameTooltip._grudgeLedgerKey == grouped.key and #GameTooltip.lines > 0, "a note makes the neutral contact eligible")
+    GameTooltip.hooks.OnTooltipCleared(GameTooltip)
+    GameTooltip.lines, units.party3 = {}, nil
+end
+
 -- Aggression is orange and distinct from a red kill, sharing the enemy-alert toggle.
 units.nameplate4 = { name = "Aggressor", surname = "Orange", guid = "Player-1-44" }
 local warningPlate = makePlate("nameplate4")
@@ -705,6 +721,18 @@ assert(not toast.shown, "continued indirect contact extends its suppression acro
 now = now + 31
 voice("CHAT_MSG_YELL", threat.guid)
 assert(toast.shown and toast.key == threat.key and #sounds == silent)
+do
+    local uncertain = GL.IdentityFromName("Unknown", "Attacker", "Player-1-inferred")
+    GL.RecordPvP(uncertain, "death", "probable", "fixture", "indirect-only-death")
+    now = now + 31
+    voice("CHAT_MSG_YELL", uncertain.guid)
+    assert(toast.shown and toast.signal and toast.title.text == "Signal indirect · Ennemi (PvP probable)",
+        "the identity in a chat event is certain, but its historical PvP attribution is still inferred")
+    assert(toast.note.text:find("Distance inconnue", 1, true) and not GL.Get(uncertain).encounters)
+    GL.RecordPvP(uncertain, "death", "confirmed", "fixture", "confirmed-later")
+    assert(toast.title.text == "Signal indirect · Ennemi" and #sounds == silent,
+        "confidence updates on the existing hint without a second notification")
+end
 GL.SetSetting("enemyAlerts", false)
 assert(not toast.shown and not eventFrame.events.CHAT_MSG_SAY and not eventFrame.events.UNIT_TARGET)
 assert(#GL.errors == 0)

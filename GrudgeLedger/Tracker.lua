@@ -207,12 +207,24 @@ end
 
 -- Forever exposes this native event independently of restricted combat-log access.
 -- https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua
-local function personalKill(src, dst, name, evidence, native)
+local function killingBlow(src, dst, name, evidence, native)
     src, dst = GL.Clean(src, "string"), GL.Clean(dst, "string")
     if not src or not dst or not dst:match("^Player%-%w") or not enabled() then return end
     local me = playerGUID()
     if not me or dst == me then return end
     if src ~= me then
+        if src:match("^Player%-%w") then
+            local f, previous = combatSession(), recentCredits[dst]
+            local enemy = f and f.enemies["guid:" .. dst]
+            if enemy then enemy.otherKiller = true end
+            local age = previous and GL.Now() - previous.at
+            -- A later fight against the same GUID need not concern the death we
+            -- inferred. Retract only while the corpse/credit was just observed.
+            if age and age >= 0 and age <= 2 and previous.event.confidence == "probable" and not previous.event.voided then
+                GL.VoidPvP("guid:" .. dst, previous.event, false, "other-killer")
+            end
+            return
+        end
         if src ~= GL.Clean(GL.Safe(UnitGUID, "pet"), "string") then return end
         evidence = "Votre familier a porté le coup fatal à ce joueur."
     end
@@ -295,7 +307,17 @@ function T.Observe(unit, reuseObservation)
     local f = combatSession()
     if not unit then return end
     local identity = GL.Identity(unit, reuseObservation)
+    local dead
     if identity then
+        local key = identity.guid or identity.key
+        local receipt = recentCredits[key]
+        if receipt then
+            dead = bool(UnitIsDeadOrGhost, unit)
+            local now = GL.Now()
+            if now < receipt.at or now - receipt.at > 10 then recentCredits[key] = nil
+            elseif dead then receipt.observedDead, receipt.at = true, now
+            elseif dead == false and receipt.observedDead then recentCredits[key] = nil end
+        end
         local record = GL.Get(identity)
         local previousGuild = record and record.guild
         record = GL.RecordSeen(identity)
@@ -347,7 +369,7 @@ function T.Observe(unit, reuseObservation)
     end
     enemy.identity = identity
     local now = GL.Now()
-    local dead = bool(UnitIsDeadOrGhost, unit)
+    if dead == nil then dead = bool(UnitIsDeadOrGhost, unit) end
     if dead == false then
         if engaged then
             if targetingMe then
@@ -357,7 +379,7 @@ function T.Observe(unit, reuseObservation)
             if bool(UnitIsUnit, unit, "target") == true then enemy.targetedAt = now end
         else enemy.targetingMeAt, enemy.targetedAt = nil, nil end
         if enemy.dead then
-            enemy.signalAt = nil enemy.deadAt = nil enemy.credited = nil
+            enemy.signalAt, enemy.deadAt, enemy.credited, enemy.otherKiller = nil, nil, nil, nil
             recentCredits[identity.guid or identity.key] = nil
             if identity.alias then recentCredits[identity.alias] = nil end
         end
@@ -381,7 +403,7 @@ local function tryKills()
             candidate = enemy
         end
     end
-    if count ~= 1 or not candidate or candidate.credited then return end
+    if count ~= 1 or not candidate or candidate.credited or candidate.otherKiller then return end
     local e = candidate
     for _, attack in pairs(f.petAttackers or {}) do
         if attack.owner.guid ~= e.identity.guid and now - attack.at <= 6 then return end
@@ -561,7 +583,7 @@ function T.OnCombatLog(...)
         local owner = identityForGUID(src, srcName)
         if owner then rememberPet(dst, owner) end
     elseif sub == "PARTY_KILL" then
-        personalKill(src, dst, dstName, "Journal de combat : coup fatal personnel (PARTY_KILL).")
+        killingBlow(src, dst, dstName, "Journal de combat : coup fatal personnel (PARTY_KILL).")
     elseif dst ~= me and hostileFlags(args[10]) and (damageEvents[sub] or sub == "SPELL_INSTAKILL") then
         if src == me and fight and not deathHandled then
             observeOpponent(fight, dst, nil, true)
@@ -574,7 +596,7 @@ function T.OnCombatLog(...)
         local amount, excess = GL.Clean(args[amountAt], "number"), GL.Clean(args[amountAt + 1], "number")
         if sub == "SPELL_INSTAKILL" or (sub ~= "ENVIRONMENTAL_DAMAGE" and amount and excess
             and excess > 0 and excess <= amount and amount < math.huge) then
-            personalKill(src, dst, dstName, "Le journal de combat vous attribue les dégâts mortels.")
+            killingBlow(src, dst, dstName, "Le journal de combat vous attribue les dégâts mortels.")
         end
     -- Only health-damage payloads contain overkill. LEECH/DRAIN use powerType in
     -- that position, and durability damage is not damage to the player either.
@@ -755,7 +777,7 @@ function T.HandleEvent(event, arg, second)
         arg = GL.Clean(arg, "string")
         if event == "UNIT_HEALTH" and arg == "player" then T.Poll() else T.Observe(arg) end
     elseif event == "PLAYER_DEAD" then T.OnDeath()
-    elseif event == "PARTY_KILL" then personalKill(arg, second, nil, "Le jeu vous attribue le coup fatal (PARTY_KILL).", true)
+    elseif event == "PARTY_KILL" then killingBlow(arg, second, nil, "Le jeu vous attribue le coup fatal (PARTY_KILL).", true)
     elseif event == "PLAYER_PVP_KILLS_CHANGED" then T.OnHonorCount()
     elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then T.OnHonorMessage(arg)
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then T.OnCombatLog() end

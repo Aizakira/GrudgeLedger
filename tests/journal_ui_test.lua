@@ -47,15 +47,24 @@ assert(f.recaps.mostDeaths.raceIcon:IsShown() and not f.recaps.mostKilled.raceIc
 assert(f.recaps.mostKilled.name:GetText() == "Aucune victoire confirmée" and not f.recaps.mostKilled:IsEnabled())
 assert(f.podium:IsShown() and f.podium.rows[1].record == ra and not f.podium.rows[2]:IsShown())
 click(f.dimensionButtons.race)
-assert(f.breakdownRows[1].kills:GetText() == "0 / 1" and f.breakdownRows[1].deaths:GetText() == "1 / 0",
+assert(f.breakdownRows[1].kills:GetText() == "0 · 1 prob." and f.breakdownRows[1].deaths:GetText() == "1",
     "breakdown must agree with the scoped summary and keep probable facts distinct")
 assert(f.breakdownInfo:GetText():find("1 rapport annulé", 1, true))
+local zoneReads = 0
+GL.ZoneTimes = function()
+    zoneReads = zoneReads + 1
+    return { ["Hurlevent"] = 3600 }, true
+end
 click(f.dimensionButtons.zone)
 assert(f.dimension == "zone" and f.breakdown:IsShown() and f.breakdownRows[1].name:GetText() ~= "")
+assert(f.breakdownInfo:GetText():find("1 rapport annulé", 1, true) and f.breakdownInfo:GetText():find("archives de présence partielles", 1, true))
 local area = f.breakdownRows[1].name:GetText()
+local beforeZoom = zoneReads
 click(f.breakdownRows[1])
 assert(f.zoneKey == area and f.zoneBack:IsShown() and f.breakdownLabel:GetText() == area)
+assert(zoneReads == beforeZoom, "the subzone view does not read or show zone-wide presence")
 click(f.zoneBack)
+GL.ZoneTimes = nil
 assert(not f.zoneKey and not f.zoneBack:IsShown())
 click(f.dimensionButtons.class)
 assert(f.dimension == "class" and f.breakdownRows[1]:IsShown())
@@ -145,8 +154,27 @@ assert(not GrudgeLedgerGuide:IsShown(), "later openings do not interrupt the jou
 GL.ShowLedger(ra.key)
 click(ledger.detailTabs.matchup)
 assert(ledger.detailScroll:IsShown() and not ledger.tools:IsShown())
-assert(ledger.detailText:GetText():find("0 victoire   ·   1 défaite", 1, true),
-    "face-to-face excludes the other character, unknown author, probable and corrected outcomes")
+assert(ledger.metrics.kills.value:GetText() == "0" and ledger.metrics.deaths.value:GetText() == "1"
+    and ledger.metrics.kills.probable:GetText() == "1 probable" and not ledger.balancePanel:IsShown(),
+    "face-to-face separates probable results and excludes other characters, unknown authors and corrections")
+click(ledger.matchupHistory)
+assert(ledger.historyPage.kind == "matchup" and ledger.historyPage.total:GetText() == "1–2 sur 2")
+assert(ledger.historyPage.rows[1].event.eventId == "own-kill" and ledger.historyPage.rows[2].event.eventId == "own-death")
+GL.ShowLedger(rb.key)
+click(ledger.detailTabs.matchup)
+assert(ledger.detailText:GetText():find("Aucune victoire ni défaite", 1, true) and not ledger.matchupHistory:IsEnabled())
+local _, probableLoss = GL.RecordPvP(b, "death", "probable", "fixture", "uncertain")
+assert(ledger.metrics.deaths.value:GetText() == "0" and ledger.metrics.deaths.probable:GetText() == "1 probable")
+assert(ledger.detailText:GetText():find("vérifiés", 1, true) and ledger.matchupHistory:IsEnabled())
+local upgrade = {}
+for field, value in pairs(probableLoss) do upgrade[field] = value end
+upgrade.confidence = "confirmed"
+table.insert(rb.history, upgrade)
+local upgraded = GL.ContactMatchup(rb, true)
+assert(upgraded.deaths == 1 and upgraded.probableDeaths == 0 and #upgraded.indices == 1)
+assert(rb.history[upgraded.indices[1]] == upgrade)
+table.remove(rb.history)
+GL.ShowLedger(ra.key)
 do
     local opponent = person("Rematch")
     local start = now
@@ -168,6 +196,7 @@ do
     assert(GL.ContactMatchup(contact).run == 1, "correcting an event takes effect on the next read")
 end
 click(ledger.detailTabs.summary)
+assert(ledger.balancePanel:IsShown() and ledger.metrics.kills.caption:GetText() == "Vous l’avez vaincu")
 assert(ledger.reactions[GL.Relation(ra)].active and not ledger.reactions.neutral.active,
     "automatic PvP danger must select the real dangerous relation, not neutral")
 click(ledger.reactions.friend)
