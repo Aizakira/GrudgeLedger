@@ -53,11 +53,39 @@ end
 local row = assert(rowFor(record.key))
 assert(row.identity:GetText() == "Alliance · Naine · Chamane")
 assert(row.raceIcon.atlas == "raceicon128-dwarf-female" and row.classIcon.atlas == "classicon-shaman")
+-- A character observed in French can be viewed later on a different client.
+-- Only its display changes. A custom name survives if the client has no matching token.
+do
+    local calls = 0
+    C_CreatureInfo = { GetRaceInfo = function(id)
+        calls = calls + 1
+        if id == 3 then return {clientFileString="Dwarf",raceName="Enano"} end
+        if id == 88 then return {clientFileString="OtherRace",raceName="No corresponde"} end
+        if id == 89 then return {clientFileString="ForeverRace",raceName="Eólido"} end
+    end }
+    LOCALIZED_CLASS_NAMES_FEMALE.SHAMAN = "Chamana"
+    GL.ShowLedger(dwarf.key)
+    assert(rowFor(record.key).identity:GetText() == "Alliance · Enano · Chamana")
+    assert(record.raceName == "Naine" and record.className == "Chamane" and calls == 1)
+    record.race, record.raceName, record.raceID = "ForeverRace", "Éolide", 88
+    record.class, record.className = "FOREVERCLASS", "Archiviste"
+    GL.ShowLedger(dwarf.key)
+    assert(rowFor(record.key).identity:GetText() == "Alliance · Éolide · Archiviste")
+    record.raceID = 89
+    GL.RecordPvP(record, "death", "confirmed", nil, "localized-race")
+    GL.ShowJournal("summary")
+    click(GrudgeLedgerJournal.dimensionButtons.race)
+    assert(GrudgeLedgerJournal.breakdownRows[1].name:GetText() == "Eólido", "event snapshot retains its custom race ID")
+    record.race, record.raceName, record.raceID = "Dwarf", "Naine", nil
+    record.class, record.className = "SHAMAN", "Chamane"
+    LOCALIZED_CLASS_NAMES_FEMALE.SHAMAN = "Chamane"
+    C_CreatureInfo = nil
+end
 knownAtlas["raceicon128-dwarf-female"], knownAtlas["raceicon-dwarf-female"] = nil, true
 GL.ShowLedger(dwarf.key)
 assert(rowFor(record.key).raceIcon.atlas == "raceicon-dwarf-female" and f.raceIcon.atlas == "raceicon-dwarf-female",
     "both the index and the profile support the alternative native race atlas name")
-assert(f.detailIdentity:GetText() == "Alliance · Naine · Chamane")
+assert(f.detailIdentity:GetText() == "Alliance · Enano · Chamane", "profile shares the cached native race label with the index")
 click(f.relationFilter) assert(f.filters.friend.parent:IsShown())
 click(f.filters.friend) assert(not f.filters.friend.parent:IsShown())
 click(f.factionFilter) click(f.factions.Horde)

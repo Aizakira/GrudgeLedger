@@ -1,6 +1,7 @@
 -- Grudge Ledger: combat inference and group memories.
 -- Heuristic evidence is always recorded as probable, never as a confirmed kill.
 local GL = GrudgeLedger
+local L = GL.L
 local T = {}
 GL.Tracker = T
 
@@ -16,6 +17,29 @@ local damageEvents = {
     SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true, SPELL_PERIODIC_DAMAGE = true,
     SPELL_BUILDING_DAMAGE = true, DAMAGE_SHIELD = true, DAMAGE_SPLIT = true, ENVIRONMENTAL_DAMAGE = true,
 }
+
+-- Evidence stays in its original form so older records and later language changes agree.
+function GL.LocalizeEvidence(event)
+    local text = event.evidence
+    if type(text) ~= "string" then return nil end
+    if event.kind == "trade" then
+        return GL.LocalizeTradeReceipt and GL.LocalizeTradeReceipt(text) or text
+    elseif event.kind == "kill" or event.kind == "aggression" or event.kind == "death" then
+        local kind = text:match("^Journal de combat : dégâts reçus de ce joueur hostile %(([A-Z_]+)%)%.$")
+        if kind and damageEvents[kind] then
+            return L("Journal de combat : dégâts reçus de ce joueur hostile (%s)."):format(kind)
+        end
+        return L(text)
+    elseif event.kind == "reputation" then
+        if event.source == "emote" then
+            local positive = text:match("^Geste amical envoyé : /([a-z]+)$")
+            local negative = text:match("^Geste négatif envoyé : /([a-z]+)$")
+            if positive then return L("Geste amical envoyé : /%s"):format(positive) end
+            if negative then return L("Geste négatif envoyé : /%s"):format(negative) end
+        elseif text == "Avis personnel" then return L("Avis personnel") end
+    end
+    return text
+end
 
 local function bool(fn, ...)
     return GL.Clean(GL.Safe(fn, ...), "boolean")
@@ -716,7 +740,7 @@ GL.On("READY", function()
     end
     frame:SetScript("OnEvent", function(_, event, ...)
         local ok, err = pcall(T.HandleEvent, event, ...)
-        if not ok then GL.Debug("Tracker: " .. tostring(err)) end
+        if not ok then GL.Debug(L("Suivi JcJ : %s"):format(tostring(err))) end
     end)
     local elapsedTotal = 0
     frame:SetScript("OnUpdate", function(_, elapsed)
@@ -724,7 +748,7 @@ GL.On("READY", function()
         if elapsedTotal < 0.25 then return end
         elapsedTotal = 0
         local ok, err = pcall(T.Poll)
-        if not ok then GL.Debug("Tracker: " .. tostring(err)) end
+        if not ok then GL.Debug(L("Suivi JcJ : %s"):format(tostring(err))) end
     end)
     honorBaseline = GL.Clean(GL.Safe(GetPVPSessionStats), "number")
     deathHandled = bool(UnitIsDeadOrGhost, "player") == true

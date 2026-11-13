@@ -25,8 +25,9 @@ sys.path.insert(0, str(WORK / "test-runtime"))
 from lupa.lua51 import LuaRuntime
 
 FONTS = Path("C:/Windows/Fonts")
-OUT = BASE / "renders"
-OUT.mkdir(exist_ok=True)
+LOCALE = os.environ.get("GRUDGE_LEDGER_QA_LOCALE", "frFR")
+OUT = BASE / "renders" if LOCALE == "frFR" else BASE / "renders" / LOCALE
+OUT.mkdir(exist_ok=True, parents=True)
 POINTS = {"TOPLEFT": (0, 0), "TOP": (.5, 0), "TOPRIGHT": (1, 0),
           "LEFT": (0, .5), "CENTER": (.5, .5), "RIGHT": (1, .5),
           "BOTTOMLEFT": (0, 1), "BOTTOM": (.5, 1), "BOTTOMRIGHT": (1, 1)}
@@ -405,6 +406,7 @@ def render(name, frames, root):
 def main():
     lua=LuaRuntime(unpack_returned_tuples=True)
     g=lua.globals();g.TEST_ROOT=ADDON.as_posix();g.TEST_WORK=WORK.as_posix()
+    g.GetLocale=lambda: LOCALE
     g.QA_FontSize=fontsize
     g.QA_TextHeight=textheight
     g.QA_TextWidth=lambda text,size,face=None: font(size,face).getlength(plaintext(text))

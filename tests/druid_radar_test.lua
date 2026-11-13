@@ -147,6 +147,7 @@ local function run(mode, expected, options)
     env.C_Timer = { After = function(delay, fn) assert(delay == 12); watchdog = fn end }
     local GL = { version = "0.5.9", db = { players = { person = { fullName = target.fullName, surname = target.surname, score = -9 } } } }
     env.GrudgeLedger = GL
+    GL.ContainsControlOrMarkup = function(value) return value:find("[|%c]") end
     GL.Clean = function(value, kind)
         if value == secret or kind and type(value) ~= kind then return nil end
         return value

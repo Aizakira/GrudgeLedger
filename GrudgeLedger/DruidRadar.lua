@@ -1,39 +1,40 @@
 -- Explicit, bounded experiment. No scans, tracking changes or alerts at login.
 -- Independently implemented from public minimap API behavior; no NodeSight code.
 local GL = GrudgeLedger
+local L = GL.L or function(source) return source end
 local BLANK = "Interface\\AddOns\\GrudgeLedger\\Media\\RadarBlank"
 local running, restorationFailed
 local check = "prérequis"
 local driver = CreateFrame("Frame")
 local reasons = {
-    ready = "Prêt pour un essai en félin avec Pistage des humanoïdes actif.",
-    class = "Ce test est réservé aux druides.", form = "Passe en forme de félin.",
-    tracking = "Active Pistage des humanoïdes dans le menu de pistage.",
-    api = "Une API nécessaire est absente, protégée ou illisible.",
-    mask = "Minimap à préparer : ouvre /gl debug, clique sur « Préparer la minimap », puis « Validation druide ».",
-    target = "Cible un autre joueur immobile, visible comme point sur ta minimap.",
-    target_missing = "Aucune cible au lancement du test. Sélectionne un joueur, puis relance sans changer de cible.",
-    target_npc = "La cible n'est pas un joueur. Choisis un joueur comme témoin, pas un PNJ ni un familier.",
-    target_self = "Tu te cibles toi-même. Choisis un autre joueur comme témoin.",
-    target_identity = "La cible est un joueur, mais son identité n'a pas pu être lue. Aucun point n'a été testé.",
-    target_name = "La cible est un joueur, mais son prénom ou son nom de famille est indisponible. Aucun point n'a été testé.",
-    combat = "Combat : essai arrêté.", moving = "Déplacement du personnage : essai arrêté.",
-    dead = "Personnage mort : essai arrêté.", instance = "Essai limité au monde extérieur.",
-    mouse = "Mouvement ou clic de souris : essai arrêté.",
-    focus = "Place la souris sur une zone vide du monde, hors fenêtres et minimap.",
-    focus_changed = "Un élément d'interface extérieur à la minimap intercepte la souris : essai arrêté.",
-    map_focus = "Un élément attaché à la minimap masque un point de contrôle : résultat non validé.",
-    obstructed = "Témoin non retrouvé et certains points masqués par des éléments de la minimap : balayage incomplet.",
-    map = "Minimap masquée, protégée ou modifiée pendant l'essai.",
-    zoom_unknown = "Notification de zoom reçue, mais portée illisible : essai arrêté par précaution.",
-    conflict = "Un autre scanner est chargé : désactive-le pour isoler l'essai.",
-    busy = "Un autre test est déjà en cours.", timeout = "Temps limite atteint : résultat incomplet.",
-    cache = "Le témoin persiste sur un point vide : cache possible, résultat non validé.",
-    missed = "Témoin non retrouvé : méthode non validée (point mobile, grille ou API possibles).",
-    replay = "Témoin trouvé une fois mais pas relu : résultat non validé.",
-    positive = "Témoin relu deux fois sans survol manuel ; contrôles vides réussis.",
-    stopped = "Annulé par le joueur.", world = "Changement de zone ou déconnexion : essai arrêté.",
-    restored = "Restauration incomplète : utilise /reload avant un nouvel essai.",
+    ready = L("Prêt pour un essai en félin avec Pistage des humanoïdes actif."),
+    class = L("Ce test est réservé aux druides."), form = L("Passe en forme de félin."),
+    tracking = L("Active Pistage des humanoïdes dans le menu de pistage."),
+    api = L("Une API nécessaire est absente, protégée ou illisible."),
+    mask = L("Minimap à préparer : ouvre /gl debug, clique sur « Préparer la minimap », puis « Validation druide »."),
+    target = L("Cible un autre joueur immobile, visible comme point sur ta minimap."),
+    target_missing = L("Aucune cible au lancement du test. Sélectionne un joueur, puis relance sans changer de cible."),
+    target_npc = L("La cible n'est pas un joueur. Choisis un joueur comme témoin, pas un PNJ ni un familier."),
+    target_self = L("Tu te cibles toi-même. Choisis un autre joueur comme témoin."),
+    target_identity = L("La cible est un joueur, mais son identité n'a pas pu être lue. Aucun point n'a été testé."),
+    target_name = L("La cible est un joueur, mais son prénom ou son nom de famille est indisponible. Aucun point n'a été testé."),
+    combat = L("Combat : essai arrêté."), moving = L("Déplacement du personnage : essai arrêté."),
+    dead = L("Personnage mort : essai arrêté."), instance = L("Essai limité au monde extérieur."),
+    mouse = L("Mouvement ou clic de souris : essai arrêté."),
+    focus = L("Place la souris sur une zone vide du monde, hors fenêtres et minimap."),
+    focus_changed = L("Un élément d'interface extérieur à la minimap intercepte la souris : essai arrêté."),
+    map_focus = L("Un élément attaché à la minimap masque un point de contrôle : résultat non validé."),
+    obstructed = L("Témoin non retrouvé et certains points masqués par des éléments de la minimap : balayage incomplet."),
+    map = L("Minimap masquée, protégée ou modifiée pendant l'essai."),
+    zoom_unknown = L("Notification de zoom reçue, mais portée illisible : essai arrêté par précaution."),
+    conflict = L("Un autre scanner est chargé : désactive-le pour isoler l'essai."),
+    busy = L("Un autre test est déjà en cours."), timeout = L("Temps limite atteint : résultat incomplet."),
+    cache = L("Le témoin persiste sur un point vide : cache possible, résultat non validé."),
+    missed = L("Témoin non retrouvé : méthode non validée (point mobile, grille ou API possibles)."),
+    replay = L("Témoin trouvé une fois mais pas relu : résultat non validé."),
+    positive = L("Témoin relu deux fois sans survol manuel ; contrôles vides réussis."),
+    stopped = L("Annulé par le joueur."), world = L("Changement de zone ou déconnexion : essai arrêté."),
+    restored = L("Restauration incomplète : utilise /reload avant un nouvel essai."),
 }
 local function public(value, kind) return GL.Clean(value, kind) end
 local function number(value)
@@ -67,7 +68,7 @@ end
 function GL.PrepareDruidRadar()
     if running or (GL.MinimapProbeActive and GL.MinimapProbeActive()) then return false, reasons.busy end
     if restorationFailed then return false, reasons.restored end
-    if GL.Safe(InCombatLockdown) ~= false then return false, "Préparation indisponible en combat." end
+    if GL.Safe(InCombatLockdown) ~= false then return false, L("Préparation indisponible en combat.") end
     if not maskHooked or Minimap ~= observedMap then return false, reasons.api end
     if GL.Safe(Minimap.IsProtected, Minimap) ~= false then return false, reasons.map end
     -- Preserve an already observed third-party skin. Never toggle a saved CVar.
@@ -75,13 +76,13 @@ function GL.PrepareDruidRadar()
         local cluster = MinimapCluster
         if not cluster or not cluster.MinimapContainer or cluster.MinimapContainer.Minimap ~= observedMap
             or type(cluster.UpdateMinimapConfig) ~= "function" then
-            return false, "Réapplication native indisponible sur ce client. Aucun essai lancé."
+            return false, L("Réapplication native indisponible sur ce client. Aucun essai lancé.")
         end
         local ok = pcall(cluster.UpdateMinimapConfig, cluster)
-        if not ok then return false, "Échec de la réapplication native. Aucun essai lancé." end
-        if not maskAsset then return false, "Apparence réappliquée, mais masque toujours inconnu. Aucun essai lancé." end
+        if not ok then return false, L("Échec de la réapplication native. Aucun essai lancé.") end
+        if not maskAsset then return false, L("Apparence réappliquée, mais masque toujours inconnu. Aucun essai lancé.") end
     end
-    return true, "Minimap prête. Lance « Validation druide »."
+    return true, L("Minimap prête. Lance « Validation druide ».")
 end
 local function build()
     local _, value = GL.Safe(GetBuildInfo)
@@ -137,24 +138,24 @@ local function measureEnd(state)
     state.timingStart = nil
 end
 local function report(entry)
-    if not entry then return "Aucun essai druide sauvegardé. /glradar test pour commencer." end
-    local text = string.format("Radar druide · addon %s · build %s · %s · %s\n%s%s\n%d points, %d lectures, %d textes distincts, %d correspondances connues, %.1f s.\n%d points ignorés : élément de la minimap sous la souris.",
-        entry.version or "non précisé", entry.build, entry.phase, entry.check or "non précisé", reasons[entry.code] or reasons.api,
-        entry.detail and ("\n" .. entry.detail) or "",
+    if not entry then return L("Aucun essai druide sauvegardé. /glradar test pour commencer.") end
+    local text = string.format(L("Radar druide · addon %s · build %s · %s · %s\n%s%s\n%d points, %d lectures, %d textes distincts, %d correspondances connues, %.1f s.\n%d points ignorés : élément de la minimap sous la souris."),
+        entry.version or L("non précisé"), L(entry.build), L(entry.phase), L(entry.check or "non précisé"), reasons[entry.code] or reasons.api,
+        entry.detail and ("\n" .. L(entry.detail)) or "",
         entry.points, entry.reads, entry.texts, entry.known, entry.seconds, entry.skipped or 0)
     if entry.mode then
-        text = text .. string.format("\nMode %s : %d/225 positions lues (grille espacée, couverture non exhaustive).", entry.mode, entry.samples or 0)
-        text = text .. (entry.workMs and string.format("\nTravail mesuré : %.2f ms cumulées ; pic %.2f ms par appel. Hors rendu natif entre les appels.", entry.workMs, entry.peakMs)
-            or "\nMesure du coût indisponible sur cet essai.")
+        text = text .. string.format(L("\nMode %s : %d/225 positions lues (grille espacée, couverture non exhaustive)."), L(entry.mode), entry.samples or 0)
+        text = text .. (entry.workMs and string.format(L("\nTravail mesuré : %.2f ms cumulées ; pic %.2f ms par appel. Hors rendu natif entre les appels."), entry.workMs, entry.peakMs)
+            or L("\nMesure du coût indisponible sur cet essai."))
     end
     if (entry.zoomEvents or 0) > 0 then
-        text = text .. string.format("\nNotifications de zoom reçues : %d.", entry.zoomEvents)
+        text = text .. string.format(L("\nNotifications de zoom reçues : %d."), entry.zoomEvents)
     end
     return text
 end
 function GL.DruidRadarReport()
     local history = GL.db and GL.db.druidRadarTests
-    return "\nRadar druide : expérimental, lancement manuel uniquement.\n" .. report(history and history[#history])
+    return L("\nRadar druide : expérimental, lancement manuel uniquement.\n") .. report(history and history[#history])
 end
 local function finish(code)
     local state = running
@@ -231,7 +232,7 @@ local function names(state)
             text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
             for value in text:gmatch("[^\n]+") do
                 value = value:match("^%s*(.-)%s*$")
-                if #value > 0 and #value <= 160 and not value:find("[|%c]") then result[value] = true end
+                if #value > 0 and #value <= 160 and not GL.ContainsControlOrMarkup(value) then result[value] = true end
             end
         end
     end
@@ -267,7 +268,7 @@ local function expectNumber(state, label, actual, expected, tolerance)
         reject("api")
     end
     if math.abs(actual - expected) > (tolerance or 0) then
-        state.detail = string.format("Reçu : %.6f ; attendu : %.6f ; tolérance : %.6f.", actual, expected, tolerance or 0)
+        state.detail = string.format(L("Reçu : %.6f ; attendu : %.6f ; tolérance : %.6f."), actual, expected, tolerance or 0)
         reject("map")
     end
 end
@@ -439,7 +440,7 @@ local function start(mode)
         driver:SetScript("OnUpdate", function() tick(state) end)
         -- Also restore if hiding the UI prevents our frame receiving OnUpdate.
         C_Timer.After(12, function() if running == state then finish("timeout") end end)
-        GL.Print("Essai druide lancé : garde souris et personnage immobiles. Minimap masquée au maximum 12 s. /glradar stop pour annuler.")
+        GL.Print(L("Essai druide lancé : garde souris et personnage immobiles. Minimap masquée au maximum 12 s. /glradar stop pour annuler."))
     end)
     if not ok then
         running = state
@@ -457,7 +458,7 @@ SlashCmdList.GRUDGELEDGERDRUIDRADAR = function(message)
     else
         local ok, err = pcall(prerequisites)
         GL.Print(ok and reasons.ready or reasons[reason(err)])
-        GL.Print("/glradar test : essai court avec un joueur témoin immobile. /glradar validation : grille complète et mesure du coût. Garde la souris hors minimap et fenêtres. /glradar rapport : résultat anonyme. Aucun pistage ni radar automatique activé.")
+        GL.Print(L("/glradar test : essai court avec un joueur témoin immobile. /glradar validation : grille complète et mesure du coût. Garde la souris hors minimap et fenêtres. /glradar rapport : résultat anonyme. Aucun pistage ni radar automatique activé."))
     end
 end
 for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_STARTED_MOVING", "PLAYER_LEAVING_WORLD", "PLAYER_LOGOUT", "PLAYER_DEAD", "UPDATE_SHAPESHIFT_FORM", "MINIMAP_UPDATE_TRACKING", "MINIMAP_UPDATE_ZOOM" }) do driver:RegisterEvent(event) end

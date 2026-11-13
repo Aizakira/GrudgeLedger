@@ -150,10 +150,11 @@ DoEmote = function() end
 StartDuel = function() end
 C_NamePlate = { GetNamePlates = function() return {} end }
 SetCVar("nameplateShowFriends", 1) SetCVar("nameplateShowEnemies", 1)
+local namespace = {}
 local toc = assert(io.open(TEST_ROOT .. "/GrudgeLedger.toc", "r"))
 for line in toc:lines() do
     line = line:gsub("\r", "")
-    if line:match("%.lua$") then assert(loadfile(TEST_ROOT .. "/" .. line))("GrudgeLedger") end
+    if line:match("%.lua$") then assert(loadfile(TEST_ROOT .. "/" .. line))("GrudgeLedger", namespace) end
 end
 toc:close()
 mock.Fire("ADDON_LOADED", "GrudgeLedger")
@@ -218,7 +219,7 @@ local function hideWindows()
 end
 local function click(label)
     for _, f in ipairs(mock.frames) do
-        if f:GetText() == label and f.scripts.OnClick then f.scripts.OnClick(f, "LeftButton") return end
+        if f:GetText() == GL.L(label) and f.scripts.OnClick then f.scripts.OnClick(f, "LeftButton") return end
     end
     error("Missing UI action: " .. label)
 end

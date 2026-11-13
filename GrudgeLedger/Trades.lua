@@ -1,11 +1,28 @@
 -- The native trade window uses the "npc" unit for its partner and six transferable slots.
 -- https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_UIPanels_Game/Mainline/TradeFrame.lua
 local GL = GrudgeLedger
+local L = GL.L
 local frame = CreateFrame("Frame")
 local trade, ambiguousUntil
 local events = { "TRADE_SHOW", "TRADE_UPDATE", "TRADE_MONEY_CHANGED", "PLAYER_TRADE_MONEY",
     "TRADE_ACCEPT_UPDATE", "TRADE_PLAYER_ITEM_CHANGED", "TRADE_TARGET_ITEM_CHANGED", "TRADE_CLOSED",
     "TRADE_REQUEST_CANCEL", "UI_INFO_MESSAGE", "UI_ERROR_MESSAGE", "PLAYER_LEAVING_WORLD", "PLAYER_ENTERING_WORLD" }
+
+function GL.LocalizeTradeReceipt(text)
+    return (text:gsub("[^\n]+", function(line)
+        local label, contents = line:match("^(Donné) : (.+)$")
+        if not label then label, contents = line:match("^(Reçu) : (.+)$") end
+        if not label then return line end
+        -- Only the first comma-delimited field can hold coin totals. Item names are native text.
+        local first, rest = contents:match("^([^,]+)(.*)$")
+        if first and first:gsub("%d+ p[oac]", ""):match("^%s*$") then
+            contents = first:gsub("(%d+) (p[oac])", function(amount, unit)
+                return L("%s " .. unit):format(amount)
+            end) .. rest
+        end
+        return (label == "Donné" and L("Donné : %s") or L("Reçu : %s")):format(contents)
+    end))
+end
 
 local function offered(moneyFn, itemFn)
     local parts = {}
@@ -20,7 +37,7 @@ local function offered(moneyFn, itemFn)
     parts = coins ~= "" and { coins } or {}
     for slot = 1, 6 do
         local name, _, count = GL.Safe(itemFn, slot)
-        if type(name) == "string" and #name > 0 and #name <= 250 and not name:find("[|%c]") then
+        if type(name) == "string" and #name > 0 and #name <= 250 and not GL.ContainsControlOrMarkup(name) then
             count = GL.Clean(count, "number")
             local qty = count and count > 1 and count < 1e9 and count == math.floor(count)
             parts[#parts + 1] = qty and (name .. " ×" .. count) or name

@@ -1,9 +1,14 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
-local ADDON = ...
-GrudgeLedger = { version = "0.8.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+local ADDON, private = ...
+GrudgeLedger = { version = "0.9.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
+local translations = private and private.translations
+local function L(source)
+    return translations and translations[source] or source
+end
+GL.L = L
 local listeners = {}
 local guildSightings = {}
 local traceLast = {}
@@ -81,22 +86,22 @@ function GL.Trace(code, identity, unit)
     while #log > 200 do table.remove(log, 1) end
 end
 function GL.DetectionReport(private)
-    local lines, aliases, count = { "\nDétections : 200 dernières décisions, répétitions espacées de 30 s." }, {}, 0
+    local lines, aliases, count = { L("\nDétections : 200 dernières décisions, répétitions espacées de 30 s.") }, {}, 0
     for _, event in ipairs(GL.db.detectionLog or {}) do
         if traceReasons[event.code] then
-            local who = "identité inconnue"
+            local who = L("identité inconnue")
             if event.key then
-                if not aliases[event.key] then count = count + 1 aliases[event.key] = "joueur #" .. count end
+                if not aliases[event.key] then count = count + 1 aliases[event.key] = L("joueur #") .. count end
                 local record = private and GL.Get(event.key)
                 who = record and (record.fullName or record.name):gsub("|", "||") or aliases[event.key]
             end
-            lines[#lines + 1] = date("%d/%m %H:%M:%S", event.time) .. " · " .. who .. " · " .. event.source .. " · " .. traceReasons[event.code]
+            lines[#lines + 1] = date("%d/%m %H:%M:%S", event.time) .. " · " .. who .. " · " .. L(event.source) .. " · " .. L(traceReasons[event.code])
         end
     end
     local probe = GL.db.minimapProbe
-    lines[#lines + 1] = "\nRadar minimap : expérimental, non activé."
-    if probe then lines[#lines + 1] = "Dernier test : " .. probe.result .. " (build " .. probe.build .. ")"
-    else lines[#lines + 1] = "Aucun résultat de test sauvegardé." end
+    lines[#lines + 1] = L("\nRadar minimap : expérimental, non activé.")
+    if probe then lines[#lines + 1] = L("Dernier test : ") .. (GL.ProbeResultText and GL.ProbeResultText(probe.result) or L(probe.result)) .. " (build " .. L(probe.build) .. ")"
+    else lines[#lines + 1] = L("Aucun résultat de test sauvegardé.") end
     if GL.DruidRadarReport then lines[#lines + 1] = GL.DruidRadarReport() end
     return table.concat(lines, "\n")
 end
@@ -113,10 +118,14 @@ function GL.Emit(event, ...)
     end
 end
 
+-- Lua's %c and %s use the Windows byte locale and can match half an accented letter.
+function GL.ContainsControlOrMarkup(value)
+    return value:find("[|%z\1-\31\127]") ~= nil or value:find("\194[\128-\159]") ~= nil
+end
 local function cleanName(value)
     value = GL.Clean(value, "string")
-    if not value or #value > 160 or value:find("[|%c]") then return nil end
-    value = value:match("^%s*(.-)%s*$")
+    if not value or #value > 160 or GL.ContainsControlOrMarkup(value) then return nil end
+    value = value:match("^ *(.-) *$")
     return value ~= "" and value or nil
 end
 
@@ -125,7 +134,7 @@ function GL.IdentityFromName(name, surname, guid)
     if guid and (not guid:match("^Player%-%w") or #guid > 128) then guid = nil end
     if not name then return nil end
     if not surname then
-        local first, last = name:match("^(%S+)%s+(.+)$")
+        local first, last = name:match("^([^ ]+) +(.+)$")
         if last then name, surname = first, last end
     end
     -- ponytail: an unknown surname without a GUID is ambiguous on Forever; wait for a live identity.
@@ -164,8 +173,9 @@ function GL.Identity(unit, reuseObservation)
     end
     local className, class = GL.Safe(UnitClass, unit)
     identity.class, identity.className = cleanName(class), cleanName(className)
-    local raceName, race = GL.Safe(UnitRace, unit)
+    local raceName, race, raceID = GL.Safe(UnitRace, unit)
     identity.race, identity.raceName = cleanName(race), cleanName(raceName)
+    identity.raceID = raceID
     local sex = GL.Safe(UnitSex, unit)
     identity.sex = (sex == 2 or sex == 3) and sex or nil
     identity.faction = GL.Clean(GL.Safe(UnitFactionGroup, unit), "string")
@@ -372,6 +382,7 @@ local function merge(provisional, record)
             record[field .. "Name"] = provisional[field .. "Name"]
         end
     end
+    if record.race and record.race == provisional.race then record.raceID = record.raceID or provisional.raceID end
     for _, field in ipairs({ "faction", "sex" }) do
         if record[field] == nil then record[field] = provisional[field] end
     end
@@ -446,11 +457,17 @@ function GL.Remember(identity)
         if clean[field] then record[field] = clean[field] end
     end
     record.fullName = record.name .. (record.surname and " " .. record.surname or "")
+    local previousRace = record.race
     for _, field in ipairs({ "class", "race" }) do
         local value = cleanName(identity[field])
         local name = cleanName(identity[field .. "Name"])
         if value and value ~= record[field] then record[field], record[field .. "Name"] = value, nil end
         if name and (not record[field] or value == record[field]) then record[field .. "Name"] = name end
+    end
+    if previousRace ~= record.race then record.raceID = nil end
+    local raceID = GL.Clean(identity.raceID, "number")
+    if record.race and record.race == identity.race and raceID and raceID > 0 and raceID < math.huge and raceID == math.floor(raceID) then
+        record.raceID = raceID
     end
     record.faction = cleanName(identity.faction) or record.faction
     local sex = GL.Clean(identity.sex, "number")
@@ -570,6 +587,7 @@ local function history(record, kind, extra)
         -- Snapshot once: later guild changes must never reassign old PvP events.
         entry.guild, entry.guildRealm, entry.guildObservedAt = record.guild, record.realm, record.guildSeenAt
         entry.guildSource = not record.guild and "unknown" or record.guildSeenAt == entry.time and "observed" or "last-known"
+        entry.raceID = record.raceID
         entry.race, entry.raceName, entry.class, entry.className = record.race, record.raceName, record.class, record.className
     end
     table.insert(record.history, entry)
@@ -757,8 +775,8 @@ function GL.AdjustReputation(identity, delta, reason, source)
 end
 local function noteText(text)
     text = GL.Clean(text, "string")
-    if not text or not text:find("%S") then return nil, "La note est vide." end
-    if #text > 2000 then return nil, "La note est trop longue (2000 octets maximum)." end
+    if not text or not text:find("%S") then return nil, L("La note est vide.") end
+    if #text > 2000 then return nil, L("La note est trop longue (2000 octets maximum).") end
     return text
 end
 function GL.AddNote(identity, text)
@@ -766,7 +784,7 @@ function GL.AddNote(identity, text)
     text, err = noteText(text)
     if not text then return false, err end
     local record = GL.Remember(identity)
-    if not record then return false, "Identité du joueur indisponible." end
+    if not record then return false, L("Identité du joueur indisponible.") end
     local actorGUID, actorName = currentActor()
     table.insert(record.notes, { time = GL.Now(), text = text, actorGUID = actorGUID, actorName = actorName })
     lastInteraction[record] = math.max(lastInteraction[record] or 0, record.notes[#record.notes].time)
@@ -782,7 +800,7 @@ local function findNote(identity, note)
 end
 function GL.UpdateNote(identity, note, text)
     local record = findNote(identity, note)
-    if not record then return false, "Cette note n'appartient plus à cette fiche." end
+    if not record then return false, L("Cette note n'appartient plus à cette fiche.") end
     local value, err = noteText(text)
     if not value then return false, err end
     if note.text ~= value then
@@ -794,7 +812,7 @@ function GL.UpdateNote(identity, note, text)
 end
 function GL.DeleteNote(identity, note)
     local record, index = findNote(identity, note)
-    if not record then return false, "Cette note n'appartient plus à cette fiche." end
+    if not record then return false, L("Cette note n'appartient plus à cette fiche.") end
     table.remove(record.notes, index)
     rebuildInteraction(record)
     guildStatistics = nil
@@ -852,13 +870,13 @@ function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
 end
 function GL.VoidPvP(identity, event, silent)
     local record = GL.Get(identity)
-    if not record or type(event) ~= "table" or event.voided then return false, "Événement indisponible ou déjà annulé." end
+    if not record or type(event) ~= "table" or event.voided then return false, L("Événement indisponible ou déjà annulé.") end
     local fields = pvpFields[event.kind]
     local field = fields and fields[event.confidence]
-    if not field then return false, "Seul un événement PvP peut être corrigé ici." end
+    if not field then return false, L("Seul un événement PvP peut être corrigé ici.") end
     local found = false
     for _, entry in ipairs(record.history) do if entry == event then found = true break end end
-    if not found then return false, "Cet événement n'appartient pas à cette fiche." end
+    if not found then return false, L("Cet événement n'appartient pas à cette fiche.") end
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
     if event.time == lastInteraction[record] then rebuildInteraction(record) end
@@ -873,7 +891,7 @@ end
 local function cleanBattlegroundHistory()
     if GL.db.battlegroundCleanupVersion == 1 then return end
     if GL.db.battlegroundArchive ~= nil and type(GL.db.battlegroundArchive) ~= "table" then
-        GL.Debug("Archive de champs de bataille invalide : nettoyage reporté.")
+        GL.Debug(L("Archive de champs de bataille invalide : nettoyage reporté."))
         return
     end
     -- ponytail: old events have zone text, not instance IDs. Match only exact known
@@ -911,8 +929,8 @@ local function cleanBattlegroundHistory()
     end
     GL.db.battlegroundCleanupVersion = 1
     if events > 0 or count > 0 then
-        GL.Print("Champs de bataille : " .. events .. " événement(s) écarté(s), " .. count
-            .. " fiche(s) archivée(s). Notes et avis personnels conservés.")
+        GL.Print(L("Champs de bataille : ") .. events .. L(" événement(s) écarté(s), ") .. count
+            .. L(" fiche(s) archivée(s). Notes et avis personnels conservés."))
     end
 end
 function GL.RecordGroup(identity, sessionId, zone)
@@ -938,30 +956,62 @@ function GL.RecordTrade(identity, summary)
     GL.Emit("CHANGED", record)
 end
 
+-- Normalize only search text. Display names, stored identity keys and notes keep their spelling.
+local searchLetters = {}
+for letter, variants in pairs({
+    a="ÀÁÂÃÄÅàáâãäå", ae="Ææ", c="Çç", e="ÈÉÊËèéêë", i="ÌÍÎÏìíîï",
+    n="Ññ", o="ÒÓÔÕÖòóôõö", oe="Œœ", u="ÙÚÛÜùúûü", y="ÝŸýÿ",
+    [""]="̧̀́̂̃̈",
+}) do
+    for character in variants:gmatch("[\194-\244][\128-\191]+") do searchLetters[character] = letter end
+end
+local function searchText(text)
+    return (text:gsub("[A-Z]+", string.lower):gsub("[\194-\244][\128-\191]+", searchLetters))
+end
 local function queryWords(query)
     local words = {}
     query = GL.Clean(query, "string") or ""
-    for word in query:sub(1, 512):lower():gmatch("%S+") do words[#words + 1] = word end
+    for word in searchText(query:sub(1, 512)):gmatch("[^ \t\r\n\f\v]+") do words[#words + 1] = word end
     return words
 end
 local function matchesWords(text, words)
-    text = text:lower()
+    text = searchText(text)
     for _, word in ipairs(words) do if not text:find(word, 1, true) then return false end end
     return true
 end
 local historySearchFields = { "opponentName", "zone", "subzone", "guild", "questTitle", "evidence" }
+local searchRelations = {friend=L("Ami"), enemy=L("Ennemi"), warning=L("Méfiance"), neutral=L("Neutre")}
+local searchKinds = {kill=L("Victoire"), death=L("Mort"), aggression=L("Agression"), trade=L("Échange terminé"),
+    grouped=L("Vous avez partagé un groupe"), group=L("Vous avez partagé un groupe"), note=L("Note personnelle"),
+    reputation=L("Avis personnel")}
+local function addEventText(parts, event)
+    for _, field in ipairs(historySearchFields) do
+        if type(event[field]) == "string" then parts[#parts + 1] = event[field] end
+    end
+    parts[#parts + 1] = searchKinds[event.kind]
+    if event.reaction then parts[#parts + 1] = searchRelations[event.reaction] end
+    if event.confidence == "confirmed" then parts[#parts + 1] = L("Confirmé")
+    elseif event.confidence == "probable" then parts[#parts + 1] = L("Probable") end
+    if event.evidence and GL.LocalizeEvidence then
+        local display = GL.LocalizeEvidence(event)
+        if display ~= event.evidence then parts[#parts + 1] = display end
+    end
+end
 local function recordText(record, notes, past)
     local parts = {}
     for _, field in ipairs({ "fullName", "name", "surname", "guild", "class", "className", "race", "raceName", "lastZone", "lastEncounterZone", "lastEncounterSubzone", "faction" }) do
         if type(record[field]) == "string" then parts[#parts + 1] = record[field] end
     end
+    parts[#parts + 1] = searchRelations[GL.Relation(record)]
+    if GL.IdentityLabels then
+        local faction, race, class = GL.IdentityLabels(record)
+        parts[#parts + 1] = faction
+        parts[#parts + 1] = race
+        parts[#parts + 1] = class
+    elseif record.faction then parts[#parts + 1] = L(record.faction) end
     if past then
         for _, event in ipairs(record.history or {}) do
-            if type(event) == "table" then
-                for _, field in ipairs(historySearchFields) do
-                    if type(event[field]) == "string" then parts[#parts + 1] = event[field] end
-                end
-            end
+            if type(event) == "table" then addEventText(parts, event) end
         end
     end
     if notes then
@@ -1093,9 +1143,7 @@ function GL.JournalEvents(options)
                 texts[record] = texts[record] or recordText(record)
                 local parts = { texts[record] }
                 if type(event.text) == "string" then parts[#parts + 1] = event.text end
-                for _, field in ipairs(historySearchFields) do
-                    if type(event[field]) == "string" then parts[#parts + 1] = event[field] end
-                end
+                addEventText(parts, event)
                 match = matchesWords(table.concat(parts, "\n"), words)
             end
             if match then result[#result + 1] = { record = record, event = event } end
@@ -1257,7 +1305,7 @@ function GL.PvPBreakdown(options, dimension)
                     local id = pvpEventKey(row)
                     local previous = counts[id]
                     if not previous or event.confidence == "confirmed" and previous.confidence ~= "confirmed" then
-                        counts[id] = { key = category, label = label, kind = event.kind, confidence = event.confidence, zone = zone }
+                        counts[id] = { key = category, label = label, raceID = dimension == "race" and event.raceID or nil, kind = event.kind, confidence = event.confidence, zone = zone }
                     elseif event.confidence == previous.confidence then
                         -- Resolve a shared death before filtering by location. A probable
                         -- participant cannot create a second death in another district.
@@ -1265,6 +1313,7 @@ function GL.PvPBreakdown(options, dimension)
                             previous.zone = (zone == "unknown" or previous.zone == "unknown") and "unknown" or "mixed"
                         end
                         if previous.key ~= category then
+                            previous.raceID = nil
                             previous.key = (previous.key == "unknown" or category == "unknown") and "unknown" or "mixed"
                             previous.label = previous.key == "unknown" and "Inconnue" or (dimension == "zone" or subzones) and "Plusieurs lieux" or "Groupe mixte"
                         elseif label < previous.label then previous.label = label end
@@ -1279,6 +1328,7 @@ function GL.PvPBreakdown(options, dimension)
                         probableKills = 0, probableDeaths = 0, correctedKills = 0, correctedDeaths = 0 }
                     local field = counts == corrected and (entry.kind == "kill" and "correctedKills" or "correctedDeaths")
                         or pvpFields[entry.kind][entry.confidence]
+                    bucket.raceID = bucket.raceID or entry.raceID
                     bucket[field] = bucket[field] + 1
                     if entry.label < bucket.label then bucket.label = entry.label end
                     buckets[entry.key] = bucket
@@ -1359,7 +1409,7 @@ function GL.InitDB()
             GL.db.quarantine = GL.db.quarantine or {}
             GL.db.quarantine[key] = record
             GL.db.players[key] = nil
-            GL.Debug("Entrée sauvegardée invalide conservée dans quarantine : " .. tostring(key))
+            GL.Debug(L("Entrée sauvegardée invalide conservée dans quarantine : ") .. tostring(key))
         end
     end
     cleanBattlegroundHistory()

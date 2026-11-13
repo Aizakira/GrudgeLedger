@@ -46,10 +46,11 @@ C_NamePlate = {
     GetNamePlateForUnit = function(unit) if unit == "nameplate1" then return plate end end,
     GetNamePlates = function() return { plate } end,
 }
+local namespace = {}
 local file = assert(io.open(TEST_ROOT .. "/GrudgeLedger.toc", "r"))
 for line in file:lines() do
     line = line:gsub("\r", "")
-    if line:match("%.lua$") then assert(loadfile(TEST_ROOT .. "/" .. line))("GrudgeLedger") end
+    if line:match("%.lua$") then assert(loadfile(TEST_ROOT .. "/" .. line))("GrudgeLedger", namespace) end
 end
 file:close()
 mock.Fire("ADDON_LOADED", "GrudgeLedger")

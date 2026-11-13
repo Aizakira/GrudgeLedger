@@ -2,6 +2,7 @@
 -- Nameplate lifecycle/tooltip approach adapted from Worth Remembering by Kyle
 -- (GPL-3.0); https://github.com/kk-on-gh/WorthRemembering. No runtime dependency.
 local GL = GrudgeLedger
+local L = GL.L
 local D = {}
 GL.Display = D
 
@@ -85,19 +86,18 @@ local function partyWarning(record, unit)
     local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
     if type(send) ~= "function" then return end
     presence.attemptAt, GL.db.partyWarningLastAttempt[me] = now, now
-    local message = "[Grudge Ledger] Attention, " .. name .. (confirmed
-        and " : agression PvP enregistrée dans mon journal."
-        or " : implication PvP probable dans mon journal (à confirmer).")
+    local message = (confirmed and L("[Grudge Ledger] Attention, %s : agression PvP enregistrée dans mon journal.")
+        or L("[Grudge Ledger] Attention, %s : implication PvP probable dans mon journal (à confirmer).")):format(name)
     local ok = pcall(send, message, "PARTY")
-    if not ok then GL.Debug("Avertissement de groupe refusé par le jeu ; aucun nouvel essai pendant cette rencontre.") end
+    if not ok then GL.Debug(L("Avertissement de groupe refusé par le jeu ; aucun nouvel essai pendant cette rencontre.")) end
 end
 
 local function guildLabel(record, relation)
     if not record.guild then return nil end
     if GL.RelationSource(record) == "guild" and relation ~= "neutral" then
-        return (relation == "friend" and "Amitié de guilde : " or "Rancune de guilde : ") .. record.guild
+        return (relation == "friend" and L("Amitié de guilde : %s") or L("Rancune de guilde : %s")):format(record.guild)
     end
-    return "Guilde : " .. record.guild
+    return L("Guilde : %s"):format(record.guild)
 end
 
 local function recordNote(record)
@@ -114,23 +114,24 @@ end
 
 local function alertTitle(record, relation)
     if GL.RelationSource(record) == "guild" then return guildLabel(record, relation) end
-    return styles[relation].label .. (GL.RelationConfidence(record) == "probable" and " (probable)" or "") .. " à proximité"
+    return (GL.RelationConfidence(record) == "probable" and L("%s (probable) à proximité") or L("%s à proximité")):format(L(styles[relation].label))
 end
 
 local function refreshToastText(frame, record)
     if frame.signal then
         local age = math.max(0, GL.Now() - frame.signalAt)
-        frame.title:SetText("Signal indirect · " .. styles[frame.relation].label)
+        frame.title:SetText(L("Signal indirect · %s"):format(L(styles[frame.relation].label)))
         frame.name:SetText(record.fullName or record.name)
-        frame.note:SetText(frame.signal .. (age == 0 and " · à l’instant" or (" · il y a " .. age .. " s")) .. "\nDistance inconnue")
+        frame.note:SetText(age == 0 and L("%s · à l’instant\nDistance inconnue"):format(L(frame.signal))
+            or L("%s · il y a %d s\nDistance inconnue"):format(L(frame.signal), age))
         return
     end
     frame.title:SetText(alertTitle(record, frame.relation))
-    local name = record.fullName or record.name or "Joueur connu"
+    local name = record.fullName or record.name or L("Joueur connu")
     if record.guild and GL.RelationSource(record) ~= "guild" then name = name .. " <" .. record.guild .. ">" end
     frame.name:SetText(name)
-    local hint = "Déjà rencontré : " .. (record.lastZone or "lieu inconnu")
-    if GL.RelationConfidence(record) == "probable" then hint = "Identification déduite d'un combat — à confirmer" end
+    local hint = L("Déjà rencontré : %s"):format(record.lastZone or L("lieu inconnu"))
+    if GL.RelationConfidence(record) == "probable" then hint = L("Identification déduite d'un combat — à confirmer") end
     frame.note:SetText(recordNote(record) or hint)
 end
 
@@ -344,7 +345,7 @@ local function makeToast(preview)
     frame.divider:SetSize(384, 1)
     frame.divider:SetColorTexture(0.48, 0.35, 0.18, 0.6)
     frame.hint = textLine("GameFontHighlightSmall", 16, 95, 384, 14, 1, 0.65, 0.59, 0.48)
-    frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
+    frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     frame:SetScript("OnEnter", function(self) self.border:SetColorTexture(0.68, 0.51, 0.28, 1) end)
     frame:SetScript("OnLeave", function(self) self.border:SetColorTexture(0.48, 0.35, 0.18, 1) end)
     frame:SetScript("OnClick", function(self, button)
@@ -377,10 +378,10 @@ function D.PreviewAlert(relation)
     if toast and toast:IsShown() then return false end
     local frame = makeToast(true)
     styleToast(frame, styles[relation])
-    frame.title:SetText("Aperçu · " .. styles[relation].label .. " à proximité")
+    frame.title:SetText(L("Aperçu · %s"):format(L("%s à proximité"):format(L(styles[relation].label))))
     frame.name:SetText(relation == "friend" and "Célestine Longuebrise" or "Bastian Griseforge")
-    frame.note:SetText("Exemple affiché depuis les réglages.")
-    frame.hint:SetText("Cliquer pour fermer")
+    frame.note:SetText(L("Exemple affiché depuis les réglages."))
+    frame.hint:SetText(L("Cliquer pour fermer"))
     frame.expires = GL.Now() + 6
     frame:Show()
     local sound = alertSound(relation)
@@ -426,7 +427,7 @@ alert = function(identity, unit)
             if not burst.people[record.key] then
                 burst.people[record.key], burst.count = true, burst.count + 1
                 if toast and toast:IsShown() and toast.guildBurst == burst then
-                    toast.hint:SetText(burst.count .. " membres aperçus • clic : première fiche")
+                    toast.hint:SetText(L("%d membres aperçus • clic : première fiche"):format(burst.count))
                 end
             end
             return
@@ -441,7 +442,7 @@ alert = function(identity, unit)
     frame.key, frame.relation, frame.source, frame.expires = record.key, relation, source, now + 6
     frame.signal, frame.signalAt = nil, nil
     frame.guildKey, frame.guildBurst = guildKey, burst
-    frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
+    frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, style)
     refreshToastText(frame, record)
     frame:Show()
@@ -494,7 +495,7 @@ local function indirectSignal(guid, source)
     frame.key, frame.relation, frame.source = record.key, relation, GL.RelationSource(record)
     frame.guildKey, frame.guildBurst = inheritedGuildKey(record), nil
     frame.signal, frame.signalAt, frame.expires = signalSources[source], now, now + 6
-    frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
+    frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[relation])
     frame.stripe:SetColorTexture(0.74, 0.57, 0.32, 1)
     frame.title:SetTextColor(0.94, 0.80, 0.57)
@@ -593,31 +594,31 @@ function D.Tooltip(tooltip)
     local relation = GL.Relation(record)
     local style = styles[relation]
     tooltip:AddLine(" ")
-    tooltip:AddLine("Grudge Ledger — " .. (style and style.label or "Neutre"),
+    tooltip:AddLine("Grudge Ledger — " .. L(style and style.label or "Neutre"),
         style and style.color[1] or 0.85, style and style.color[2] or 0.85,
         style and style.color[3] or 0.85)
     if GL.RelationConfidence(record) == "probable" then
-        tooltip:AddLine("? Identification PvP probable — à confirmer", 1, 0.85, 0.3, true)
+        tooltip:AddLine(L("? Identification PvP probable — à confirmer"), 1, 0.85, 0.3, true)
     end
     tooltip._grudgeLedgerExpanded = not GL.Settings().compactTooltips or GL.Safe(IsShiftKeyDown) == true
     if not tooltip._grudgeLedgerExpanded then
-        tooltip:AddLine("Maj : notes et bilan PvP", 0.8, 0.75, 0.64)
+        tooltip:AddLine(L("Maj : notes et bilan PvP"), 0.8, 0.75, 0.64)
         return
     end
     local guild = guildLabel(record, relation)
     if guild then tooltip:AddLine(guild, 0.85, 0.85, 0.85, true) end
     local note = recordNote(record)
     if note then tooltip:AddLine(note, 0.9, 0.85, 0.7, true) end
-    tooltip:AddLine("Camaraderie : " .. tostring(record.reputation or 0), 0.85, 0.85, 0.85)
+    tooltip:AddLine(L("Camaraderie : %s"):format(tostring(record.reputation or 0)), 0.85, 0.85, 0.85)
     local pvp = record.pvp or {}
     if (pvp.aggressions or 0) + (pvp.probableAggressions or 0) > 0 then
-        tooltip:AddLine(("Agressions : %d confirmée(s), %d probable(s)"):format(pvp.aggressions or 0, pvp.probableAggressions or 0), 1, 0.6, 0.1, true)
+        tooltip:AddLine(L("Agressions : %d confirmée(s), %d probable(s)"):format(pvp.aggressions or 0, pvp.probableAggressions or 0), 1, 0.6, 0.1, true)
     end
     if (pvp.kills or 0) + (pvp.deaths or 0) > 0 then
-        tooltip:AddLine(("PvP confirmé : %d victoire(s), %d mort(s)"):format(pvp.kills or 0, pvp.deaths or 0), 0.85, 0.85, 0.85, true)
+        tooltip:AddLine(L("PvP confirmé : %d victoire(s), %d mort(s)"):format(pvp.kills or 0, pvp.deaths or 0), 0.85, 0.85, 0.85, true)
     end
     if (pvp.probableKills or 0) + (pvp.probableDeaths or 0) > 0 then
-        tooltip:AddLine(("PvP probable : %d victoire(s), %d mort(s)"):format(pvp.probableKills or 0, pvp.probableDeaths or 0), 1, 0.7, 0.35, true)
+        tooltip:AddLine(L("PvP probable : %d victoire(s), %d mort(s)"):format(pvp.probableKills or 0, pvp.probableDeaths or 0), 1, 0.7, 0.35, true)
     end
 end
 

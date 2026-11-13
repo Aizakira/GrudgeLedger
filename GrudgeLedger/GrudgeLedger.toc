@@ -1,13 +1,17 @@
 ## Interface: 16001
 ## Title: Grudge Ledger
-## Notes: Journal personnel des amis et des rancunes : notes, rencontres et historique PvP.
+## Notes: A personal journal of friends, grudges, encounters and PvP history.
+## Notes-esES: Diario personal de amistades, rencores, encuentros e historial JcJ.
+## Notes-esMX: Diario personal de amistades, rencores, encuentros e historial JcJ.
+## Notes-frFR: Journal personnel des amis et des rancunes : notes, rencontres et historique PvP.
 ## Author: Grudge Ledger contributors
-## Version: 0.8.2
+## Version: 0.9.0
 ## SavedVariables: GrudgeLedgerDB
 ## IconTexture: Interface\AddOns\GrudgeLedger\Media\LedgerBook
 ## X-License: GPL-3.0
 ## X-Credits: Menu and nameplate techniques adapted from Worth Remembering by Kyle (GPLv3).
 
+Locales.lua
 Core.lua
 ZoneTime.lua
 Tracker.lua

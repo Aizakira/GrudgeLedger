@@ -1,4 +1,8 @@
-GRUDGE LEDGER — 0.8.2
+GRUDGE LEDGER — 0.9.0
+
+Interface en français, anglais ou espagnol selon la langue du jeu. Anglais par défaut pour les autres langues.
+The interface follows your WoW text language: English, French or Spanish.
+La interfaz utiliza el idioma del juego: español, francés o inglés.
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
