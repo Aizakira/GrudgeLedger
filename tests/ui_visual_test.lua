@@ -134,6 +134,10 @@ local identity = GL.Identity("target")
 GL.SetReaction(identity, "friend")
 GL.AddNote(identity, "Une sortie agréable, à refaire.")
 GL.ShowLedger(identity.key)
+for _, slot in ipairs({ledger, ledger.rows[1]}) do
+    assert(slot.raceIcon.drawLayer == "ARTWORK" and slot.classIcon.drawLayer == "OVERLAY",
+        "the class badge must draw in front of the portrait")
+end
 assert(ledger.rows[1].name.wordWrap == false and ledger.rows[1].name.maxLines == 1)
 assert(ledger.rows[1].selection:IsShown() and ledger.reactions.friend.selection:IsShown())
 assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] > 0.9)

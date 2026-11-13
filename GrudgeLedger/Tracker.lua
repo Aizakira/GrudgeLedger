@@ -856,6 +856,16 @@ function T.OnCombatLog(...)
 end
 
 local groupTimers = {}
+GL.On("CHANGED", function(record, reason)
+    if reason ~= "deleted" then return end
+    local groups = type(GL.db.tracker) == "table" and GL.db.tracker.groups
+    for _, members in pairs(type(groups) == "table" and groups or {}) do
+        if type(members) == "table" and members[record.key] then
+            groupTimers[members[record.key]] = nil
+            members[record.key] = nil
+        end
+    end
+end)
 local function groupTime(timer, now)
     return math.max(0, math.floor((now or GL.Now()) - timer.started))
 end

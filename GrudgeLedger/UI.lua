@@ -112,6 +112,7 @@ local function paintPortrait(row, record, unit)
 end
 
 local function identityIcons(row, record)
+    row.classIcon:SetDrawLayer("OVERLAY")
     portraitRows[row] = record
     paintPortrait(row, record, portraitUnit(record))
 end
@@ -2151,7 +2152,7 @@ local function buildLedger()
         if record then GL.EditNote(record) end
     end, nil, true)
     f.toolsMenu = CreateFrame("Frame", nil, f)
-    f.toolsMenu:SetPoint("TOPLEFT", 734, -505) f.toolsMenu:SetSize(180, 119)
+    f.toolsMenu:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 734, -624) f.toolsMenu:SetSize(180, 148)
     f.toolsMenu:SetFrameStrata("FULLSCREEN_DIALOG") f.toolsMenu:SetToplevel(true) f.toolsMenu:EnableMouse(true)
     surface(f.toolsMenu, theme.gold) surface(f.toolsMenu, theme.panel, 1)
     f.tools = button(f, L("Autres actions"), 734, -634, 180, function() toggleMenu(f.toolsMenu) end, nil, true)
@@ -2172,6 +2173,22 @@ local function buildLedger()
         f.toolsMenu:Hide()
         f.detailTab, f.historyPage.kind, f.historyPage.offset = "history", "pvp", 0
         renderDetail()
+    end)
+    local deleteDialog = "GRUDGE_LEDGER_DELETE_PROFILE"
+    StaticPopupDialogs[deleteDialog] = {
+        text = L("Supprimer définitivement la fiche de %s ? Ses notes et son historique seront effacés et ses événements retirés des statistiques du compte."),
+        button1 = L("Supprimer"), button2 = L("Annuler"), timeout = 0, whileDead = true, hideOnEscape = true,
+        OnAccept = function(_, record)
+            if currentRecord() ~= record or not GL.DeleteProfile(record) then
+                GL.Print(L("La fiche a changé. Rouvrez-la pour la supprimer."))
+            end
+        end,
+    }
+    f:HookScript("OnHide", function() StaticPopup_Hide(deleteDialog) end)
+    f.actions[#f.actions + 1] = button(f.toolsMenu, L("Supprimer la fiche…"), 3, -119, 174, function()
+        closeMenu()
+        local record = currentRecord()
+        if record then StaticPopup_Show(deleteDialog, plain(record.fullName or record.key), nil, record) end
     end)
     f.toolsMenu:Hide()
     f.detailTabs = {}
@@ -2683,7 +2700,15 @@ GL.On("READY", function()
     positionMinimap()
 end)
 
-GL.On("CHANGED", function() if ledger then ledger.historyPage.cache = nil end refresh(true) end)
+GL.On("CHANGED", function(record, reason)
+    if reason == "deleted" then
+        drafts[record] = nil
+        for _, note in ipairs(record.notes) do drafts[note] = nil end
+        if correctionWindow and correctionWindow.identity and correctionWindow.identity.key == record.key then correctionWindow:Hide() end
+    end
+    if ledger then ledger.historyPage.cache = nil end
+    refresh(true)
+end)
 local sightingRefreshPending
 GL.On("CONTACT_SEEN", function()
     if not ledger or not ledger:IsShown() or listSort ~= "recent" or sightingRefreshPending then return end

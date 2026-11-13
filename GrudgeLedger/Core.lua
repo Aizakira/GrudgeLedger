@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON, private = ...
-GrudgeLedger = { version = "0.10.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.10.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local translations = private and private.translations
@@ -11,6 +11,7 @@ end
 GL.L = L
 local listeners = {}
 local guildSightings = {}
+local deletedGuildSightings = {}
 local traceLast = {}
 local observations, observationCount = {}, 0
 local guildStatistics
@@ -506,6 +507,17 @@ function GL.RecordSeen(identity, visible)
     if GL.IsPvPInstance() then return nil end
     local record = GL.Get(identity)
     local rule = GL.GetGuildRule(identity)
+    -- A guild rule can recreate a deleted contact while their nameplate is still visible.
+    -- Use the journal's ten-minute absence window to treat the next visit as a new encounter.
+    local last = identity and deletedGuildSightings[identity.key]
+    if last then
+        local now = GL.Now()
+        if not record and now >= last and now - last <= 600 then
+            deletedGuildSightings[identity.key] = now
+            return nil
+        end
+        deletedGuildSightings[identity.key] = nil
+    end
     if record or (rule and rule.reaction ~= "neutral") then record = GL.Remember(identity) end
     local me = visible and GL.Clean(GL.Safe(UnitGUID, "player"), "string")
     if record and me then
@@ -840,6 +852,25 @@ function GL.DeleteNote(identity, note)
     rebuildInteraction(record)
     guildStatistics = nil
     GL.Emit("CHANGED", record)
+    return true
+end
+function GL.DeleteProfile(record)
+    if not GL.db or type(record) ~= "table" or GL.db.players[record.key] ~= record then return false end
+    local key = record.key
+    GL.db.players[key] = nil
+    local rule = GL.GetGuildRule(record)
+    if rule and rule.reaction ~= "neutral" then deletedGuildSightings[key] = GL.Now() end
+    for alias, owner in pairs(GL.db.aliases) do
+        if owner == key then GL.db.aliases[alias] = nil end
+    end
+    local log = GL.db.detectionLog
+    if type(log) == "table" then
+        for i = #log, 1, -1 do
+            if type(log[i]) == "table" and log[i].key == key then table.remove(log, i) end
+        end
+    end
+    guildStatistics = nil
+    GL.Emit("CHANGED", record, "deleted")
     return true
 end
 local pvpFields = {
@@ -1542,7 +1573,7 @@ function GL.InitDB()
     invalidateJournal()
     observations, observationCount, guildStatistics = {}, 0, nil
     socialTotals = setmetatable({}, { __mode = "k" })
-    guildSightings = {}
+    guildSightings, deletedGuildSightings = {}, {}
     traceLast = {}
     if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end
     GL.db = GrudgeLedgerDB

@@ -13,6 +13,8 @@ function SetCVar(k, v) cvars[k] = v end
 function GetCVar(k) return cvars[k] and tostring(cvars[k]) or nil end
 function GetCursorPosition() return 200, 200 end
 UISpecialFrames, SlashCmdList = {}, {}
+StaticPopupDialogs = {}
+function StaticPopup_Hide() end
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, message) messages[#messages + 1] = message end }
 local units = {
     player = { name = "Testeur", surname = "Exemple", guid = "Player-1-self" },

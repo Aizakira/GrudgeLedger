@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.10.0
+GRUDGE LEDGER — 0.10.1
 
 Interface en français, anglais ou espagnol selon la langue du jeu. Anglais par défaut pour les autres langues.
 The interface follows your WoW text language: English, French or Spanish.
@@ -10,6 +10,10 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.10.1 — Depuis la synthèse, Autres actions > Supprimer la fiche… demande
+confirmation pour le joueur nommé. Les bilans sont recalculés après suppression.
+Le badge de classe s’affiche au premier plan lorsqu’il chevauche un portrait.
 
 0.10.0 — Initiative et honneur en PvP sauvage
 
