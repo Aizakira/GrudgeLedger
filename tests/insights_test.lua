@@ -103,16 +103,34 @@ local f = GrudgeLedgerStatistics
 assert(f:IsShown() and f.rows[1].item)
 assert(f.tabs.guilds.selection:IsShown() and not f.tabs.players.selection:IsShown())
 f.groups[2].scripts.OnClick()
-assert(not f.groups[3]:IsShown(), "guild combat metrics must not create a nonexistent third category")
+assert(f.groups[3]:GetText() == "Mes règles" and f.choices[4].metric == "probableDeaths")
+f.groups[3].scripts.OnClick()
+assert(f.rows[1].item and not f.choices[2]:IsShown(), "rules page has its own single choice and works for guilds without combat")
+for _, row in ipairs(f.rows) do
+    if row:IsShown() then assert(GL.GetGuildRule(row.item.name, row.item.realm) and row.value:GetText() ~= "") end
+end
 f.groups[1].scripts.OnClick()
 assert(f.scope:GetText() == "Compte · Relations actuelles")
 f.rows[1].scripts.OnClick(f.rows[1])
 local chosen = f.selected
 f.guildActions[1].scripts.OnClick()
 assert(GL.GetGuildRule(chosen.name, chosen.realm).reaction == "warning")
+assert(f.guildDetail.name:GetText() == chosen.name and f.guildDetail.exceptionButton.enabled)
+f.guildDetail.exceptionButton.scripts.OnClick()
+assert(f.guildDetail.exceptionsOnly)
+for _, row in ipairs(f.guildDetail.rows) do
+    if row.record then assert(GL.Relation(row.record) ~= "warning" and row.record.guild == chosen.name and row.record.realm == chosen.realm) end
+end
+f.guildDetail.exceptionButton.scripts.OnClick()
+assert(not f.guildDetail.exceptionsOnly and f.guildDetail.rows[1].record)
 GL.ShowStatistics("players")
 assert(f.tabs.players.selection:IsShown() and not f.tabs.guilds.selection:IsShown())
 assert(f.rows[1].item.value >= 1 and not f.guildActions[1]:IsShown())
+f.relationButton.scripts.OnClick()
+for _, row in ipairs(f.rows) do if row:IsShown() then assert(GL.Relation(row.item.record) == "enemy") end end
+f.relationButton.scripts.OnClick()
+for _, row in ipairs(f.rows) do if row:IsShown() then assert(GL.Relation(row.item.record) == "warning") end end
+f.relationButton.scripts.OnClick()
 local selected = f.rows[1].item.record
 f.rows[1].scripts.OnClick(f.rows[1])
 assert(not f:IsShown() and GrudgeLedgerWindow:IsShown())
@@ -133,7 +151,7 @@ f.factionButton.scripts.OnClick()
 for i = 1, 10 do GL.SetReaction(identity("Fixture" .. i, "Fixture " .. i), "enemy") end
 local allGuilds = #GL.GuildStatistics()
 GL.ShowStatistics("guilds") f.next.scripts.OnClick()
-assert(f.offset == 7 and f.rows[1].item and f.previous.enabled)
+assert(f.offset == #f.rows and f.rows[1].item and f.previous.enabled)
 f.rows[1].scripts.OnClick(f.rows[1])
 assert(f.guildActions[1].enabled)
 f.previous.scripts.OnClick()
@@ -169,6 +187,7 @@ GL.ShowStatistics("players") f.groups[3].scripts.OnClick() f.choices[2].scripts.
 assert(not f.rows[1]:IsShown() and f.empty:GetText() ~= "" and not f.next.enabled)
 assert(f.selection:GetText() == "", "empty rankings must not invite selecting a missing row")
 -- Commands use the same entry points as buttons: only one book may be visible.
+GL.SetSetting("guideSeen", true)
 GL.ShowJournal("summary")
 assert(GrudgeLedgerJournal:IsShown() and not f:IsShown())
 GL.ShowStatistics("players")

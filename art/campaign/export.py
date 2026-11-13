@@ -8,6 +8,7 @@ media = source.parents[1] / "GrudgeLedger" / "Media"
 sizes = {
     "JournalBookSurface": (1024, 1024),
     "JournalButtons": (512, 512),
+    "JournalDialog": (512, 512),
     "JournalTitlePlate": (512, 64),
     "JournalMedallion": (128, 128),
     "JournalSettings": (64, 64),

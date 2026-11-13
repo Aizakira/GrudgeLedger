@@ -70,6 +70,16 @@ function methods:IsEnabled() return self.enabled end
 function methods:SetToplevel(v) self.topLevel = v end
 function methods:Raise() self.raised = (self.raised or 0) + 1 end
 function methods:SetChecked(v) self.checked = v end
+function methods:SetMinMaxValues(low, high) self.minValue, self.maxValue = low, high end
+function methods:SetValueStep(step) self.step = step end
+function methods:SetValue(value)
+    value = math.max(self.minValue, math.min(self.maxValue, value))
+    if self.value ~= value then
+        self.value = value
+        if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, value) end
+    end
+end
+function methods:GetValue() return self.value end
 function methods:GetChecked() return self.checked end
 function methods:SetFocus() self.focus = true end
 function methods:ClearFocus() self.focus = false end
@@ -144,6 +154,7 @@ GL_TEST_MOCK = {
 -- Native Menu descriptions become hover submenus when children are added.
 function GL_TEST_MOCK.NewMenu()
     local menu = { buttons = {}, children = {}, entries = {} }
+    function menu:AddInitializer(callback) self.initializer = callback end
     function menu:CreateDivider() self.entries[#self.entries + 1] = { kind = "divider" } end
     function menu:CreateTitle(text) self.entries[#self.entries + 1] = { kind = "title", text = text } end
     function menu:CreateButton(text, callback)

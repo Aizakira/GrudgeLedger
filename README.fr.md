@@ -37,6 +37,13 @@ Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartou
 
 La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous pouvez agrandir le texte, choisir la police de lecture et compacter l’espacement. Le guide de première ouverture est accessible depuis **Données et aide**.
 
+Depuis la version 0.7.1, l’onglet Histoire permet de consulter chaque événement
+et de vérifier son attribution avant de l’annuler. L’onglet Notes permet
+d’écrire, de modifier et de parcourir les notes sur la fiche du joueur.
+Dans Bilan, **Mon année** ouvre la chronique de l’année choisie. La fiche de guilde
+présente sa règle et les exceptions individuelles. Pour vérifier la version
+effectivement chargée par Forever, tapez `/gl version`.
+
 ## Solde de rancune
 
 Les fiches automatiques comptent **−10 par mort, −1 par agression et +1 par victoire**. Les gestes négatifs s'ajoutent : une mort, un geste négatif et deux victoires donnent **−9**, donc **Méfiance (orange)** avec une alerte de proximité. Les victoires seules ne créent jamais d'amitié ; les gestes amicaux ne masquent pas une dette PvP encore négative. Les classements Ami/Méfiance/Ennemi et les avis manuels restent prioritaires. Les anciennes fiches automatiques sont recalculées sans effacer notes, compteurs ni historique.

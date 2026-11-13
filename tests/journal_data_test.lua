@@ -34,6 +34,9 @@ local stats = GL.PersonalStatistics()
 eq(stats.deaths, 1, "three aggressors count as one own death")
 eq(stats.probableDeaths, 0, "confirmed evidence supersedes probable participants")
 eq(stats.mostDeaths.record, rb, "confirmed opponent ranking")
+eq(#stats.topDeaths, 1, "probable participants never enter the podium")
+stats.topDeaths[1].value = 888
+eq(GL.PersonalStatistics().topDeaths[1].value, 1, "the podium returned to UI must not mutate the cache")
 stats.deaths, stats.mostDeaths.value = 999, 999
 eq(GL.PersonalStatistics().deaths, 1, "returned stats cannot corrupt cached totals")
 eq(GL.PersonalStatistics().mostDeaths.value, 1, "returned rankings cannot corrupt cache")
@@ -41,6 +44,7 @@ assert(GL.VoidPvP(rb, eb, true))
 eq(GL.PersonalStatistics().probableDeaths, 1, "silent correction invalidates summary cache")
 eq(GL.PersonalStatistics().deaths, 0, "corrected confirmation is excluded")
 eq(#GL.JournalEvents({ kind = "pvp" }), 3, "chronicle retains corrected evidence for audit")
+eq(#GL.PersonalStatistics().topDeaths, 0, "corrected deaths are removed from the podium")
 assert(GL.VoidPvP(ra, ea, true) and GL.VoidPvP(rc, ec, true))
 eq(GL.PersonalStatistics().events, 0, "voided events excluded from every total")
 
@@ -180,4 +184,14 @@ eq(GL.Relation(GL.Get(a)), "neutral", "victories never create friendship")
 IsInInstance = function() return true, "pvp" end
 assert(not GL.RecordPvP(b, "death", "confirmed", "battleground", "bg-death"))
 eq(GL.PersonalStatistics().deaths, 2, "battleground deaths never enter personal journal")
+reset()
+local rivals = {person("Zulu"), person("Alpha"), person("Delta"), person("Bravo")}
+for i, rival in ipairs(rivals) do
+    for n = 1, i == 1 and 3 or 2 do add(rival, "death", "confirmed", i .. "-" .. n) end
+end
+local podium = GL.PersonalStatistics().topDeaths
+eq(#podium, 3, "podium has at most three positions")
+eq(podium[1].record.key, rivals[1].key, "most confirmed deaths rank first")
+eq(podium[2].record.key, rivals[2].key, "stable key breaks a tie")
+eq(podium[3].record.key, rivals[4].key, "fourth ranked player stays off the podium")
 print("PASS journal data: provenance, alt/legacy scopes, shared deaths, merge dedup, corrections, periods, cache invalidation, note CRUD, rich search/sort and tenacious PvP score")

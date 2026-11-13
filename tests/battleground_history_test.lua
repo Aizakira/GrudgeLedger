@@ -106,13 +106,13 @@ assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 GL.ShowLedger(mixed.key)
 GrudgeLedgerWindow.detailTabs.history.scripts.OnClick(GrudgeLedgerWindow.detailTabs.history, "LeftButton")
-assert(GrudgeLedgerWindow.detailText:GetText():find("champ de bataille, non comptabilisé", 1, true))
-GrudgeLedgerWindow.tools.scripts.OnClick()
-for _, child in ipairs(GrudgeLedgerWindow.toolsMenu.children) do
-    if child.text == "Corriger le PvP" then child.scripts.OnClick(child, "LeftButton") end
-end
-local row = GrudgeLedgerCorrections.rows[3]
-assert(row.title:GetText():find("champ de bataille, exclu", 1, true) and row.undo.enabled == false)
+local page = GrudgeLedgerWindow.historyPage
+page.filter.scripts.OnClick()
+page.options.voided.scripts.OnClick()
+local row = page.rows[1]
+assert(row.badge:GetText():find("Champ de bataille",1,true))
+row.details.scripts.OnClick()
+assert(not GrudgeLedgerCorrections.confirm.enabled and GrudgeLedgerCorrections.certainty:GetText():find("exclu",1,true))
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 
 -- Archives are ordinary private SavedVariables, with no cycles or shared tables.

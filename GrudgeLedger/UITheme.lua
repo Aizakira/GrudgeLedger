@@ -158,7 +158,7 @@ local function iconButton(parent, textureName, title, x, y, size, onClick)
     return b
 end
 
-local function window(name, title, width, height)
+local function window(name, title, width, height, isBook)
     local f = CreateFrame("Frame", name, UIParent)
     f:SetSize(width, height)
     f:SetPoint("CENTER")
@@ -171,39 +171,12 @@ local function window(name, title, width, height)
     f:SetScript("OnMouseDown", function(self) self:Raise() end)
     f:SetScript("OnDragStart", function(self) self:StartMoving() end)
     f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-    local shadow = f:CreateTexture(nil, "BACKGROUND", nil, -8)
-    f.shadow = shadow
-    shadow:SetPoint("TOPLEFT", -4, 4)
-    shadow:SetPoint("BOTTOMRIGHT", 4, -4)
-    shadow:SetColorTexture(0, 0, 0, 0.65)
-    -- ponytail: explicit native sublevels, never creation order; keep solid fills
-    -- below decorative images so a missing texture cannot erase readable backing.
-    f.outerBorder = surface(f, theme.gold, 0, -7)
-    f.cover = surface(f, theme.red, 1, -6)
-    f.innerBorder = surface(f, theme.gold, 6, -5)
-    local lining = surface(f, theme.background, 7, -4)
-    f.lining = lining
-    local grain = f:CreateTexture(nil, "BACKGROUND", nil, -3)
-    f.grain = grain
-    grain:SetAllPoints(lining)
-    grain:SetTexture(media .. "JournalPaper")
-    GL.Safe(grain.SetVertexColor, grain, 0.13, 0.085, 0.065)
-    local header = f:CreateTexture(nil, "BORDER", nil, 0)
-    f.header = header
-    header:SetPoint("TOPLEFT", 7, -7)
-    header:SetPoint("TOPRIGHT", -7, -7)
-    header:SetHeight(35)
-    header:SetTexture(media .. "JournalPaper")
-    GL.Safe(header.SetVertexColor, header, 0.32, 0.075, 0.065)
-    local headerFill = f:CreateTexture(nil, "BORDER", nil, -1)
-    f.headerFill = headerFill
-    headerFill:SetAllPoints(header)
-    headerFill:SetColorTexture(unpack(theme.red))
-    f.headerLine = f:CreateTexture(nil, "BORDER", nil, 1)
-    f.headerLine:SetPoint("TOPLEFT", 8, -42)
-    f.headerLine:SetPoint("TOPRIGHT", -8, -42)
-    f.headerLine:SetHeight(1)
-    f.headerLine:SetColorTexture(theme.gold[1], theme.gold[2], theme.gold[3], 0.7)
+    f.lining = surface(f, theme.background, isBook and 20 or 14, -4)
+    if not isBook then
+        local cover = f:CreateTexture(nil, "BACKGROUND", nil, -2)
+        cover:SetAllPoints()
+        cover:SetTexture(media .. "JournalDialog")
+    end
     local seal = f:CreateTexture(nil, "ARTWORK")
     f.seal = seal
     seal:SetSize(34, 34)
@@ -225,11 +198,7 @@ local function window(name, title, width, height)
 end
 
 local function bookWindow(name, title)
-    local f = window(name, title, 960, 700)
-    for _, region in ipairs({ f.shadow, f.outerBorder, f.cover, f.innerBorder, f.grain, f.header, f.headerFill, f.headerLine }) do region:Hide() end
-    f.lining:ClearAllPoints()
-    f.lining:SetPoint("TOPLEFT", 20, -20)
-    f.lining:SetPoint("BOTTOMRIGHT", -20, 20)
+    local f = window(name, title, 960, 700, true)
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)
     f.closeButton:SetSize(32, 32)

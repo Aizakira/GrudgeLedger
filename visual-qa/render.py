@@ -418,6 +418,10 @@ def main():
               "honor-story", "guide"]
     views += ["journal-largeprint", "journal-history-largeprint-small", "statistics-largeprint",
               "honor-largeprint-small", "settings-readable-alerts-largeprint-small"]
+    views += ["journal-compact", "journal-history-page2", "journal-history-filter", "correction-voided",
+              "honor-annual", "honor-annual-empty", "honor-annual-largeprint-small", "honor-podium",
+              "honor-races", "honor-classes", "guild-exceptions", "guild-rankings-largeprint-small",
+              "settings-appearance-markers", "settings-data-experimental", "alert-preview"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
     if sys.argv[1:]: views = sys.argv[1:]

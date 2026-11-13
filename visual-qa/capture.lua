@@ -4,6 +4,10 @@ local qaClock = 1794400000
 time = function() return qaClock end
 date = function(format, timestamp) return os.date(format or "%c", timestamp or qaClock) end
 local methods = getmetatable(UIParent).__index
+function methods:Click()
+    assert(self:IsEnabled(), "Attempt to click a disabled control: " .. self:GetText())
+    self:GetScript("OnClick")(self, "LeftButton")
+end
 local oldFrame, oldTexture, oldFont = CreateFrame, methods.CreateTexture, methods.CreateFontString
 local function tag(region, kind, template, layer)
     region.qaKind, region.qaTemplate, region.qaLayer = kind, template, layer
@@ -200,7 +204,7 @@ for i, r in ipairs(records) do
     if GL.Relation(r) == "friend" then r.groupCount = 15 - i end
 end
 local function hideWindows()
-    for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert", "GrudgeLedgerGuide" }) do
+    for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert", "GrudgeLedgerAlertPreview", "GrudgeLedgerGuide" }) do
         if _G[name] then _G[name]:Hide() end
     end
 end
@@ -215,10 +219,11 @@ function QA.capture(name)
     hideWindows()
     GL.SetSetting("readableFont", name:find("%-readable") ~= nil)
     GL.SetSetting("readingScale", name:find("%-largeprint") and 1.25 or 1)
+    GL.SetSetting("compactMode", name == "journal-compact")
     name = name:gsub("%-readable", "")
     name = name:gsub("%-largeprint", "")
     UIParent:SetSize(1920, 1080)
-    if name == "journal" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" or name == "journal-history" or name == "journal-notes" or name == "journal-history-small" or name == "journal-notes-small" then
+    if name == "journal" or name == "journal-compact" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" or name:find("^journal%-history") or name:find("^journal%-notes") then
         if name:find("^journal%-small") then UIParent:SetSize(1024, 600) end
         if name:find("%-small$") then UIParent:SetSize(1024, 600) end
         GL.ShowLedger(record.key)
@@ -229,6 +234,8 @@ function QA.capture(name)
         local tab = name:find("%-history") and "history" or name:find("%-notes") and "notes" or "summary"
         local f = GrudgeLedgerWindow
         if f.detailTabs then f.detailTabs[tab].scripts.OnClick(f.detailTabs[tab]) end
+        if name == "journal-history-page2" then f.historyPage.next:Click() end
+        if name == "journal-history-filter" then f.historyPage.options.pvp:Click() end
         if name == "journal-small-bottom" then
             local f = GrudgeLedgerWindow
             assert(f.detailBody:GetHeight() >= f.detailText:GetStringHeight() + 12)
@@ -237,9 +244,12 @@ function QA.capture(name)
         return GrudgeLedgerWindow
     elseif name:find("^honor") or name:find("^chronicle") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
-        local mode = name:find("%-story") and "story" or name:find("^honor") and "summary" or "history"
+        local mode = name:find("%-annual") and "year" or name:find("%-story") and "story" or name:find("^honor") and "summary" or "history"
         GL.ShowJournal(mode)
         local f = GrudgeLedgerJournal
+        if name == "honor-podium" then f.dimensionButtons.opponents:Click() end
+        if name == "honor-races" then f.dimensionButtons.race:Click() end
+        if name == "honor-classes" then f.dimensionButtons.class:Click() end
         f.period, f.scope, f.kind, f.offset = "all", "character", "all", 0
         f.search:SetText("")
         if name:find("%-empty") then f.scope = "legacy" end
@@ -258,7 +268,7 @@ function QA.capture(name)
         f.search:SetText("Aucune correspondance QA")
         f.search.scripts.OnEnterPressed(f.search)
         return f
-    elseif name:find("^statistics") or name:find("^guild%-rankings") then
+    elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
         local guild = name:find("^guild") ~= nil
         GL.ShowStatistics(guild and "guilds" or "players")
@@ -273,26 +283,36 @@ function QA.capture(name)
         if name:find("%-horde") then f.faction = "Horde" end
         GL.ShowStatistics(guild and "guilds" or "players")
         if guild and f.rows[1].item then f.rows[1].scripts.OnClick(f.rows[1]) end
+        if name == "guild-exceptions" and f.guildDetail.exceptionButton:IsEnabled() then f.guildDetail.exceptionButton:Click() end
         return f
     elseif name == "guilds" then GL.ShowGuilds(record) return GrudgeLedgerGuilds
     elseif name == "note-edit" or name == "note-delete" then
         GL.EditNote(record, record.notes[1])
         if name == "note-delete" then GrudgeLedgerNote.remove.scripts.OnClick() end
-        return GrudgeLedgerNote
-    elseif name == "note" then GL.EditNote(record) GrudgeLedgerNote.edit:SetText("Une bonne équipe au monastère.\n\nJoueur patient, consignes claires et partage équitable du butin. À retrouver pour une prochaine sortie.") return GrudgeLedgerNote
+        return GrudgeLedgerWindow
+    elseif name == "note" then GL.EditNote(record) GrudgeLedgerNote.edit:SetText("Une bonne équipe au monastère.\n\nJoueur patient, consignes claires et partage équitable du butin. À retrouver pour une prochaine sortie.") return GrudgeLedgerWindow
     elseif name == "settings" or name:find("^settings%-") then
         SlashCmdList.GRUDGELEDGER("settings")
         local f = GrudgeLedgerSettings
-        local category = name:match("^settings%-(.+)$") or "appearance"
+        local category = name:match("^settings%-([a-z]+)") or "appearance"
         category = category:gsub("%-small$", "")
         if name:find("%-small$") then UIParent:SetSize(1024, 600) f:Hide() f:Show() end
         if f.tabs then
             local tab = assert(f.tabs[category], "Missing settings category: " .. category)
             tab.scripts.OnClick(tab)
         end
+        if name == "settings-appearance-markers" then GL.SetSetting("iconSize", 40) end
+        if name == "settings-data-experimental" then f.experimental:Click() end
         return f
+    elseif name == "alert-preview" then GL.Display.PreviewAlert("enemy") return GrudgeLedgerAlertPreview
     elseif name == "guide" then GL.ShowGuide() return GrudgeLedgerGuide
-    elseif name == "corrections" then GL.ShowLedger(record.key) click("Corriger le PvP") GrudgeLedgerWindow:Hide() return GrudgeLedgerCorrections
+    elseif name == "corrections" or name == "correction-voided" then
+        GL.ShowLedger(record.key)
+        click("Corriger le PvP")
+        local details = GrudgeLedgerWindow.historyPage.rows[1].details
+        details:Click()
+        if name == "correction-voided" then GrudgeLedgerCorrections.confirm:Click() details:Click() end
+        return GrudgeLedgerCorrections
     elseif name == "diagnostic" then SlashCmdList.GRUDGELEDGER("debug") return GrudgeLedgerDiagnostic
     elseif name == "minimap" or name == "minimap-large" then
         Minimap:SetSize(name == "minimap" and 160 or 260, name == "minimap" and 160 or 260)

@@ -8,6 +8,12 @@ CACHE = Path(__file__).resolve().parent / "renders" / "native"
 # Git mirror of the extracted Blizzard UI, Classic 1.13.5 (34911).
 SOURCE = "https://raw.githubusercontent.com/Gethe/wow-ui-textures/312a6e61bab69370c65ccc0a08f1075d62196294/"
 TEXTURES = {
+    "ACHIEVEMENTFRAME/UI-Achievement-IconFrame.PNG": "78a47130332791b276b1b6474a191cebfd16a56770850f3d1e6dcd4006fd657e",
+    "ICONS/Ability_DualWield.PNG": "2af79363ad391968679b5b92a001cff742a4d6b1cb823b60fc02d87c5b4b0149",
+    "ICONS/Ability_Rogue_FeignDeath.PNG": "7cfd14b389e89fd21da4dd8c854ba23d34bb080d79af89807b6589f78dd41e18",
+    "ICONS/Ability_Warrior_Challange.PNG": "a0d2479627399aec6027fbeac857e8000741b4b80d19c284b819a4e761eb50ef",
+    "ICONS/Ability_Warrior_Charge.PNG": "bcf188e59dfaf2f1112969ed4a8ead480be24f83939dbe9304eb726b06ffb033",
+    "ICONS/INV_Misc_Book_09.PNG": "a0dc6f294133afd3cbf5a54389fe55cb3123a643678d9594469615b63f10d300",
     "Buttons/UI-OptionsButton.PNG": "f4afedd1e3669d860d3f31e705ffd79fef054cf50a696b38bb06b6a901701e8f",
     "Buttons/UI-ScrollBar-ScrollDownButton-Up.PNG": "33b783b69a9c1744ce967c309af3e669bb8accc24453aacc158aa265e72b8989",
     "Buttons/UI-Quickslot2.PNG": "a9d4a63d00423f73b9dfc35454647d8f69241ba9b0e8feda1cd0a749e6ef6669",

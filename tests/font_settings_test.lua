@@ -30,22 +30,22 @@ GL.EditNote(record)
 local f, note = GrudgeLedgerWindow, GrudgeLedgerNote
 note.edit:SetText(string.rep("Brouillon non enregistré. ", 40))
 SlashCmdList.GRUDGELEDGER("settings")
-local settings, check = GrudgeLedgerSettings, GrudgeLedgerSettings.checks.readableFont
-assert(check:GetChecked() and f.title.fontObject == "ChatFontNormal" and note.edit.fontObject == "ChatFontNormal")
+local settings = GrudgeLedgerSettings
+assert(settings.classic.active and f.title.fontObject == "ChatFontNormal" and note.edit.fontObject == "ChatFontNormal")
 assert(select(2, f.title:GetFont()) == 30 and select(2, f.rows[1].name:GetFont()) == 16)
 assert(select(2, f.detailText:GetFont()) == 15 and select(2, note.edit:GetFont()) == 15)
 local draft, text, color = note.edit:GetText(), f.detailText:GetText(), {f.detailText:GetTextColor()}
-local readableHeight = f.detailBody:GetHeight()
+local readableHeight = note.edit:GetHeight()
 local function choose(value)
-    check:SetChecked(value)
-    check:GetScript("OnClick")(check)
+    local control = value and settings.classic or settings.grimoire
+    control:GetScript("OnClick")(control)
     assert(GL.Settings().readableFont == value and GrudgeLedgerDB.settings.readableFont == value)
 end
 choose(false)
 assert(f.title.fontObject == "GameFontNormalLarge" and f.detailTitle.fontObject == "GameFontNormalLarge")
 assert(f.rows[1].name.fontObject == "GameFontNormalLarge" and note.edit.fontObject == "QuestFont_Large")
 assert(settings.title.fontObject == "GameFontNormalLarge", "book section titles switch too")
-assert(f.detailBody:GetHeight() > readableHeight, "wrapped text is measured again immediately")
+assert(note.edit:GetHeight() > readableHeight, "wrapped text is measured again immediately")
 f.detailScroll:SetVerticalScroll(100000)
 note.scroll:SetVerticalScroll(100000)
 choose(true)
@@ -65,7 +65,7 @@ GL.ShowGuilds(record)
 assert(GrudgeLedgerGuilds.title.fontObject == "ChatFontNormal", "later-created windows use the saved choice")
 assert(not GL.SetSetting("readableFont", "true"), "setting validates its type")
 GL.InitDB()
-assert(GL.Settings().readableFont and check:GetChecked(), "choice survives database reload")
+assert(GL.Settings().readableFont and settings.classic.active, "choice survives database reload")
 GL.SetSetting("readingScale", 1.25)
 assert(select(2, f.detailText:GetFont()) == 18.75 and select(2, f.rows[1].name:GetFont()) == 20,
     "reading scale applies to content and index names")

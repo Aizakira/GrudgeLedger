@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON = ...
-GrudgeLedger = { version = "0.7.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.7.1", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local listeners = {}
@@ -627,6 +627,23 @@ function GL.GuildStatistics()
     return result
 end
 
+function GL.GuildMembers(name, realm)
+    local key = guildIdentity(name, realm)
+    local members = {}
+    if key then
+        for _, record in pairs(GL.db.players) do
+            if record.guild and guildIdentity(record) == key and not GL.IsGroupOnly(record) then
+                members[#members + 1] = record
+            end
+        end
+        table.sort(members, function(a, b)
+            if a.fullName ~= b.fullName then return a.fullName < b.fullName end
+            return a.key < b.key
+        end)
+    end
+    return members
+end
+
 function GL.PlayerStatistics(metric)
     local result = {}
     for _, record in pairs(GL.db.players) do
@@ -1023,7 +1040,10 @@ end
 local function statisticsCopy(stats)
     local result = {}
     for key, value in pairs(stats) do
-        if key == "mostKilled" or key == "mostDeaths" then result[key] = { record = value.record, value = value.value }
+        if key == "topDeaths" then
+            result[key] = {}
+            for i, row in ipairs(value) do result[key][i] = { record = row.record, value = row.value } end
+        elseif key == "mostKilled" or key == "mostDeaths" then result[key] = { record = value.record, value = value.value }
         else result[key] = value end
     end
     return result
@@ -1039,7 +1059,7 @@ function GL.PersonalStatistics(options)
         and (not personalStatistics.nextAt or now < personalStatistics.nextAt) then return statisticsCopy(personalStatistics.value) end
     local stats = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0,
         aggressions = 0, probableAggressions = 0, events = 0, unknownActorEvents = 0,
-        unlinkedEvents = 0, currentActor = actor, actorName = actorName, scope = scope }
+        unlinkedEvents = 0, currentActor = actor, actorName = actorName, scope = scope, topDeaths = {} }
     local counted, unknown, ranked, rankings = {}, {}, {}, { kill = {}, death = {} }
     for _, row in ipairs(indexedJournal()) do
         local event, record = row.event, row.record
@@ -1078,6 +1098,17 @@ function GL.PersonalStatistics(options)
         for _, row in pairs(records) do
             local best = stats[field]
             if not best or row.value > best.value or row.value == best.value and row.record.key < best.record.key then stats[field] = row end
+            if kind == "death" then
+                -- Keep only the three displayed opponents, after deduplication and period filtering.
+                for i = 1, 3 do
+                    local other = stats.topDeaths[i]
+                    if not other or row.value > other.value or row.value == other.value and row.record.key < other.record.key then
+                        table.insert(stats.topDeaths, i, row)
+                        stats.topDeaths[4] = nil
+                        break
+                    end
+                end
+            end
         end
     end
     -- One bounded result cache; changing a filter replaces it. Rolling windows

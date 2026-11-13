@@ -40,11 +40,9 @@ https://github.com/GudaAddons/HeadHunter/blob/main/Detection/ForeverDeaths.lua
 
 The ancient-book presentation is visually inspired by Overlord's warm fantasy
 materials and restrained gold accents. No Overlord code or artwork is bundled.
-The open book/quill illustration (Media/JournalIllustration.tga, 512x256) and
-quiet parchment (Media/JournalPaper.tga, 512x512) were originally generated with
-OpenAI's built-in image tool, then converted to uncompressed RGBA TGA. They are
-distributed under the same GPLv3 terms. The illustration has a transparent
-background; the reading paper is opaque. No text is baked into either asset.
+The quiet parchment (Media/JournalPaper.tga) and the dark leather dialog frame
+(Media/JournalDialog.tga) were generated with OpenAI's image tool and exported
+as RGBA TGA textures. Both are distributed under GPLv3.
 
 The campaign register's background (JournalBookSurface), title plaque,
 medallion, settings and close buttons are independent layers. WoW renders the

@@ -42,6 +42,8 @@ assert(f.metrics.deaths.value:GetText() == "1" and f.metrics.kills.value:GetText
 assert(f.metrics.probableKills.value:GetText() == "1" and f.metrics.probableKills.qualifier:GetText() == "probable", "probable wins stay separate")
 assert(f.coverage:GetText():find("1 sans auteur connu", 1, true))
 assert(f.recaps.mostDeaths.record == ra and not f.recaps.mostKilled.record)
+assert(f.podium:IsShown() and f.podium.rows[1].record == ra and not f.podium.rows[2]:IsShown())
+click(f.dimensionButtons.race)
 assert(f.breakdownRows[1].kills:GetText() == "0 / 1" and f.breakdownRows[1].deaths:GetText() == "1 / 0",
     "breakdown must agree with the scoped summary and keep probable facts distinct")
 assert(f.breakdownInfo:GetText():find("1 rapport annulé", 1, true))
@@ -58,6 +60,15 @@ assert(not f.yearButton:GetText():find("nil", 1, true))
 click(f.periodButtons.year) assert(f.yearButton.enabled)
 click(f.periodButtons.week) assert(not f.yearButton.enabled)
 click(f.periodButtons.all)
+click(f.tabs.year)
+assert(f.annual:IsShown() and f.annual.metrics.deaths:GetText() == "1" and f.annual.metrics.kills:GetText() == "0")
+assert(f.yearButton.enabled and not f.periodButtons.week:IsShown() and f.annual.recaps.mostDeaths.record == ra)
+f.year = 2025 GL.ShowJournal("year")
+assert(f.annual.metrics.deaths:GetText() == "0" and f.annual.coverage:GetText():find("Aucun fait PvP", 1, true) and not f.annual.recaps.mostDeaths.enabled)
+f.year = 2026 GL.ShowJournal("year")
+click(f.annual.events)
+assert(f.mode == "history" and f.period == "year" and f.kind == "pvp" and f.scope == "character")
+click(f.reset)
 click(f.tabs.story)
 assert(f.story:IsShown() and not f.summary:IsShown() and not f.history:IsShown())
 assert(f.storyText:GetText():find("remporté 0 victoire confirmée", 1, true), "story must use the selected character, not account totals")
@@ -83,6 +94,9 @@ for _, row in ipairs(f.rows) do
     if row.item and row.item.event.voided then corrected = row end
 end
 assert(corrected and corrected.action:GetText():find("exclu des compteurs", 1, true), "corrections remain readable in the chronicle")
+click(corrected.details)
+assert(GrudgeLedgerCorrections.event == corrected.item.event and not GrudgeLedgerCorrections.confirm:IsEnabled())
+click(GrudgeLedgerCorrections.keep)
 click(f.scopeButton)
 local alt
 for _, row in ipairs(f.rows) do
@@ -162,6 +176,17 @@ assert(GL.Settings().partyWarnings)
 local count = #rb.notes
 GL.EditNote(rb, note)
 local n = GrudgeLedgerNote
+assert(n.parent == ledger and ledger.detailTab == "notes" and n.rows[1].note == note,
+    "opening an existing note jumps to its page in the selected player's book")
+click(n.previous)
+local picked = n.rows[1].note
+click(n.rows[1]) n.edit:SetText("Temporary revision")
+assert(n.draft:GetText():find("non enregistré",1,true))
+click(n.rows[2]) click(n.rows[1])
+assert(n.edit:GetText() == "Temporary revision" and n.selectedNote == picked, "switching dated notes preserves their individual drafts")
+click(n.cancel)
+assert(n.edit:GetText() == picked.text and n.draft:GetText() == "", "Cancel discards just this edit")
+GL.EditNote(rb,note)
 n.edit:SetText("Updated dungeon memory") click(n.save)
 assert(#rb.notes == count and rb.notes[1] == note and note.text == "Updated dungeon memory")
 GL.EditNote(rb, note) n.edit:SetText("Unfinished edit") n:Hide()
@@ -182,5 +207,11 @@ assert(n:IsShown() and n.error:GetText() ~= "" and #rb.notes == count - 2,
     "an outdated editor cannot overwrite a different note")
 click(n.new) n.edit:SetText("  ") click(n.save)
 assert(n:IsShown() and n.error:GetText() ~= "", "empty notes are rejected without closing the draft")
+local formatDate = date
+date = function(format, at) return format == "%Y" and "?" or formatDate(format, at) end
+f.year = nil
+GL.ShowJournal("year")
+assert(f.annual.period:GetText() == "Année inconnue" and not f.yearButton:IsEnabled())
+date = formatDate
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS journal UI: scoped evidence, legacy/alt labels, bounded submitted search, correction audit, paging, configurable index, opt-in warning, stable note editing/deletion/drafts")

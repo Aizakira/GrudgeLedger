@@ -35,6 +35,8 @@ The leather, cloth and parchment share a decorative background. The medallion, t
 
 Open the cog or use `/gl settings` to set the font, text size and spacing. The first-use guide can be opened again from **Données et aide**.
 
+In 0.7.1, open an event in **Histoire** to review its attribution before cancelling it. Use **Notes** to write, edit and browse a player's notes. In the summary, **Mon année** opens the chronicle for the selected year. Each guild page shows its rule and any individual exceptions. Type `/gl version` to check which version Forever has loaded.
+
 ## Grudge balance
 
 Automatic records count **−10 per death, −1 per aggression and +1 per victory**. Negative gestures add to that balance: one death, one negative gesture and two victories leave **−9**, still **caution (orange)** with nearby alerts. Victories alone never create friendship; friendly gestures do not hide outstanding negative PvP debt. Explicit Friend/Caution/Enemy classifications and manual opinions stay authoritative. Existing automatic records are recalculated without deleting notes, counters or history.

@@ -28,11 +28,36 @@ local function text(tab)
     GL.ShowLedger(record.key)
     local control = GrudgeLedgerWindow.detailTabs[tab or "history"]
     control:GetScript("OnClick")(control)
-    return GrudgeLedgerWindow.detailText:GetText()
+    if tab == "summary" then return GrudgeLedgerWindow.detailText:GetText() end
+    if tab == "notes" then
+        local editor = GrudgeLedgerNote
+        if editor.rows[1].note then editor.rows[1].scripts.OnClick() end
+        return editor.edit:GetText()
+    end
+    local page, lines = GrudgeLedgerWindow.historyPage, {}
+    repeat
+        for _, row in ipairs(page.rows) do
+            if row.event then
+                for _,field in ipairs({row.date,row.title,row.hint,row.badge}) do lines[#lines+1] = field:GetText() end
+                if row.event.kind == "reputation" and row.event.source == "manual" then
+                    row.details.scripts.OnClick()
+                    lines[#lines+1] = GrudgeLedgerCorrections.proof:GetText()
+                    GrudgeLedgerCorrections.keep.scripts.OnClick()
+                elseif row.event.questTitle and row.event.kind == "death" and row.event.confidence == "probable" then
+                    row.details.scripts.OnClick()
+                    assert(GrudgeLedgerCorrections.proof:GetText():find("coup fatal non identifié",1,true))
+                    GrudgeLedgerCorrections.keep.scripts.OnClick()
+                end
+            end
+        end
+        if not page.next.enabled then break end
+        page.next.scripts.OnClick()
+    until false
+    return table.concat(lines,"\n")
 end
 local rendered = text()
 for _, expected in ipairs({
-    "Participation possible à votre mort", "coup fatal non identifié", "Vous l'avez vaincu",
+    "Participation possible à votre mort", "Vous l'avez vaincu",
     "Vous a infligé des dégâts", "Geste demandé : Bisou", "Geste demandé : Crachat",
     "Geste demandé : Bisou — avis +1", "Geste demandé : Crachat — avis -1", "Vous l'avez marqué : Ami", "Super donjon ||cff00ff00",
     "11/11/2026 12:00", "Quartier commerçant · Hurlevent", "Quête suivie : Les oreilles des trolls",
@@ -52,7 +77,7 @@ GL.RecordGroup(identity, "different-place", "Monastère écarlate")
 local group = record.history[#record.history]
 assert(group.kind == "grouped" and not group.subzone and not group.questTitle, "explicitly different locations must not inherit current context")
 assert(GL.VoidPvP(record, first))
-assert(text():find("annulé, non comptabilisé", 1, true) and record.pvp.probableDeaths == 0)
+assert(text():find("Annulé · exclu",1,true) and record.pvp.probableDeaths == 0)
 
 -- A newer quest/location cannot rewrite an old event, even after loading the DB again.
 questTitle = "Une autre quête"
@@ -93,10 +118,10 @@ assert(not record.history[#record.history].subzone)
 
 local previous = #record.history
 local display = text("history")
-assert(#record.history == previous, "the 20-event display cap must not truncate the stored journal")
+assert(#record.history == previous, "paging the history must not truncate the stored journal")
 local _, count = display:gsub("11/11/2026 12:00", "")
-assert(count == 20, "the history tab renders at most 20 dated events")
-assert(text("notes"):find("Mon souvenir personnel", 1, true), "history cap never hides personal notes")
+assert(count == previous, "all recorded events can be reached three at a time, including entries older than the first 20")
+assert(text("notes"):find("Mon souvenir personnel", 1, true), "history pagination never hides personal notes")
 local longNote = "À revoir : à\n\t" .. string.rep("é", 90) .. " souvenir final"
 GL.AddNote(record, longNote)
 local summary = text("summary")

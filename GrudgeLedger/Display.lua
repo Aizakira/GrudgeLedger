@@ -13,7 +13,7 @@ local styles = {
 }
 local visible, markers, lastAlert, pendingNames = {}, {}, {}, {}
 local guildBursts = {}
-local toast, elapsed = nil, 0
+local toast, previewToast, elapsed = nil, nil, 0
 local alert
 local lastSound
 local function alertSetting(relation) return relation == "friend" and "friendAlerts" or "enemyAlerts" end
@@ -275,9 +275,10 @@ local function updateMarker(entry, reuseObservation)
     else restoreName(marker) end
 end
 
-local function makeToast()
-    if toast then return toast end
-    local frame = CreateFrame("Button", "GrudgeLedgerNearbyAlert", UIParent)
+local function makeToast(preview)
+    if preview and previewToast then return previewToast end
+    if not preview and toast then return toast end
+    local frame = CreateFrame("Button", preview and "GrudgeLedgerAlertPreview" or "GrudgeLedgerNearbyAlert", UIParent)
     frame:SetSize(416, 112)
     if ChatFrame1 then
         -- Follow the chat layout, leaving room for tabs and small panels above it.
@@ -298,11 +299,9 @@ local function makeToast()
     frame.bg:SetPoint("TOPLEFT", 1, -1)
     frame.bg:SetPoint("BOTTOMRIGHT", -1, 1)
     frame.bg:SetColorTexture(0.055, 0.043, 0.042, 0.98)
-    frame.header = frame:CreateTexture(nil, "BORDER")
-    frame.header:SetPoint("TOPLEFT", 1, -1)
-    frame.header:SetPoint("TOPRIGHT", -1, -1)
-    frame.header:SetHeight(29)
-    frame.header:SetColorTexture(0.22, 0.055, 0.065, 1)
+    local leather = frame:CreateTexture(nil, "BORDER")
+    leather:SetAllPoints()
+    leather:SetTexture("Interface\\AddOns\\GrudgeLedger\\Media\\JournalDialog")
     frame.stripe = frame:CreateTexture(nil, "ARTWORK")
     frame.stripe:SetPoint("TOPLEFT", 1, -1)
     frame.stripe:SetPoint("BOTTOMLEFT", 1, 1)
@@ -347,8 +346,37 @@ local function makeToast()
     -- ponytail: clicking opens the captured record, avoiding protected targeting
     -- and recycled unit-token hazards. A future targeting control needs secure UI.
     frame:Hide()
-    toast = frame
+    if preview then previewToast = frame else toast = frame end
     return frame
+end
+
+local function styleToast(frame, style)
+    frame.icon:SetTexture(style.icon)
+    frame.icon:SetVertexColor(1, 1, 1)
+    frame.stripe:SetColorTexture(style.color[1], style.color[2], style.color[3], 1)
+    frame.title:SetTextColor(unpack(style.color))
+end
+
+local function alertSound(relation)
+    local sounds = SOUNDKIT or {}
+    if relation == "friend" then return sounds.IG_QUEST_LOG_OPEN end
+    return sounds.RAID_WARNING
+end
+
+function D.PreviewAlert(relation)
+    if relation ~= "friend" and relation ~= "enemy" then return false end
+    if toast and toast:IsShown() then return false end
+    local frame = makeToast(true)
+    styleToast(frame, styles[relation])
+    frame.title:SetText("Aperçu · " .. styles[relation].label .. " à proximité")
+    frame.name:SetText(relation == "friend" and "Célestine Longuebrise" or "Bastian Griseforge")
+    frame.note:SetText("Exemple affiché depuis les réglages.")
+    frame.hint:SetText("Cliquer pour fermer")
+    frame.expires = GL.Now() + 6
+    frame:Show()
+    local sound = alertSound(relation)
+    if sound and GL.Settings().sounds then GL.Safe(PlaySound, sound, "Master") end
+    return true
 end
 
 alert = function(identity, unit)
@@ -400,20 +428,16 @@ alert = function(identity, unit)
         end
     end
     local frame = makeToast()
+    if previewToast and previewToast:IsShown() then previewToast:Hide() end
     frame.key, frame.relation, frame.source, frame.expires = record.key, relation, source, now + 6
     frame.guildKey, frame.guildBurst = guildKey, burst
     frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
-    frame.icon:SetTexture(style.icon)
-    frame.icon:SetVertexColor(1, 1, 1)
-    frame.stripe:SetColorTexture(style.color[1], style.color[2], style.color[3], 1)
-    frame.title:SetTextColor(unpack(style.color))
+    styleToast(frame, style)
     refreshToastText(frame, record)
     frame:Show()
     GL.Trace("shown", identity, unit)
     if settings.sounds then
-        local sounds = SOUNDKIT or {}
-        local sound
-        if relation == "friend" then sound = sounds.IG_QUEST_LOG_OPEN else sound = sounds.RAID_WARNING end
+        local sound = alertSound(relation)
         if sound and (not lastSound or now - lastSound.time >= 2 or style.priority > lastSound.priority) then
             GL.Safe(PlaySound, sound, "Master")
             lastSound = { time = now, priority = style.priority }
@@ -552,6 +576,7 @@ function D.OnEvent(_, event, unit)
         for token in pairs(visible) do removeUnit(token) end
         guildBursts = {}
         if toast then toast:Hide() end
+        if previewToast then previewToast:Hide() end
         scanPlates()
     elseif event == "PLAYER_REGEN_ENABLED" or event == "GROUP_ROSTER_UPDATE" then D.Refresh()
     end
@@ -567,6 +592,7 @@ eventFrame:SetScript("OnUpdate", function(_, delta)
     -- with ThreatPlates updates. Use its update hook if very large crowds prove costly.
     D.Refresh()
     if toast and toast:IsShown() and GL.Now() >= toast.expires then toast:Hide() end
+    if previewToast and previewToast:IsShown() and GL.Now() >= previewToast.expires then previewToast:Hide() end
 end)
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
     "UPDATE_MOUSEOVER_UNIT", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do

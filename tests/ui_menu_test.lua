@@ -31,6 +31,12 @@ assert(not next(open({ unit = "player" }).buttons), "no self records")
 assert(not next(open({ name = "Ambiguous" }).buttons), "no bare-name guesses")
 
 local r = open({ unit = "target" })
+local texture = { SetSize = function() end, SetPoint = function() end, SetTexture = function(self, path) self.path = path end }
+local menuRow = { AttachTexture = function() return texture end, fontString = { GetUnboundedStringWidth = function() return 56 end } }
+for label, name in pairs({ Ami = "Friend", ["Méfiance"] = "Warning", Ennemi = "Enemy", Automatique = "Neutral" }) do
+    local width, height = r.children[label].initializer(menuRow)
+    assert(texture.path:match("Relation" .. name .. "$") and width > 56 and height >= 16)
+end
 assert(r.buttons.Ami and r.buttons.Ennemi and r.buttons.Automatique and not r.buttons.Neutre and r.buttons["Ajouter une note"])
 assert(not next(GL.db.players), "opening a menu must not create a record")
 units.target = { name = "Megumin", surname = "Crimson", guid = "Player-1-megumin" }
@@ -72,7 +78,7 @@ assert(GrudgeLedgerNote:IsShown())
 GrudgeLedgerNote.edit:SetText("Super donjon, personne cool |cff00ff00")
 click(childButton(GrudgeLedgerNote, "Enregistrer"))
 assert(#aqua.notes == 1 and aqua.notes[1].text:find("Super donjon", 1, true))
-assert(not GrudgeLedgerNote:IsShown() and not GL.Get("guid:Player-1-megumin"))
+assert(GrudgeLedgerNote.selectedNote == aqua.notes[1] and GrudgeLedgerNote.draft:GetText() == "Note enregistrée" and not GL.Get("guid:Player-1-megumin"))
 GL.EditNote(aqua)
 GrudgeLedgerNote.edit:SetText("Brouillon conservé")
 GrudgeLedgerNote:Hide()
@@ -81,7 +87,7 @@ assert(GrudgeLedgerNote.edit:GetText() == "Brouillon conservé", "Escape/close k
 GrudgeLedgerNote.edit:SetText(string.rep("Ligne de note\n", 40))
 assert(GrudgeLedgerNote.edit:GetHeight() > GrudgeLedgerNote.scroll:GetHeight(), "multiline editor child must grow beyond viewport")
 GrudgeLedgerNote.edit.scripts.OnCursorChanged(GrudgeLedgerNote.edit, 0, -520, 1, 13)
-assert(GrudgeLedgerNote.scroll:GetVerticalScroll() >= 393, "cursor follows down beyond viewport")
+assert(GrudgeLedgerNote.scroll:GetVerticalScroll() >= 533-GrudgeLedgerNote.scroll:GetHeight(), "cursor follows down beyond viewport")
 GrudgeLedgerNote.edit.scripts.OnCursorChanged(GrudgeLedgerNote.edit, 0, -2, 1, 13)
 assert(GrudgeLedgerNote.scroll:GetVerticalScroll() == 2, "cursor follows back to top")
 GrudgeLedgerNote.edit:SetText("Court")
@@ -106,11 +112,11 @@ GL.SetReaction(aqua, "friend")
 click(GrudgeLedgerWindow.reactions.neutral)
 assert(GL.Relation(aqua) == "warning" and aqua.reputation == -9, "journal button shares the same automatic calculation")
 click(GrudgeLedgerWindow.detailTabs.history)
-assert(GrudgeLedgerWindow.detailText:GetText():find("Classement automatique réactivé", 1, true))
+assert(GrudgeLedgerWindow.historyPage.rows[1].title:GetText():find("Classement automatique réactivé",1,true))
 GL.SetReaction(aqua, "warning")
 local status = GrudgeLedgerWindow.detailStatus
 assert(status:GetText():find("Méfiance", 1, true) and status.color[1] > status.color[2] and status.color[2] > status.color[3], "warning uses readable orange ink and an explicit status label")
-assert(not GrudgeLedgerWindow.detailText:GetText():find("Vous a infligé des dégâts", 1, true), "history does not invent aggression events")
+for _,row in ipairs(GrudgeLedgerWindow.historyPage.rows) do assert(not row.event or row.event.kind ~= "aggression","history does not invent aggression events") end
 click(GrudgeLedgerWindow.detailTabs.summary)
 assert(GrudgeLedgerWindow.detailText:GetText():find("Agressions : 0 confirmée, 0 probable", 1, true))
 click(GrudgeLedgerWindow.actions[1])
@@ -134,7 +140,7 @@ assert(GL.Settings().socialTracking == false)
 assert(not next(cvars), "no automatic changes to nameplate settings")
 mock.SetCombat(true)
 click(GrudgeLedgerSettings.tabs.appearance)
-local recognition = childButton(GrudgeLedgerSettings.pages.appearance, "Activer le repérage (icônes + couleurs)")
+local recognition = childButton(GrudgeLedgerSettings.pages.appearance, "Activer le repérage")
 click(recognition)
 SlashCmdList.GRUDGELEDGER("reperage")
 assert(not next(cvars), "no restricted CVar changes in combat")
@@ -150,7 +156,7 @@ assert(cvars.nameplateShowFriendlyPlayers == 1 and cvars.nameplateShowEnemies ==
 assert(not cvars.nameplateShowFriends, "use Forever's current friendly-player filter")
 assert(GL.Settings().markers and GL.Settings().nameColor)
 assert(GrudgeLedgerSettings.checks.nameColor:GetChecked())
-assert(GrudgeLedgerSettings.plateStatus:GetText():find("Alliés : activées", 1, true))
+assert(GrudgeLedgerSettings.plateStatus:GetText():find("Barres alliées : activées", 1, true))
 GL.SetSetting("markers", false) GL.SetSetting("nameColor", false)
 cvars.nameplateShowFriendlyPlayers = 0
 SlashCmdList.GRUDGELEDGER("reperage")
@@ -193,12 +199,12 @@ units.target = nil
 SlashCmdList.GRUDGELEDGER("- Sans cible")
 assert(megumin.reputation == beforeReputation, "missing target must not reuse old macro identity")
 SlashCmdList.GRUDGELEDGER("debug")
-for _, frame in ipairs({ GrudgeLedgerWindow, GrudgeLedgerNote, GrudgeLedgerSettings }) do
+for _, frame in ipairs({ GrudgeLedgerWindow, GrudgeLedgerSettings }) do
     assert(frame.topLevel and frame.raised > 0, "all windows must be top-level and raised on opening")
 end
-local raised = GrudgeLedgerNote.raised
+local raised = GrudgeLedgerWindow.raised
 GL.EditNote(aqua)
-assert(GrudgeLedgerNote.raised > raised, "reopening visible note editor raises it")
+assert(GrudgeLedgerWindow.raised > raised and GrudgeLedgerNote:IsShown(), "reopening the embedded editor raises its book")
 raised = GrudgeLedgerWindow.raised
 GL.ShowLedger(aqua.key)
 assert(GrudgeLedgerWindow.raised > raised, "reopening visible ledger raises it")

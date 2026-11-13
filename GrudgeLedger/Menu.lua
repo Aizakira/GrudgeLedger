@@ -52,7 +52,17 @@ local function onMenu(_, root, data)
     root = root:CreateButton("Grudge Ledger")
     for _, choice in ipairs({ { "Ami", "friend" }, { "Méfiance", "warning" }, { "Ennemi", "enemy" }, { "Automatique", "neutral" } }) do
         local relation = choice[2]
-        root:CreateButton(choice[1], function() GL.SetReaction(captured, relation) end)
+        local entry = root:CreateButton(choice[1], function() GL.SetReaction(captured, relation) end)
+        if entry.AddInitializer then
+            entry:AddInitializer(function(b)
+                if not b.AttachTexture or not b.fontString then return end
+                local icon = b:AttachTexture()
+                icon:SetTexture("Interface\\AddOns\\GrudgeLedger\\Media\\Relation" .. relation:gsub("^%l", string.upper))
+                icon:SetSize(16, 16)
+                icon:SetPoint("RIGHT", -3, 0)
+                return b.fontString:GetUnboundedStringWidth() + 42, 22
+            end)
+        end
     end
     root:CreateButton("Avis positif (+1)", function() GL.AdjustReputation(captured, 1, "Avis personnel", "manual") end)
     root:CreateButton("Avis négatif (-1)", function() GL.AdjustReputation(captured, -1, "Avis personnel", "manual") end)
