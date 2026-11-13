@@ -147,12 +147,27 @@ local function counted(n, singular, plural)
     local many = n > 1 or n == 0 and not frenchNumbers
     return n .. " " .. L(many and (plural or singular .. "s") or singular)
 end
+local function honorTotal(stats)
+    return stats.honorAwards > 0 and L("Honneur reçu : %d"):format(stats.honor) or L("Aucun gain d’honneur enregistré")
+end
+local function honorDetail(stats)
+    if stats.honorAwards == 0 then return "" end
+    local text = counted(stats.honorAwards, "gain", "gains") .. " · " .. L("Gain maximal : %d"):format(stats.bestHonor)
+    if (stats.unassignedHonor or 0) > 0 then
+        text = text .. " · " .. L("Sans adversaire identifié : %d"):format(stats.unassignedHonor)
+    end
+    return text
+end
 local function outcomeCount(confirmed, probable)
     return probable > 0 and L("%d · %d prob."):format(confirmed, probable) or tostring(confirmed)
 end
 local function eventEvidence(event)
     return GL.LocalizeEvidence and GL.LocalizeEvidence(event) or event.evidence
 end
+local killOpeningLabels = {
+    initiatedKillsNoGrudge = L("Initiative sans rancune"), initiatedKillsGrudge = L("Initiative avec rancune"),
+    revengeKills = L("Revanche"), responseKills = L("Riposte"), unknownOpeningKills = L("Initiative inconnue"),
+}
 local function combatDetails(event, compact)
     local c = event.combat
     if type(c) ~= "table" then return end
@@ -189,6 +204,14 @@ local function groupDurationText(seconds)
     return ("%d h %02d"):format(math.floor(minutes / 60), minutes % 60)
 end
 local function eventTitle(event)
+    if event.kind == "honor" then
+        local points = GL.HonorPoints(event)
+        return points and L("Honneur reçu : +%d"):format(points) or L("Honneur")
+    end
+    if event.kind == "opening" then
+        return event.opener == "player" and L("Premier dégât observé : vous")
+            or event.opener == "opponent" and L("Premier dégât observé : adversaire") or L("Initiative inconnue")
+    end
     if event.kind == "grouped" and GL.GroupDuration then
         local seconds = GL.GroupDuration(event)
         if seconds > 0 then
@@ -756,7 +779,7 @@ GL.On("CHANGED", refreshStatistics)
 
 local journalPeriods = { { "all", L("Toutes périodes") }, { "week", L("7 derniers jours") }, { "month", L("30 derniers jours") }, { "year", L("Année") } }
 local journalScopes = { { "character", L("Ce personnage") }, { "all", L("Tout le compte") }, { "legacy", L("Auteur inconnu") } }
-local journalKinds = { { "all", L("Tous les événements") }, { "pvp", L("Rencontres PvP") }, { "social", L("Avis et groupes") }, { "notes", L("Notes personnelles") }, { "trade", L("Échanges") } }
+local journalKinds = { { "all", L("Tous les événements") }, { "pvp", L("Rencontres PvP") }, { "honor", L("Gains d’honneur") }, { "social", L("Avis et groupes") }, { "notes", L("Notes personnelles") }, { "trade", L("Échanges") } }
 local function choiceLabel(choices, key)
     for _, entry in ipairs(choices) do if entry[1] == key then return entry[2] end end
     return key
@@ -797,6 +820,8 @@ local function refreshJournal()
     if f.mode == "summary" then
         f.cardName:SetText(f.scope == "character" and plain(stats.actorName or L("Votre personnage"))
             or f.scope == "legacy" and L("Archives sans auteur") or L("Les personnages de ce compte"))
+        f.honor:SetText(honorTotal(stats))
+        f.honor:SetEnabled(stats.honorAwards > 0)
         for key, metric in pairs(f.metrics) do
             local value = stats[key] or 0
             metric.value:SetText(tostring(value))
@@ -820,16 +845,17 @@ local function refreshJournal()
             control:SetEnabled(item ~= nil)
         end
         local unknown = stats.unknownActorEvents or 0
-        local coverage = counted(stats.events or 0, "fait retenu", "faits retenus")
+        local coverage = counted(stats.events or 0, "fait de combat", "faits de combat")
         if unknown > 0 then
             coverage = coverage .. " · " .. unknown .. L(" sans auteur connu") .. (f.scope == "character" and L(" (hors bilan)") or "")
         end
         f.coverage:SetText(coverage)
         local podium = f.dimension == "opponents"
+        local initiative = f.dimension == "initiative"
         local geographic = f.dimension == "zone"
         local zoom = geographic and f.zoneKey
         options.zone = zoom
-        local breakdown = not podium and GL.PvPBreakdown(options, zoom and "subzone" or f.dimension) or {}
+        local breakdown = not podium and not initiative and GL.PvPBreakdown(options, zoom and "subzone" or f.dimension) or {}
         local exposure, partial = {}
         if geographic and not zoom and GL.ZoneTimes then exposure, partial = GL.ZoneTimes(options) end
         if geographic and not zoom then
@@ -850,7 +876,23 @@ local function refreshJournal()
         f.breakdownLabel:SetText(zoom and plain(f.zoneLabel) or geographic and L("Zone · ouvrir les lieux") or L("Confirmées / probables"))
         moveTo(f.breakdownLabel, zoom and 484 or 356, 451)
         f.breakdownLabel:SetWidth(zoom and 150 or showTime and 176 or 270)
-        showIf(f.podium, podium) showIf(f.breakdown, not podium)
+        showIf(f.podium, podium) showIf(f.initiative, initiative) showIf(f.breakdown, not podium and not initiative)
+        if initiative then
+            local ratio = "—"
+            if stats.attackers > 0 then
+                local decimal = DECIMAL_SEPERATOR or (frenchNumbers and "," or ".")
+                ratio = ("%.2f"):format(stats.victims / stats.attackers):gsub("%.", decimal)
+            end
+            for key, value in pairs(f.initiative.values) do
+                value:SetText(key == "ratio" and ratio or tostring(stats[key]))
+            end
+            local openings = stats.initiated + stats.responded
+            if openings > 0 then
+                local share = math.floor(100 * stats.initiated / openings + 0.5)
+                f.initiative.values.initiated:SetText(L("%d · %d %%"):format(stats.initiated, share))
+                f.initiative.values.responded:SetText(L("%d · %d %%"):format(stats.responded, 100 - share))
+            end
+        end
         if podium then
             for i, control in ipairs(f.podium.rows) do
                 local item = stats.topDeaths[i]
@@ -913,10 +955,12 @@ local function refreshJournal()
             showIf(recap.raceIcon, item ~= nil) showIf(recap.classIcon, item ~= nil) recap:SetEnabled(item ~= nil)
         end
         card.probable:SetText(L("Faits probables · ") .. counted(stats.probableKills, "victoire") .. " · " .. counted(stats.probableDeaths, "mort") .. " · " .. counted(stats.probableAggressions, "agression"))
-        card.coverage:SetText(stats.events > 0 and counted(stats.events, "fait PvP conservé", "faits PvP conservés") .. L(" · Hors champs de bataille et arènes.") or L("Aucun fait PvP conservé pour cette année et cette sélection."))
+        card.honor:SetText(honorTotal(stats))
+        card.coverage:SetText((stats.events > 0 or stats.honorAwards > 0) and counted(stats.events, "fait de combat", "faits de combat") .. L(" · Hors champs de bataille et arènes.") or L("Aucun fait PvP conservé pour cette année et cette sélection."))
         local text = table.concat({ "Grudge Ledger · " .. period .. " · " .. scope,
             L("Confirmés : ") .. counted(stats.kills, "victoire") .. ", " .. counted(stats.deaths, "mort") .. ", " .. counted(stats.aggressions, "agression") .. ".",
-            L("Probables : ") .. counted(stats.probableKills, "victoire") .. ", " .. counted(stats.probableDeaths, "mort") .. ", " .. counted(stats.probableAggressions, "agression") .. "." }, "\n")
+            L("Probables : ") .. counted(stats.probableKills, "victoire") .. ", " .. counted(stats.probableDeaths, "mort") .. ", " .. counted(stats.probableAggressions, "agression") .. ".",
+            honorTotal(stats) }, "\n")
         if text ~= f.annualText then f.cardCopy:Hide() end
         f.annualText = text
     elseif f.mode == "story" then
@@ -928,7 +972,12 @@ local function refreshJournal()
         end
         if stats.mostDeaths then story[#story + 1] = L("Votre némésis sur cette période : ") .. plain(stats.mostDeaths.record.fullName) .. " (" .. counted(stats.mostDeaths.value, "mort confirmée", "morts confirmées") .. ").\n" end
         if stats.mostKilled then story[#story + 1] = L("Votre adversaire le plus vaincu : ") .. plain(stats.mostKilled.record.fullName) .. " (" .. counted(stats.mostKilled.value, "victoire confirmée", "victoires confirmées") .. ").\n" end
-        if (stats.events or 0) == 0 then story = { L("Le récit de cette période reste à écrire."), "", L("Aucun fait PvP comptabilisé dans cette sélection. Essayez une période plus large ou un autre personnage.") } end
+        if (stats.events or 0) == 0 then
+            story = stats.honorAwards > 0 and {} or { L("Le récit de cette période reste à écrire."), "", L("Aucun fait PvP comptabilisé dans cette sélection. Essayez une période plus large ou un autre personnage.") }
+        end
+        story[#story + 1] = honorTotal(stats)
+        if stats.honorAwards > 0 then story[#story + 1] = honorDetail(stats) end
+        story[#story + 1] = ""
         story[#story + 1] = subdued(L("Ce récit résume vos archives, pas l'ensemble de votre carrière. Champs de bataille et rapports annulés sont exclus."))
         f.storyText:SetText(table.concat(story, "\n"))
         f.storyBody:SetHeight(math.max(405, f.storyText:GetStringHeight() + 12))
@@ -946,9 +995,10 @@ local function refreshJournal()
                 if event.voided then title = title .. L(" — exclu des compteurs") end
                 local place = event.subzone or event.zone
                 local author = not event.actorGUID and L(" · auteur inconnu") or f.scope == "all" and (" · " .. plain(event.actorName or L("Autre personnage"))) or ""
-                identityIcons(row, record)
+                if record then identityIcons(row, record) else portraitRows[row] = nil end
+                showIf(row.raceIcon, record ~= nil) showIf(row.classIcon, record ~= nil)
                 local hasTime = type(event.time) == "number" and event.time > 0
-                row.name:SetText((hasTime and date("%H:%M", event.time) .. "  ·  " or "") .. plain(record.fullName))
+                row.name:SetText((hasTime and date("%H:%M", event.time) .. "  ·  " or "") .. (record and plain(record.fullName) or L("Adversaire non identifié")))
                 row.action:SetText(plain(title):gsub("[\r\n]+", " "))
                 row.meta:SetText((hasTime and date("%d/%m/%Y", event.time) or L("Date inconnue")) .. (place and (" · " .. plain(place)) or "") .. author)
                 row.context:SetText(event.kind == "trade" and plain((eventEvidence(event) or ""):gsub("\n", " · ")) or combatDetails(event, true) or event.questTitle and L("Quête suivie · ") .. plain(event.questTitle)
@@ -961,12 +1011,15 @@ local function refreshJournal()
         f.previous:SetEnabled(f.offset > 0) f.next:SetEnabled(f.offset + #f.rows < #events)
     end
     f.help:ClearAllPoints() f.help:SetPoint("TOPLEFT", 36, history and -608 or annual and -396 or -465) f.help:SetHeight(history and 46 or annual and 60 or 180)
-    f.help:SetText(history and L("Cliquez sur un événement pour ouvrir sa fiche. Validez la recherche avec Entrée ou OK.")
+    local help = history and L("Ouvrez les détails d’un événement. Validez la recherche avec Entrée ou OK.")
         or annual and L("Cette carte résume les faits PvP conservés pour l’année et les personnages choisis.")
         or f.mode == "story" and L("Choisissez une période et les personnages dont vous souhaitez relire les combats.")
         or f.dimension == "opponents" and L("Seules les morts confirmées figurent au podium. Cliquez sur un adversaire pour ouvrir sa fiche.")
+        or f.dimension == "initiative" and L("La rancune est celle du journal avant le combat. Une revanche est une victoire que vous engagez après une mort confirmée contre ce joueur avec le même personnage.")
         or f.dimension == "zone" and L("Cliquez sur une zone pour lire ses sous-zones. Victoires et morts : confirmées / probables. Le temps mesure la présence en monde ouvert depuis l’activation, hors absences et instances.")
-        or L("Les colonnes distinguent les faits confirmés et probables.\n\nLa race et la classe sont celles relevées au combat. « Inconnue » signifie que l'information manque."))
+        or L("Les colonnes distinguent les faits confirmés et probables.\n\nLa race et la classe sont celles relevées au combat. « Inconnue » signifie que l'information manque.")
+    if f.mode == "summary" and stats.honorAwards > 0 then help = honorDetail(stats) .. "\n\n" .. help end
+    f.help:SetText(help)
 end
 
 function GL.ShowJournal(mode)
@@ -1013,8 +1066,12 @@ function GL.ShowJournal(mode)
         f.summary = CreateFrame("Frame", nil, f) f.summary:SetAllPoints(f)
         f.history = CreateFrame("Frame", nil, f) f.history:SetAllPoints(f)
         f.story = CreateFrame("Frame", nil, f) f.story:SetAllPoints(f)
-        f.cardName = label(f.summary, "", "large", 356, -216, 548) f.cardName:SetTextColor(unpack(theme.ink))
+        f.cardName = label(f.summary, "", "large", 356, -216, 300) f.cardName:SetTextColor(unpack(theme.ink))
         f.cardName:SetHeight(26) GL.Safe(f.cardName.SetWordWrap, f.cardName, false)
+        f.honor = button(f.summary, "", 661, -211, 243, function()
+            f.kind, f.query, f.offset = "honor", "", 0
+            f.search:SetText("") GL.ShowJournal("history")
+        end, nil, true)
         f.metrics = {}
         for i, entry in ipairs({ { "kills", L("Victoires confirmées"), "probableKills" }, { "deaths", L("Morts confirmées"), "probableDeaths" }, { "aggressions", L("Agressions confirmées"), "probableAggressions" } }) do
             local card = CreateFrame("Frame", nil, f.summary) card:SetPoint("TOPLEFT", 356 + (i - 1) * 185, -245) card:SetSize(176, 80)
@@ -1043,9 +1100,26 @@ function GL.ShowJournal(mode)
             f.recaps[entry[1]] = row
         end
         f.dimensionButtons = {}
-        for i, entry in ipairs({ { "opponents", L("Adversaires") }, { "race", L("Par race") }, { "class", L("Par classe") }, { "zone", L("Par zone") } }) do
+        for i, entry in ipairs({ { "opponents", L("Adversaires") }, { "race", L("Par race") }, { "class", L("Par classe") }, { "zone", L("Par zone") }, { "initiative", L("Initiative") } }) do
             local key = entry[1]
-            f.dimensionButtons[key] = button(f.summary, entry[2], 356 + (i - 1) * 132, -413, 122, function() f.dimension, f.breakdownOffset, f.zoneKey = key, 0, nil refreshJournal() end, true, true)
+            f.dimensionButtons[key] = button(f.summary, entry[2], 356 + (i - 1) * 111, -413, 104, function() f.dimension, f.breakdownOffset, f.zoneKey = key, 0, nil refreshJournal() end, true, true)
+        end
+        f.initiative = CreateFrame("Frame", nil, f.summary) f.initiative:SetAllPoints(f)
+        f.initiative.values = {}
+        for _, group in ipairs({
+            { x = 356, y = 449, title = L("Joueurs distincts"), {"victims", L("Vaincus")}, {"attackers", L("Vous ayant blessé")}, {"ratio", L("Vaincus / attaquants")} },
+            { x = 356, y = 556, title = L("Premier dégât observé"), {"initiated", L("Porté par vous")}, {"responded", L("Porté par l’adversaire")} },
+            { x = 633, y = 449, title = L("Victoires confirmées"), {"initiatedKillsNoGrudge"}, {"initiatedKillsGrudge"},
+                {"revengeKills"}, {"responseKills"}, {"unknownOpeningKills"} },
+        }) do
+            bookText(f.initiative, group.x, group.y, 271, 25, 16, group.title)
+            for i, entry in ipairs(group) do
+                local y = group.y + 26 + (i - 1) * 24
+                local share = entry[1] == "initiated" or entry[1] == "responded"
+                bookText(f.initiative, group.x, y, share and 153 or 198, 23, 13, entry[2] or killOpeningLabels[entry[1]], theme.inkMuted)
+                local value = bookText(f.initiative, group.x + (share and 157 or 201), y, share and 97 or 53, 23, 14)
+                value:SetJustifyH("RIGHT") f.initiative.values[entry[1]] = value
+            end
         end
         f.podium = CreateFrame("Frame", nil, f.summary) f.podium:SetAllPoints(f)
         bookText(f.podium, 356, 449, 548, 25, 16, L("Vos morts par adversaire"))
@@ -1134,8 +1208,9 @@ function GL.ShowJournal(mode)
             row:SetScript("OnClick", function(self) if self.record then GL.ShowLedger(self.record.key) end end)
             annual.recaps[entry[1]] = row
         end
-        annual.probable = bookText(annual, 16, 329, 516, 27, 13, "", theme.inkMuted)
-        annual.coverage = bookText(annual, 16, 361, 516, 34, 12)
+        annual.probable = bookText(annual, 16, 322, 516, 22, 13, "", theme.inkMuted)
+        annual.honor = bookText(annual, 16, 345, 516, 22, 14)
+        annual.coverage = bookText(annual, 16, 369, 516, 26, 12)
         GL.Safe(annual.coverage.SetWordWrap, annual.coverage, true)
         annual.events = button(annual, L("Voir les événements de l’année"), 95, -397, 358, function()
             f.period, f.kind, f.query, f.offset = "year", "pvp", "", 0
@@ -1171,7 +1246,10 @@ function GL.ShowJournal(mode)
             end, nil, true)
             for _, text in ipairs({ row.name, row.action, row.meta }) do GL.Safe(text.SetWordWrap, text, false) end
             row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-            row:SetScript("OnClick", function(self) if self.item then GL.ShowLedger(self.item.record.key) end end)
+            row:SetScript("OnClick", function(self)
+                if not self.item then return end
+                if self.item.record then GL.ShowLedger(self.item.record.key) else inspectEvent(nil, self.item.event) end
+            end)
             f.rows[i] = row
         end
         f.empty = label(f.history, "", nil, 365, -238, 520) f.empty:SetTextColor(unpack(theme.inkMuted))
@@ -1199,9 +1277,15 @@ local function eventCertainty(e)
     if e.kind == "trade" then return L("Échange confirmé") end
     if e.voidReason == "battleground" then return L("Champ de bataille · exclu") end
     if e.voided then return L("Annulé · exclu") end
+    if e.kind == "honor" then return L("Honneur") end
+    if e.kind == "opening" then return L("Initiative") end
     if e.playerConfirmedAt then return L("Témoignage") end
     if pvpNames[e.kind] then return e.confidence == "confirmed" and L("Confirmé") or e.confidence == "probable" and L("Probable") or L("Certitude inconnue") end
     return e.source == "emote" and L("Geste") or e.kind == "grouped" and L("Groupe") or L("Journal")
+end
+
+local function honorRecipient(e)
+    return L("Reçu par %s"):format(plain(e.actorName or L("Auteur inconnu")))
 end
 
 local function eventAction(e)
@@ -1211,6 +1295,9 @@ local function eventAction(e)
 end
 
 local function eventReason(e)
+    if e.kind == "honor" then
+        return honorRecipient(e) .. "\n" .. L("Le jeu annonce votre gain d’honneur. Plusieurs joueurs peuvent recevoir de l’honneur pour le même combat.")
+    end
     if e.voidReason == "other-killer" then return L("Le jeu a attribué le coup fatal à un autre joueur.") end
     if e.playerConfirmedAt then return L("Coup fatal confirmé manuellement le %s."):format(stamp(e.playerConfirmedAt)) end
     if e.confidence == "probable" then
@@ -1226,6 +1313,7 @@ local function refreshCorrections()
     f.certainty:SetText(eventCertainty(e))
     showIf(f.attest, e.kind == "kill" and e.confidence == "probable" and not e.voided)
     f.effect:SetText(e.voided and L("Ce fait reste dans l’histoire. Il est exclu des statistiques et du solde automatique.")
+        or e.kind == "honor" and L("Le jeu ne communique pas l’honneur reçu par votre adversaire.")
         or pvpNames[e.kind] and L("Annuler retire ce fait des statistiques et du solde automatique. Il reste lisible dans l’histoire.")
         or L("Cet événement reste dans votre journal personnel."))
     if pvpNames[e.kind] then f.confirm:Show() else f.confirm:Hide() end
@@ -1234,7 +1322,7 @@ local function refreshCorrections()
 end
 
 inspectEvent = function(record, e)
-    if not record or not e then return end
+    if not e or not record and e.kind ~= "honor" then return end
     if not correctionWindow then
         local f = window("GrudgeLedgerCorrections", L("Vérifier cet événement"), 586, 447)
         correctionWindow = f
@@ -1267,12 +1355,16 @@ inspectEvent = function(record, e)
         f.confirm = button(f, L("Annuler cet événement"), 351, -396, 211, nil, nil, true)
     end
     local f = correctionWindow
-    f.identity, f.event = { key=record.key, guid=record.guid, alias=record.alias }, e
+    f.identity, f.event = record and { key=record.key, guid=record.guid, alias=record.alias }, e
     f.title:SetText(pvpNames[e.kind] and L("Vérifier cet événement") or L("Détails de la rencontre"))
-    f.action:SetText(eventAction(e)) identityIcons(f, record)
-    f.who:SetText(plain(record.fullName or record.name or record.key))
+    f.action:SetText(eventAction(e))
+    if record then identityIcons(f, record) else portraitRows[f] = nil end
+    showIf(f.raceIcon, record ~= nil) showIf(f.classIcon, record ~= nil)
+    f.who:SetText(record and plain(record.fullName or record.name or record.key) or L("Adversaire non identifié"))
     f.where:SetText(eventDate(e) .. "   ·   " .. plain(eventPlace(e)))
     local evidence = {}
+    local category = GL.KillOpeningCategory(record, e)
+    if category then evidence[#evidence + 1] = killOpeningLabels[category] end
     local reason = eventReason(e)
     if reason then evidence[#evidence+1] = reason end
     if e.evidence and e.evidence ~= "" then evidence[#evidence+1] = plain(eventEvidence(e)) end
@@ -1374,9 +1466,9 @@ local function showDiagnostic(private)
 end
 
 local noteEditor, selectNote
-local historyKinds = { {"all", L("Tous les événements")}, {"pvp", L("Combats PvP")}, {"matchup", L("Mes face-à-face")}, {"social", L("Avis et gestes")}, {"group", L("Groupes")}, {"trade", L("Échanges")}, {"voided", L("Événements annulés")} }
+local historyKinds = { {"all", L("Tous les événements")}, {"pvp", L("Combats PvP")}, {"matchup", L("Mes face-à-face")}, {"honor", L("Gains d’honneur")}, {"social", L("Avis et gestes")}, {"group", L("Groupes")}, {"trade", L("Échanges")}, {"voided", L("Événements annulés")} }
 local function includeHistory(e, kind)
-    return kind == "all" or kind == "pvp" and pvpNames[e.kind]
+    return kind == "all" or (kind == "pvp" or kind == "honor") and GL.HonorPoints(e) or kind == "pvp" and (pvpNames[e.kind] or e.kind == "opening")
         or kind == "social" and (e.kind == "reaction" or e.kind == "reputation")
         or kind == "group" and (e.kind == "grouped" or e.kind == "group") or kind == "trade" and e.kind == "trade" or kind == "voided" and e.voided
 end
@@ -1412,7 +1504,8 @@ local function renderHistory(p, record)
             row.title:SetText(eventAction(e))
             row.badge:SetText(eventCertainty(e))
             row.badge:SetTextColor(unpack(e.voided and theme.inkMuted or e.confidence == "probable" and inkColors.warning or theme.ink))
-            local hint = combatDetails(e, true) or e.questTitle and (L("Quête suivie : ") .. plain(e.questTitle)) or eventReason(e)
+            local hint = e.kind == "honor" and honorRecipient(e) or combatDetails(e, true)
+                or e.questTitle and (L("Quête suivie : ") .. plain(e.questTitle)) or eventReason(e)
             if not hint and e.source ~= "emote" and not pvpNames[e.kind] and e.evidence ~= "Avis personnel" then hint = plain(eventEvidence(e)) end
             if e.kind == "trade" then hint = plain((eventEvidence(e) or ""):gsub("\n", " · ")) end
             row.hint:SetText(hint or "")
@@ -1543,12 +1636,14 @@ local function renderDetail()
         elseif matchup then
             local confirmed = duels.kills + duels.deaths
             local probable = duels.probableKills + duels.probableDeaths
-            ledger.matchupHistory:SetEnabled(confirmed + probable > 0)
-            lines = { subdued(L("Ce personnage · Monde ouvert")) }
+            ledger.matchupHistory:SetEnabled(confirmed + probable + duels.honorAwards > 0)
+            lines = { subdued(L("Ce personnage · Monde ouvert")), honorTotal(duels) }
+            if duels.honorAwards > 0 then lines[#lines + 1] = honorDetail(duels) end
+            lines[#lines + 1] = subdued(L("Le jeu ne communique pas l’honneur reçu par votre adversaire."))
             if duels.run > 1 then
                 lines[#lines + 1] = L("Série en cours : %s de suite."):format(counted(duels.run, duels.lastKind == "kill" and "victoire" or "défaite"))
             end
-            if duels.comeback then lines[#lines + 1] = L("Dernière revanche : %s"):format(eventDate(duels.comeback)) end
+            if duels.comeback then lines[#lines + 1] = L("Dernière victoire après une défaite : %s"):format(eventDate(duels.comeback)) end
             if duels.closeDeaths then lines[#lines + 1] = L("Deux défaites à trois minutes d’intervalle ou moins le %s."):format(eventDate(duels.closeDeaths)) end
             if #duels.recent > 0 then
                 lines[#lines + 1] = "\n|cff653c20" .. L("Derniers résultats datés") .. "|r"

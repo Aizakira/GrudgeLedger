@@ -13,9 +13,17 @@ local pendingDeath, lastDeathAt, lastRecapStamp
 local duel, deathHandled, registered = false, false, false
 local duelPendingUntil
 local serial, honorBaseline, session = 0, nil, nil
+local worldActive = true
+local idleOpponents, idleAt, openingFeed
 local damageEvents = {
     SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true, SPELL_PERIODIC_DAMAGE = true,
     SPELL_BUILDING_DAMAGE = true, DAMAGE_SHIELD = true, DAMAGE_SPLIT = true, ENVIRONMENTAL_DAMAGE = true,
+}
+local priorActions = {
+    SPELL_AURA_APPLIED = true, SPELL_AURA_APPLIED_DOSE = true, SPELL_AURA_REFRESH = true,
+    SPELL_CAST_START = true, SPELL_CAST_SUCCESS = true, SPELL_INTERRUPT = true, SPELL_DISPEL = true,
+    SPELL_STOLEN = true, SWING_MISSED = true, RANGE_MISSED = true, SPELL_MISSED = true,
+    SPELL_PERIODIC_MISSED = true, SPELL_DRAIN = true, SPELL_LEECH = true, SPELL_ABSORBED = true,
 }
 
 -- Evidence stays in its original form so older records and later language changes agree.
@@ -106,14 +114,14 @@ end
 
 -- Pet GUIDs carry no owner ID. Use an explicit summon or the native UnitOwner
 -- tooltip line. Matching by a pet name would confuse two hunters with the same pet.
-local function rememberPet(guid, owner)
+local function rememberPet(guid, owner, mine)
     if not petOwners[guid] then
         local oldest = petSlots[nextPetSlot]
         if oldest then petOwners[oldest] = nil end
         petSlots[nextPetSlot] = guid
         nextPetSlot = nextPetSlot % 64 + 1
     end
-    petOwners[guid] = { owner = owner, at = GL.Now() }
+    petOwners[guid] = { owner = owner, mine = mine, at = GL.Now() }
 end
 
 local function petOwner(guid, unit, encounter)
@@ -122,7 +130,7 @@ local function petOwner(guid, unit, encounter)
     local age = cached and GL.Now() - cached.at
     -- ponytail: bound ownership lookups to 64 recent units; failed reads are
     -- retried after one second as nameplates and tooltip data arrive asynchronously.
-    if age and age >= 0 and age < (cached.owner and 120 or 1) then return cached.owner end
+    if age and age >= 0 and age < ((cached.owner or cached.mine) and 120 or 1) then return cached.owner end
     local info = C_TooltipInfo
     unit = unit or GL.Clean(GL.Safe(UnitTokenFromGUID, guid), "string")
     local tip = info and (unit and GL.Safe(info.GetUnit, unit) or GL.Safe(info.GetHyperlink, "unit:" .. guid))
@@ -173,17 +181,27 @@ local function observeOpponent(f, guid, level, live)
     if level and level > 0 and level < math.huge then f.combatants[guid] = level end
 end
 
-local function combatSnapshot(f, identity, viaPet)
+local function combatSnapshot(f, identity, viaPet, credit)
     if not f or not f.combatants then return end
     local level = identity.guid and f.combatants[identity.guid]
-    return { healthPct = f.firstHealth, playerLevel = f.observerLevel, opponentLevel = level,
+    local snapshot = { healthPct = f.firstHealth, playerLevel = f.observerLevel, opponentLevel = level,
         opponents = f.opponentCount, pve = f.npcPressure, pet = viaPet }
+    local opening = f.opening
+    if opening and opening.guid == identity.guid and not opening.defeated and not (credit and f.endedAt) then
+        snapshot.opener, snapshot.hadGrudge, snapshot.encounterId = opening.opener, opening.hadGrudge, f.id
+        snapshot.priorDeath = opening.priorDeath
+    end
+    return snapshot
 end
 
 local function creditKill(identity, confidence, evidence, native)
     if not enabled() or not identity then return end
     local key = identity.guid or identity.key
     local now, previous = GL.Now(), recentCredits[key] or (identity.alias and recentCredits[identity.alias])
+    local f = combatSession()
+    if previous and f and f.opening and f.opening.guid == identity.guid and previous.fightId ~= f.id then
+        previous = nil -- a freshly witnessed opening proves this is a different encounter
+    end
     -- The native event identifies each kill, even without a visible resurrection.
     -- Coalesce its other evidence for ten seconds and same-tick native repeats.
     if previous and now >= previous.at and now - previous.at <= 10
@@ -198,10 +216,13 @@ local function creditKill(identity, confidence, evidence, native)
         if native then previous.nativeAt = now end
         return
     end
-    local f = combatSession()
     observeOpponent(f, identity.guid)
-    local record, event = GL.RecordPvP(identity, "kill", confidence, evidence, nextID("kill"), combatSnapshot(f, identity))
-    if event then recentCredits[key] = { at = now, nativeAt = native and now, event = event } end
+    -- A late PARTY_KILL alone cannot put a new defeat in a completed fight.
+    local record, event = GL.RecordPvP(identity, "kill", confidence, evidence, nextID("kill"), combatSnapshot(f, identity, nil, true))
+    if event then
+        recentCredits[key] = { at = now, nativeAt = native and now, event = event, fightId = f and f.id }
+        if f and f.opening and f.opening.guid == identity.guid then f.opening.defeated = true end
+    end
     return record
 end
 
@@ -220,7 +241,8 @@ local function killingBlow(src, dst, name, evidence, native)
             local age = previous and GL.Now() - previous.at
             -- A later fight against the same GUID need not concern the death we
             -- inferred. Retract only while the corpse/credit was just observed.
-            if age and age >= 0 and age <= 2 and previous.event.confidence == "probable" and not previous.event.voided then
+            if age and age >= 0 and age <= 2 and previous.event.confidence == "probable" and not previous.event.voided
+                and not (f and f.opening and f.opening.guid == dst and previous.fightId ~= f.id) then
                 GL.VoidPvP("guid:" .. dst, previous.event, false, "other-killer")
             end
             return
@@ -270,6 +292,7 @@ local function observeHealth()
     local now = GL.Now()
     if health and maximum and f.health and f.maxHealth == maximum and f.healthAt
         and now - f.healthAt <= 2 and health < f.health and not unresolvedAttack(f) and not f.damageLogged then
+        if not f.opening then f.idleOpponents = nil end
         local candidates = recentAttackers(f, 2)
         if next(candidates) and not f.pendingAggression then
             f.pendingAggression = { candidates = candidates, at = now }
@@ -308,6 +331,10 @@ function T.Observe(unit, reuseObservation)
     if not unit then return end
     local identity = GL.Identity(unit, reuseObservation)
     local dead
+    if idleOpponents and identity and identity.guid then
+        local idle = bool(UnitAffectingCombat, unit) == false and bool(UnitIsDeadOrGhost, unit) == false
+        idleOpponents[identity.guid] = idle and idleAt or nil
+    end
     if identity then
         local key = identity.guid or identity.key
         local receipt = recentCredits[key]
@@ -380,6 +407,7 @@ function T.Observe(unit, reuseObservation)
         else enemy.targetingMeAt, enemy.targetedAt = nil, nil end
         if enemy.dead then
             enemy.signalAt, enemy.deadAt, enemy.credited, enemy.otherKiller = nil, nil, nil, nil
+            if f.opening and f.opening.guid == identity.guid then f.opening.defeated = true end
             recentCredits[identity.guid or identity.key] = nil
             if identity.alias then recentCredits[identity.alias] = nil end
         end
@@ -416,10 +444,136 @@ local function tryKills()
     creditKill(e.identity, "probable", "Adversaire vu vivant puis mort, combat mutuel isolé et gain d'honneur concordant.")
 end
 
-function T.OnHonorMessage(message)
+-- Forever GlobalStrings, build 1.60.1.70938. Only the four named victories
+-- report the points from this defeat. COMBATLOG_HONORAWARD also covers quests.
+local honorFormats, honorRanks = {}, {}
+local honorLines, honorSlots, nextHonorSlot = {}, {}, 1
+local hasHonorTemplates = COMBATLOG_HONORGAIN or COMBATLOG_HONORGAIN_NO_RANK
+    or COMBATLOG_HONORGAIN_EXHAUSTION1 or COMBATLOG_HONORGAIN_NO_RANK_EXHAUSTION1
+local function addHonorFormat(fmt, pointsArg)
+    if type(fmt) ~= "string" then return end
+    -- Expand the client's Russian plurals and Korean particles once at load.
+    local first, last, choices = fmt:find("|4([^;]+);")
+    if not first then first, last, choices = fmt:find("|1([^;]+;[^;]+);") end
+    if first then
+        for word in choices:gmatch("[^:;]+") do
+            addHonorFormat(fmt:sub(1, first - 1) .. word .. fmt:sub(last + 1), pointsArg)
+        end
+        return
+    end
+    local pattern, capture, cursor, count = "^", {}, 1, 0
+    while cursor <= #fmt do
+        local at = fmt:find("%", cursor, true) or #fmt + 1
+        pattern = pattern .. fmt:sub(cursor, at - 1):gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1")
+        if at > #fmt then break end
+        local token, position, kind = fmt:sub(at):match("^(%%(%d*%$?)([sd]))")
+        if token then
+            count = count + 1
+            local arg = position == "" and count or tonumber(position:match("^(%d+)%$$"))
+            if not arg or capture[arg] or (kind == "d") ~= (arg == pointsArg) then return end
+            capture[arg] = count
+            pattern = pattern .. (kind == "d" and "([0-9]+)" or "(.-)")
+            cursor = at + #token
+        elseif fmt:sub(at, at + 1) == "%%" then
+            pattern, cursor = pattern .. "%%", at + 2
+        else return end
+    end
+    if capture[1] and capture[pointsArg] and (pointsArg == 2 or capture[2]) then
+        honorFormats[#honorFormats + 1] = { pattern = pattern .. "$", name = capture[1],
+            points = capture[pointsArg], rank = pointsArg == 3 and capture[2] }
+    end
+end
+addHonorFormat(COMBATLOG_HONORGAIN, 3)
+addHonorFormat(COMBATLOG_HONORGAIN_NO_RANK, 2)
+addHonorFormat(COMBATLOG_HONORGAIN_EXHAUSTION1, 3)
+addHonorFormat(COMBATLOG_HONORGAIN_NO_RANK_EXHAUSTION1, 2)
+-- Faction leaders can also award honor. A known player rank identifies the
+-- source without requiring a visible unit. Rank 19 is the special NPC rank.
+for rank = 0, 19 do
+    for faction = 0, 1 do
+        local key = ("PVP_RANK_%d_%d"):format(rank, faction)
+        for _, label in pairs({ _G[key], _G[key .. "_FEMALE"] }) do
+            if label ~= "" then honorRanks[label] = rank == 19 and "leader" or "player" end
+        end
+    end
+end
+if PVP_RANK_LEADER then honorRanks[PVP_RANK_LEADER] = "leader" end
+
+local function recordHonorReceipt(message, lineID, f)
+    local inside, kind = GL.Safe(IsInInstance)
+    if not worldActive or inside ~= false or kind ~= "none" or #message > 2048 then return end
+    lineID = GL.Clean(lineID, "number")
+    if not (lineID and lineID > 0 and lineID < math.huge and lineID == math.floor(lineID)) then lineID = nil end
+    if lineID and honorLines[lineID] then return end
+    for _, format in ipairs(honorFormats) do
+        local fields = { message:match(format.pattern) }
+        local victim = fields[format.name]
+        if victim then
+            local points = tonumber(fields[format.points])
+            local rank = honorRanks[format.rank and fields[format.rank]]
+            if not points or points > 2147483647 or rank == "leader" then return end
+            victim = victim:match("^|c%x%x%x%x%x%x%x%x(.-)|r$") or victim:match("^|cn[%w_]+:(.-)|r$") or victim
+            local linkName = victim:match("^|Hplayer:([^:|]+)[^|]*|h%[[^|]+%]|h$")
+            -- Some hyperlinks qualify a complete regional name with -Realm.
+            -- A single Given-Realm is still an incomplete regional identity.
+            if linkName then linkName = linkName:match("^([^ %-]+ [^ %-]+)%-[^ %-]+$") or linkName end
+            victim = linkName or victim
+            if #victim > 160 or not victim:match("^[A-Za-z\128-\255][A-Za-z\128-\255'%-]* ?[A-Za-z\128-\255'%-]*$")
+                or victim:sub(-1) == " "
+                or GL.ContainsControlOrMarkup(victim) then return end
+            local name = GL.IdentityFromName(victim)
+            local candidate = name and GL.Get(name)
+            local verified, ambiguous = linkName or rank == "player", name and GL.db.aliases[name.alias] == false
+            local function observe(identity)
+                if not identity or identity.fullName ~= victim then return end
+                verified = true
+                if candidate and candidate.guid and identity.guid and candidate.guid ~= identity.guid then ambiguous = true end
+                if not candidate or identity.guid then candidate = identity end
+            end
+            for _, enemy in pairs(f and f.enemies or {}) do observe(enemy.identity) end
+            for _, unit in ipairs(units()) do
+                local first, last = GL.Safe(UnitName, unit)
+                if type(first) == "string" and (first == victim or
+                    (type(last) == "string" and first .. " " .. last == victim)) then
+                    -- An NPC or our own character with the printed name makes the source unsafe.
+                    if bool(UnitIsPlayer, unit) ~= true or bool(UnitIsUnit, unit, "player") == true then return end
+                    observe(GL.Identity(unit))
+                end
+            end
+            if not verified then return end
+            local first, last = GL.Safe(UnitName, "player")
+            if name and type(first) == "string" and (first == victim or (type(last) == "string" and first .. " " .. last == victim)) then return end
+            -- A bare given name is never a unique key on Forever. A client with
+            -- no usable lineID delivers one frame event per award; identical text
+            -- and timestamps can legitimately describe two separate defeats.
+            local identity = name and not ambiguous and (candidate or name) or nil
+            if not GL.RecordHonor(identity, points) then return end
+            if lineID then
+                -- ponytail: remember the last 256 awards; extend this window
+                -- if a client begins replaying older native chat lines.
+                local old = honorSlots[nextHonorSlot]
+                if old then honorLines[old] = nil end
+                honorSlots[nextHonorSlot], honorLines[lineID] = lineID, true
+                nextHonorSlot = nextHonorSlot % 256 + 1
+            end
+            return identity
+        end
+    end
+end
+
+function T.OnHonorMessage(message, lineID)
     message = GL.Clean(message, "string")
+    if not enabled() or not message then return end
     local f = combatSession()
-    if not enabled() or not f or not message then return end
+    if hasHonorTemplates then
+        local identity = recordHonorReceipt(message, lineID, f)
+        local enemy = identity and f and (f.enemies[identity.key] or f.enemies[identity.alias])
+        if enemy then enemy.signalAt = GL.Now() tryKills() end
+        return
+    end
+    -- Compatibility with clients missing all named formats: this old signal
+    -- can support an isolated probable kill but cannot establish any points.
+    if not f then return end
     for _, enemy in pairs(f.enemies) do
         local name = enemy.identity.fullName
         -- Match the whole known identity; never use only a shared first name.
@@ -560,34 +714,105 @@ function T.OnDeath(confirmed, viaPet)
     lastDeathAt = now
 end
 
+-- ponytail: require both players on visible unit tokens, idle within two
+-- seconds. A bidirectional client encounter feed could cover unseen ambushes.
+local function observeOpening(sub, args, me, src, dst, srcName, dstName, srcFlags, dstFlags)
+    local idle = fight and fight.idleOpponents or idleOpponents
+    if not idle or not next(idle) or not worldActive or deathHandled then return end
+    local pet = GL.Clean(GL.Safe(UnitGUID, "pet"), "string")
+    local aura = sub == "SPELL_AURA_APPLIED" or sub == "SPELL_AURA_APPLIED_DOSE" or sub == "SPELL_AURA_REFRESH"
+    if aura and GL.Clean(args[15], "string") == "BUFF" then return end
+    if priorActions[sub] and src and src == dst then return end
+    local function ourUnit(guid)
+        if not guid then return false end
+        if guid == me or guid == pet then return true end
+        local summoned = petOwners[guid]
+        local age = summoned and GL.Now() - summoned.at
+        return age and age >= 0 and age < 120 and summoned.mine
+    end
+    local ours, theirs = ourUnit(src), ourUnit(dst)
+    if not ours and not theirs then
+        if not src or not dst then
+            if fight then fight.idleOpponents = nil end
+            idleOpponents = nil
+            return
+        end
+        idle[src], idle[dst] = nil, nil
+        local fromPet, toPet = petOwners[src], petOwners[dst]
+        if fromPet and fromPet.owner then idle[fromPet.owner.guid] = nil end
+        if toPet and toPet.owner then idle[toPet.owner.guid] = nil end
+        return
+    end
+    local amountAt = sub == "SWING_DAMAGE" and 12 or 15
+    local amount = GL.Clean(args[amountAt], "number")
+    if amount == 0 and (sub == "SWING_DAMAGE" or sub == "RANGE_DAMAGE" or sub == "SPELL_DAMAGE") then return end
+    if not fight then
+        fight, lastFight = { enemies = {}, id = nextID("fight") }, nil
+    end
+    local f = fight
+    -- Only the earliest personal health damage is eligible. Unknown/indirect
+    -- first hits close the window instead of letting later retaliation claim it.
+    f.idleOpponents, idleOpponents = nil, nil
+    local opponentGUID, opponentName, flags = src, srcName, srcFlags
+    if ours then opponentGUID, opponentName, flags = dst, dstName, dstFlags end
+    if (sub ~= "SWING_DAMAGE" and sub ~= "RANGE_DAMAGE" and sub ~= "SPELL_DAMAGE")
+        or not amount or not (amount > 0 and amount < math.huge) or ours and theirs
+        or not hostileFlags(flags) or unresolvedAttack(f) or f.otherCombatant or f.pendingAggression
+        or GL.Clean(GL.Safe(GetNumGroupMembers), "number") ~= 0 then return end
+    local inside, kind = GL.Safe(IsInInstance)
+    if inside ~= false or kind ~= "none" then return end
+    local identity = attacker(opponentGUID, opponentName, flags, f)
+    local at = identity and idle[identity.guid]
+    local now = GL.Now()
+    if not at or now < at or now - at > 2 then return end
+    for guid in pairs(f.combatants or {}) do if guid ~= identity.guid then return end end
+    local relation = GL.Relation(GL.Remember(identity))
+    local opener, hadGrudge = ours and "player" or "opponent", relation == "warning" or relation == "enemy"
+    local event = GL.RecordOpening(identity, opener, hadGrudge, f.id)
+    if event then
+        f.opening = {guid = identity.guid, opener = opener, hadGrudge = hadGrudge, priorDeath = event.priorDeath}
+        observeOpponent(f, identity.guid, identity.level, true)
+    end
+end
+
 function T.OnCombatLog(...)
     if not enabled() then return end
     local args
     if select("#", ...) > 0 then args = { ... }
     else
         local getter = (C_CombatLog and C_CombatLog.GetCurrentEventInfo) or CombatLogGetCurrentEventInfo
-        if type(getter) ~= "function" then return end
-        local result = { pcall(getter) }
-        if result[1] ~= true then return end
-        table.remove(result, 1)
-        args = result
+        -- select preserves nil payload slots, including concealed player names.
+        args = type(getter) == "function" and { select(2, pcall(getter)) } or {}
     end
     local sub = GL.Clean(args[2], "string")
     local src = GL.Clean(args[4], "string")
     local dst = GL.Clean(args[8], "string")
     local me = playerGUID()
-    if not sub or not me then return end
+    if not sub or not me then
+        idleOpponents = nil
+        if fight then fight.idleOpponents = nil end
+        return
+    end
     local srcName, dstName = GL.Clean(args[5], "string"), GL.Clean(args[9], "string")
-    if sub == "SPELL_SUMMON" and src and src:match("^Player%-") and hostileFlags(args[6])
+    local srcFlags, dstFlags = args[6], args[10]
+    if (fight and fight.idleOpponents or idleOpponents) and (damageEvents[sub] or sub == "SPELL_INSTAKILL"
+        or priorActions[sub] and (hostileFlags(srcFlags) or hostileFlags(dstFlags))) then
+        -- A witnessed hostile cast, control effect, or miss may precede damage.
+        observeOpening(sub, args, me, src, dst, srcName, dstName, srcFlags, dstFlags)
+    end
+    if sub == "SPELL_SUMMON" and src and src:match("^Player%-") and (src == me or hostileFlags(srcFlags))
         and dst and (dst:match("^Pet%-") or dst:match("^Creature%-")) then
-        local owner = identityForGUID(src, srcName)
-        if owner then rememberPet(dst, owner) end
+        if src == me then rememberPet(dst, nil, true)
+        else
+            local owner = identityForGUID(src, srcName)
+            if owner then rememberPet(dst, owner) end
+        end
     elseif sub == "PARTY_KILL" then
         killingBlow(src, dst, dstName, "Journal de combat : coup fatal personnel (PARTY_KILL).")
-    elseif dst ~= me and hostileFlags(args[10]) and (damageEvents[sub] or sub == "SPELL_INSTAKILL") then
+    elseif dst ~= me and hostileFlags(dstFlags) and (damageEvents[sub] or sub == "SPELL_INSTAKILL") then
         if src == me and fight and not deathHandled then
             observeOpponent(fight, dst, nil, true)
-            if dst and dst:match("^Creature%-") and hasFlag(args[10], COMBATLOG_OBJECT_CONTROL_NPC or 512)
+            if dst and dst:match("^Creature%-") and hasFlag(dstFlags, COMBATLOG_OBJECT_CONTROL_NPC or 512)
                 and not petOwners[dst] then fight.npcPressure = true end
         end
         -- Zero overkill is ambiguous across clients. Require a strictly positive
@@ -601,14 +826,14 @@ function T.OnCombatLog(...)
     -- Only health-damage payloads contain overkill. LEECH/DRAIN use powerType in
     -- that position, and durability damage is not damage to the player either.
     elseif dst == me and (damageEvents[sub] or sub == "SPELL_INSTAKILL") then
-        local identity, viaPet = attacker(src, srcName, args[6])
+        local identity, viaPet = attacker(src, srcName, srcFlags)
         local f = combatSession()
         if not identity and f then
             f.pve = true
-            if src and src:match("^Creature%-") and hasFlag(args[6], COMBATLOG_OBJECT_CONTROL_NPC or 512)
-                and hostileFlags(args[6]) and not viaPet then f.npcPressure = true end
+            if src and src:match("^Creature%-") and hasFlag(srcFlags, COMBATLOG_OBJECT_CONTROL_NPC or 512)
+                and hostileFlags(srcFlags) and not viaPet then f.npcPressure = true end
         end
-        local hostile = hostileFlags(args[6])
+        local hostile = hostileFlags(srcFlags)
         if identity and hostile and not deathHandled then
             -- Initial damage can arrive before PLAYER_REGEN_DISABLED.
             if not fight then fight = { enemies = {}, id = nextID("fight") } end
@@ -630,7 +855,7 @@ function T.OnCombatLog(...)
     end
 end
 
-local groupTimers, groupWorldActive = {}, true
+local groupTimers = {}
 local function groupTime(timer, now)
     return math.max(0, math.floor((now or GL.Now()) - timer.started))
 end
@@ -650,7 +875,7 @@ end
 
 function T.ScanGroup()
     local now = GL.Now()
-    if not groupWorldActive or not GL.db or not GL.Settings().groupTracking or GL.IsPvPInstance() then stopGroupTime(now) return end
+    if not worldActive or not GL.db or not GL.Settings().groupTracking or GL.IsPvPInstance() then stopGroupTime(now) return end
     local size = GL.Clean(GL.Safe(GetNumGroupMembers), "number")
     local me = playerGUID()
     if size == nil or not me then stopGroupTime(now) return end
@@ -705,12 +930,19 @@ end
 
 function T.Poll()
     if not GL.db then return end
-    if GL.IsPvPInstance() then
+    local inside, kind = GL.Safe(IsInInstance)
+    if kind == "pvp" or kind == "arena" then
         -- Discard pending inference too, so a late recap cannot cross the boundary.
-        fight, lastFight, pendingDeath = nil, nil, nil
+        fight, lastFight, pendingDeath, idleOpponents = nil, nil, nil, nil
         return
     end
     resolveDeath()
+    if openingFeed and not fight then
+        if worldActive and GL.Settings().pvpTracking and not duel and not deathHandled and inside == false and kind == "none"
+            and bool(UnitAffectingCombat, "player") == false and bool(UnitIsDeadOrGhost, "player") == false then
+            idleOpponents, idleAt = {}, GL.Now()
+        else idleOpponents = nil end
+    end
     for _, unit in ipairs(units()) do T.Observe(unit, true) end
     observeHealth()
     tryAggression()
@@ -719,14 +951,17 @@ function T.Poll()
     for key, credit in pairs(recentCredits) do if now < credit.at or now - credit.at > 10 then recentCredits[key] = nil end end
 end
 
-function T.HandleEvent(event, arg, second)
+function T.HandleEvent(event, ...)
     if not GL.db then return end
+    local arg, second = ...
     if event == "PLAYER_LOGOUT" or event == "PLAYER_LEAVING_WORLD" then
-        groupWorldActive = false
+        worldActive = false
+        idleOpponents = nil
+        if fight then fight.idleOpponents, fight.opening = nil, nil end
         stopGroupTime(GL.Now())
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
-        if event == "PLAYER_ENTERING_WORLD" then groupWorldActive = true end
-        recentCredits = {}
+        if event == "PLAYER_ENTERING_WORLD" then worldActive = true end
+        recentCredits, idleOpponents = {}, nil
         petOwners, petSlots, nextPetSlot = {}, {}, 1
         fight, lastFight, plates, duel, duelPendingUntil, pendingDeath = nil, nil, {}, false, nil, nil
         honorBaseline = GL.Clean(GL.Safe(GetPVPSessionStats), "number")
@@ -748,23 +983,25 @@ function T.HandleEvent(event, arg, second)
         duel = true
         -- Failed/ignored outgoing requests must not disable tracking forever.
         duelPendingUntil = (event == "DUEL_REQUESTED" or event == "DUEL_TO_THE_DEATH_REQUESTED") and (GL.Now() + 120) or nil
-        fight, lastFight, pendingDeath = nil, nil, nil
+        fight, lastFight, pendingDeath, idleOpponents = nil, nil, nil, nil
     elseif event == "DUEL_FINISHED" then
         duel, duelPendingUntil = false, nil
-        fight, lastFight, pendingDeath = nil, nil, nil
+        fight, lastFight, pendingDeath, idleOpponents = nil, nil, nil, nil
     elseif event == "PLAYER_REGEN_DISABLED" then
         if enabled() then
-            if not fight then fight = { enemies = {}, id = nextID("fight") } end
+            if not fight then fight = { enemies = {}, id = nextID("fight"), idleOpponents = idleOpponents } end
+            idleOpponents = nil
             lastFight = nil
             honorBaseline = GL.Clean(GL.Safe(GetPVPSessionStats), "number")
             T.Poll()
         end
     elseif event == "PLAYER_REGEN_ENABLED" then
+        idleOpponents = nil
         if fight then fight.endedAt = GL.Now() lastFight = fight fight = nil end
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
         if bool(UnitIsDeadOrGhost, "player") == false then
             deathHandled = false
-            fight, lastFight, pendingDeath = nil, nil, nil
+            fight, lastFight, pendingDeath, idleOpponents = nil, nil, nil, nil
         end
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         arg = GL.Clean(arg, "string")
@@ -779,7 +1016,7 @@ function T.HandleEvent(event, arg, second)
     elseif event == "PLAYER_DEAD" then T.OnDeath()
     elseif event == "PARTY_KILL" then killingBlow(arg, second, nil, "Le jeu vous attribue le coup fatal (PARTY_KILL).", true)
     elseif event == "PLAYER_PVP_KILLS_CHANGED" then T.OnHonorCount()
-    elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then T.OnHonorMessage(arg)
+    elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then T.OnHonorMessage(arg, (select(11, ...))) -- field 12 is the sender, never the victim
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then T.OnCombatLog() end
 end
 
@@ -798,7 +1035,7 @@ GL.On("READY", function()
     for _, event in ipairs(events) do pcall(frame.RegisterEvent, frame, event) end
     -- Forever may reject registration even when the getter exists.
     if (C_CombatLog and C_CombatLog.GetCurrentEventInfo) or CombatLogGetCurrentEventInfo then
-        pcall(frame.RegisterEvent, frame, "COMBAT_LOG_EVENT_UNFILTERED")
+        openingFeed = pcall(frame.RegisterEvent, frame, "COMBAT_LOG_EVENT_UNFILTERED")
     end
     -- Blizzard's player menu and /duel call StartDuel. A secure post-hook observes
     -- outgoing requests; DUEL_REQUESTED is only delivered to the recipient.
@@ -823,6 +1060,6 @@ GL.On("READY", function()
 end)
 
 GL.On("SETTINGS", function()
-    if not GL.Settings().pvpTracking then fight, lastFight, pendingDeath = nil, nil, nil end
+    if not GL.Settings().pvpTracking then fight, lastFight, pendingDeath, idleOpponents = nil, nil, nil, nil end
     T.ScanGroup()
 end)

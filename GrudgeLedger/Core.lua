@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON, private = ...
-GrudgeLedger = { version = "0.9.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.10.0", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local translations = private and private.translations
@@ -18,6 +18,7 @@ local journalIndex, journalSorted, personalStatistics
 local breakdownStatistics = {}
 local socialTotals = setmetatable({}, { __mode = "k" })
 local lastInteraction = setmetatable({}, { __mode = "k" })
+local openingProofs = setmetatable({}, { __mode = "k" })
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
@@ -129,9 +130,12 @@ local function cleanName(value)
     return value ~= "" and value or nil
 end
 
+local function playerGUID(value)
+    local guid = GL.Clean(value, "string")
+    return guid and guid:match("^Player%-%w") and #guid <= 128 and guid or nil
+end
 function GL.IdentityFromName(name, surname, guid)
-    name, surname, guid = cleanName(name), cleanName(surname), GL.Clean(guid, "string")
-    if guid and (not guid:match("^Player%-%w") or #guid > 128) then guid = nil end
+    name, surname, guid = cleanName(name), cleanName(surname), playerGUID(guid)
     if not name then return nil end
     if not surname then
         local first, last = name:match("^([^ ]+) +(.+)$")
@@ -254,7 +258,7 @@ local function refreshReputation(record)
     if record.reactionSource == "emote" or record.reactionSource == "automatic" then record.reaction = scoreRelation(record.reputation) end
 end
 local interactionKinds = {kill=true, death=true, aggression=true, grouped=true, group=true,
-    reaction=true, reputation=true, trade=true, note=true}
+    reaction=true, reputation=true, trade=true, note=true, honor=true, opening=true}
 local function interactionTime(value, now)
     return type(value) == "number" and value > 0 and value <= now and value or 0
 end
@@ -272,6 +276,7 @@ local function rebuildInteraction(record)
     lastInteraction[record] = at
 end
 local function normalize(record)
+    openingProofs[record] = nil
     socialTotals[record] = nil
     record.notes = type(record.notes) == "table" and record.notes or {}
     record.history = type(record.history) == "table" and record.history or {}
@@ -352,6 +357,7 @@ function GL.Get(identity)
 end
 
 local function merge(provisional, record)
+    openingProofs[record] = nil
     invalidateJournal()
     guildStatistics, socialTotals[record] = nil, nil
     if (provisional.lastEncounterAt or 0) > (record.lastEncounterAt or 0) then
@@ -563,12 +569,21 @@ local function currentActor()
     local actor = GL.IdentityFromName(name, surname, GL.Safe(UnitGUID, "player"))
     return actor and actor.guid, actor and actor.fullName
 end
+local function indexOpeningEvidence(proof, entry)
+    if type(entry) ~= "table" or entry.voided or entry.voidReason == "battleground"
+        or (entry.kind ~= "opening" and (entry.kind ~= "death" or entry.confidence ~= "confirmed"))
+        or not playerGUID(entry.actorGUID) or type(entry.time) ~= "number" or not (entry.time > 0 and entry.time < math.huge) then return end
+    local actor = proof[entry.actorGUID] or {openings = {}}
+    proof[entry.actorGUID] = actor
+    if entry.kind == "death" then actor.firstDeath = math.min(actor.firstDeath or entry.time, entry.time)
+    elseif type(entry.encounterId) == "string" then actor.openings[entry.encounterId] = entry end
+end
 local function history(record, kind, extra)
     local entry = extra or {}
     local now, zone = GL.Now(), GL.Where()
     entry.time, entry.kind, entry.zone = entry.time or now, kind, entry.zone or zone
-    entry.actorGUID, entry.actorName = currentActor()
-    entry.opponentName = record.fullName
+    if not entry.actorGUID then entry.actorGUID, entry.actorName = currentActor() end
+    entry.opponentName = record and record.fullName
     -- Snapshot the explicitly tracked quest, never guess which quest the player is doing.
     -- ponytail: absent/protected quest APIs simply omit context; old events are not enriched.
     if entry.time == now and entry.zone == zone then
@@ -590,8 +605,14 @@ local function history(record, kind, extra)
         entry.raceID = record.raceID
         entry.race, entry.raceName, entry.class, entry.className = record.race, record.raceName, record.class, record.className
     end
-    table.insert(record.history, entry)
-    lastInteraction[record] = math.max(lastInteraction[record] or 0, interactionTime(entry.time, now))
+    if record then
+        table.insert(record.history, entry)
+        if openingProofs[record] then indexOpeningEvidence(openingProofs[record], entry) end
+        lastInteraction[record] = math.max(lastInteraction[record] or 0, interactionTime(entry.time, now))
+    else
+        GL.db.unassignedHonor = GL.db.unassignedHonor or {}
+        table.insert(GL.db.unassignedHonor, entry)
+    end
     guildStatistics = nil
     invalidateJournal()
     return entry
@@ -826,6 +847,67 @@ local pvpFields = {
     death = { confirmed = "deaths", probable = "probableDeaths" },
     aggression = { confirmed = "aggressions", probable = "probableAggressions" },
 }
+function GL.HonorPoints(event)
+    local n = type(event) == "table" and event.kind == "honor" and GL.Clean(event.honor, "number")
+    if n and n >= 0 and n <= 2147483647 and n == math.floor(n) then return n end
+end
+function GL.RecordHonor(identity, points)
+    local inside, instance = GL.Safe(IsInInstance)
+    if inside ~= false or instance ~= "none" or not GL.db or not GL.Settings().pvpTracking then return end
+    local entry = {kind = "honor", honor = points}
+    if not GL.HonorPoints(entry) then return end
+    entry.actorGUID, entry.actorName = currentActor()
+    if not entry.actorGUID or identity and (type(identity) ~= "table" or GL.Clean(identity.guid, "string") == entry.actorGUID) then return end
+    local record = identity and GL.Remember(identity)
+    history(record, "honor", entry)
+    GL.Emit("CHANGED", record, "honor")
+    return entry
+end
+local function sumHonor(stats, points)
+    stats.honor = stats.honor + points
+    stats.honorAwards = stats.honorAwards + 1
+    stats.bestHonor = math.max(stats.bestHonor, points)
+end
+-- Read each contact's evidence once across summary rows. A corrected death
+-- invalidates the index, including for victories in a later reporting period.
+local function openingProof(record)
+    if openingProofs[record] then return openingProofs[record] end
+    local proof = {}
+    for _, entry in ipairs(record.history or {}) do indexOpeningEvidence(proof, entry) end
+    openingProofs[record] = proof
+    return proof
+end
+function GL.RecordOpening(identity, opener, hadGrudge, encounterId)
+    local inside, instance = GL.Safe(IsInInstance)
+    if inside ~= false or instance ~= "none" or not GL.db or not GL.Settings().pvpTracking
+        or (opener ~= "player" and opener ~= "opponent") or type(hadGrudge) ~= "boolean"
+        or not cleanName(encounterId) or type(identity) ~= "table" then return end
+    local actor, name = currentActor()
+    if not actor or not playerGUID(identity.guid) or identity.guid == actor then return end
+    local record = GL.Remember(identity)
+    if not record then return end
+    local previous = openingProof(record)[actor]
+    if previous and previous.openings[encounterId] then return previous.openings[encounterId] end
+    local at = GL.Now()
+    local event = history(record, "opening", {actorGUID=actor, actorName=name, time=at, opener=opener,
+        hadGrudge=hadGrudge, encounterId=encounterId, priorDeath=previous and previous.firstDeath and previous.firstDeath < at or false})
+    GL.Emit("CHANGED", record, "opening")
+    return event
+end
+function GL.KillOpeningCategory(record, event)
+    if type(event) ~= "table" or event.kind ~= "kill" or event.confidence ~= "confirmed" or event.voided or event.voidReason == "battleground" then return end
+    local context = event.combat
+    local actor = record and type(context) == "table" and openingProof(record)[event.actorGUID]
+    local opening = actor and actor.openings[context.encounterId]
+    if not opening or context.opener ~= opening.opener or type(event.time) ~= "number"
+        or not (event.time >= opening.time and event.time < math.huge) then return "unknownOpeningKills" end
+    if opening.opener == "opponent" then return "responseKills" end
+    if opening.opener ~= "player" then return "unknownOpeningKills" end
+    if opening.priorDeath == true and actor.firstDeath and actor.firstDeath < opening.time then return "revengeKills" end
+    if opening.hadGrudge == true then return "initiatedKillsGrudge" end
+    if opening.hadGrudge == false then return "initiatedKillsNoGrudge" end
+    return "unknownOpeningKills"
+end
 local function combatContext(value)
     if not GL.Clean(value, "table") then return end
     local function integer(field, low, high)
@@ -837,6 +919,10 @@ local function combatContext(value)
         opponentLevel = integer("opponentLevel", 1, 1000), opponents = integer("opponents", 1, 10000),
         pve = GL.Clean(value.pve, "boolean") or nil, pet = GL.Clean(value.pet, "boolean") or nil,
     }
+    if (value.opener == "player" or value.opener == "opponent") and cleanName(value.encounterId) then
+        snapshot.opener, snapshot.encounterId = value.opener, value.encounterId
+        snapshot.priorDeath, snapshot.hadGrudge = GL.Clean(value.priorDeath, "boolean"), GL.Clean(value.hadGrudge, "boolean")
+    end
     if next(snapshot) then return snapshot end
 end
 function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat)
@@ -902,6 +988,7 @@ function GL.VoidPvP(identity, event, silent, reason)
     if not hasEvent(record, event) then return false, L("Cet événement n'appartient pas à cette fiche.") end
     -- Keep the original evidence and eventId: repeated observations must not resurrect it.
     event.voided, event.voidedAt = true, GL.Now()
+    if event.kind == "death" then openingProofs[record] = nil end
     if event.time == lastInteraction[record] then rebuildInteraction(record) end
     if reason then event.voidReason = reason
     else event.voidedByGUID, event.voidedByName = currentActor() end
@@ -1005,8 +1092,8 @@ local function matchesWords(text, words)
 end
 local historySearchFields = { "opponentName", "zone", "subzone", "guild", "questTitle", "evidence" }
 local searchRelations = {friend=L("Ami"), enemy=L("Ennemi"), warning=L("Méfiance"), neutral=L("Neutre")}
-local searchKinds = {kill=L("Victoire"), death=L("Mort"), aggression=L("Agression"), trade=L("Échange terminé"),
-    grouped=L("Vous avez partagé un groupe"), group=L("Vous avez partagé un groupe"), note=L("Note personnelle"),
+local searchKinds = {kill=L("Victoire"), death=L("Mort"), aggression=L("Agression"), honor=L("Honneur"), trade=L("Échange terminé"),
+    opening=L("Initiative"), grouped=L("Vous avez partagé un groupe"), group=L("Vous avez partagé un groupe"), note=L("Note personnelle"),
     reputation=L("Avis personnel")}
 local function addEventText(parts, event)
     for _, field in ipairs(historySearchFields) do
@@ -1077,15 +1164,14 @@ local function eventTime(event)
     return at and at >= 0 and at < math.huge and at or 0
 end
 local function eventActor(event)
-    local guid = GL.Clean(event.actorGUID, "string")
-    return guid and guid:match("^Player%-%w") and #guid <= 128 and guid or nil
+    return playerGUID(event.actorGUID)
 end
 local function indexedJournal()
     if journalIndex then return journalIndex end
     local rows = {}
     for _, record in pairs(GL.db and GL.db.players or {}) do
         for index, event in ipairs(record.history or {}) do
-            if type(event) == "table" then
+            if type(event) == "table" and (event.kind ~= "honor" or GL.HonorPoints(event)) then
                 rows[#rows + 1] = { record = record, event = event, at = eventTime(event), actor = eventActor(event), sequence = index }
             end
         end
@@ -1096,6 +1182,11 @@ local function indexedJournal()
                     actorGUID = note.actorGUID, actorName = note.actorName, note = note,
                 } }
             end
+        end
+    end
+    for index, event in ipairs(GL.db and GL.db.unassignedHonor or {}) do
+        if type(event) == "table" and GL.HonorPoints(event) then
+            rows[#rows + 1] = {event = event, at = eventTime(event), actor = eventActor(event), sequence = index}
         end
     end
     -- ponytail: one session-only index, built on demand and invalidated on writes.
@@ -1152,19 +1243,20 @@ function GL.JournalEvents(options)
     if not journalSorted then
         table.sort(rows, function(a, b)
             if a.at ~= b.at then return a.at > b.at end
-            if a.record.key ~= b.record.key then return a.record.key < b.record.key end
+            local aKey, bKey = a.record and a.record.key or "", b.record and b.record.key or ""
+            if aKey ~= bKey then return aKey < bKey end
             return a.sequence > b.sequence
         end)
         journalSorted = true
     end
     for _, row in ipairs(rows) do
         local event, record = row.event, row.record
-        local category = pvpFields[event.kind] and "pvp" or event.kind == "note" and "notes" or event.kind == "trade" and "trade" or "social"
+        local category = (pvpFields[event.kind] or event.kind == "honor" or event.kind == "opening") and "pvp" or event.kind == "note" and "notes" or event.kind == "trade" and "trade" or "social"
         if not GL.IsGroupOnly(record) and within(event, row.at) and inScope(row.actor, scope, actor)
             and (kind == "all" or kind == category or kind == event.kind) then
             local match = true
             if #words > 0 then
-                texts[record] = texts[record] or recordText(record)
+                if record and not texts[record] then texts[record] = recordText(record) end
                 local parts = { texts[record] }
                 if type(event.text) == "string" then parts[#parts + 1] = event.text end
                 addEventText(parts, event)
@@ -1186,15 +1278,15 @@ local function pvpEventKey(row, byOpponent)
 end
 function GL.ContactMatchup(record, withHistory)
     local actor, now = currentActor(), GL.Now()
-    local result = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0,
+    local result = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0, honor = 0, honorAwards = 0, bestHonor = 0,
         run = 0, recent = {}, indices = withHistory and {} or nil }
     if not actor or not record then return result end
     -- ponytail: only the open contact is read. Rebuild on demand so corrections and
     -- merged identities take effect without maintaining a second combat ledger.
     local entries, seen = {}, {}
     for i, event in ipairs(record.history or {}) do
-        if type(event) == "table" and (event.kind == "kill" or event.kind == "death")
-            and pvpFields[event.kind][event.confidence] and not event.voided and event.voidReason ~= "battleground"
+        if type(event) == "table" and (GL.HonorPoints(event) or (event.kind == "kill" or event.kind == "death")
+            and pvpFields[event.kind][event.confidence]) and not event.voided and event.voidReason ~= "battleground"
             and eventActor(event) == actor then
             local at = eventTime(event)
             local key = pvpEventKey({ record = record, actor = actor, event = event }, true)
@@ -1216,10 +1308,14 @@ function GL.ContactMatchup(record, withHistory)
     local previous
     for i, row in ipairs(entries) do
         local kind, confidence = row.event.kind, row.event.confidence
-        local field = pvpFields[kind][confidence]
-        result[field] = result[field] + 1
+        if kind == "honor" then
+            sumHonor(result, row.event.honor)
+        else
+            local field = pvpFields[kind][confidence]
+            result[field] = result[field] + 1
+        end
         if withHistory then result.indices[#entries - i + 1] = row.index end
-        if row.at > 0 and confidence == "confirmed" then
+        if kind ~= "honor" and row.at > 0 and confidence == "confirmed" then
             result.run = result.lastKind == kind and result.run + 1 or 1
             result.lastKind = kind
             if previous and previous.event.kind == "death" and row.at > previous.at then
@@ -1231,7 +1327,7 @@ function GL.ContactMatchup(record, withHistory)
     end
     for i = #entries, 1, -1 do
         local row = entries[i]
-        if row.at > 0 and row.event.confidence == "confirmed" then
+        if row.event.kind ~= "honor" and row.at > 0 and row.event.confidence == "confirmed" then
             result.recent[#result.recent + 1] = row.event
             if #result.recent == 5 then break end
         end
@@ -1259,22 +1355,39 @@ function GL.PersonalStatistics(options)
     if personalStatistics and personalStatistics.key == key and now >= personalStatistics.at
         and (not personalStatistics.nextAt or now < personalStatistics.nextAt) then return statisticsCopy(personalStatistics.value) end
     local stats = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0,
+        honor = 0, honorAwards = 0, bestHonor = 0, unassignedHonor = 0,
+        victims = 0, attackers = 0, initiated = 0, responded = 0, revengeKills = 0,
+        initiatedKillsNoGrudge = 0, initiatedKillsGrudge = 0, responseKills = 0, unknownOpeningKills = 0,
         aggressions = 0, probableAggressions = 0, events = 0, unknownActorEvents = 0,
         unlinkedEvents = 0, currentActor = actor, actorName = actorName, scope = scope, topDeaths = {} }
     local counted, unknown, ranked, rankings = {}, {}, {}, { kill = {}, death = {} }
+    local attackers, openings = {}, {}
     for _, row in ipairs(indexedJournal()) do
         local event, record = row.event, row.record
         local fields = pvpFields[event.kind]
         local at = row.at
-        if fields and not event.voided and at > now and (not nextAt or at < nextAt) then nextAt = at end
-        if fields and not event.voided and fields[event.confidence] and within(event, at) then
+        if (fields or event.kind == "honor" or event.kind == "opening") and not event.voided and at > now and (not nextAt or at < nextAt) then nextAt = at end
+        if event.kind == "opening" and not event.voided and event.voidReason ~= "battleground" and within(event, at) and inScope(row.actor, scope, actor)
+            and row.actor and type(event.encounterId) == "string" and (event.opener == "player" or event.opener == "opponent") then
+            local key = row.actor .. "\031" .. record.key .. "\031" .. event.encounterId
+            if not openings[key] then
+                openings[key] = true
+                local field = event.opener == "player" and "initiated" or "responded"
+                stats[field] = stats[field] + 1
+                if event.opener == "opponent" then attackers[record.key] = true end
+            end
+        elseif event.kind == "honor" and not event.voided and event.voidReason ~= "battleground" and within(event, at) and inScope(row.actor, scope, actor) then
+            sumHonor(stats, event.honor)
+            if not record then stats.unassignedHonor = stats.unassignedHonor + event.honor end
+        elseif fields and not event.voided and event.voidReason ~= "battleground" and fields[event.confidence] and within(event, at) then
             local id = pvpEventKey(row)
             if not row.actor and not unknown[id] then
                 unknown[id], stats.unknownActorEvents = true, stats.unknownActorEvents + 1
             end
             if inScope(row.actor, scope, actor) then
+                if event.confidence == "confirmed" and (event.kind == "aggression" or event.kind == "death") then attackers[record.key] = true end
                 local previous = counted[id]
-                if not previous or event.confidence == "confirmed" then counted[id] = event end
+                if not previous or event.confidence == "confirmed" then counted[id] = row end
                 if not stats.firstAt or at < stats.firstAt then stats.firstAt = at end
                 if not stats.lastAt or at > stats.lastAt then stats.lastAt = at end
                 if event.confidence == "confirmed" and rankings[event.kind] then
@@ -1289,9 +1402,16 @@ function GL.PersonalStatistics(options)
             end
         end
     end
-    for id, event in pairs(counted) do
+    for _ in pairs(attackers) do stats.attackers = stats.attackers + 1 end
+    for _ in pairs(rankings.kill) do stats.victims = stats.victims + 1 end
+    for id, row in pairs(counted) do
+        local event = row.event
         local field = pvpFields[event.kind][event.confidence]
         stats[field], stats.events = stats[field] + 1, stats.events + 1
+        if field == "kills" then
+            local category = GL.KillOpeningCategory(row.record, event)
+            stats[category] = stats[category] + 1
+        end
         if type(id) == "table" then stats.unlinkedEvents = stats.unlinkedEvents + 1 end
     end
     for kind, records in pairs(rankings) do
@@ -1428,6 +1548,10 @@ function GL.InitDB()
     GL.db = GrudgeLedgerDB
     GL.db.schema = 1
     GL.db.players = type(GL.db.players) == "table" and GL.db.players or {}
+    if GL.db.unassignedHonor ~= nil and type(GL.db.unassignedHonor) ~= "table" then
+        GL.db.quarantine = GL.db.quarantine or {}
+        GL.db.quarantine.unassignedHonor, GL.db.unassignedHonor = GL.db.unassignedHonor, nil
+    end
     GL.db.aliases = type(GL.db.aliases) == "table" and GL.db.aliases or {}
     GL.db.guilds = type(GL.db.guilds) == "table" and GL.db.guilds or {}
     GL.db.settings = type(GL.db.settings) == "table" and GL.db.settings or {}

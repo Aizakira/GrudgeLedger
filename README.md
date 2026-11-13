@@ -37,6 +37,12 @@ Open the cog or use `/gl settings` to set the font, text size and spacing. The f
 
 The index opens with the most recent interaction first. A new encounter, fight, gesture, trade or note can move a contact up. Submitting a search restores the preferred result order. Clearing it returns the index to chronological order.
 
+### New in 0.10.0
+
+**Summary → Overview → Initiative** shows who opened observed fights and how confirmed victories break down. **Revenge** requires a confirmed earlier death of this character to the same opponent, an observed opening hit from your side, and a confirmed victory. Winning after the opponent opens counts as a response. Victories with a missing opening still count under **Unknown initiative**, including older fights.
+
+Select **Honor received** to review recorded outdoor PvP rewards for the selected period and character. **Journal → Head-to-head** shows rewards tied to one opponent. Shared honor counts even when a teammate lands the killing blow. The game reports the honor paid to your character. Your opponent’s payout is unknown.
+
 ### New in 0.9.2
 
 **Head-to-head** separates this character’s confirmed and likely outcomes. Open the matching fight history to review the evidence. Shared honor is excluded when the game identifies a different killer in the same encounter. A delayed combat-log confirmation for a continuously observed corpse updates the original victory.

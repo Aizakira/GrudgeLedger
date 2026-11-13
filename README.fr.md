@@ -39,6 +39,12 @@ La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous 
 
 La colonne de gauche présente les contacts du plus récemment au plus anciennement rencontré ou annoté. Une interaction comme un combat, un geste ou un échange actualise aussi ce classement. Validez une recherche pour utiliser votre tri préféré. Vider le champ rétablit la chronologie.
 
+### Depuis la 0.10.0
+
+Dans **Bilan → Vue d’ensemble → Initiative**, retrouvez qui a engagé les combats observés et comment vos victoires confirmées se répartissent. Une **revanche** exige une mort antérieure confirmée de ce personnage face au même adversaire, un premier coup observé de votre côté et une victoire confirmée. Si l’adversaire engage, la victoire compte comme une riposte. Si le début manque, elle compte sous **Initiative inconnue**. Les anciennes victoires gardent leur résultat.
+
+**Honneur reçu** ouvre le détail des gains de PvP sauvage annoncés par le jeu pour la période et le personnage choisis. **Journal → Face-à-face** réunit les gains associés à un adversaire. Un gain partagé entre plusieurs joueurs compte aussi. Seul le coup fatal détermine une victoire personnelle. Le montant reçu par le tueur adverse demeure inconnu.
+
 ### Depuis la 0.9.2
 
 **Face-à-face** distingue les résultats confirmés et probables de ce personnage. Ouvrez l’historique associé pour en vérifier la preuve. Une victoire déduite de l’honneur partagé est écartée si le jeu attribue le coup fatal à un autre joueur lors de ce combat. Un coup fatal signalé tardivement pour un adversaire resté mort sous observation complète la victoire déjà inscrite.

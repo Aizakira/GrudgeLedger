@@ -197,12 +197,23 @@ local districts = {"Base de Kurzen", "Ruines de Tkashi", "Baie-du-Butin"}
 local district = 1
 GetRealZoneText = function() return "Vallée de Strangleronce" end
 GetSubZoneText = function() return districts[district] end
+IsInInstance = function() return false, "none" end
+assert(GL.RecordHonor(record, 38))
+assert(GL.RecordHonor(record, 17))
+assert(GL.RecordHonor(nil, 12))
 for i = 1, 7 do
     district = (i - 1) % #districts + 1
     GL.RecordPvP(record, "death", i % 2 == 0 and "confirmed" or "probable", "Un seul adversaire hostile vous ciblait avant la mort. Attribution déduite ; aucune confirmation du coup fatal.", "qa-event-" .. i)
 end
 GL.RecordAggression(record, "probable", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack")
 GL.RecordPvP(records[3], "kill", "confirmed", "Coup fatal observé.", "qa-victory")
+qaClock = qaClock + 1
+for i, entry in ipairs({ {records[5], "player", false}, {records[12], "player", true}, {record, "player", true}, {records[8], "opponent", false} }) do
+    local id = "qa-opening-" .. i
+    local opening = assert(GL.RecordOpening(entry[1], entry[2], entry[3], id))
+    if entry[2] == "opponent" then GL.RecordAggression(entry[1], "confirmed", nil, id .. "-hit", opening) end
+    GL.RecordPvP(entry[1], "kill", "confirmed", nil, id .. "-kill", opening)
+end
 district = 2
 GL.RecordPvP(records[7], "kill", "probable", "Adversaire observé mort après le combat.", "qa-probable-victory")
 GetRealZoneText, GetSubZoneText = oldZone, oldSubzone
@@ -245,6 +256,7 @@ function QA.capture(name)
         if f.detailTabs then f.detailTabs[tab].scripts.OnClick(f.detailTabs[tab]) end
         if name == "journal-history-page2" then f.historyPage.next:Click() end
         if name == "journal-history-filter" then f.historyPage.options.pvp:Click() end
+        if name == "journal-history-honor" then f.historyPage.options.honor:Click() end
         if name == "journal-small-bottom" then
             local f = GrudgeLedgerWindow
             assert(f.detailBody:GetHeight() >= f.detailText:GetStringHeight() + 12)
@@ -257,6 +269,7 @@ function QA.capture(name)
         GL.ShowJournal(mode)
         local f = GrudgeLedgerJournal
         if name == "honor-podium" then f.dimensionButtons.opponents:Click() end
+        if name:find("^honor%-initiative") then f.dimensionButtons.initiative:Click() end
         if name == "honor-races" then f.dimensionButtons.race:Click() end
         if name == "honor-classes" then f.dimensionButtons.class:Click() end
         if name == "honor-zones" or name == "honor-subzones" then f.dimensionButtons.zone:Click() end
@@ -265,6 +278,7 @@ function QA.capture(name)
         if name:find("%-empty") then f.scope = "legacy" end
         if name:find("%-year") then f.period, f.year = "year", tonumber(date("%Y", qaClock)) end
         if name:find("%-notes") then f.kind = "notes" end
+        if name == "chronicle-honor" then f.kind = "honor" end
         GL.ShowJournal(mode)
         if name == "honor-subzones" then
             f.breakdownRows[1]:Click()

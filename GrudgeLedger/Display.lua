@@ -550,8 +550,8 @@ local function addUnit(unit)
     if C_Timer and C_Timer.After then C_Timer.After(0.25, update) end
 end
 
-function D.Refresh(changedRecord)
-    if not GL.db then return end
+function D.Refresh(changedRecord, reason)
+    if not GL.db or reason == "honor" then return end
     for font, saved in pairs(pendingNames) do
         if not sameColor(colorOf(font), saved.applied) then pendingNames[font] = nil
         elseif canChange(font) then

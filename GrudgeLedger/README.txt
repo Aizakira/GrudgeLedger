@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.9.2
+GRUDGE LEDGER — 0.10.0
 
 Interface en français, anglais ou espagnol selon la langue du jeu. Anglais par défaut pour les autres langues.
 The interface follows your WoW text language: English, French or Spanish.
@@ -10,6 +10,15 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.10.0 — Initiative et honneur en PvP sauvage
+
+Dans Bilan > Vue d’ensemble > Initiative, « Revanche » compte une victoire
+confirmée quand votre personnage engage un adversaire qui l’avait déjà tué.
+Si le début du combat manque, la victoire compte avec « Initiative inconnue ».
+Cliquez sur « Honneur reçu » pour retrouver les gains annoncés par le jeu dans
+la période choisie. La fiche Face-à-face réunit les gains liés à cet adversaire.
+L’honneur partagé peut être reçu sans avoir porté le coup fatal.
 
 0.9.2 — Relire et vérifier un combat
 

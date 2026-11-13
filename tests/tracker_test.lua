@@ -2,7 +2,7 @@
 local now, unitData, groupSize, honor, secret, instanceType, GL, T, nativeFrame
 local passed = 0
 
-local function fixture(saved)
+local function fixture(saved, formats)
     now, groupSize, honor, secret = 1000, 0, 0, {}
     instanceType = "none"
     function IsInInstance() return instanceType ~= "none", instanceType end
@@ -22,6 +22,16 @@ local function fixture(saved)
     function GetRealZoneText() return "Bois de la Pénombre" end
     function GetNumGroupMembers() return groupSize end
     function GetPVPSessionStats() return honor, 0 end
+    -- Client-owned GlobalStrings (Forever 1.60.1.70938), independent of the addon language.
+    formats = formats or {}
+    COMBATLOG_HONORGAIN = formats[1] or "%s dies (Honorable Kill: %s). You gain %d Honor."
+    COMBATLOG_HONORGAIN_NO_RANK = formats[2] or "%s dies (Honorable Kill). You gain %d Honor."
+    COMBATLOG_HONORGAIN_EXHAUSTION1 = "%s dies (Honorable Kill: %s). You gain %d Honor (%s %s bonus)."
+    COMBATLOG_HONORGAIN_NO_RANK_EXHAUSTION1 = "%s dies (Honorable Kill). You gain %d Honor (%s %s bonus)."
+    if formats.unavailable then
+        COMBATLOG_HONORGAIN, COMBATLOG_HONORGAIN_NO_RANK, COMBATLOG_HONORGAIN_EXHAUSTION1, COMBATLOG_HONORGAIN_NO_RANK_EXHAUSTION1 = nil, nil, nil, nil
+    end
+    PVP_RANK_7_0, PVP_RANK_LEADER = formats[3] or "Sergeant", formats[4] or "Leader"
     function IsInRaid() return false end
     function UnitExists(token) return unit(token) ~= nil end
     function UnitIsPlayer(token) local u = unit(token) return u and u.isPlayer or false end
@@ -49,7 +59,7 @@ local function fixture(saved)
     function CreateFrame()
         return { scripts = {},
             RegisterEvent = function(frame, event)
-                if event == "COMBAT_LOG_EVENT_UNFILTERED" then error("Forbidden on Forever") end
+                if event == "COMBAT_LOG_EVENT_UNFILTERED" and not formats.combatFeed then error("Forbidden on Forever") end
                 if event == "PARTY_KILL" then nativeFrame = frame end
             end,
             UnregisterEvent = function() end,
@@ -467,6 +477,140 @@ test("shared group honor cannot become personal probable kill", function()
     assert(total("kills") == 1)
 end)
 
+local function honorChat(text, lineID)
+    nativeFrame.scripts.OnEvent(nativeFrame, "CHAT_MSG_COMBAT_HONOR_GAIN", text, "", "", "", "", "", 0, 0,
+        "", 0, lineID, "Player-1-sender")
+end
+
+test("shared awards use the received integer exactly once independently of kills and bonus text", function()
+    groupSize = 5
+    local e = start(opponent("award", "Alex", "Verdant"))
+    unitData.focus = opponent("bystander", "Alex", "Other")
+    local text = COMBATLOG_HONORGAIN_EXHAUSTION1:format("Alex Verdant", "Sergeant", 18, "200%", "rested")
+    honorChat(text, 501)
+    honorChat(text, 502)
+    honorChat(text, 501) -- redelivery after another award, at the same timestamp
+    killedTarget()
+    T.HandleEvent("PARTY_KILL", unitData.focus.guid, e.guid)
+    honorChat(COMBATLOG_HONORGAIN_NO_RANK_EXHAUSTION1:format("Alex Verdant", 4, "20%", "rested"), 503)
+    local stats = GL.PersonalStatistics()
+    assert(stats.honor == 40 and stats.honorAwards == 3 and stats.bestHonor == 18 and stats.unassignedHonor == 0)
+    local contact = GL.ContactMatchup(GL.Get("guid:" .. e.guid))
+    assert(contact.honor == 40 and contact.kills == 0 and contact.probableKills == 0)
+    assert(count() == 1 and GL.Get("guid:Player-1-sender") == nil and GL.Get("guid:" .. unitData.focus.guid) == nil)
+end)
+
+test("real French and Spanish receipts plus reordered arguments retain the correct name and amount", function()
+    for _, example in ipairs({
+        {"%s meurt (victoire honorable : %s). Vous gagnez %d points d’honneur.", "Sergent",
+            "Anaïs Sève meurt (victoire honorable : Sergent). Vous gagnez 23 points d’honneur."},
+        {"%s muere (muerte con honor: %s). Obtienes %d p. de honor.", "Sargento",
+            "Anaïs Sève muere (muerte con honor: Sargento). Obtienes 23 p. de honor."},
+        {"%s murió (Muerte honorable: %s). Recibes %d p. de Honor.", "Sargento",
+            "Anaïs Sève murió (Muerte honorable: Sargento). Recibes 23 p. de Honor."},
+        {"%3$d [100%%] (%2$s) + %1$s.", "Sergent", "23 [100%] (Sergent) + Anaïs Sève."},
+    }) do
+        fixture(nil, {example[1], nil, example[2]})
+        honorChat(example[3], 80)
+        assert(GL.ContactMatchup(GL.Get(GL.IdentityFromName("Anaïs Sève"))).honor == 23, example[3])
+        assert(GL.PersonalStatistics().unassignedHonor == 0 and count() == 1)
+    end
+end)
+
+test("grammatical alternatives in native Russian and Korean receipts are expanded at load", function()
+    local russian = "%s погибает (рейтинг почетной победы: %s). Вы получаете %d |4очко:очка:очков; чести."
+    fixture(nil, {russian, nil, "Сержант"})
+    for _, row in ipairs({{1, "очко"}, {2, "очка"}, {10, "очков"}}) do
+        honorChat(("Анна Лес погибает (рейтинг почетной победы: Сержант). Вы получаете %d %s чести."):format(row[1], row[2]))
+    end
+    assert(GL.ContactMatchup(GL.Get(GL.IdentityFromName("Анна Лес"))).honor == 13)
+    fixture(nil, {"%s|1이;가; 죽었습니다(명예 승수: %s). %d의 명예를 획득했습니다.", nil, "하사관"})
+    for _, particle in ipairs({"이", "가"}) do
+        honorChat("아나 숲" .. particle .. " 죽었습니다(명예 승수: 하사관). 7의 명예를 획득했습니다.")
+    end
+    assert(GL.ContactMatchup(GL.Get(GL.IdentityFromName("아나 숲"))).honor == 14)
+end)
+
+test("only a new verified named receipt signals an isolated probable kill when templates exist", function()
+    local e = start()
+    local msg = COMBATLOG_HONORGAIN_EXHAUSTION1:format("Alex enemy", "Sergeant", 0, "100%", "rested")
+    honorChat(msg, 19)
+    now = now + 5 T.Poll()
+    e.dead = true T.Poll()
+    honorChat(msg, 19)
+    honorChat(COMBATLOG_HONORGAIN:format("Alex enemy", "Leader", 7), 20)
+    honorChat("Alex enemy dies.", 21)
+    now = now + 1 T.Poll()
+    assert(GL.PersonalStatistics().honorAwards == 1 and total("probableKills") == 0)
+    honorChat(msg, 22)
+    assert(GL.PersonalStatistics().honorAwards == 2 and GL.PersonalStatistics().honor == 0 and total("probableKills") == 1)
+    fixture(nil, {unavailable=true})
+    e = start()
+    now = now + 1 e.dead = true T.Poll()
+    honorChat("Alex enemy dies.")
+    now = now + 1 T.Poll()
+    assert(GL.PersonalStatistics().honorAwards == 0 and total("probableKills") == 1)
+end)
+
+test("bare and colliding player names remain personal honor without a contact", function()
+    local a, b = opponent("first", "Alex", "Same"), opponent("second", "Alex", "Same")
+    unitData.target, unitData.focus = a, b
+    honorChat(COMBATLOG_HONORGAIN:format("Alex", "Sergeant", 3), 40)
+    honorChat(COMBATLOG_HONORGAIN_NO_RANK:format("Alex Same", 5), 41)
+    assert(count() == 0)
+    GL.Remember(GL.Identity("target")) GL.Remember(GL.Identity("focus"))
+    unitData.target, unitData.focus = nil, nil
+    honorChat(COMBATLOG_HONORGAIN:format("Alex Same", "Sergeant", 2), 42)
+    honorChat(COMBATLOG_HONORGAIN_NO_RANK:format("|cffaaccdd|Hplayer:Alex-Forever:32|h[Alex]|h|r", 1), 43)
+    local stats = GL.PersonalStatistics()
+    assert(stats.honor == 11 and stats.unassignedHonor == 11 and stats.honorAwards == 4 and count() == 2)
+    assert(GL.ContactMatchup(GL.Get("guid:" .. a.guid)).honor == 0 and GL.ContactMatchup(GL.Get("guid:" .. b.guid)).honor == 0)
+end)
+
+test("rankless text needs player evidence and a missing chat ID cannot erase successive awards", function()
+    local msg = COMBATLOG_HONORGAIN_NO_RANK:format("Alex Green", 6)
+    honorChat(msg)
+    assert(GL.PersonalStatistics().honorAwards == 0)
+    local e = start(opponent("known", "Alex", "Green"))
+    T.HandleEvent("PLAYER_REGEN_ENABLED")
+    unitData.target = nil -- the recently observed combatant still proves the name
+    honorChat(msg) honorChat(msg)
+    honorChat(COMBATLOG_HONORGAIN:format("Alex Green", "Sergeant", 0), 3)
+    honorChat(COMBATLOG_HONORGAIN_NO_RANK:format("|cnHIGHLIGHT_FONT_COLOR:|Hplayer:Alex Green-Forever:7|h[Alex]|h|r", 1), 4)
+    T.HandleEvent("PLAYER_ENTERING_WORLD")
+    assert(GL.PersonalStatistics().honor == 13 and count() == 1)
+    honorChat(COMBATLOG_HONORGAIN_NO_RANK:format("|cffbbccdd|Hplayer:New Name:7|h[Alex Green]|h|r", 2), 5)
+    assert(GL.ContactMatchup(GL.Get("name:new name")).honor == 2, "only the native player link's destination owns the award")
+    local stats = GL.PersonalStatistics()
+    assert(stats.honor == 15 and stats.honorAwards == 5 and GL.ContactMatchup(GL.Get("guid:" .. e.guid)).honor == 13)
+end)
+
+test("NPCs, flat awards, secret or malformed receipts and restricted locations award no points", function()
+    local msg = COMBATLOG_HONORGAIN:format("Alex Green", "Sergeant", 8)
+    unitData.target = { guid = "Creature-1-leader", name = "Alex Green", isPlayer = false }
+    honorChat(msg, 1)
+    unitData.target = nil
+    for i, text in ipairs({
+        "You have been awarded 99 Honor.", "Alex Green dies.", "Reward: " .. msg, msg .. " extra",
+        msg:gsub("8", "8.5"), msg:gsub("8", "8,5"), msg:gsub("8", "-8"), msg:gsub("8", "2147483648"),
+        COMBATLOG_HONORGAIN:format("Alex Green", "Leader", 99),
+        COMBATLOG_HONORGAIN:format("Testeur Exemple", "Sergeant", 99),
+        COMBATLOG_HONORGAIN_NO_RANK:format("|Hunit:Creature-1-npc|h[Alex Green]|h", 99), secret,
+    }) do honorChat(text, i + 10) end
+    for i, kind in ipairs({"pvp", "arena", "party", "raid", "scenario"}) do instanceType = kind honorChat(msg, 30 + i) end
+    instanceType = "none"
+    T.HandleEvent("DUEL_INBOUNDS") honorChat(msg, 41) T.HandleEvent("DUEL_FINISHED")
+    GL.Settings().pvpTracking = false honorChat(msg, 42) GL.Settings().pvpTracking = true
+    T.HandleEvent("PLAYER_LEAVING_WORLD") honorChat(msg, 43) T.HandleEvent("PLAYER_ENTERING_WORLD")
+    local old = IsInInstance
+    IsInInstance = function() return secret, secret end
+    honorChat(msg, 44)
+    IsInInstance = old
+    assert(GL.PersonalStatistics().honorAwards == 0 and count() == 0)
+    honorChat(msg, 45)
+    assert(GL.PersonalStatistics().honor == 8)
+end)
+
 test("honor alone and partial name matches are ignored", function()
     T.OnHonorMessage("Alex unrelated dies.")
     honor = 1 T.OnHonorCount()
@@ -689,6 +833,155 @@ test("explicit hostile damage is confirmed once per encounter", function()
     now = now + 5
     cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
     assert(total("aggressions") == 2)
+end)
+
+local function idlePair(e)
+    e = e or opponent("opening", "Asha", "Brightvale")
+    unitData.target = e
+    e.combat, unitData.player.combat = false, false
+    T.Poll()
+    e.combat, unitData.player.combat = true, true
+    return e
+end
+
+local function entries(e, kind)
+    local record, rows = GL.Get("guid:" .. e.guid), {}
+    for _, entry in ipairs(record and record.history or {}) do
+        if entry.kind == kind then rows[#rows + 1] = entry end
+    end
+    return rows
+end
+
+test("first incoming damage before regen records an independent opening and keeps the pre-hit opinion", function()
+    fixture(nil, {combatFeed=true})
+    local e = idlePair()
+    CombatLogGetCurrentEventInfo = function()
+        -- Optional name/raid flag slots may be nil; the observed GUID is enough.
+        return now, "SWING_DAMAGE", false, e.guid, nil, 64, nil, unitData.player.guid, nil, 16, nil, 85, -1
+    end
+    nativeFrame.scripts.OnEvent(nativeFrame, "COMBAT_LOG_EVENT_UNFILTERED")
+    nativeFrame.scripts.OnEvent(nativeFrame, "PLAYER_REGEN_DISABLED")
+    cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
+    assert(#entries(e, "opening") == 1 and #entries(e, "aggression") == 1 and total("kills") == 0)
+    local stats = GL.PersonalStatistics()
+    assert(stats.responded == 1 and stats.attackers == 1 and stats.victims == 0)
+    local opening = entries(e, "opening")[1]
+    assert(opening.opener == "opponent" and opening.hadGrudge == false and opening.priorDeath == false)
+    GL.SetReaction(GL.Identity("target"), "enemy")
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    local c = entries(e, "kill")[1].combat
+    assert(c.opener == "opponent" and c.hadGrudge == false and c.priorDeath == false and c.encounterId == opening.encounterId)
+    now = now + 1
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    assert(not entries(e, "kill")[2].combat.opener, "a second death cannot inherit the first life’s opening")
+end)
+
+test("outgoing opener snapshots guild hostility, prior death and new encounter without creating an aggression", function()
+    fixture(nil, {combatFeed=true})
+    local e = opponent("remembered", "Alex", "Aube")
+    e.guild = "Guild"
+    local id = GL.IdentityFromName(e.name, e.surname, e.guid)
+    local oldRecord = GL.RecordPvP(id, "death", "confirmed", "test", "earlier-death")
+    GL.SetGuildReaction("Guild", "enemy")
+    now = now + 5
+    idlePair(e)
+    T.HandleEvent("PLAYER_REGEN_DISABLED")
+    cle("SPELL_DAMAGE", unitData.player, e, -1, 0, 64)
+    assert(#entries(e, "opening") == 1 and oldRecord.pvp.aggressions == 0 and total("kills") == 0)
+    GL.SetReaction(GL.Identity("target"), "friend")
+    cle("SPELL_DAMAGE", e, unitData.player, 1, 64)
+    local c = entries(e, "death")[2].combat
+    assert(c.opener == "player" and c.hadGrudge == true and c.priorDeath == true)
+    T.HandleEvent("PLAYER_ALIVE")
+    now = now + 3
+    idlePair(e)
+    cle("RANGE_DAMAGE", e, unitData.player, -1, 64)
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    local again = entries(e, "kill")[1].combat
+    assert(again.encounterId ~= c.encounterId and again.opener == "opponent" and again.hadGrudge == false)
+end)
+
+test("owner-verified combat pets can open in either direction", function()
+    for _, direction in ipairs({"player", "opponent", "own summon", "opponent hit pet"}) do
+        fixture(nil, {combatFeed=true})
+        local e = idlePair()
+        local own = {guid="Pet-1-own", name="Loup", surname=""}
+        local other = {guid="Pet-1-other", name="Loup", surname=""}
+        unitData.pet = own
+        cle("SPELL_SUMMON", e, other, nil, 64)
+        if direction == "own summon" then
+            own = {guid="Creature-1-totem", name="Totem", surname=""}
+            cle("SPELL_SUMMON", unitData.player, own, nil, 16)
+        end
+        local outgoing = direction == "player" or direction == "own summon"
+        if outgoing then cle("SPELL_DAMAGE", own, other, -1, 16, 64)
+        else cle("SWING_DAMAGE", other, direction == "opponent hit pet" and own or unitData.player, -1, 64) end
+        T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+        local c = entries(e, "kill")[1].combat
+        assert(#entries(e, "opening") == 1 and c.opener == (outgoing and "player" or "opponent"), direction)
+    end
+end)
+
+test("a guild grudge without a past defeat and a manual exception survive as separate opening facts", function()
+    for _, friend in ipairs({false, true}) do
+        fixture(nil, {combatFeed=true})
+        local e = opponent("guild", "Alex", "Garde")
+        GL.SetGuildReaction("Enemies", "enemy")
+        idlePair(e)
+        GL.Remember(GL.Identity("target"))
+        e.guild = "Enemies" -- new guild visible on first damage, after prior idle observation
+        if friend then GL.SetReaction(GL.Identity("target"), "friend") end
+        cle("SWING_DAMAGE", unitData.player, e, -1, 16, 64)
+        local opening = entries(e, "opening")[1]
+        assert(opening and opening.priorDeath == false and opening.hadGrudge == (not friend))
+        assert(total("aggressions") == 0 and total("kills") == 0)
+    end
+end)
+
+test("rapid separate defeats of the same GUID retain each observed opening", function()
+    fixture(nil, {combatFeed=true})
+    local e = idlePair()
+    cle("SWING_DAMAGE", unitData.player, e, 1, 16, 64)
+    T.HandleEvent("PLAYER_REGEN_ENABLED")
+    now = now + 1
+    idlePair(e)
+    cle("SWING_DAMAGE", e, unitData.player, -1, 64)
+    cle("SWING_DAMAGE", unitData.player, e, 1, 16, 64)
+    local outcomes = entries(e, "kill")
+    assert(#outcomes == 2 and outcomes[1].combat.opener == "player" and outcomes[2].combat.opener == "opponent")
+    assert(outcomes[1].combat.encounterId ~= outcomes[2].combat.encounterId)
+end)
+
+test("late, indirect, obscured or mixed beginnings never turn retaliation into an opening", function()
+    for _, reason in ipairs({"in-progress", "already fighting", "expired", "third party", "periodic", "crowd control", "missed opener", "unowned pet",
+        "prior health loss", "opaque damage", "group", "instance", "duel", "world change", "restricted feed", "same first name"}) do
+        fixture(nil, {combatFeed=reason ~= "restricted feed"})
+        local e = idlePair()
+        local other = opponent("other", e.name, "Elsewhere")
+        if reason == "in-progress" or reason == "world change" then T.HandleEvent("PLAYER_ENTERING_WORLD")
+        elseif reason == "already fighting" then unitData.player.combat = false T.Poll() unitData.player.combat = true
+        elseif reason == "expired" then now = now + 4
+        elseif reason == "third party" then cle("SPELL_DAMAGE", other, e, -1, 64, 64)
+        elseif reason == "periodic" then cle("SPELL_PERIODIC_DAMAGE", e, unitData.player, -1, 64)
+        elseif reason == "crowd control" then cle("SPELL_AURA_APPLIED", e, unitData.player, nil, 64)
+        elseif reason == "missed opener" then cle("SWING_MISSED", e, unitData.player, nil, 64)
+        elseif reason == "unowned pet" then
+            cle("SPELL_DAMAGE", {guid="Pet-1-missing", name="Loup", surname=""}, unitData.player, -1, 64)
+        elseif reason == "opaque damage" then
+            T.OnCombatLog(now, "SWING_DAMAGE", false, unitData.player.guid, "", 16, 0, e.guid, "", 64, 0, secret, -1)
+        elseif reason == "group" then groupSize = 2
+        elseif reason == "instance" then instanceType = "party"
+        elseif reason == "duel" then T.HandleEvent("DUEL_INBOUNDS")
+        elseif reason == "same first name" then unitData.target = other e = other end
+        T.HandleEvent("PLAYER_REGEN_DISABLED")
+        if reason == "prior health loss" then unitData.player.health = 800 T.Poll() end
+        cle("SWING_DAMAGE", e, unitData.player, -1, 64)
+        cle("SWING_DAMAGE", unitData.player, e, -1, 0, 64)
+        assert(#entries(e, "opening") == 0, reason)
+        T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+        local kill = entries(e, "kill")[1]
+        assert(not kill or not kill.combat or not kill.combat.opener, reason)
+    end
 end)
 
 test("resource and durability events cannot fabricate a lethal damage event", function()

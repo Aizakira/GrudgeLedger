@@ -424,7 +424,9 @@ def main():
               "honor-largeprint-small", "settings-readable-alerts-largeprint-small"]
     views += ["journal-compact", "journal-history-page2", "journal-history-filter", "correction-voided",
               "honor-annual", "honor-annual-copy", "honor-annual-empty", "honor-annual-largeprint-small", "honor-podium",
-              "honor-races", "honor-classes", "honor-zones", "honor-subzones", "guild-exceptions", "guild-rankings-largeprint-small",
+              "honor-races", "honor-classes", "honor-zones", "honor-subzones", "honor-initiative",
+              "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
+              "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview", "confirm-kill"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.

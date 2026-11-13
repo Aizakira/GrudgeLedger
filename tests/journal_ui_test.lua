@@ -300,5 +300,47 @@ f.year = nil
 GL.ShowJournal("year")
 assert(f.annual.period:GetText() == "Année inconnue" and not f.yearButton:IsEnabled())
 date = formatDate
+do
+    IsInInstance = function() return false, "none" end
+    local opponent = person("Opening")
+    local other = person("OpeningOther")
+    local function win(target, opener, grudge, id)
+        local opening = assert(GL.RecordOpening(target, opener, grudge, id))
+        local _, kill = GL.RecordPvP(target, "kill", "confirmed", nil, id .. "-kill", opening)
+        assert(kill)
+        return kill
+    end
+    win(opponent, "player", false, "no-grudge")
+    win(opponent, "player", true, "grudge")
+    win(other, "opponent", false, "response")
+    GL.RecordAggression(other, "confirmed", nil, "other-hit")
+    GL.RecordPvP(opponent, "death", "confirmed", nil, "prior-death")
+    now = now + 1
+    local revenge = win(opponent, "player", true, "revenge")
+    GL.ShowJournal("summary")
+    f.scope = "character"
+    click(f.periodButtons.all) click(f.dimensionButtons.initiative)
+    local fields = f.initiative.values
+    assert(f.initiative:IsShown() and not f.podium:IsShown() and not f.breakdown:IsShown())
+    assert(fields.initiatedKillsNoGrudge:GetText() == "1" and fields.initiatedKillsGrudge:GetText() == "1")
+    assert(fields.responseKills:GetText() == "1" and fields.revengeKills:GetText() == "1")
+    assert(tonumber(fields.unknownOpeningKills:GetText()) > 0 and tonumber(fields.victims:GetText()) >= 2)
+    local ratio = tonumber((fields.ratio:GetText():gsub(",", ".")))
+    assert(math.abs(ratio - tonumber(fields.victims:GetText()) / tonumber(fields.attackers:GetText())) < 0.006)
+    assert(fields.initiated:GetText() == "3 · 75 %" and fields.responded:GetText() == "1 · 25 %")
+    click(f.scopeButton) click(f.scopeButton)
+    assert(f.scope == "legacy" and fields.revengeKills:GetText() == "0" and fields.initiated:GetText() == "0")
+    click(f.scopeButton)
+    assert(fields.revengeKills:GetText() == "1")
+    click(f.periodButtons.year)
+    f.year = 2025 GL.ShowJournal("summary")
+    assert(fields.ratio:GetText() == "—" and fields.initiated:GetText() == "0" and fields.revengeKills:GetText() == "0")
+    GL.ShowLedger(opponent.key)
+    click(ledger.detailTabs.history) click(ledger.historyPage.options.pvp)
+    local row = ledger.historyPage.rows[1]
+    assert(row.event == revenge)
+    click(row.details)
+    assert(GrudgeLedgerCorrections.proof:GetText():find("Revanche", 1, true))
+end
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS journal UI: scoped evidence, legacy/alt labels, bounded submitted search, correction audit, paging, configurable index, opt-in warning, stable note editing/deletion/drafts")
