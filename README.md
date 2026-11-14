@@ -210,10 +210,14 @@ python -m pip install --target test-runtime -r requirements-test.txt
 python tests/run_tests.py
 ```
 
-GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
+GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer.
+
+To prepare an installable ZIP, open **Actions → Prepare addon ZIP → Run workflow**. Keep the workflow branch set to `main`, enter the addon's branch, tag or full commit SHA in **Addon branch, tag or full commit SHA**, then run it. Download `GrudgeLedger-<version>.zip` from **Artifacts** on the completed run. The ZIP is ready for manual upload to CurseForge. Its filename uses the version in the selected commit's `.toc`.
+
+To write the ZIP for the current commit to `dist/`, run this from the repository root. It checks the ZIP's integrity and verifies that the files listed in the TOC, the license and credits are present.
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.7.zip GrudgeLedger
+python tools/package_addon.py
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

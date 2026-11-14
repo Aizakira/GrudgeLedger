@@ -222,10 +222,14 @@ python -m pip install --target test-runtime -r requirements-test.txt
 python tests/run_tests.py
 ```
 
-Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
+GitHub Actions exécute les mêmes tests sur Linux et Windows. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu.
+
+Pour préparer un ZIP installable, ouvrez **Actions → Prepare addon ZIP → Run workflow**. Gardez `main` comme branche du workflow, saisissez la branche, le tag ou le SHA complet de l'addon dans **Addon branch, tag or full commit SHA**, puis lancez l'action. Téléchargez `GrudgeLedger-<version>.zip` sous **Artifacts** à la fin de l'exécution. Ce ZIP est prêt pour votre dépôt manuel sur CurseForge. Son nom reprend la version du `.toc` du commit choisi.
+
+Pour créer le ZIP du commit courant dans `dist/`, lancez cette commande à la racine du dépôt. Elle vérifie l'intégrité de l'archive et la présence des fichiers du TOC, de la licence et des crédits.
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.2.zip GrudgeLedger
+python tools/package_addon.py
 ```
 
 ## Licence et crédits
