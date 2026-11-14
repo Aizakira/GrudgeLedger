@@ -188,6 +188,7 @@ GL.SetGuildReaction("Les Corbeaux de la Dernière Nuit", "enemy", "Plusieurs mau
 GL.SetGuildReaction("La Compagnie du Lys", "warning", "Avis partagé : vérifier la personne avant de juger.")
 GL.SetGuildReaction("Les Voyageurs", "neutral", "Aucun avis pour le moment.")
 local record = records[2]
+record.level = 39
 record.reaction = nil
 GL.AddNote(record, "Très bon tank au monastère. A pris le temps d'expliquer les mécaniques et de partager le butin.")
 GL.AddNote(record, "Rencontre suivante plus tendue : à recontacter pour éclaircir le malentendu.")
@@ -203,9 +204,9 @@ assert(GL.RecordHonor(record, 17))
 assert(GL.RecordHonor(nil, 12))
 for i = 1, 7 do
     district = (i - 1) % #districts + 1
-    GL.RecordPvP(record, "death", "confirmed", "Un seul adversaire hostile vous ciblait avant la mort. Attribution déduite ; aucune confirmation du coup fatal.", "qa-event-" .. i)
+    GL.RecordPvP(record, "death", "confirmed", "Un seul adversaire hostile vous ciblait avant la mort. Attribution déduite ; aucune confirmation du coup fatal.", "qa-event-" .. i, {playerLevel=34, opponentLevel=39})
 end
-GL.RecordAggression(record, "confirmed", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack")
+GL.RecordAggression(record, "confirmed", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack", {playerLevel=34, opponentLevel=39})
 GL.RecordPvP(records[3], "kill", "confirmed", "Coup fatal observé.", "qa-victory")
 qaClock = qaClock + 1
 for i, entry in ipairs({ {records[5], "player", false}, {records[12], "player", true}, {record, "player", true}, {records[8], "opponent", false} }) do

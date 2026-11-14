@@ -94,7 +94,7 @@ knownAtlas["raceicon128-dwarf-female"], knownAtlas["raceicon-dwarf-female"] = ni
 GL.ShowLedger(dwarf.key)
 assert(rowFor(record.key).raceIcon.atlas == "raceicon-dwarf-female" and f.raceIcon.atlas == "raceicon-dwarf-female",
     "both the index and the profile support the alternative native race atlas name")
-assert(f.detailIdentity:GetText() == "Alliance · Enano · Chamane · Niveau 42", "profile shares the cached native race label with the index")
+assert(f.detailIdentity:GetText() == "Alliance · Enano · Chamane" and f.levelBadge:IsShown() and f.levelBadge.caption:GetText() == "Niv. 42", "profile shares the cached native race label with the index")
 click(f.relationFilter) assert(f.filters.friend.parent:IsShown())
 click(f.filters.friend) assert(not f.filters.friend.parent:IsShown())
 click(f.factionFilter) click(f.factions.Horde)
@@ -281,4 +281,12 @@ portraitEvent("PLAYER_TARGET_CHANGED")
 assert(f.raceIcon.texture == "current-face" and not f.portraitUnit)
 GL.ShowLedger(record.key)
 assert(not f.archivedPortrait and f.raceIcon.texture == "face:" .. record.guid, "recycled rows restore the exact previously observed face")
+f:Hide()
+units.target = {guid=saved.guid}
+SetPortraitTexture = function(texture, unit) texture:SetTexture("closed-book:" .. UnitGUID(unit)) end
+portraitEvent("UNIT_MODEL_CHANGED", "target")
+units.target, GrudgeLedgerPortraitIndex = nil, nil
+GL.ShowLedger(saved.key)
+assert(f.raceIcon.texture == "closed-book:" .. saved.guid and rowFor(saved.key).raceIcon.texture == f.raceIcon.texture,
+    "both the detail pane and the list can reuse a portrait last seen while the book was closed")
 print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

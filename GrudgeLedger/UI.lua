@@ -94,6 +94,39 @@ end
 -- ponytail: retain 64 spare native portraits plus the visible slots this session.
 -- The Armory archive covers reloads and evicted faces.
 local spareFaces = {}
+-- The list and detail pane can show the same person at once. Native portrait
+-- textures cannot be copied after the unit disappears, so paint two while visible.
+local function observeFace(unit, refresh)
+    if not unit or not SetPortraitTexture then return end
+    local guid = GL.Clean(GL.Safe(UnitGUID, unit), "string")
+    if not guid or not guid:match("^Player%-") or not visibleGUID(unit, guid)
+        or not GL.Get("guid:" .. guid) or (IsUnitModelReadyForUI and not GL.Safe(IsUnitModelReadyForUI, unit)) then return end
+    if refresh then
+        for row in pairs(portraitRows) do
+            if row.livePortraitGUID == guid then pcall(SetPortraitTexture, row.raceIcon, unit, true) end
+        end
+    end
+    local count = 0
+    for _, saved in ipairs(spareFaces) do
+        if saved.guid == guid then
+            count = count + 1
+            if refresh then pcall(SetPortraitTexture, saved.face, unit, true) end
+            if count >= 2 and not refresh then return end
+        end
+    end
+    for _ = count + 1, 2 do
+        local index
+        if #spareFaces >= 64 then
+            for i, old in ipairs(spareFaces) do if old.guid ~= guid then index = i break end end
+        end
+        local saved = index and table.remove(spareFaces, index) or {face = portraitFrames:CreateTexture(nil, "ARTWORK")}
+        saved.face:Hide()
+        saved.guid = pcall(SetPortraitTexture, saved.face, unit, true) and guid or nil
+        spareFaces[#spareFaces + 1] = saved
+        if not saved.guid then return end
+    end
+end
+GL.ObservePortrait = observeFace
 local function usePortrait(row, guid)
     local current = row.raceIcon
     if guid == row.faceGUID then return current end
@@ -186,7 +219,8 @@ local function refreshPortraits(frame)
     end
     redrawPortraits = nil
 end
-portraitFrames:SetScript("OnEvent", function(self, event)
+portraitFrames:SetScript("OnEvent", function(self, event, unit)
+    if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then observeFace(unit, true) end
     if not ((ledger and ledger:IsShown()) or (statisticsWindow and statisticsWindow:IsShown())
         or (journalWindow and journalWindow:IsShown()) or (correctionWindow and correctionWindow:IsShown())) then return end
     if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" or event == "PORTRAITS_UPDATED" then redrawPortraits = true end
@@ -1548,6 +1582,13 @@ local function renderHistory(p, record)
                 or e.questTitle and (L("Quête suivie : ") .. plain(e.questTitle)) or eventReason(e)
             if not hint and e.source ~= "emote" and not pvpNames[e.kind] and e.evidence ~= "Avis personnel" then hint = plain(eventEvidence(e)) end
             if e.kind == "trade" then hint = plain((eventEvidence(e) or ""):gsub("\n", " · ")) end
+            local combat = e.combat or {}
+            local yours, theirs = GL.ValidLevel(combat.playerLevel), GL.ValidLevel(combat.opponentLevel)
+            showIf(row.playerLevel, yours ~= nil)
+            showIf(row.opponentLevel, theirs ~= nil)
+            if yours then row.playerLevel:SetText(L("Vous · niv. %d"):format(yours)) end
+            if theirs then row.opponentLevel:SetText(L("Adversaire · niv. %d"):format(theirs)) end
+            showIf(row.hint, not yours and not theirs)
             row.hint:SetText(hint or "")
             local icon = ({death="Ability_Rogue_FeignDeath", kill="Ability_DualWield", aggression="Ability_Warrior_Charge"})[e.kind]
             row.icon:SetTexture(icon and ("Interface\\Icons\\" .. icon) or GL.icon)
@@ -1593,6 +1634,9 @@ local function renderDetail()
     ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -450 or matchup and -380 or -283)
     ledger.detailScroll:SetHeight(summary and 126 or matchup and 220 or 293)
     ledger.detailTitle:SetTextColor(unpack(theme.ink))
+    local level = record and GL.ValidLevel(record.level)
+    showIf(ledger.levelBadge, level ~= nil)
+    if level then ledger.levelBadge.caption:SetText(L("Niv. %d"):format(level)) end
     local lines = {}
     if not record then
         ledger.detailTitle:SetText("")
@@ -1615,7 +1659,7 @@ local function renderDetail()
         local banner = factionPortrait[record.faction]
         if banner then ledger.detailFaction:SetTexture(banner) end
         showIf(ledger.detailFaction, banner)
-        ledger.detailIdentity:SetText(plain(faction .. " · " .. race .. " · " .. class) .. (GL.ValidLevel(record.level) and " · " .. L("Niveau %d"):format(record.level) or ""))
+        ledger.detailIdentity:SetText(plain(faction .. " · " .. race .. " · " .. class))
         ledger.detailGuild:SetText(record.guild and plain(record.guild) or L("Guilde non renseignée"))
         ledger.raceIcon:Show() ledger.classIcon:Show() identityIcons(ledger, record)
         local duels = matchup and GL.ContactMatchup(record)
@@ -2130,7 +2174,7 @@ local function buildLedger()
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(plain(record.fullName or record.name))
             GameTooltip:AddLine(plain(faction .. " · " .. race .. " · " .. class) .. (GL.ValidLevel(record.level) and " · " .. L("Niveau %d"):format(record.level) or ""))
-            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.archivedPortrait
+            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.livePortraitGUID and L("Portrait vu en jeu") or self.archivedPortrait
                 and L("Portrait enregistré de l’Armurerie") or L("Icône générique"), 0.82, 0.78, 0.69)
             if record.guild then GameTooltip:AddLine(plain(record.guild)) end
             GameTooltip:Show()
@@ -2149,6 +2193,11 @@ local function buildLedger()
     f.empty:SetTextColor(unpack(theme.muted))
     f.raceIcon = f:CreateTexture(nil, "ARTWORK")
     f.raceIcon:SetPoint("TOPLEFT", 356, -155) f.raceIcon:SetSize(60, 60)
+    f.levelBadge = CreateFrame("Frame", nil, f)
+    f.levelBadge:SetPoint("TOPLEFT", 349, -218) f.levelBadge:SetSize(75, 24)
+    surface(f.levelBadge, theme.gold) surface(f.levelBadge, theme.panel, 1)
+    f.levelBadge.caption = bookText(f.levelBadge, 0, 0, 75, 24, 16, "", theme.paper)
+    f.levelBadge.caption:SetJustifyH("CENTER")
     f.detailTitle = label(f, "", "large", 426, -151, 321)
     f.detailTitle:SetHeight(37)
     GL.Safe(f.detailTitle.SetWordWrap, f.detailTitle, false)
@@ -2295,6 +2344,8 @@ local function buildLedger()
         row.title = label(row, "", nil, 55, -29, 350) journalFont(row.title, "GameFontNormalLarge", 15)
         row.title:SetHeight(24) row.title:SetTextColor(unpack(theme.ink))
         row.hint = label(row, "", nil, 55, -57, 359) row.hint:SetHeight(25) row.hint:SetTextColor(unpack(theme.inkMuted))
+        row.playerLevel = bookText(row, 55, 56, 149, 26, 16, "", theme.ink)
+        row.opponentLevel = bookText(row, 207, 56, 222, 26, 16, "", theme.ink)
         row.badge = label(row, "", nil, 411, -29, 133) row.badge:SetJustifyH("RIGHT") row.badge:SetHeight(25)
         for _, field in ipairs({row.date, row.title, row.hint,row.badge}) do GL.Safe(field.SetWordWrap, field, false) end
         row.details = button(row, L("Détails"), 433, -56, 111, function() inspectEvent(row.record, row.event) end, nil, true)
@@ -2739,6 +2790,7 @@ GL.On("READY", function()
 end)
 
 GL.On("CHANGED", function(record, reason)
+    if record and reason ~= "deleted" and record.guid then observeFace(portraitUnit(record)) end
     if reason == "deleted" then
         drafts[record] = nil
         for _, note in ipairs(record.notes) do drafts[note] = nil end
