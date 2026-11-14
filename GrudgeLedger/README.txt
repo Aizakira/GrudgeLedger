@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.10.6
+GRUDGE LEDGER — 0.10.7
 
 Nouveau : médaillon de niveau sur le coin inférieur gauche du portrait et niveaux côte à côte dans l’histoire. Un portrait visible peut être retenu pendant la session même si le journal est fermé.
 
