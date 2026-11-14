@@ -1,5 +1,8 @@
 # Grudge Ledger
 
+**0.10.3.** Outdoor combat now credits each contributing opponent once per death, even when a creature lands the final blow. Previous attributions are combined on upgrade. Resurrecting enables a fresh nearby warning. The journal keeps recently seen portraits during the session and shows your recorded honor on the contact summary. Enemy honor is unknown.
+
+
 <img src="docs/red-book.png" alt="Grudge Ledger's red book" width="96" align="right">
 
 **Remember the good encounters. Keep a little book of grudges for the rest.**
@@ -19,10 +22,10 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 - **Right-click actions:** a compact “Grudge Ledger” submenu on supported player portraits and chat names. Mark a friend, caution or enemy, give a positive/negative opinion, add a note or open their record.
 - **Visible reminders:** green hearts for friends, orange watchful eyes for caution and red broken hearts for enemies on visible player nameplates; optional name coloring and tooltip notes.
 - **Faction filters and character details:** combine friends/caution/enemies with Alliance or Horde, with a count of the matching people. Race and class appear under each name and in the selected record, with native icons when available. Unknown factions have their own filter; older records fill in on the next observed encounter. Race never determines faction.
-- **PvP memory:** records observed aggression and deaths. Inferred events are explicitly marked as probable and can be corrected without erasing your personal notes.
+- **PvP memory:** records observed aggression and deaths. Each result counts once and can be corrected without erasing your personal notes.
 - **Friendly and unfriendly gestures:** your own targeted emotes can adjust camaraderie, including toward the opposing faction. Repeated emotes are rate-limited.
 - **Guild opinions:** mark an entire guild, with individual exceptions.
-- **Guild history:** keep the last observed guild and snapshot it separately for each new PvP event, including its realm and observation time. Missing replies do not erase known guilds; later membership changes never rewrite old encounters. Unknown guilds stay unknown. Guild rankings use these event snapshots and separate confirmed deaths from probable ones.
+- **Guild history:** keep the last observed guild and snapshot it separately for each new PvP event, including its realm and observation time. Missing replies do not erase known guilds; later membership changes never rewrite old encounters. Unknown guilds stay unknown. Guild rankings use these event snapshots to count each death once per guild.
 - **Nearby encounter alerts:** a small popup above the main chat in the lower-left area, with distinct sounds, cooldowns and grouped guild alerts. It follows the chat's position, leaving room above its tabs. Friends in your party or raid never trigger these alerts. Other friends alert on first sighting, then only after more than ten minutes without an observed presence; every sighting renews this window, including across UI reloads. Encounter clocks are separate for each of your characters.
 - **No automatic roster clutter:** joining a group does not add unknown players. Group history is kept for existing contacts; legacy entries containing only group sessions are hidden without deleting them. Opinions, notes and PvP records remain visible.
 - **A personal journal:** notes, encounters, shared groups and PvP history, accessed through the red book on the minimap or `/gl`.
@@ -56,9 +59,9 @@ Select **Honor received** to review recorded outdoor PvP rewards for the selecte
 
 ### New in 0.9.2
 
-**Head-to-head** separates this character’s confirmed and likely outcomes. Open the matching fight history to review the evidence. Shared honor is excluded when the game identifies a different killer in the same encounter. A delayed combat-log confirmation for a continuously observed corpse updates the original victory.
+**Head-to-head** shows this character’s outcomes. Open the matching fight history to review the evidence. Shared honor is excluded when the game identifies a different killer in the same encounter. A delayed combat-log confirmation for a continuously observed corpse updates the original victory.
 
-Repeat-encounter rankings start on the second recorded meeting. Indirect alerts identify feuds based on likely PvP events. Zone statistics label likely outcomes and display incomplete time coverage alongside excluded fights.
+Repeat-encounter rankings start on the second recorded meeting. Zone statistics display incomplete time coverage alongside excluded fights.
 
 ### New in 0.9.1
 
@@ -69,7 +72,7 @@ In outdoor PvP, a personal killing-blow event can confirm a victory even when th
 ### New in 0.8.0
 
 - **Journal → Face-à-face** shows this character’s confirmed outcomes against a contact, the current streak and the most recent win following a loss. Each victory still counts as +1. New combat history can show levels, health at first PvP observation, distinct opponents and pet or NPC involvement.
-- **Bilan → Par zone** opens the combat breakdown for each district. The optional zone clock measures connected outdoor time from activation and pauses while AFK or in instances. **Mon année** can prepare a text copy of the selected confirmed and probable totals.
+- **Bilan → Par zone** opens the combat breakdown for each district. The optional zone clock measures connected outdoor time from activation and pauses while AFK or in instances. **Mon année** can prepare a text copy of the selected totals.
 - The friends ranking includes observed time grouped together. An optional trade history records completed exchanges with existing contacts, including items and money given and received.
 - Optional indirect alerts distinguish a known threat heard nearby or targeted by a visible party member from a direct sighting. Appearance settings offer local relationship icons in chat and compact tooltips with Shift for details. The new indirect alerts, badges, compact tooltips, trade history and zone clock are off by default.
 
@@ -94,8 +97,8 @@ A **gray medallion** marks known neutral people in the journal and on their visi
 | --- | --- |
 | Threats | Strongest grudges, most encountered threats, recently observed threats, confirmed aggressions |
 | Friends | Most encountered friends, strongest affinities, recently observed friends, shared group sessions |
-| Combat | Players who killed you most, most defeated opponents, separate probable deaths and victories |
-| Guilds | Personal grudges, personal friends, deaths, victories, aggressions and probable deaths |
+| Combat | Players who killed you most, most defeated opponents |
+| Guilds | Personal grudges, personal friends, deaths, victories and aggressions |
 
 Each view states its units, scope and calculation. Active Person/Guild tabs and
 themes are marked; player lists filter by Alliance, Horde or unknown faction.
@@ -122,7 +125,7 @@ empty lists, long names and readable fonts. Native rendering remains to be check
 **Bilan & récit**, `/gl bilan` and `/gl chronique` open two new pages. The summary
 shows observed victories, deaths and aggressions, your nemesis and most defeated
 opponent. The chronicle combines events across records with dates, places, people
-and explanations. Confirmed facts stay separate from probable inferences.
+and explanations.
 
 - **Period and character filters:** all time, rolling seven/thirty days or a calendar
   year; current character, whole account or legacy records without an identified
@@ -320,9 +323,9 @@ updating to load the new texture. Gesture behavior is unchanged.
 
 ## 0.5.0: chronicles, guild rankings and diagnostics
 
-A shared death ID counts once per guild, with confirmed evidence taking precedence over probable participation. Different guilds can be involved in the same death, so their totals are not additive. Legacy events without a shared ID are not guessed into one event.
+A shared death ID counts once per guild. Different guilds can be involved in the same death, so their totals are not additive. Legacy events without a shared ID are not guessed into one event.
 
-The book now opens **Statistics** (`/gl stats`) and **Guild rankings** (`/gl guildes`). Rank player deaths, victories, negative balances, positive friendships and distinct encounters; probable PvP events stay in separate rankings. Guild lists count personal grudges/friends and historically attributed deaths/aggressions. Click a guild to mark it for caution, as friendly, or edit its rule/notes. Personal overrides still win, inherited rules do not inflate personal grudge counts, unknown historical guilds remain unassigned and membership changes never rewrite old events.
+The book now opens **Statistics** (`/gl stats`) and **Guild rankings** (`/gl guildes`). Rank player deaths, victories, negative balances, positive friendships and distinct encounters. Guild lists count personal grudges/friends and historically attributed deaths/aggressions. Click a guild to mark it for caution, as friendly, or edit its rule/notes. Personal overrides still win, inherited rules do not inflate personal grudge counts, unknown historical guilds remain unassigned and membership changes never rewrite old events.
 
 Two **kiss/spit** buttons with native WoW frames sit above chat, below alerts. Clicking acts on the selected player using the existing emote path (+1/−1, same 30-second sentiment cooldown). Ctrl-drag moves the pair; settings hide or reset it. No automatic emotes or forced targeting.
 
@@ -365,7 +368,7 @@ See the [full usage guide](GrudgeLedger/README.txt) for neutral status, prioriti
 
 Targets **Forever interface 16001**; development used client **1.60.1.70862**. Retail, Classic and other private-server clients are not validated. Nameplate markers require visible nameplates and obey the client's range and visibility rules. This is not a whole-zone radar or a stealth detector.
 
-Forever may hide combat-log information. The addon also reads its public death recap, waiting up to two seconds for delayed data. Multiple attackers are recorded by GUID: an explicit lethal hit is confirmed, while other participants in the fatal attack remain probable. Without usable direct evidence, recent hostile PvP combatants actually targeting you may be recorded as probable participants; bystanders are excluded. Counters belong to each person's record: three participants in one death do not mean three player deaths. Inferences can be corrected and coverage is limited by the data the client exposes. Previously missed deaths are not reconstructed automatically.
+Forever may hide combat-log information. The addon also reads its public death recap, waiting up to two seconds for delayed data. Each identified participant receives credit for the death. Without usable direct evidence, recent hostile PvP combatants actually targeting you may be recorded as participants; bystanders are excluded. Counters belong to each person's record: three participants in one death do not mean three player deaths. Inferences can be corrected and coverage is limited by the data the client exposes. Previously missed deaths are not reconstructed automatically.
 
 Explicit Friend/Caution/Enemy buttons and manual opinions retain priority, including after an emote. Gestures alone no longer pin a relationship: `/spit` cannot keep a killer at caution when a PvP death is subsequently recorded. Duel detection still depends on the available client signals.
 

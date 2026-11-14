@@ -15,8 +15,14 @@ local GL = GrudgeLedger
 GL.InitDB()
 local identity = GL.Identity("target")
 local sample = {healthPct = 44, playerLevel = 34, opponentLevel = 39, opponents = 2, pet = true, pve = true, ignored = {}}
-local record = GL.RecordPvP(identity, "death", "probable", "PRIVATE technical evidence: UNIT_DIED", "death", sample)
+local record = GL.RecordPvP(identity, "death", "confirmed", "PRIVATE technical evidence: UNIT_DIED", "death", sample)
 local first = record.history[1]
+identity.level = -1
+GL.Remember(identity)
+assert(record.level == 42, "an unreadable level must not erase the last sighting")
+identity.level = 43
+GL.Remember(identity)
+assert(first.combat.opponentLevel == 39 and first.combat.playerLevel == 34, "later levels must not rewrite a fight")
 sample.healthPct = 1
 assert(first.combat.healthPct == 44 and first.combat.ignored == nil, "persist a private copy of observed scalar fields")
 assert(first.questID == 123 and first.questTitle == questTitle and first.subzone == "Quartier commerçant")
@@ -46,10 +52,13 @@ local function text(tab)
                     row.details.scripts.OnClick()
                     lines[#lines+1] = GrudgeLedgerCorrections.proof:GetText()
                     GrudgeLedgerCorrections.keep.scripts.OnClick()
-                elseif row.event.questTitle and row.event.kind == "death" and row.event.confidence == "probable" then
+                elseif row.event.questTitle and row.event.kind == "death" and row.event.confidence == "confirmed" then
                     row.details.scripts.OnClick()
-                    assert(GrudgeLedgerCorrections.proof:GetText():find("coup fatal non identifié",1,true))
+                    assert(GrudgeLedgerCorrections.proof:GetText():find("UNIT_DIED",1,true))
                     if row.event == first then
+                        assert(row.playerLevel:IsShown() and row.playerLevel:GetText() == "Vous · niv. 34")
+                        assert(row.opponentLevel:IsShown() and row.opponentLevel:GetText() == "Adversaire · niv. 39")
+                        assert(not row.hint:IsShown())
                         local proof = GrudgeLedgerCorrections.proof:GetText()
                         assert(proof:find("Monstre engagé pendant le combat", 1, true) and proof:find("44 %", 1, true))
                         assert(proof:find("vous 34, adversaire 39 (+5)", 1, true))
@@ -64,9 +73,9 @@ local function text(tab)
     return table.concat(lines,"\n")
 end
 local rendered = text()
-assert(rendered:find("Familier impliqué · 2 adversaires observés", 1, true))
+assert(rendered:find("Niveaux : vous 34, adversaire 39 (+5) · Familier impliqué", 1, true))
 for _, expected in ipairs({
-    "Participation possible à votre mort", "Vous l'avez vaincu",
+    "Vous a tué", "Vous l'avez vaincu",
     "Vous a infligé des dégâts", "Geste demandé : Bisou", "Geste demandé : Crachat",
     "Geste demandé : Bisou — avis +1", "Geste demandé : Crachat — avis -1", "Vous l'avez marqué : Ami", "Super donjon ||cff00ff00",
     "11/11/2026 12:00", "Quartier commerçant · Hurlevent", "Quête suivie : Les oreilles des trolls",
@@ -78,15 +87,15 @@ assert(first.evidence == "PRIVATE technical evidence: UNIT_DIED", "presentation 
 assert(text("notes"):find("Mon souvenir personnel", 1, true), "notes have a dedicated readable view")
 text("summary")
 assert(GrudgeLedgerWindow.metrics.kills.value:GetText() == "1 fois"
-    and GrudgeLedgerWindow.metrics.deaths.probable:GetText() == "1 probable"
-    and GrudgeLedgerWindow.detailText:GetText():find("Agressions : 1 confirmée, 0 probable", 1, true), "summary keeps confidence counters separate")
+    and GrudgeLedgerWindow.metrics.deaths.value:GetText() == "1 fois"
+    and GrudgeLedgerWindow.detailText:GetText():find("1 agression", 1, true), "summary keeps confidence counters separate")
 assert(GrudgeLedgerWindow.balance:GetText() == "-10" and GrudgeLedgerWindow.scoreContext:GetText():find("Avis personnel", 1, true),
     "manual friendship does not overwrite the displayed automatic debt")
 GL.RecordGroup(identity, "different-place", "Monastère écarlate")
 local group = record.history[#record.history]
 assert(group.kind == "grouped" and not group.subzone and not group.questTitle, "explicitly different locations must not inherit current context")
 assert(GL.VoidPvP(record, first))
-assert(text():find("Annulé · exclu",1,true) and record.pvp.probableDeaths == 0)
+assert(text():find("Annulé · exclu",1,true) and record.pvp.probableDeaths == nil)
 
 -- A newer quest/location cannot rewrite an old event, even after loading the DB again.
 questTitle = "Une autre quête"
@@ -136,7 +145,7 @@ GL.AddNote(record, longNote)
 local summary = text("summary")
 assert(summary:find("À revoir : à " .. string.rep("é", 67) .. "… (suite dans Notes)", 1, true), "summary folds ASCII whitespace and preserves accented characters under the Windows locale")
 assert(GrudgeLedgerWindow.balance:GetText() ~= "" and summary:find("Dernière rencontre", 1, true) < summary:find("Dernière note", 1, true)
-    and summary:find("Dernière note", 1, true) < summary:find("Agressions", 1, true), "summary gives encounters and notes priority over supporting details")
+    and summary:find("Dernière note", 1, true) < summary:find("agression", 1, true), "summary gives encounters and notes priority over supporting details")
 assert(text("notes"):find(longNote, 1, true) and record.notes[#record.notes].text == longNote,
     "preview never changes the complete note")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)

@@ -50,7 +50,7 @@ for _, row in ipairs(book.rows) do
             contains(row.name, "Adversaire non identifié")
             click(row)
             local detail = GrudgeLedgerCorrections
-            assert(detail:IsShown() and detail.event == e and not detail.attest:IsShown() and not detail.confirm:IsShown())
+            assert(detail:IsShown() and detail.event == e and not detail.attest and not detail.confirm:IsShown())
             contains(detail.proof, "Plusieurs joueurs")
             assert(not detail.raceIcon:IsShown())
             click(detail.keep)
@@ -73,7 +73,7 @@ local ledger = GrudgeLedgerWindow
 click(ledger.detailTabs.matchup)
 contains(ledger.detailText, "Honneur reçu : 31")
 contains(ledger.detailText, "2 gains · Gain maximal : 31")
-contains(ledger.detailText, "l’honneur reçu par votre adversaire")
+contains(ledger.detailText, "Honneur adverse inconnu")
 assert(ledger.metrics.kills.value:GetText() == "0")
 click(ledger.matchupHistory)
 local history = ledger.historyPage

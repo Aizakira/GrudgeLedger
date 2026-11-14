@@ -22,7 +22,6 @@ mock.units.player.guid = "Player-1-alt"
 death(opponent, "confirmed")
 mock.units.player.guid = me
 death(other, "confirmed")
-death(opponent, "probable")
 now = now + 1
 assert(victory(opponent, "old-grudge") == "initiatedKillsGrudge")
 local removed = death(opponent, "confirmed")

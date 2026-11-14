@@ -1,4 +1,11 @@
-GRUDGE LEDGER — 0.10.2
+GRUDGE LEDGER — 0.10.8
+
+Nouveau : médaillon de niveau sur le coin inférieur gauche du portrait et niveaux côte à côte dans l’histoire. Un portrait visible peut être retenu pendant la session même si le journal est fermé.
+
+Le Bilan affiche les victoires et les morts. Les royaumes Forever sont explicités. Chaque nouveau combat conserve les niveaux disponibles à ce moment-là.
+
+La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde ouvert, même si une créature porte le dernier coup. Les anciens compteurs sont réunis à la mise à jour. La résurrection réactive les alertes. Le journal conserve les portraits récemment vus pendant la session et affiche votre honneur enregistré dans la synthèse. Le gain adverse est inconnu.
+
 
 Interface en français, anglais ou espagnol selon la langue du jeu. Anglais par défaut pour les autres langues.
 The interface follows your WoW text language: English, French or Spanish.
@@ -32,20 +39,16 @@ L’honneur partagé peut être reçu sans avoir porté le coup fatal.
 
 0.9.2 — Relire et vérifier un combat
 
-Journal > Face-à-face distingue les combats confirmés des résultats probables de
-ce personnage. « Voir les combats dans l’histoire » ouvre les événements comptés.
+Journal > Face-à-face réunit les résultats de ce personnage. « Voir les combats dans l’histoire » ouvre les événements comptés.
 Si le jeu attribue le coup fatal à un autre joueur, une victoire déduite du gain
-d’honneur pour ce même combat est écartée. Les signaux indirects précisent la
-nature probable d’une rancune. Les classements des amis et menaces les plus
+d’honneur pour ce même combat est écartée. Les classements des amis et menaces les plus
 recroisés commencent à la deuxième rencontre enregistrée sur le compte.
 
 0.9.1 — Journal et victoires PvP
 
 Le Journal et les Guildes ouvrent une fiche quand la liste contient des résultats.
 Un coup fatal attribué à votre personnage ou à son familier peut confirmer une
-victoire déjà détectée. Pour une ancienne victoire probable dont vous avez été
-témoin, ouvrez Histoire > Vérifier > J’ai porté le coup fatal. La confirmation
-personnelle compte une victoire à la date du combat et garde sa provenance.
+victoire déjà détectée.
 
 0.8.2 — Police du journal
 
@@ -91,7 +94,7 @@ la session. Le Bilan comprend une carte annuelle et un classement des adversaire
 0.6.0 : bilan personnel et chronique
 
 /gl bilan : tableau d'honneur, morts, victoires, agressions, némésis et adversaire
-le plus vaincu. Faits confirmés et événements probables restent séparés.
+le plus vaincu.
 Choisir personnage actuel, compte ou archives sans auteur ; toutes les dates,
 sept jours, trente jours ou une année civile. Ce sont les événements observés,
 pas une carrière complète. Les anciennes données sans auteur ne sont jamais
@@ -268,8 +271,8 @@ texture. Le fonctionnement des gestes reste identique.
 
 Nouveautés 0.5.0 : chroniques, guildes et diagnostic
 
-- Statistiques dans le livre (/gl stats) : bourreaux, victoires, antagonistes par solde négatif, amis par score, amis et menaces recroisés. Morts/victoires probables ont leurs propres classements. Un clic ouvre la fiche.
-- Guildes (/gl guildes) : nombre de rancunes personnelles et d'amis parmi les membres connus, morts confirmées/probables et agressions confirmées. Cliquer une guilde permet de la marquer à surveiller, amie, ou d'ouvrir ses avis et notes. Les choix personnels restent prioritaires. Les avis hérités d'une guilde ne créent pas artificiellement de rancunes personnelles dans le classement. Les faits sans guilde connue restent non attribués ; une ancienne guilde enregistrée au moment des faits conserve ces événements.
+- Statistiques dans le livre (/gl stats) : bourreaux, victoires, antagonistes par solde négatif, amis par score, amis et menaces recroisés. Un clic ouvre la fiche.
+- Guildes (/gl guildes) : nombre de rancunes personnelles et d'amis parmi les membres connus, morts et agressions. Cliquer une guilde permet de la marquer à surveiller, amie, ou d'ouvrir ses avis et notes. Les choix personnels restent prioritaires. Les avis hérités d'une guilde ne créent pas artificiellement de rancunes personnelles dans le classement. Les faits sans guilde connue restent non attribués ; une ancienne guilde enregistrée au moment des faits conserve ces événements.
 - Bisou / crachat : deux boutons avec les cadres natifs de WoW, au-dessus du chat, sous les alertes. Clic sur un joueur ciblé : /kiss (+1) ou /spit (−1), avec le même délai de 30 secondes par sentiment que les macros. Un geste positif n'efface pas une dette PvP. Ctrl + glisser déplace les deux boutons ; position mémorisée et bouton de remise en place dans les réglages. Aucun geste n'est envoyé automatiquement. Désactivables dans les réglages.
 - Rencontres distinctes : compteur démarré à cette version, pour les joueurs déjà suivis ou couverts par un avis de guilde. Une nouvelle rencontre demande plus de dix minutes sans observation ; chaque présence renouvelle le délai. Le rechargement ne compte pas deux fois. Horloges séparées par personnage, statistiques réunies dans ce livre de compte. Ce n'est ni une mesure de distance ni du temps passé ensemble, et aucun ancien passage n'est inventé.
 - Diagnostic local (/gl traces) : les 200 dernières décisions de détection/alerte, avec la raison (identité absente, délai, ami du groupe, alerte désactivée, affichée, etc.). Répétitions limitées à une fois par 30 secondes ; effaçable et désactivable. Les noms de ce journal local sont privés. /gl debug produit la version anonymisée pour un signalement. Les données sont dans WTF/SavedVariables, jamais dans le code distribué. WoW écrit la sauvegarde lors d'un /reload ou d'une déconnexion normale.
@@ -313,9 +316,6 @@ Cœur vert : ami. Œil orange : méfiance/agression.
 Cœur brisé rouge : ennemi/rancune forte, notamment après une mort PvP.
 Médaillon gris : personne connue devenue neutre. Aucun popup ni son pour les
 neutres ; les inconnus et les anciennes fiches de groupe seules ne sont pas marqués.
-Un petit « ? » accompagne les marqueurs fondés uniquement sur une déduction
-PvP. Une mort probable reste signalée comme telle, même si une agression était
-confirmée. Le « ? » disparaît après correction ou confirmation pertinente.
 Les icônes nécessitent les barres de noms du jeu. Le bouton des Réglages permet
 d'activer le repérage (icônes + couleurs), hors combat, également avec /gl reperage.
 Il active les barres des joueurs alliés, les barres ennemies et leur affichage
@@ -352,10 +352,9 @@ Chaque nouvelle mort, victoire ou agression mémorise séparément la guilde, so
 serveur et la date de son observation. L'historique indique quand il s'agit d'une
 dernière information connue. Les événements anciens ou de guilde inconnue ne sont
 jamais réattribués après coup, même si le joueur rejoint une autre guilde.
-Les statistiques de guilde séparent les déductions des faits confirmés et excluent
+Les statistiques de guilde excluent
 les événements annulés. Une même mort identifiée ne compte qu'une fois par guilde,
-même avec plusieurs attaquants ; une preuve confirmée prime sur les participations
-probables. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne
+même avec plusieurs attaquants. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne
 s'additionnent pas pour calculer vos morts. Sans identifiant commun, aucun regroupement
 des anciens événements n'est deviné.
 Les classements de guildes sont disponibles depuis la version 0.5.0.
@@ -383,8 +382,7 @@ restent distinctes. « Automatique » n'impose donc jamais une couleur neutre.
 
 SOLDE DE RANCUNE 0.4.2
 Le classement automatique utilise les événements actifs : mort -10, agression -1,
-victoire +1. Les événements probables restent explicitement signalés ; une victoire
-confirmée ne confirme pas une ancienne mort probable. Les gestes négatifs s'ajoutent
+victoire +1. Les gestes négatifs s'ajoutent
 au solde. Exemple : une mort, un geste négatif et deux victoires donnent -9.
 À -10 ou moins après une mort, le classement est Ennemi (rouge). De -9 à -1,
 il reste Méfiance (orange), avec l'alerte de proximité. À 0, il devient Neutre.
@@ -416,15 +414,7 @@ restent séparés de la camaraderie personnelle.
 Forever peut masquer le journal de combat. Après un décès, l'addon consulte aussi
 le récapitulatif natif de mort et attend au plus deux secondes s'il arrive en
 retard. Les sources de dégâts accessibles sont enregistrées par GUID, même sans
-avoir ciblé ces adversaires. Un coup fatal explicite est confirmé. Les autres
-participants à l'attaque mortelle sont marqués ennemis avec une participation
-PROBABLE, pas comme auteurs de plusieurs coups fatals. Chaque fiche compte une
-participation maximum au même décès. Un PNJ identifié comme source fatale ne
-transforme pas les agresseurs joueurs en tueurs.
-Sans récapitulatif exploitable, les adversaires PvP en combat qui vous ciblaient
-réellement juste avant le décès peuvent être enregistrés comme participants
-probables, y compris à plusieurs. Une baisse de santé peut également produire
-des agressions probables. Les simples passants sont exclus ; les situations
+avoir ciblé ces adversaires. Chaque adversaire identifié qui contribue à une mort reçoit une seule attribution, même si une créature porte le coup fatal. Les simples passants sont exclus ; les situations
 ambiguës ou les données indisponibles peuvent toujours empêcher une attribution.
 Une agression n'est comptée qu'une fois par adversaire et par combat. Les preuves
 restent consultables et corrigeables. Les anciens décès manqués ne sont pas

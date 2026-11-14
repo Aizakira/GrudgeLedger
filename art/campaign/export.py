@@ -12,6 +12,8 @@ sizes = {
     "JournalTitlePlate": (512, 64),
     "JournalWordmark": (512, 128),
     "JournalMedallion": (128, 128),
+    "PortraitBezel": (128, 128),
+    "LevelMedallion": (64, 64),
     "JournalSettings": (64, 64),
     "JournalClose": (64, 64),
     "LedgerBook": (256, 256),

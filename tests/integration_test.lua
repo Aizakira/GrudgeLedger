@@ -41,9 +41,9 @@ mock.units.target = { name = "Another", surname = "Fighter", guid = "Player-1-in
 mock.units.nameplate1 = mock.units.target
 mock.Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 local opponent = GL.Identity("target")
-local record = GL.RecordPvP(opponent, "death", "probable", "Uncertain attribution", "integration-death")
+local record = GL.RecordPvP(opponent, "death", "confirmed", "Uncertain attribution", "integration-death")
 assert(GrudgeLedgerNearbyAlert.key == record.key and GrudgeLedgerNearbyAlert:IsShown())
-assert(GrudgeLedgerNearbyAlert.title:GetText():find("probable", 1, true))
+assert(GrudgeLedgerNearbyAlert.title:GetText():find("Ennemi", 1, true))
 GL.ShowLedger(record.key)
 local correctionButton
 GrudgeLedgerWindow.tools.scripts.OnClick()
@@ -52,10 +52,10 @@ for _, child in ipairs(GrudgeLedgerWindow.toolsMenu.children) do
 end
 assert(correctionButton).scripts.OnClick()
 GrudgeLedgerWindow.historyPage.rows[1].details.scripts.OnClick()
-assert(record.pvp.probableDeaths == 1)
+assert(record.pvp.deaths == 1)
 local undo = GrudgeLedgerCorrections.confirm
 undo.scripts.OnClick(undo, "LeftButton")
-assert(record.pvp.probableDeaths == 0 and GL.Relation(record) == "neutral")
+assert(record.pvp.probableDeaths == nil and GL.Relation(record) == "neutral")
 assert(not GrudgeLedgerNearbyAlert:IsShown(), "correction immediately removes the obsolete alert")
 GrudgeLedgerWindow.detailTabs.history.scripts.OnClick(GrudgeLedgerWindow.detailTabs.history, "LeftButton")
 assert(GrudgeLedgerWindow.historyPage.rows[1].badge:GetText():find("Annulé",1,true))
@@ -114,7 +114,7 @@ for _, kind in ipairs({ "pvp", "arena" }) do
     local stranger = GL.IdentityFromName("Unrecorded", kind, "Player-1-unrecorded-" .. kind)
     for _, who in ipairs({ opponent, stranger }) do
         assert(GL.RecordPvP(who, "death", "confirmed", "BG death", "bg-death") == nil)
-        assert(GL.RecordPvP(who, "kill", "probable", "BG kill", "bg-kill") == nil)
+        assert(GL.RecordPvP(who, "kill", "confirmed", "BG kill", "bg-kill") == nil)
         assert(GL.RecordAggression(who, "confirmed", "BG damage", "bg-damage") == nil)
         assert(GL.RecordSeen(who, true) == nil)
         assert(GL.RecordGroup(who, "bg-group", "Battleground") == nil)

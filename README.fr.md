@@ -1,5 +1,8 @@
 # Grudge Ledger — Le journal des rancunes
 
+La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde ouvert, même si une créature porte le dernier coup. Les anciens compteurs sont réunis à la mise à jour. La résurrection réactive les alertes. Le journal conserve les portraits récemment vus pendant la session et affiche votre honneur enregistré dans la synthèse. Le gain adverse est inconnu.
+
+
 <img src="docs/red-book.png" alt="Le livre rouge de Grudge Ledger" width="96" align="right">
 
 **Se souvenir des bonnes rencontres… et garder une petite trace des autres.**
@@ -21,10 +24,10 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 - **Un menu au clic droit** sur les portraits et noms du chat pris en charge : Ami, Méfiance, Ennemi, avis positif ou négatif, note et fiche personnelle.
 - **Des repères visuels** sur les barres de noms visibles : cœur vert pour les amis, œil orange pour la méfiance, cœur brisé rouge pour les ennemis. La coloration supplémentaire des noms est facultative.
 - **Des filtres de faction et des identités détaillées** : combiner Amis, Méfiance ou Ennemis avec Alliance ou Horde, avec le nombre de personnes correspondantes. Race et classe apparaissent sous chaque nom et dans la fiche, avec leurs icônes natives lorsqu’elles sont disponibles. Les factions inconnues ont leur filtre ; les anciennes fiches se complètent à la prochaine rencontre observée. La race ne détermine jamais la faction.
-- **Un historique PvP** des agressions et des morts observées, avec distinction entre faits confirmés et déductions probables. Une attribution erronée peut être corrigée.
+- **Un historique PvP** des agressions et des morts observées. Une attribution erronée peut être corrigée.
 - **La camaraderie par les emotes** que vous envoyez à un joueur ciblé, y compris de l'autre faction. Les répétitions sont limitées pour éviter de gonfler les scores.
 - **Des avis sur des guildes entières**, avec des exceptions individuelles.
-- **Une mémoire des guildes** : dernière guilde observée dans la fiche, puis copie de son nom, serveur et date d'observation dans chaque nouvel événement PvP. Une réponse vide n'efface plus la guilde connue ; un changement ultérieur ne réécrit pas les anciennes rencontres. Les guildes inconnues restent inconnues. Les classements utilisent ces événements en séparant les morts confirmées et probables.
+- **Une mémoire des guildes** : dernière guilde observée dans la fiche, puis copie de son nom, serveur et date d'observation dans chaque nouvel événement PvP. Une réponse vide n'efface plus la guilde connue ; un changement ultérieur ne réécrit pas les anciennes rencontres. Les guildes inconnues restent inconnues. Les classements utilisent ces événements pour compter les morts une fois par guilde.
 - **Des alertes de rencontre** en bas à gauche, au-dessus du chat principal, avec un petit son, des délais entre répétitions et un regroupement pour les membres d'une même guilde. Elles suivent la position du chat en laissant une marge au-dessus des onglets. Aucun rappel pour les amis du groupe ou du raid. Les autres amis sont annoncés à la première rencontre, puis seulement après plus de dix minutes sans présence observée : chaque recroisement repousse ce délai, même après un rechargement d'interface. Chaque personnage possède son propre compteur.
 - **Une liste centrée sur vos relations** : rejoindre un groupe n’ajoute plus les inconnus. Les groupes partagés sont suivis pour vos contacts ; les anciennes fiches constituées uniquement de groupes sont masquées sans effacement. Les avis, notes et événements PvP restent visibles.
 - **Un journal personnel** pour les notes, rencontres, groupes partagés et événements PvP, accessible par le livre de la minimap ou `/gl`.
@@ -60,9 +63,9 @@ Dans **Bilan → Vue d’ensemble → Initiative**, retrouvez qui a engagé les 
 
 ### Depuis la 0.9.2
 
-**Face-à-face** distingue les résultats confirmés et probables de ce personnage. Ouvrez l’historique associé pour en vérifier la preuve. Une victoire déduite de l’honneur partagé est écartée si le jeu attribue le coup fatal à un autre joueur lors de ce combat. Un coup fatal signalé tardivement pour un adversaire resté mort sous observation complète la victoire déjà inscrite.
+**Face-à-face** réunit les résultats de ce personnage. Ouvrez l’historique associé pour en vérifier la preuve. Une victoire déduite de l’honneur partagé est écartée si le jeu attribue le coup fatal à un autre joueur lors de ce combat. Un coup fatal signalé tardivement pour un adversaire resté mort sous observation complète la victoire déjà inscrite.
 
-Les classements des personnes recroisées commencent à la deuxième rencontre enregistrée. Les signaux indirects précisent si la rancune repose sur un événement PvP probable. Le bilan par zone identifie les résultats probables et signale à la fois les combats annulés et les durées de présence partielles.
+Les classements des personnes recroisées commencent à la deuxième rencontre enregistrée. Le bilan par zone signale les combats annulés et les durées de présence partielles.
 
 ### Depuis la 0.9.1
 
@@ -73,7 +76,7 @@ En PvP sauvage, un coup fatal attribué par le jeu peut confirmer une victoire m
 ### Depuis la 0.8.0
 
 - **Journal → Face-à-face** présente les résultats confirmés de ce personnage contre le contact sélectionné, sa série en cours et sa dernière victoire après une défaite. Une revanche compte pour une victoire (+1). Dans **Histoire**, les nouveaux combats peuvent préciser les adversaires observés, les niveaux, votre vie au premier signal et la présence d’un monstre ou d’un familier.
-- **Bilan → Par zone** ouvre le détail des sous-zones. « Mesurer le temps par zone » compte, à partir de son activation, votre présence en monde ouvert, hors absences et instances. **Bilan → Mon année → Copier le bilan annuel** prépare les chiffres confirmés et probables de la sélection pour une copie manuelle.
+- **Bilan → Par zone** ouvre le détail des sous-zones. « Mesurer le temps par zone » compte, à partir de son activation, votre présence en monde ouvert, hors absences et instances. **Bilan → Mon année → Copier le bilan annuel** prépare les totaux de la sélection pour une copie manuelle.
 - **Classements → Amis → Temps passé en groupe** utilise les nouvelles durées observées avec un contact en ligne. Dans **Réglages → Relations et PvP**, vous pouvez aussi consigner les échanges terminés avec vos contacts. Les objets et les pièces donnés et reçus sont consultables dans **Histoire → Échanges**.
 - **Réglages → Alertes** propose un signal local et discret pour une menace connue qui parle, crie ou devient la cible d’un équipier visible. La bannière indique d’où vient le signal et depuis combien de temps. **Réglages → Apparence** permet d’ajouter les icônes de relation aux noms dans le chat et de réduire les infobulles aux informations essentielles, avec les détails sous Maj. Les signaux indirects, les badges, les infobulles compactes, le suivi des échanges et la mesure du temps par zone sont facultatifs.
 
@@ -103,8 +106,8 @@ Un **médaillon gris** identifie les personnes connues neutres dans le journal e
 | --- | --- |
 | Menaces | Rancunes les plus fortes, menaces les plus recroisées, menaces vues récemment, agressions confirmées |
 | Amis | Amis les plus recroisés, affinités les plus fortes, amis vus récemment, sessions de groupe partagées |
-| Combats | Ceux qui m'ont le plus tué, adversaires les plus vaincus, morts et victoires probables séparées |
-| Guildes | Rancunes personnelles, amis personnels, morts, victoires, agressions et morts probables |
+| Combats | Ceux qui m'ont le plus tué, adversaires les plus vaincus |
+| Guildes | Rancunes personnelles, amis personnels, morts, victoires et agressions |
 
 Chaque classement affiche son unité, son périmètre et une explication. Les pages
 Personnes/Guildes et le thème actif sont identifiés ; les listes de personnes
@@ -133,8 +136,7 @@ listes vides, noms longs et police classique. Le rendu natif reste à confirmer.
 Le bouton **Bilan & récit**, `/gl bilan` et `/gl chronique` ouvrent deux nouvelles
 pages. Le bilan présente les victoires, morts et agressions observées, la némésis
 et l'adversaire le plus vaincu. La chronique rassemble les événements de toutes
-les fiches, avec date, lieu, personne et explication. Les faits confirmés restent
-séparés des déductions probables.
+les fiches, avec date, lieu, personne et explication.
 
 - **Périodes et origine** : toutes les dates, sept ou trente derniers jours, année
   civile ; personnage actuel, compte entier ou archives sans personnage identifié.
@@ -319,8 +321,8 @@ nouvelle texture. Le fonctionnement des gestes reste identique.
 
 ## Nouveautés 0.5.0 : chroniques, guildes et diagnostic
 
-- **Statistiques** dans le livre (`/gl stats`) : bourreaux, victoires, antagonistes par solde négatif, amis par score, amis et menaces recroisés. Morts/victoires probables ont leurs propres classements. Un clic ouvre la fiche.
-- **Guildes** (`/gl guildes`) : nombre de rancunes personnelles et d'amis parmi les membres connus, morts confirmées/probables et agressions confirmées. Cliquer une guilde permet de la marquer **à surveiller**, amie, ou d'ouvrir ses avis et notes. Les choix personnels restent prioritaires. Les avis hérités d'une guilde ne créent pas artificiellement de rancunes personnelles dans le classement. Les faits sans guilde connue restent non attribués ; une ancienne guilde enregistrée au moment des faits conserve ces événements.
+- **Statistiques** dans le livre (`/gl stats`) : bourreaux, victoires, antagonistes par solde négatif, amis par score, amis et menaces recroisés. Un clic ouvre la fiche.
+- **Guildes** (`/gl guildes`) : nombre de rancunes personnelles et d'amis parmi les membres connus, morts et agressions. Cliquer une guilde permet de la marquer **à surveiller**, amie, ou d'ouvrir ses avis et notes. Les choix personnels restent prioritaires. Les avis hérités d'une guilde ne créent pas artificiellement de rancunes personnelles dans le classement. Les faits sans guilde connue restent non attribués ; une ancienne guilde enregistrée au moment des faits conserve ces événements.
 - **Bisou / crachat** : deux boutons avec les cadres natifs de WoW, au-dessus du chat, sous les alertes. Clic sur un joueur ciblé : `/kiss` (+1) ou `/spit` (−1), avec le même délai de 30 secondes par sentiment que les macros. Un geste positif n'efface pas une dette PvP. **Ctrl + glisser** déplace les deux boutons ; position mémorisée et bouton de remise en place dans les réglages. Aucun geste n'est envoyé automatiquement. Désactivables dans les réglages.
 - **Rencontres distinctes** : compteur démarré à cette version, pour les joueurs déjà suivis ou couverts par un avis de guilde. Une nouvelle rencontre demande plus de dix minutes sans observation ; chaque présence renouvelle le délai. Le rechargement ne compte pas deux fois. Horloges séparées par personnage, statistiques réunies dans ce livre de compte. Ce n'est ni une mesure de distance ni du temps passé ensemble, et aucun ancien passage n'est inventé.
 - **Diagnostic local** (`/gl traces`) : les 200 dernières décisions de détection/alerte, avec la raison (identité absente, délai, ami du groupe, alerte désactivée, affichée, etc.). Répétitions limitées à une fois par 30 secondes ; effaçable et désactivable. Les noms de ce journal local sont privés. **`/gl debug` produit la version anonymisée** pour un signalement. Les données sont dans `WTF/SavedVariables`, jamais dans le code distribué. WoW écrit la sauvegarde lors d'un `/reload` ou d'une déconnexion normale.
@@ -328,7 +330,7 @@ nouvelle texture. Le fonctionnement des gestes reste identique.
 
 La précédente extension temporaire `GrudgeLedgerProbe` doit être retirée ou désactivée : le test est désormais inclus dans Grudge Ledger. Redémarrer le jeu après l'installation de cette version pour charger les nouveaux fichiers.
 
-Une mort ayant le même identifiant compte une seule fois par guilde, même avec plusieurs attaquants ; une preuve confirmée prime sur les participations probables. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne s'additionnent pas. Sans identifiant commun, aucun regroupement des anciens événements n'est deviné.
+Une mort ayant le même identifiant compte une seule fois par guilde, même avec plusieurs attaquants. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne s'additionnent pas. Sans identifiant commun, aucun regroupement des anciens événements n'est deviné.
 
 Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, vide, protégée, indisponible ou un cache trompeur. Ils ne prouvent pas que le client réel donne accès aux points de la minimap : les essais dans Forever restent nécessaires. Une absence de trace ne prouve pas l'absence du joueur dans le monde.
 
@@ -391,7 +393,7 @@ obtenue. Voir [l'enquête et ses sources primaires](DEVELOPMENT.txt) et les
 
 Prévu pour **Forever, interface 16001** ; développé avec le client **1.60.1.70862**. Les versions Retail, Classic et les autres serveurs ne sont pas validés. Les marqueurs nécessitent des barres de noms visibles et respectent les limites de portée du jeu. Ce n'est ni un radar couvrant toute la zone, ni un détecteur de furtivité.
 
-Forever peut masquer le journal de combat. L'addon consulte aussi son récapitulatif natif de mort, avec jusqu'à deux secondes d'attente. Il enregistre plusieurs agresseurs par GUID : le coup fatal explicite est confirmé, les autres participations à l'attaque mortelle sont probables. Sans preuve exploitable, seuls des adversaires en combat qui vous ciblaient récemment peuvent être retenus comme participants probables ; les simples passants sont exclus. Les compteurs sont individuels : trois participants à un même décès ne signifient pas trois morts du personnage. Les déductions peuvent être corrigées et la couverture reste limitée par les données fournies par le jeu. Les anciens décès manqués ne sont pas reconstitués automatiquement.
+Forever peut masquer le journal de combat. L'addon consulte aussi son récapitulatif natif de mort, avec jusqu'à deux secondes d'attente. Chaque agresseur identifié qui contribue à la mort reçoit une attribution. Sans preuve exploitable, seuls des adversaires en combat qui vous ciblaient récemment peuvent être retenus comme participants ; les simples passants sont exclus. Les compteurs sont individuels : trois participants à un même décès ne signifient pas trois morts du personnage. Les déductions peuvent être corrigées et la couverture reste limitée par les données fournies par le jeu. Les anciens décès manqués ne sont pas reconstitués automatiquement.
 
 Les boutons Ami/Méfiance/Ennemi et les avis manuels conservent leur priorité, même après une emote. Les gestes seuls ne verrouillent plus le classement : un `/spit` ne bloque pas le passage en ennemi après une mort PvP. La détection des duels dépend des signaux disponibles.
 

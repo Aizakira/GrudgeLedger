@@ -188,6 +188,7 @@ GL.SetGuildReaction("Les Corbeaux de la Dernière Nuit", "enemy", "Plusieurs mau
 GL.SetGuildReaction("La Compagnie du Lys", "warning", "Avis partagé : vérifier la personne avant de juger.")
 GL.SetGuildReaction("Les Voyageurs", "neutral", "Aucun avis pour le moment.")
 local record = records[2]
+record.level = 39
 record.reaction = nil
 GL.AddNote(record, "Très bon tank au monastère. A pris le temps d'expliquer les mécaniques et de partager le butin.")
 GL.AddNote(record, "Rencontre suivante plus tendue : à recontacter pour éclaircir le malentendu.")
@@ -203,9 +204,9 @@ assert(GL.RecordHonor(record, 17))
 assert(GL.RecordHonor(nil, 12))
 for i = 1, 7 do
     district = (i - 1) % #districts + 1
-    GL.RecordPvP(record, "death", i % 2 == 0 and "confirmed" or "probable", "Un seul adversaire hostile vous ciblait avant la mort. Attribution déduite ; aucune confirmation du coup fatal.", "qa-event-" .. i)
+    GL.RecordPvP(record, "death", "confirmed", "Un seul adversaire hostile vous ciblait avant la mort. Attribution déduite ; aucune confirmation du coup fatal.", "qa-event-" .. i, {playerLevel=34, opponentLevel=39})
 end
-GL.RecordAggression(record, "probable", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack")
+GL.RecordAggression(record, "confirmed", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack", {playerLevel=34, opponentLevel=39})
 GL.RecordPvP(records[3], "kill", "confirmed", "Coup fatal observé.", "qa-victory")
 qaClock = qaClock + 1
 for i, entry in ipairs({ {records[5], "player", false}, {records[12], "player", true}, {record, "player", true}, {records[8], "opponent", false} }) do
@@ -215,7 +216,7 @@ for i, entry in ipairs({ {records[5], "player", false}, {records[12], "player", 
     GL.RecordPvP(entry[1], "kill", "confirmed", nil, id .. "-kill", opening)
 end
 district = 2
-GL.RecordPvP(records[7], "kill", "probable", "Adversaire observé mort après le combat.", "qa-probable-victory")
+GL.RecordPvP(records[7], "kill", "confirmed", "Adversaire observé mort après le combat.", "qa-combat-victory")
 GetRealZoneText, GetSubZoneText = oldZone, oldSubzone
 for i, r in ipairs(records) do
     r.encounters = { count = 15 - i, seen = { ["Player-1-self"] = qaClock - 3600 * i } }
@@ -335,12 +336,12 @@ function QA.capture(name)
         return f
     elseif name == "alert-preview" then GL.Display.PreviewAlert("enemy") return GrudgeLedgerAlertPreview
     elseif name == "guide" then GL.ShowGuide() return GrudgeLedgerGuide
-    elseif name == "corrections" or name == "correction-voided" or name == "confirm-kill" then
-        GL.ShowLedger(name == "confirm-kill" and records[7].key or record.key)
+    elseif name == "corrections" or name == "correction-voided" or name == "kill-details" then
+        GL.ShowLedger(name == "kill-details" and records[7].key or record.key)
         click("Corriger le PvP")
         local details = GrudgeLedgerWindow.historyPage.rows[1].details
         details:Click()
-        if name == "confirm-kill" then assert(GrudgeLedgerCorrections.attest:IsShown()) end
+        if name == "kill-details" then assert(GrudgeLedgerCorrections.event.kind == "kill") end
         if name == "correction-voided" then GrudgeLedgerCorrections.confirm:Click() details:Click() end
         return GrudgeLedgerCorrections
     elseif name == "diagnostic" then SlashCmdList.GRUDGELEDGER("debug") return GrudgeLedgerDiagnostic
@@ -353,10 +354,10 @@ function QA.capture(name)
         mock.units.target = { name = "Bastian", surname = "Griseforge", guid = "Player-1-qa2", guild = record.guild }
         GL.Display.OnEvent(nil, "PLAYER_TARGET_CHANGED")
         return GrudgeLedgerNearbyAlert
-    elseif name == "alert-probable" then
+    elseif name == "alert-after-death" then
         qaClock = qaClock + 200
-        mock.units.target = { name = "Nicolas", surname = "Brisevent", guid = "Player-1-qa-probable" }
-        GL.RecordPvP(GL.Identity("target"), "death", "probable", "Un seul adversaire vous ciblait.", "qa-probable")
+        mock.units.target = { name = "Nicolas", surname = "Brisevent", guid = "Player-1-qa-combat" }
+        GL.RecordPvP(GL.Identity("target"), "death", "confirmed", "Un seul adversaire vous ciblait.", "qa-combat")
         GL.Display.OnEvent(nil, "PLAYER_TARGET_CHANGED")
         return GrudgeLedgerNearbyAlert
     elseif name == "alert-long-guild" then

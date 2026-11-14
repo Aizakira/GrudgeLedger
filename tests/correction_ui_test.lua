@@ -19,7 +19,7 @@ end
 local first = GL.Identity("target")
 local record = GL.Remember(first)
 GL.AddNote(first, "PRIVATE note inside journal")
-for i = 1, 8 do GL.RecordPvP(first, "death", "probable", "Déduction " .. i, "death" .. i) end
+for i = 1, 8 do GL.RecordPvP(first, "death", "confirmed", "Déduction " .. i, "death" .. i) end
 GL.RecordAggression(first, "confirmed", "Preuve directe |cff00ff00", "aggression")
 local latest = record.history[#record.history]
 local historyLength = #record.history
@@ -36,7 +36,7 @@ assert(not GrudgeLedgerCorrections, "selecting the PvP filter does not prompt or
 click(history.rows[1].details)
 local f = GrudgeLedgerCorrections
 assert(f:IsShown() and f.topLevel and f.raised > 0)
-assert(f.certainty:GetText() == "Confirmé" and f.proof:GetText():find("||cff00ff00",1,true))
+assert(f.certainty:GetText() == "JcJ" and f.proof:GetText():find("||cff00ff00",1,true))
 assert(f.who:GetText() == record.fullName and f.event == latest and not latest.voided)
 click(f.keep) assert(not f:IsShown() and not latest.voided, "Conserver leaves the event and statistics unchanged")
 click(history.next) click(history.next)
@@ -70,28 +70,17 @@ assert(other.pvp.deaths == 0 and other.reaction == "friend" and other.reputation
 -- Two distinct victories after one death. Attesting to one preserves the original fight
 -- and moves that one win between buckets, even if the UI callback fires twice.
 GL.RecordPvP(other, "death", "confirmed", "log", "ambush")
-local _, win1 = GL.RecordPvP(other, "kill", "probable", "honor", "win-1")
-local _, win2 = GL.RecordPvP(other, "kill", "probable", "honor", "win-2")
-local balance, eventCount = other.reputation, #other.history
-assert(not GL.ConfirmKill(first, win1))
+local _, win1 = GL.RecordPvP(other, "kill", "confirmed", "honor", "win-1")
+local _, win2 = GL.RecordPvP(other, "kill", "confirmed", "honor", "win-2")
+assert(other.pvp.kills == 2 and GL.ContactMatchup(other).kills == 2)
 GL.ShowLedger(other.key) openCorrections()
-click(history.rows[1].details)
-assert(f.attest:IsShown() and f.event == win2)
-local attest = f.attest.scripts.OnClick
-click(f.attest) attest()
-assert(not f.attest:IsShown() and f.certainty:GetText() == "Témoignage")
-assert(f.proof:GetText():find("confirmé manuellement", 1, true) and win2.evidence == "honor")
-assert(other.pvp.kills == 1 and other.pvp.probableKills == 1 and win1.confidence == "probable")
-click(f.keep) click(history.rows[2].details) click(f.attest)
-assert(other.pvp.kills == 2 and other.pvp.probableKills == 0 and other.pvp.deaths == 1)
-assert(other.reputation == balance and #other.history == eventCount)
-assert(GL.ContactMatchup(other).kills == 2 and GL.PersonalStatistics({scope="character"}).kills == 2)
+click(history.rows[2].details)
 click(f.confirm)
-assert(win1.voided and other.pvp.kills == 1 and not GL.ConfirmKill(other, win1))
-local _, sharedHonor = GL.RecordPvP(other, "kill", "probable", "Honneur partagé", "shared")
+assert(win1.voided and not win2.voided and other.pvp.kills == 1)
+local _, sharedHonor = GL.RecordPvP(other, "kill", "confirmed", "Honneur partagé", "shared")
 assert(GL.VoidPvP(other, sharedHonor, false, "other-killer"))
 click(history.rows[1].details)
-assert(not f.attest:IsShown() and f.proof:GetText():find("un autre joueur", 1, true)
+assert(not f.attest and f.proof:GetText():find("un autre joueur", 1, true)
     and f.proof:GetText():find("Honneur partagé", 1, true) and not f.proof:GetText():find("à confirmer", 1, true))
 click(f.keep)
 local empty = GL.Remember(GL.IdentityFromName("Nobody","Else","Player-1-empty"))

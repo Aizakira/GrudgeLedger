@@ -127,11 +127,26 @@ local function test(name, fn)
     passed = passed + 1
 end
 
-test("one recent hostile gives probable death once", function()
+test("native killer is counted once in each life, including after PLAYER_DEAD", function()
+    local e = start()
+    for life = 1, 2 do
+        unitData.target = nil
+        T.HandleEvent("PLAYER_DEAD")
+        unitData.target = e
+        T.HandleEvent("PARTY_KILL", e.guid, unitData.player.guid)
+        T.HandleEvent("PLAYER_DEAD")
+        assert(total("deaths") == life)
+        T.HandleEvent("PLAYER_UNGHOST")
+        now = now + 1
+        start(e)
+    end
+end)
+
+test("one recent hostile gives one death", function()
     start()
     T.HandleEvent("PLAYER_DEAD")
     T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 1 and total("deaths") == 0)
+    assert(total("deaths") == 1)
     assert(GL.Relation(GL.Get(GL.Identity("target"))) == "enemy")
 end)
 
@@ -147,9 +162,9 @@ test("multiple recent attackers share one probable fatal encounter", function()
     unitData.nameplate1 = opponent("second")
     T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
     T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 2 and total("deaths") == 0 and count() == 2)
+    assert(total("deaths") == 2 and count() == 2)
     T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 2, "duplicate death events must not repeat the batch")
+    assert(total("deaths") == 2, "duplicate death events must not repeat the batch")
 end)
 
 test("NPC pressure prevents mixed PvE guess", function()
@@ -157,7 +172,7 @@ test("NPC pressure prevents mixed PvE guess", function()
     unitData.mouseover = { guid = "Creature-1-wolf", hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
     T.Poll()
     T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 0)
+    assert(total("deaths") == 0)
 end)
 
 test("stale or merely selected target does not qualify", function()
@@ -180,7 +195,7 @@ test("duels excluded even with explicit lethal event", function()
     assert(count() == 0)
     T.HandleEvent("DUEL_FINISHED") T.HandleEvent("PLAYER_ALIVE")
     start(e) T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 1)
+    assert(total("deaths") == 1)
 end)
 
 test("outgoing duel is excluded without inbound duel events", function()
@@ -193,14 +208,14 @@ test("outgoing duel is excluded without inbound duel events", function()
     assert(count() == 0)
     T.HandleEvent("DUEL_FINISHED") T.HandleEvent("PLAYER_ALIVE")
     start(e) T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 1)
+    assert(total("deaths") == 1)
 end)
 
 test("ignored duel request eventually stops suppressing tracking", function()
     StartDuel("target")
     now = now + 121
     start() T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 1)
+    assert(total("deaths") == 1)
 end)
 
 test("ordinary combat cannot make an ignored duel request permanent", function()
@@ -209,7 +224,7 @@ test("ordinary combat cannot make an ignored duel request permanent", function()
     now = now + 121 T.Poll()
     unitData.player.combat = false T.HandleEvent("PLAYER_REGEN_ENABLED") T.Poll()
     start() T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 1)
+    assert(total("deaths") == 1)
 end)
 
 test("long continuous and confirmed duels stay suppressed beyond request timeout", function()
@@ -224,7 +239,7 @@ test("long continuous and confirmed duels stay suppressed beyond request timeout
     cle("SWING_DAMAGE", e, unitData.player, 0, 64)
     T.HandleEvent("PLAYER_DEAD") assert(count() == 0)
     T.HandleEvent("DUEL_FINISHED") T.HandleEvent("PLAYER_ALIVE")
-    start(e) T.HandleEvent("PLAYER_DEAD") assert(total("probableDeaths") == 1)
+    start(e) T.HandleEvent("PLAYER_DEAD") assert(total("deaths") == 1)
 end)
 
 test("unflagged or same-faction hostility cannot be inferred", function()
@@ -250,7 +265,7 @@ test("confirmed kill requires personal source and player victim", function()
     assert(count() == 0)
     cle("PARTY_KILL", unitData.player, e)
     cle("PARTY_KILL", unitData.player, e)
-    assert(total("kills") == 1 and total("probableKills") == 0)
+    assert(total("kills") == 1)
 end)
 
 test("two identical first names never merged", function()
@@ -262,11 +277,11 @@ end)
 test("solo observed death plus honor count gives probable kill", function()
     local e = start()
     killedTarget()
-    assert(total("probableKills") == 1 and total("kills") == 0)
+    assert(total("kills") == 1)
     T.HandleEvent("CHAT_MSG_COMBAT_HONOR_GAIN", e.name .. " " .. e.surname .. " dies.")
     cle("PARTY_KILL", unitData.player, e)
     T.Poll()
-    assert(total("probableKills") == 0 and total("kills") == 1, "late confirmation must upgrade in place")
+    assert(total("kills") == 1, "late confirmation must upgrade in place")
 end)
 
 test("Forever native PARTY_KILL works even when the client rejects combat-log registration", function()
@@ -280,7 +295,7 @@ test("Forever native PARTY_KILL works even when the client rejects combat-log re
     groupSize = 3
     fire(unitData.player.guid, e.guid)
     cle("PARTY_KILL", unitData.player, e)
-    assert(total("kills") == 1 and total("probableKills") == 0 and #GL.errors == 0)
+    assert(total("kills") == 1 and #GL.errors == 0)
 end)
 
 test("only our verified pet killing blow counts for us", function()
@@ -321,16 +336,16 @@ test("deferred native proof updates only the same defeat; a later life can earn 
     now = now + 6
     T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
     T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
-    assert(#r.history == n and r.pvp.kills == 1 and r.pvp.probableKills == 0)
+    assert(#r.history == n and r.pvp.kills == 1)
     assert(first.time == time and first.eventId == id and not first.playerConfirmedAt)
     e.dead = false
     T.Poll()
     killedTarget()
-    assert(r.pvp.kills == 1 and r.pvp.probableKills == 1)
+    assert(r.pvp.kills == 2)
     local second = r.history[#r.history]
     assert(second.eventId ~= first.eventId and GL.VoidPvP(r, second))
     T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
-    assert(r.pvp.kills == 1 and r.pvp.probableKills == 0)
+    assert(r.pvp.kills == 1)
 end)
 
 test("native killing-blow attribution works without honor and respects opt-out and exclusions", function()
@@ -355,11 +370,11 @@ test("a named probable then the victim's visible GUID point to the same event", 
     e.guid = nil
     start(e)
     killedTarget()
-    assert(total("probableKills") == 1)
+    assert(total("kills") == 1)
     e.guid = guid
     T.HandleEvent("PARTY_KILL", unitData.player.guid, guid)
     local r = assert(GL.Get("guid:" .. guid))
-    assert(r.pvp.kills == 1 and total("probableKills") == 0 and count() == 1)
+    assert(r.pvp.kills == 1 and total("kills") == 1 and count() == 1)
 end)
 
 test("native blows resolve exact victim GUIDs without a target, including two rapidly repeated wins", function()
@@ -397,7 +412,7 @@ test("a different proven killer excludes the shared honor before or after infere
         if not late then T.HandleEvent("PARTY_KILL", other.guid, e.guid) end
         killedTarget()
         if late then
-            assert(total("probableKills") == 1)
+            assert(total("kills") == 1)
             cle("SPELL_DAMAGE", other, e, 10, 64, 64)
             local r = GL.Get("guid:" .. e.guid)
             local revoked = r.history[#r.history]
@@ -405,12 +420,12 @@ test("a different proven killer excludes the shared honor before or after infere
             assert(revoked.voidReason == "other-killer" and revoked.evidence and not revoked.evidence:find("un autre joueur", 1, true))
         end
         T.Poll()
-        assert(total("probableKills") == 0 and total("kills") == 0, "shared honor cannot beat an explicit foreign killing blow")
+        assert(total("kills") == 0, "shared honor cannot beat an explicit foreign killing blow")
         assert(not GL.Get("guid:" .. other.guid), "another player's kill must not add the killer to the journal")
         e.dead = false
         T.Poll()
         killedTarget()
-        assert(total("probableKills") == 1, "a different attack in the victim's next life can still qualify")
+        assert(total("kills") == 1, "a different attack in the victim's next life can still qualify")
     end
 end)
 
@@ -418,7 +433,7 @@ test("foreign killing evidence for another victim cannot remove this victim's wi
     local e, other = start(), opponent("elsewhere")
     killedTarget()
     T.HandleEvent("PARTY_KILL", other.guid, "Player-1-another")
-    assert(total("probableKills") == 1)
+    assert(total("kills") == 1)
     T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
     T.HandleEvent("PARTY_KILL", other.guid, e.guid)
     assert(total("kills") == 1, "automatic reconciliation never overwrites a personal killing-blow confirmation")
@@ -431,7 +446,7 @@ test("late CLE corroboration of a continuously observed corpse upgrades the same
     local n = #r.history
     for i = 1, 12 do now = now + 1 T.Poll() end
     cle("PARTY_KILL", unitData.player, e)
-    assert(#r.history == n and r.pvp.kills == 1 and r.pvp.probableKills == 0, "one corpse must not yield two credits")
+    assert(#r.history == n and r.pvp.kills == 1, "one corpse must not yield two credits")
     T.HandleEvent("PLAYER_REGEN_ENABLED")
     for i = 1, 15 do now = now + 1 T.Poll() end
     cle("PARTY_KILL", unitData.player, e)
@@ -444,7 +459,7 @@ test("a different kill with no continued observation cannot revoke an older esti
     unitData.target = nil
     now = now + 8
     T.HandleEvent("PARTY_KILL", "Player-1-other", e.guid)
-    assert(total("probableKills") == 1, "no observation connects this kill to the earlier defeat")
+    assert(total("kills") == 1, "no observation connects this kill to the earlier defeat")
 end)
 
 test("seeing a corpse after a long polling gap cannot refresh an expired attribution", function()
@@ -453,7 +468,7 @@ test("seeing a corpse after a long polling gap cannot refresh an expired attribu
     now = now + 30
     T.Poll()
     T.HandleEvent("PARTY_KILL", "Player-1-other", e.guid)
-    assert(total("probableKills") == 1)
+    assert(total("kills") == 1)
 end)
 
 test("selecting a corpse cannot create personal targeting evidence", function()
@@ -472,7 +487,7 @@ test("shared group honor cannot become personal probable kill", function()
     groupSize = 2
     killedTarget()
     T.OnHonorMessage("Alex enemy dies.")
-    assert(total("probableKills") == 0)
+    assert(total("kills") == 0)
     cle("PARTY_KILL", unitData.player, unitData.target)
     assert(total("kills") == 1)
 end)
@@ -496,7 +511,7 @@ test("shared awards use the received integer exactly once independently of kills
     local stats = GL.PersonalStatistics()
     assert(stats.honor == 40 and stats.honorAwards == 3 and stats.bestHonor == 18 and stats.unassignedHonor == 0)
     local contact = GL.ContactMatchup(GL.Get("guid:" .. e.guid))
-    assert(contact.honor == 40 and contact.kills == 0 and contact.probableKills == 0)
+    assert(contact.honor == 40 and contact.kills == 0 and contact.probableKills == nil)
     assert(count() == 1 and GL.Get("guid:Player-1-sender") == nil and GL.Get("guid:" .. unitData.focus.guid) == nil)
 end)
 
@@ -541,15 +556,15 @@ test("only a new verified named receipt signals an isolated probable kill when t
     honorChat(COMBATLOG_HONORGAIN:format("Alex enemy", "Leader", 7), 20)
     honorChat("Alex enemy dies.", 21)
     now = now + 1 T.Poll()
-    assert(GL.PersonalStatistics().honorAwards == 1 and total("probableKills") == 0)
+    assert(GL.PersonalStatistics().honorAwards == 1 and total("kills") == 0)
     honorChat(msg, 22)
-    assert(GL.PersonalStatistics().honorAwards == 2 and GL.PersonalStatistics().honor == 0 and total("probableKills") == 1)
+    assert(GL.PersonalStatistics().honorAwards == 2 and GL.PersonalStatistics().honor == 0 and total("kills") == 1)
     fixture(nil, {unavailable=true})
     e = start()
     now = now + 1 e.dead = true T.Poll()
     honorChat("Alex enemy dies.")
     now = now + 1 T.Poll()
-    assert(GL.PersonalStatistics().honorAwards == 0 and total("probableKills") == 1)
+    assert(GL.PersonalStatistics().honorAwards == 0 and total("kills") == 1)
 end)
 
 test("bare and colliding player names remain personal honor without a contact", function()
@@ -628,7 +643,7 @@ test("observed third-party combat blocks solo kill inference", function()
     unitData.nameplate1 = other
     T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
     killedTarget()
-    assert(total("probableKills") == 0)
+    assert(total("kills") == 0)
 end)
 
 test("counter reset does not qualify", function()
@@ -643,12 +658,12 @@ test("only explicit lethal damage is confirmed death", function()
     local e = start()
     cle("SWING_DAMAGE", e, unitData.player, 0, 64)
     T.HandleEvent("PLAYER_DEAD")
-    assert(total("deaths") == 1 and total("probableDeaths") == 0)
+    assert(total("deaths") == 1)
     T.HandleEvent("PLAYER_ALIVE")
     start(e)
     cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
     T.HandleEvent("PLAYER_DEAD")
-    assert(total("deaths") == 1 and total("probableDeaths") == 1)
+    assert(total("deaths") == 2)
 end)
 
 test("lethal NPC damage does not blame the nearby enemy", function()
@@ -661,11 +676,11 @@ end)
 test("death immediately after combat end uses bounded grace", function()
     start() T.HandleEvent("PLAYER_REGEN_ENABLED")
     now = now + 1 T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 1)
+    assert(total("deaths") == 1)
     T.HandleEvent("PLAYER_ALIVE")
     start() T.HandleEvent("PLAYER_REGEN_ENABLED")
     now = now + 4 T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 1)
+    assert(total("deaths") == 1)
 end)
 
 test("world change clears stale battle candidates", function()
@@ -748,17 +763,17 @@ test("targeting without health loss does not imply aggression", function()
     start()
     now = now + 1 T.Poll()
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 0 and count() == 0)
+    assert(total("aggressions") == 0 and count() == 0)
 end)
 
 test("one recent attacker plus health loss records probable aggression once", function()
     start()
     now = now + 1 unitData.player.health = 900 T.HandleEvent("UNIT_HEALTH", "player")
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 1 and total("aggressions") == 0)
-    assert(GL.Relation(GL.Get(GL.Identity("target"))) == "warning")
+    assert(total("aggressions") == 1)
+    assert(GL.Relation(GL.Get(GL.Identity("target"))) == "enemy")
     unitData.player.health = 800 T.Poll() now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 1)
+    assert(total("aggressions") == 1)
 end)
 
 test("health loss under multiple targeting attackers records probable participation", function()
@@ -766,14 +781,14 @@ test("health loss under multiple targeting attackers records probable participat
     unitData.nameplate1 = opponent("second") T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
     now = now + 1 unitData.player.health = 900 T.Poll()
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 2 and total("aggressions") == 0)
+    assert(total("aggressions") == 2)
 end)
 
 test("a dead opponent cannot explain a fresh health drop", function()
     local e = start()
     now = now + 1 e.dead = true unitData.player.health = 900 T.Poll()
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 0)
+    assert(total("aggressions") == 0)
 end)
 
 test("post-death health updates and pending guesses cannot create aggression", function()
@@ -781,12 +796,12 @@ test("post-death health updates and pending guesses cannot create aggression", f
     unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
     now = now + 1 unitData.player.health = 0 T.Poll()
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 0)
+    assert(total("aggressions") == 0)
     fixture() start()
     now = now + 1 unitData.player.health = 900 T.Poll()
     unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 0)
+    assert(total("aggressions") == 0)
 end)
 
 test("explicit friendly or different hostile damage cancels health guesses", function()
@@ -795,12 +810,12 @@ test("explicit friendly or different hostile damage cancels health guesses", fun
     now = now + 1 unitData.player.health = 900 T.Poll()
     cle("SPELL_DAMAGE", friendly, unitData.player, -1, 16)
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 0 and total("aggressions") == 0)
+    assert(total("aggressions") == 0)
     fixture() start()
     now = now + 1 unitData.player.health = 900 T.Poll()
     cle("SPELL_DAMAGE", opponent("different"), unitData.player, -1, 64)
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 0 and total("aggressions") == 1)
+    assert(total("aggressions") == 1)
     assert(GL.Get(GL.Identity("target")) == nil)
 end)
 
@@ -828,7 +843,7 @@ test("explicit hostile damage is confirmed once per encounter", function()
     cle("DAMAGE_SHIELD", e, unitData.player, -1, 64)
     T.HandleEvent("PLAYER_REGEN_DISABLED")
     cle("SPELL_PERIODIC_DAMAGE", e, unitData.player, -1, 64)
-    assert(total("aggressions") == 1 and total("probableAggressions") == 0)
+    assert(total("aggressions") == 1)
     T.HandleEvent("PLAYER_REGEN_ENABLED")
     now = now + 5
     cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
@@ -1031,7 +1046,7 @@ test("explicit damage supersedes pending inference without double count", functi
     now = now + 1 unitData.player.health = 900 T.Poll()
     cle("SWING_DAMAGE", e, unitData.player, -1, 64)
     now = now + 1 T.Poll()
-    assert(total("aggressions") == 1 and total("probableAggressions") == 0)
+    assert(total("aggressions") == 1)
 end)
 
 test("late confirmation does not double count already inferred aggression", function()
@@ -1039,7 +1054,7 @@ test("late confirmation does not double count already inferred aggression", func
     now = now + 1 unitData.player.health = 900 T.Poll()
     now = now + 1 T.Poll()
     cle("SWING_DAMAGE", e, unitData.player, -1, 64)
-    assert(total("aggressions") + total("probableAggressions") == 1)
+    assert(total("aggressions") == 1)
 end)
 
 test("duel and friendly damage do not produce aggression", function()
@@ -1071,16 +1086,16 @@ test("three attackers exclude a merely selected passerby and share one death id"
     T.HandleEvent("PLAYER_TARGET_CHANGED")
     now = now + 1 unitData.player.health = 900 T.Poll()
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 3 and GL.Get("guid:" .. passerby.guid) == nil)
+    assert(total("aggressions") == 3 and GL.Get("guid:" .. passerby.guid) == nil)
     unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
     T.HandleEvent("PLAYER_DEAD") T.Poll()
-    assert(count() == 3 and total("probableDeaths") == 3 and total("deaths") == 0)
+    assert(count() == 3 and total("deaths") == 3)
     local deathId
     for _, record in pairs(GL.db.players) do
-        assert(record.pvp.probableAggressions == 1 and record.pvp.probableDeaths == 1)
+        assert(record.pvp.aggressions == 1 and record.pvp.deaths == 1)
         for _, event in ipairs(record.history) do
             if event.kind == "death" then
-                assert(event.confidence == "probable" and event.evidence:find("Participation probable", 1, true))
+                assert(event.confidence == "confirmed" and event.evidence:find("Participation", 1, true))
                 deathId = deathId or event.eventId
                 assert(event.eventId == deathId, "three participants are one fatal encounter")
             end
@@ -1094,7 +1109,7 @@ test("new arrivals cannot join a pending health-loss inference", function()
     unitData.nameplate1 = opponent("late")
     T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
     now = now + 1 T.Poll()
-    assert(total("probableAggressions") == 1 and GL.Get("guid:" .. first.guid))
+    assert(total("aggressions") == 1 and GL.Get("guid:" .. first.guid))
     assert(GL.Get(GL.Identity("nameplate1")) == nil)
 end)
 
@@ -1107,7 +1122,7 @@ test("pending death snapshots exclude players seen after death", function()
     T.HandleEvent("PLAYER_TARGET_CHANGED")
     T.HandleEvent("PLAYER_DEAD")
     now = now + 2 T.Poll()
-    assert(total("probableDeaths") == 1 and GL.Get("guid:" .. first.guid))
+    assert(total("deaths") == 1 and GL.Get("guid:" .. first.guid))
     assert(GL.Get(GL.Identity("target")) == nil)
 end)
 
@@ -1119,8 +1134,8 @@ test("GUID promotion does not duplicate aggression or fatal participation", func
     unitData.nameplate1 = e T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
     now = now + 1 T.Poll()
     T.HandleEvent("PLAYER_DEAD")
-    assert(count() == 1 and total("probableDeaths") == 1)
-    assert(total("probableAggressions") <= 1, "promotion cannot duplicate a health-loss observation")
+    assert(count() == 1 and total("deaths") == 1)
+    assert(total("aggressions") <= 1, "promotion cannot duplicate a health-loss observation")
 end)
 
 test("explicit nonlethal damager replaces targeting-only death candidates", function()
@@ -1129,8 +1144,8 @@ test("explicit nonlethal damager replaces targeting-only death candidates", func
     cle("SPELL_DAMAGE", attacker, unitData.player, -1, 64)
     T.HandleEvent("PLAYER_DEAD")
     local record = GL.Get("guid:" .. attacker.guid)
-    assert(record and record.pvp.aggressions == 1 and record.pvp.probableDeaths == 1)
-    assert(GL.Get("guid:" .. selected.guid) == nil and total("deaths") == 0)
+    assert(record and record.pvp.aggressions == 1 and record.pvp.deaths == 1)
+    assert(GL.Get("guid:" .. selected.guid) == nil and total("deaths") == 1)
 end)
 
 test("public recap identifies three unseen attackers and only the lethal source", function()
@@ -1139,7 +1154,7 @@ test("public recap identifies three unseen attackers and only the lethal source"
     unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
     T.HandleEvent("PLAYER_DEAD") T.Poll()
     assert(count() == 3 and total("aggressions") == 3)
-    assert(total("deaths") == 1 and total("probableDeaths") == 2)
+    assert(total("deaths") == 3)
     assert(GL.Get("guid:" .. c.guid).pvp.deaths == 1)
     local batch
     for _, record in pairs(GL.db.players) do
@@ -1148,7 +1163,7 @@ test("public recap identifies three unseen attackers and only the lethal source"
         end
     end
     now = now + 3 T.Poll()
-    assert(total("aggressions") == 3 and total("deaths") + total("probableDeaths") == 3)
+    assert(total("aggressions") == 3 and total("deaths") == 3)
 end)
 
 test("fractional recap timestamps are valid health-damage evidence", function()
@@ -1166,7 +1181,7 @@ test("delayed recap supersedes frozen guesses before the timeout", function()
     now = now + 1
     local actual = opponent("delayed") rows[1] = recapRow(actual, 0)
     T.Poll()
-    assert(total("deaths") == 1 and total("probableDeaths") == 0)
+    assert(total("deaths") == 1)
     assert(GL.Get("guid:" .. actual.guid) and GL.Get("guid:" .. guess.guid) == nil)
 end)
 
@@ -1201,7 +1216,7 @@ test("a previous recap cannot be reused for a rapidly following death", function
     T.HandleEvent("PLAYER_DEAD")
     now = now + 2 T.Poll()
     assert(GL.Get("guid:" .. a.guid).pvp.deaths == 1)
-    assert(GL.Get("guid:" .. b.guid).pvp.probableDeaths == 1 and total("deaths") == 1)
+    assert(GL.Get("guid:" .. b.guid).pvp.deaths == 1 and total("deaths") == 2)
 end)
 
 test("stale future or unavailable recap never fabricates a death", function()
@@ -1214,7 +1229,7 @@ test("stale future or unavailable recap never fabricates a death", function()
     fixture() local e = start()
     C_DeathRecap = { GetRecapEvents = function() error("temporarily unavailable") end }
     T.HandleEvent("PLAYER_DEAD") now = now + 2 T.Poll()
-    assert(GL.Get("guid:" .. e.guid).pvp.probableDeaths == 1 and total("deaths") == 0)
+    assert(GL.Get("guid:" .. e.guid).pvp.deaths == 1 and total("deaths") == 1)
 end)
 
 test("secret recap fields and collections are safely unavailable", function()
@@ -1256,13 +1271,23 @@ test("recap resource durability healing and zero damage cannot be fatal proof", 
     end
 end)
 
-test("fatal NPC recap preserves player aggression without attributing PvP death", function()
+test("a full recap name identifies a known hostile in mixed combat without source flags", function()
+    local foe = start()
+    local npc = {guid="Creature-1-wolf", name="Loup"}
+    local row = recapRow(foe)
+    row.sourceFlags, row.sourceGUID = nil, nil
+    recapAPI({row, recapRow(npc, 0)})
+    T.HandleEvent("PLAYER_DEAD")
+    assert(total("deaths") == 1 and total("aggressions") == 1)
+end)
+
+test("fatal NPC recap credits the hostile player who dealt damage", function()
     local e = start()
     local npc = { guid = "Creature-1-wolf", name = "Loup" }
     recapAPI({ recapRow(e), recapRow(npc, 0) })
     T.HandleEvent("PLAYER_DEAD")
     assert(total("aggressions") == 1 and count() == 1)
-    assert(total("probableDeaths") == 0 and total("deaths") == 0)
+    assert(total("deaths") == 1)
     fixture() recapAPI({ recapRow(npc, 0) }) T.HandleEvent("PLAYER_DEAD")
     assert(count() == 0, "a PvE-only recap never creates a player record")
 end)
@@ -1342,8 +1367,8 @@ test("hostile pet independently targeting the player supports only a probable de
     unitData.nameplate1, unitData.target = nil, nil -- captured before both leave
     T.HandleEvent("PLAYER_DEAD")
     local r = assert(GL.Get("guid:" .. owner.guid))
-    assert(count() == 1 and r.pvp.probableDeaths == 1 and r.pvp.deaths == 0)
-    assert(r.pvp.probableAggressions == 1 and r.history[1].evidence:find("familier", 1, true))
+    assert(count() == 1 and r.pvp.deaths == 1)
+    assert(r.pvp.aggressions == 1 and r.history[1].evidence:find("familier", 1, true))
 end)
 
 test("unknown pet, recycled tooltip, secret owner and friendly pets never accuse a nearby hunter", function()
@@ -1377,10 +1402,10 @@ test("explicit CLE fatal source stays primary and recap cannot duplicate aggress
     rows[1], rows[2] = recapRow(a), recapRow(b, 0)
     T.Poll()
     assert(GL.Get("guid:" .. a.guid).pvp.deaths == 1)
-    assert(GL.Get("guid:" .. b.guid).pvp.probableDeaths == 1 and total("deaths") == 1)
+    assert(GL.Get("guid:" .. b.guid).pvp.deaths == 1 and total("deaths") == 2)
     assert(total("aggressions") == 2, "CLE and recap report the same aggression once")
     cle("SPELL_DAMAGE", a, unitData.player, 0, 64) T.HandleEvent("PLAYER_DEAD")
-    assert(total("deaths") + total("probableDeaths") == 2 and total("aggressions") == 2)
+    assert(total("deaths") == 2 and total("aggressions") == 2)
 end)
 
 test("world seed observes existing plates when combat starts after login", function()
@@ -1391,7 +1416,7 @@ test("world seed observes existing plates when combat starts after login", funct
     T.HandleEvent("PLAYER_ENTERING_WORLD")
     assert(count() == 0)
     T.HandleEvent("PLAYER_REGEN_DISABLED") T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 2)
+    assert(total("deaths") == 2)
 end)
 
 test("reload while in combat seeds visible attackers without a new regen event", function()
@@ -1399,7 +1424,7 @@ test("reload while in combat seeds visible attackers without a new regen event",
     unitData.player.combat = true unitData.nameplate1 = opponent("reload")
     C_NamePlate = { GetNamePlates = function() return { { namePlateUnitToken = "nameplate1" } } end }
     T.HandleEvent("PLAYER_ENTERING_WORLD") T.HandleEvent("PLAYER_DEAD")
-    assert(total("probableDeaths") == 1)
+    assert(total("deaths") == 1)
 end)
 
 test("resurrection and world changes cancel a pending death batch", function()
@@ -1409,7 +1434,8 @@ test("resurrection and world changes cancel a pending death batch", function()
         unitData.player.dead = false T.HandleEvent(event)
         rows[1] = recapRow(e, 0)
         now = now + 2 T.Poll()
-        assert(count() == 0, event .. " must cancel the old pending death")
+        local expected = (event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST") and 1 or 0
+        assert(total("deaths") == expected, event .. " handles the frozen encounter exactly once")
     end
 end)
 
@@ -1420,11 +1446,11 @@ test("ghost alive event does not rearm but real resurrection permits a new batch
     unitData.target = opponent("after-ghost")
     T.HandleEvent("PLAYER_TARGET_CHANGED") T.HandleEvent("PLAYER_DEAD")
     now = now + 2 T.Poll()
-    assert(total("probableDeaths") == 1 and GL.Get("guid:" .. a.guid))
+    assert(total("deaths") == 1 and GL.Get("guid:" .. a.guid))
     unitData.player.dead = false T.HandleEvent("PLAYER_UNGHOST")
     local b = start(opponent("resurrected")) T.HandleEvent("PLAYER_DEAD")
     now = now + 2 T.Poll()
-    assert(total("probableDeaths") == 2 and GL.Get("guid:" .. b.guid))
+    assert(total("deaths") == 2 and GL.Get("guid:" .. b.guid))
 end)
 
 test("reload while already dead cannot blame newly visible attackers", function()
@@ -1440,7 +1466,7 @@ test("manual opinions override fatal inference but guild friendship does not", f
     for _, manual in ipairs({ "friend", "warning" }) do
         fixture() start() local id = GL.Identity("target") GL.SetReaction(id, manual)
         T.HandleEvent("PLAYER_DEAD")
-        assert(GL.Relation(GL.Get(id)) == manual and GL.Get(id).pvp.probableDeaths == 1)
+        assert(GL.Relation(GL.Get(id)) == manual and GL.Get(id).pvp.deaths == 1)
     end
     fixture() start() local automatic = GL.SetReaction(GL.Identity("target"), "neutral")
     T.HandleEvent("PLAYER_DEAD")
@@ -1490,7 +1516,7 @@ test("unknown and old guild histories are never retroactively assigned", functio
     local record = GL.Get("guid:" .. e.guid)
     local death = record.history[#record.history]
     assert(death.guild == nil and death.guildSource == "unknown")
-    local legacy = { kind = "death", confidence = "probable", time = 900 }
+    local legacy = { kind = "death", confidence = "confirmed", time = 900 }
     record.history[#record.history + 1] = legacy
     unitData.target = e e.guild = "Later Guild" now = now + 30
     T.HandleEvent("PLAYER_GUILD_UPDATE", "target")
@@ -1540,7 +1566,7 @@ test("all PvP event types snapshot guilds and multiple attackers share a death i
     local da, db = ra.history[#ra.history], rb.history[#rb.history]
     assert(da.eventId == db.eventId and da.guild == db.guild, "future guild counts can dedupe a shared death")
     assert(da.guildSource == "observed" and ra.history[1].guild == "One Guild")
-    assert(da.confidence == "confirmed" and db.confidence == "probable")
+    assert(da.confidence == "confirmed" and db.confidence == "confirmed")
     unitData.player.dead = false T.HandleEvent("PLAYER_ALIVE")
     a.guild = "Other Guild" now = now + 3
     cle("PARTY_KILL", unitData.player, a)
@@ -1570,7 +1596,7 @@ for _, kind in ipairs({ "pvp", "arena" }) do
         T.HandleEvent("GROUP_ROSTER_UPDATE")
         assert(count() == 1 and #record.history == historyCount and record.groupCount == 0,
             "instance activity must not add players or alter existing memories")
-        assert(total("deaths") + total("probableDeaths") + total("kills") + total("probableKills") == 0)
+        assert(total("deaths") + total("kills") == 0)
         instanceType, unitData.player.dead, enemy.dead = "none", false, false
         T.HandleEvent("PLAYER_ENTERING_WORLD")
         now = now + 3
@@ -1633,7 +1659,7 @@ test("recap context attributes multiple pets to one owner and omits unobserved h
     T.HandleEvent("PLAYER_DEAD")
     local h = assert(GL.Get("guid:" .. hunter.guid)).history
     assert(h[1].combat.pet and h[2].combat.pet and h[2].combat.opponents == 1)
-    assert(not h[2].combat.healthPct and not h[2].combat.playerLevel and not h[2].combat.opponentLevel)
+    assert(not h[2].combat.healthPct and h[2].combat.playerLevel == 34 and not h[2].combat.opponentLevel)
 end)
 
 test("protected health and unknown levels produce no guessed fight context", function()

@@ -176,3 +176,8 @@ f.scripts.OnMouseDown(f)
 assert(f.raised > raised and f.scripts.OnDragStart, "click raises window without removing dragging")
 assert(#GL.errors == 0, "guild callbacks must not silently error")
 print("PASS guild_ui: immutable menu guilds, exact names/realms, notes/validation/drafts, paged management, manual priority, macro safety, window stacking.")
+
+GL.ShowGuilds({guild="Test", realm="CAMWOWEU5Realm2PvP"})
+assert(f.realm:GetText() == "Royaume 2 · Joueur contre joueur · Europe 5")
+click(childButton(f, "Amie"))
+assert(GL.GetGuildRule("Test", "CAMWOWEU5Realm2PvP").reaction == "friend")
