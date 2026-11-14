@@ -604,7 +604,7 @@ function D.Tooltip(tooltip)
         tooltip:AddLine(L("Agressions") .. " : " .. (pvp.aggressions or 0), 1, 0.6, 0.1, true)
     end
     if (pvp.kills or 0) + (pvp.deaths or 0) > 0 then
-        tooltip:AddLine(L("PvP confirmé : %d victoire(s), %d mort(s)"):format(pvp.kills or 0, pvp.deaths or 0), 0.85, 0.85, 0.85, true)
+        tooltip:AddLine(L("PvP : %d victoire(s), %d mort(s)"):format(pvp.kills or 0, pvp.deaths or 0), 0.85, 0.85, 0.85, true)
     end
 end
 

@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON, private = ...
-GrudgeLedger = { version = "0.10.3", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.10.4", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local translations = private and private.translations
@@ -124,6 +124,10 @@ end
 function GL.ContainsControlOrMarkup(value)
     return value:find("[|%z\1-\31\127]") ~= nil or value:find("\194[\128-\159]") ~= nil
 end
+function GL.ValidLevel(value)
+    local n = GL.Clean(value, "number")
+    return n and n >= 1 and n <= 1000 and n == math.floor(n) and n or nil
+end
 local function cleanName(value)
     value = GL.Clean(value, "string")
     if not value or #value > 160 or GL.ContainsControlOrMarkup(value) then return nil end
@@ -184,7 +188,7 @@ function GL.Identity(unit, reuseObservation)
     local sex = GL.Safe(UnitSex, unit)
     identity.sex = (sex == 2 or sex == 3) and sex or nil
     identity.faction = GL.Clean(GL.Safe(UnitFactionGroup, unit), "string")
-    identity.level = GL.Clean(GL.Safe(UnitLevel, unit), "number")
+    identity.level = GL.ValidLevel(GL.Safe(UnitLevel, unit))
     if type(GetGuildInfo) == "function" then
         local ok, guild, rank, rankIndex, guildRealm = pcall(GetGuildInfo, unit)
         guild = ok and cleanName(guild) or nil
@@ -379,6 +383,7 @@ local function merge(provisional, record)
             a.seen[character] = math.max(a.seen[character] or 0, seen)
         end
     end
+    record.level = GL.ValidLevel(record.level) or GL.ValidLevel(provisional.level)
     if provisional.guild and (not record.guild or (provisional.guildSeenAt or 0) > (record.guildSeenAt or 0)) then
         record.guild, record.realm, record.guildSeenAt = provisional.guild, provisional.realm, provisional.guildSeenAt
     end
@@ -497,7 +502,7 @@ function GL.Remember(identity)
     record.faction = cleanName(identity.faction) or record.faction
     local sex = GL.Clean(identity.sex, "number")
     if sex == 2 or sex == 3 then record.sex = sex end
-    record.level = GL.Clean(identity.level, "number") or record.level
+    record.level = GL.ValidLevel(identity.level) or GL.ValidLevel(record.level)
     local previousGuild, previousRealm = record.guild, record.realm
     record.realm = cleanName(identity.realm) or record.realm
     local guild = cleanName(identity.guild)
@@ -605,6 +610,15 @@ local function indexOpeningEvidence(proof, entry)
     proof[entry.actorGUID] = actor
     if entry.kind == "death" then actor.firstDeath = math.min(actor.firstDeath or entry.time, entry.time)
     elseif type(entry.encounterId) == "string" then actor.openings[entry.encounterId] = entry end
+end
+local function withLevels(combat, identity, record)
+    local player = combat and combat.playerLevel or GL.ValidLevel(GL.Safe(UnitLevel, "player"))
+    local opponent = combat and combat.opponentLevel or (identity ~= record and GL.ValidLevel(identity.level))
+    if player or opponent then
+        combat = combat or {}
+        combat.playerLevel, combat.opponentLevel = player, opponent or nil
+    end
+    return combat
 end
 local function history(record, kind, extra)
     local entry = extra or {}
@@ -935,7 +949,7 @@ function GL.RecordOpening(identity, opener, hadGrudge, encounterId)
     local previous = openingProof(record)[actor]
     if previous and previous.openings[encounterId] then return previous.openings[encounterId] end
     local at = GL.Now()
-    local event = history(record, "opening", {actorGUID=actor, actorName=name, time=at, opener=opener,
+    local event = history(record, "opening", {actorGUID=actor, actorName=name, time=at, opener=opener, combat=withLevels(nil, identity, record),
         hadGrudge=hadGrudge, encounterId=encounterId, priorDeath=previous and previous.firstDeath and previous.firstDeath < at or false})
     GL.Emit("CHANGED", record, "opening")
     return event
@@ -983,7 +997,7 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat)
     local field = pvpFields[kind][confidence]
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
-    local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, combat = combatContext(combat) })
+    local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, combat = withLevels(combatContext(combat), identity, record) })
     GL.Emit("CHANGED", record)
     return record, event
 end
@@ -998,7 +1012,7 @@ function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     local field = pvpFields.aggression[confidence]
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
-    history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId, combat = combatContext(combat) })
+    history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId, combat = withLevels(combatContext(combat), identity, record) })
     GL.Emit("CHANGED", record)
     return record
 end
@@ -1129,7 +1143,6 @@ local function addEventText(parts, event)
     end
     parts[#parts + 1] = searchKinds[event.kind]
     if event.reaction then parts[#parts + 1] = searchRelations[event.reaction] end
-    if event.confidence == "confirmed" then parts[#parts + 1] = L("Confirmé") end
     if event.evidence and GL.LocalizeEvidence then
         local display = GL.LocalizeEvidence(event)
         if display ~= event.evidence then parts[#parts + 1] = display end

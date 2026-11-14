@@ -36,7 +36,7 @@ assert(not GrudgeLedgerCorrections, "selecting the PvP filter does not prompt or
 click(history.rows[1].details)
 local f = GrudgeLedgerCorrections
 assert(f:IsShown() and f.topLevel and f.raised > 0)
-assert(f.certainty:GetText() == "Confirmé" and f.proof:GetText():find("||cff00ff00",1,true))
+assert(f.certainty:GetText() == "JcJ" and f.proof:GetText():find("||cff00ff00",1,true))
 assert(f.who:GetText() == record.fullName and f.event == latest and not latest.voided)
 click(f.keep) assert(not f:IsShown() and not latest.voided, "Conserver leaves the event and statistics unchanged")
 click(history.next) click(history.next)

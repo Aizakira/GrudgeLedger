@@ -17,6 +17,12 @@ local identity = GL.Identity("target")
 local sample = {healthPct = 44, playerLevel = 34, opponentLevel = 39, opponents = 2, pet = true, pve = true, ignored = {}}
 local record = GL.RecordPvP(identity, "death", "confirmed", "PRIVATE technical evidence: UNIT_DIED", "death", sample)
 local first = record.history[1]
+identity.level = -1
+GL.Remember(identity)
+assert(record.level == 42, "an unreadable level must not erase the last sighting")
+identity.level = 43
+GL.Remember(identity)
+assert(first.combat.opponentLevel == 39 and first.combat.playerLevel == 34, "later levels must not rewrite a fight")
 sample.healthPct = 1
 assert(first.combat.healthPct == 44 and first.combat.ignored == nil, "persist a private copy of observed scalar fields")
 assert(first.questID == 123 and first.questTitle == questTitle and first.subzone == "Quartier commerçant")
@@ -64,7 +70,7 @@ local function text(tab)
     return table.concat(lines,"\n")
 end
 local rendered = text()
-assert(rendered:find("Familier impliqué · 2 adversaires observés", 1, true))
+assert(rendered:find("Niveaux : vous 34, adversaire 39 (+5) · Familier impliqué", 1, true))
 for _, expected in ipairs({
     "Vous a tué", "Vous l'avez vaincu",
     "Vous a infligé des dégâts", "Geste demandé : Bisou", "Geste demandé : Crachat",

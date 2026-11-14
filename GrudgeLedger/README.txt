@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.10.3
+GRUDGE LEDGER — 0.10.4
+
+Le Bilan affiche les victoires et les morts. Les royaumes Forever sont explicités. Chaque nouveau combat conserve les niveaux disponibles à ce moment-là.
 
 La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde ouvert, même si une créature porte le dernier coup. Les anciens compteurs sont réunis à la mise à jour. La résurrection réactive les alertes. Le journal conserve les portraits récemment vus pendant la session et affiche votre honneur enregistré dans la synthèse. Le gain adverse est inconnu.
 

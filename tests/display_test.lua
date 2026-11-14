@@ -310,7 +310,7 @@ GL.RecordPvP(delayed, "kill", "confirmed", "combat log", "test-confirmed")
 GL.AddNote(delayed, "Attention à lui")
 tooltipUnit = "nameplate3"
 tooltipCallback(GameTooltip)
-assert(not GL.Settings().compactTooltips and GameTooltip.lines[#GameTooltip.lines][1]:find("PvP confirmé", 1, true))
+assert(not GL.Settings().compactTooltips and GameTooltip.lines[#GameTooltip.lines][1]:find("PvP :", 1, true))
 GL.SetSetting("compactTooltips", true)
 GameTooltip.hooks.OnTooltipCleared(GameTooltip)
 GameTooltip.lines = {}
@@ -328,7 +328,7 @@ tooltipCallback(GameTooltip)
 assert(#GameTooltip.lines == count)
 local text = ""
 for _, line in ipairs(GameTooltip.lines) do text = text .. tostring(line[1]) end
-assert(text:find("Attention à lui") and not text:find("PvP probable") and text:find("PvP confirmé"))
+assert(text:find("Attention à lui") and not text:find("PvP probable") and text:find("PvP :"))
 shifted = false
 D.OnEvent(nil, "MODIFIER_STATE_CHANGED", "LSHIFT")
 assert(#GameTooltip.lines < count and GameTooltip.lines[#GameTooltip.lines][1]:find("Maj", 1, true),

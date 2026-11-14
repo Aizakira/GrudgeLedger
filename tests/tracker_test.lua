@@ -1659,7 +1659,7 @@ test("recap context attributes multiple pets to one owner and omits unobserved h
     T.HandleEvent("PLAYER_DEAD")
     local h = assert(GL.Get("guid:" .. hunter.guid)).history
     assert(h[1].combat.pet and h[2].combat.pet and h[2].combat.opponents == 1)
-    assert(not h[2].combat.healthPct and not h[2].combat.playerLevel and not h[2].combat.opponentLevel)
+    assert(not h[2].combat.healthPct and h[2].combat.playerLevel == 34 and not h[2].combat.opponentLevel)
 end)
 
 test("protected health and unknown levels produce no guessed fight context", function()

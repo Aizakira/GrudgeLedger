@@ -10,7 +10,7 @@ local factionFilter = "all"
 local notesOnly = false
 local listSort, listDetail = "recent", "identity"
 local sortChoices = { { "recent", L("Dernière interaction") }, { "name", L("Nom") }, { "reputation", L("Réputation") }, { "kills", L("Victoires") }, { "deaths", L("Morts") }, { "encounters", L("Nb de rencontres") } }
-local detailChoices = { { "identity", L("Identité") }, { "guild", L("Guilde") }, { "pvp", L("PvP") }, { "notes", L("Notes") } }
+local detailChoices = { { "identity", L("Identité") }, { "guild", L("Guilde") }, { "pvp", L("JcJ") }, { "notes", L("Notes") } }
 local drafts = {}
 local guildDrafts = {}
 local relationNames = { friend = L("Ami"), warning = L("Méfiance"), enemy = L("Ennemi"), neutral = L("Neutre") }
@@ -226,22 +226,28 @@ local function combatDetails(event, compact)
     local c = event.combat
     if type(c) ~= "table" then return end
     local parts = {}
+    if type(c.playerLevel) == "number" and type(c.opponentLevel) == "number" then
+        local difference = c.opponentLevel - c.playerLevel
+        local levels = L("Niveaux : vous ") .. c.playerLevel .. L(", adversaire ") .. c.opponentLevel
+        parts[#parts + 1] = levels .. (difference ~= 0 and (" (%+d)"):format(difference) or "")
+    elseif type(c.opponentLevel) == "number" then parts[#parts + 1] = L("Adversaire de niveau ") .. c.opponentLevel
+    elseif type(c.playerLevel) == "number" then parts[#parts + 1] = L("Votre niveau : %d"):format(c.playerLevel) end
     if c.pet then parts[#parts + 1] = L("Familier impliqué") end
     if type(c.opponents) == "number" and c.opponents > (compact and 1 or 0) then
         parts[#parts + 1] = counted(c.opponents, "adversaire observé", "adversaires observés")
     end
     if c.pve then parts[#parts + 1] = compact and L("Monstre engagé") or L("Monstre engagé pendant le combat") end
     if type(c.healthPct) == "number" then parts[#parts + 1] = (compact and L("Vie au premier signal : ") or L("Votre vie au premier signal JcJ : ")) .. c.healthPct .. " %" end
-    if type(c.playerLevel) == "number" and type(c.opponentLevel) == "number" then
-        local difference = c.opponentLevel - c.playerLevel
-        local levels = L("Niveaux : vous ") .. c.playerLevel .. L(", adversaire ") .. c.opponentLevel
-        parts[#parts + 1] = levels .. (difference ~= 0 and (" (%+d)"):format(difference) or "")
-    elseif type(c.opponentLevel) == "number" then parts[#parts + 1] = L("Adversaire de niveau ") .. c.opponentLevel end
     if #parts > 0 then return table.concat(parts, compact and " · " or "\n", 1, compact and math.min(2, #parts) or #parts) end
 end
 local function realmLabel(realm)
     local region, shard, rules = (realm or ""):match("^CAMWOW%s*([%u]+%d*)%s*Realm%s*(%d+)%s*(%a*)$")
-    if region then return region .. " · " .. shard .. (rules ~= "" and " " .. rules or "") end
+    if region then
+        local area, group = region:match("^(%a+)(%d*)$")
+        local mode = ({pvp = L("Joueur contre joueur"), pve = L("Joueur contre environnement")})[rules:lower()] or rules
+        local label = L("Royaume %s"):format(shard) .. (mode ~= "" and " · " .. mode or "")
+        return label .. " · " .. (area == "EU" and L("Europe") or area) .. (group ~= "" and " " .. group or "")
+    end
     return plain(realm)
 end
 local gestureNames = {
@@ -322,6 +328,14 @@ end
 local function currentRecord() return selectedKey and GL.Get(selectedKey) end
 local refresh
 
+local function selectedRealm(f)
+    local text = f.realm:GetText()
+    return f.realmId and text == realmLabel(f.realmId) and f.realmId or text
+end
+local function selectRealm(f, realm)
+    f.realmId = realm
+    f.realm:SetText(realm and realmLabel(realm) or "")
+end
 local function guildDraftKey(name, realm)
     name, realm = GL.Clean(name, "string"), GL.Clean(realm, "string")
     realm = realm and realm:match("^%s*(.-)%s*$")
@@ -344,7 +358,7 @@ local function refreshGuilds()
             local c = colors[rule.reaction]
             row.name:SetText(plain(rule.name))
             row.name:SetTextColor(c[1], c[2], c[3])
-            row.bg:SetAlpha(f.name:GetText() == rule.name and f.realm:GetText() == rule.realm and 1 or 0.2)
+            row.bg:SetAlpha(f.name:GetText() == rule.name and selectedRealm(f) == rule.realm and 1 or 0.2)
             row:Show()
         else row.rule = nil row:Hide() end
     end
@@ -352,8 +366,8 @@ local function refreshGuilds()
     if #rules == 0 then f.empty:Show() else f.empty:Hide() end
     f.previous:SetEnabled(f.offset > 0)
     f.next:SetEnabled(f.offset + 9 < #rules)
-    local current = GL.GetGuildRule(f.name:GetText(), f.realm:GetText())
-    local key = guildDraftKey(f.name:GetText(), f.realm:GetText())
+    local current = GL.GetGuildRule(f.name:GetText(), selectedRealm(f))
+    local key = guildDraftKey(f.name:GetText(), selectedRealm(f))
     local saved = current and current.note or ""
     if key ~= f.draftKey then
         if f.draftKey then
@@ -419,7 +433,7 @@ function GL.ShowGuilds(identity)
         end
         f.status = label(f, "", nil, 288, -278, 345)
         local function save(reaction)
-            local rule = GL.SetGuildReaction(f.name:GetText(), reaction, f.note:GetText(), f.realm:GetText())
+            local rule = GL.SetGuildReaction(f.name:GetText(), reaction, f.note:GetText(), selectedRealm(f))
             if rule then
                 guildDrafts[guildDraftKey(rule.name, rule.realm)] = nil
                 f.status:SetText(L("Avis enregistré : ") .. relationNames[rule.reaction])
@@ -432,7 +446,7 @@ function GL.ShowGuilds(identity)
             f.reactions[reaction] = button(f, choice[1], 288 + ((i - 1) % 2) * 178, -312 - math.floor((i - 1) / 2) * 32, 165, function() save(reaction) end, true)
         end
         button(f, L("Enregistrer la note"), 288, -382, 343, function()
-            local rule = GL.GetGuildRule(f.name:GetText(), f.realm:GetText())
+            local rule = GL.GetGuildRule(f.name:GetText(), selectedRealm(f))
             save(rule and rule.reaction or "neutral")
         end)
         button(f, L("Guilde de la cible"), 288, -426, 343, function()
@@ -440,12 +454,12 @@ function GL.ShowGuilds(identity)
             if not target or not target.guild then f.status:SetText(L("Sélectionne un joueur dont la guilde est connue.")) return end
             GL.ShowGuilds(target)
         end)
-        f.realm:SetText(GL.Clean(GL.Safe(GetRealmName), "string") or "")
+        selectRealm(f, GL.Clean(GL.Safe(GetRealmName), "string"))
     end
     if identity and identity.guild then
         guildWindow.changingIdentity = true
         guildWindow.name:SetText(identity.guild)
-        guildWindow.realm:SetText(identity.realm or GL.Clean(GL.Safe(GetRealmName), "string") or "")
+        selectRealm(guildWindow, identity.realm or GL.Clean(GL.Safe(GetRealmName), "string"))
         guildWindow.changingIdentity = nil
     end
     guildWindow:Show()
@@ -491,7 +505,7 @@ local statisticsChoices = {
             { "grudge", L("Rancunes les plus fortes"), L("Tes ennemis et les personnes à surveiller, selon leur solde négatif actuel."), "point", L("Solde actuel"), L("Les rancunes restent tenaces : une mort pèse dix victoires. Un avis manuel ou de guilde peut aussi signaler un danger sans solde négatif.") },
             { "enemiesSeen", L("Menaces les plus recroisées"), L("Celles que vous avez rencontrées le plus souvent."), "rencontre", L("Rencontres"), encounterHelp },
             { "enemiesRecent", L("Menaces vues récemment"), L("Tes ennemis et les personnes à surveiller, du plus récemment aperçu au plus ancien."), "date", L("Dernière observation"), recentHelp },
-            { "aggressions", L("Le plus d'agressions"), L("Les joueurs avec le plus d'agressions confirmées enregistrées à ton encontre."), "agression", L("Agressions confirmées"), L("Nombre d'épisodes enregistrés, pas de coups reçus ni de fréquence horaire. Les suspicions sont exclues de ce classement.") },
+            { "aggressions", L("Le plus d'agressions"), L("Les joueurs avec le plus d'agressions enregistrées à ton encontre."), "agression", L("Agressions"), L("Nombre d'épisodes enregistrés, pas de coups reçus ni de fréquence horaire.") },
         } },
         { name = L("Amis"), entries = {
             { "friendsSeen", L("Amis les plus recroisés"), L("Tes amis actuels que tu as rencontrés le plus souvent."), "rencontre", L("Rencontres"), encounterHelp },
@@ -501,8 +515,8 @@ local statisticsChoices = {
             { "friendsOnline", L("Temps passé en groupe"), L("Les amis avec lesquels vous avez passé le plus de temps en groupe, tous deux en ligne."), "durée", L("Temps en groupe"), L("Les durées commencent lorsque le suivi observe les deux joueurs connectés. Les anciennes sessions et les champs de bataille sont exclus du calcul.") },
         } },
         { name = L("Combats"), entries = {
-            { "deaths", L("Ceux qui m'ont le plus tué"), L("Les joueurs auxquels le plus de tes morts sont attribuées avec confirmation."), "mort", L("Morts confirmées"), confirmedHelp },
-            { "kills", L("Adversaires les plus vaincus"), L("Les joueurs contre lesquels tu as le plus de victoires confirmées."), "victoire", L("Victoires confirmées"), confirmedHelp },
+            { "deaths", L("Ceux qui m'ont le plus tué"), L("Les joueurs auxquels le plus de tes morts sont attribuées."), "mort", L("Morts"), confirmedHelp },
+            { "kills", L("Adversaires les plus vaincus"), L("Les joueurs contre lesquels tu as le plus de victoires."), "victoire", L("Victoires"), confirmedHelp },
         } },
     },
     guilds = {
@@ -511,9 +525,9 @@ local statisticsChoices = {
             { "friends", L("Le plus d'amis"), L("Guildes réunissant le plus de membres que tu apprécies personnellement."), "ami", L("Amis personnels"), L("Dernière guilde connue des personnes de ton livre. Les relations héritées d'un avis global sur la guilde ne gonflent pas ce total.") },
         } },
         { name = L("Combats"), entries = {
-            { "deaths", L("Guildes qui m'ont le plus tué"), L("Morts confirmées, rattachées à la guilde connue au moment des faits."), "mort", L("Morts confirmées"), L("Une même mort n'est comptée qu'une fois par guilde impliquée. Les faits sans guilde connue restent non attribués.") },
-            { "kills", L("Guildes les plus vaincues"), L("Victoires confirmées contre les membres de ces guildes."), "victoire", L("Victoires confirmées"), L("Guilde mémorisée au moment du combat.") },
-            { "aggressions", L("Le plus d'agressions"), L("Agressions confirmées attribuées aux membres de ces guildes."), "agression", L("Agressions confirmées"), L("Guilde mémorisée lors des faits. Plusieurs membres peuvent participer à un même épisode ; les faits sans guilde restent non attribués.") },
+            { "deaths", L("Guildes qui m'ont le plus tué"), L("Morts, rattachées à la guilde connue au moment des faits."), "mort", L("Morts"), L("Une même mort n'est comptée qu'une fois par guilde impliquée. Les faits sans guilde connue restent non attribués.") },
+            { "kills", L("Guildes les plus vaincues"), L("Victoires contre les membres de ces guildes."), "victoire", L("Victoires"), L("Guilde mémorisée au moment du combat.") },
+            { "aggressions", L("Le plus d'agressions"), L("Agressions attribuées aux membres de ces guildes."), "agression", L("Agressions"), L("Guilde mémorisée lors des faits. Plusieurs membres peuvent participer à un même épisode ; les faits sans guilde restent non attribués.") },
         } },
         { name = L("Mes règles"), entries = {
             { "rules", L("Mes règles de guilde"), L("Les avis de guilde que vous avez enregistrés, par ordre alphabétique."), "avis", L("Avis de guilde"), L("Les avis individuels restent prioritaires. La fiche indique les exceptions à la règle choisie.") },
@@ -880,11 +894,11 @@ local function refreshJournal()
             control.record = item and item.record
             local deaths = key == "mostDeaths"
             control.name:SetText(item and plain(item.record.fullName)
-                or (deaths and L("Aucune mort confirmée") or L("Aucune victoire confirmée")))
+                or (deaths and L("Aucune mort") or L("Aucune victoire")))
             moveTo(control.name, item and 54 or 10, item and 27 or 36)
             control.name:SetWidth(item and 207 or 250)
-            control.detail:SetText(item and counted(item.value, deaths and "mort confirmée" or "victoire confirmée",
-                deaths and "morts confirmées" or "victoires confirmées") or "")
+            control.detail:SetText(item and counted(item.value, deaths and "mort" or "victoire",
+                deaths and "morts" or "victoires") or "")
             if item then identityIcons(control, item.record) else portraitRows[control] = nil end
             showIf(control.raceIcon, item ~= nil) showIf(control.classIcon, item ~= nil)
             control:SetEnabled(item ~= nil)
@@ -950,7 +964,7 @@ local function refreshJournal()
                     identityIcons(control, item.record)
                 end
             end
-            f.podium.empty:SetText(#stats.topDeaths == 0 and L("Aucun adversaire confirmé sur cette période.") or "")
+            f.podium.empty:SetText(#stats.topDeaths == 0 and L("Aucun adversaire sur cette période.") or "")
         end
         f.breakdownOffset = math.min(f.breakdownOffset, math.max(0, math.floor((#breakdown - 1) / #f.breakdownRows) * #f.breakdownRows))
         local corrected = 0
@@ -994,7 +1008,7 @@ local function refreshJournal()
         for key, recap in pairs(card.recaps) do
             local item = stats[key]
             recap.record = item and item.record
-            recap.name:SetText(item and plain(item.record.fullName) or L("Aucun adversaire confirmé"))
+            recap.name:SetText(item and plain(item.record.fullName) or L("Aucun adversaire"))
             recap.score:SetText(item and counted(item.value, key == "mostDeaths" and "mort" or "victoire") or "—")
             if item then identityIcons(recap, item.record) end
             showIf(recap.raceIcon, item ~= nil) showIf(recap.classIcon, item ~= nil) recap:SetEnabled(item ~= nil)
@@ -1002,16 +1016,16 @@ local function refreshJournal()
         card.honor:SetText(honorTotal(stats))
         card.coverage:SetText((stats.events > 0 or stats.honorAwards > 0) and counted(stats.events, "fait de combat", "faits de combat") .. L(" · Hors champs de bataille et arènes.") or L("Aucun fait PvP conservé pour cette année et cette sélection."))
         local text = table.concat({ "Grudge Ledger · " .. period .. " · " .. scope,
-            L("Confirmés : ") .. counted(stats.kills, "victoire") .. ", " .. counted(stats.deaths, "mort") .. ", " .. counted(stats.aggressions, "agression") .. ".",
+            L("Bilan : ") .. counted(stats.kills, "victoire") .. ", " .. counted(stats.deaths, "mort") .. ", " .. counted(stats.aggressions, "agression") .. ".",
             honorTotal(stats) }, "\n")
         if text ~= f.annualText then f.cardCopy:Hide() end
         f.annualText = text
     elseif f.mode == "story" then
         local story = {
-            L("Vous avez remporté ") .. counted(stats.kills, "victoire confirmée", "victoires confirmées") .. L(" et subi ") .. counted(stats.deaths, "mort confirmée", "morts confirmées") .. ".", "" }
-        if stats.aggressions > 0 then story[#story + 1] = L("Le registre compte aussi ") .. counted(stats.aggressions, "agression confirmée", "agressions confirmées") .. ".\n" end
-        if stats.mostDeaths then story[#story + 1] = L("Votre némésis sur cette période : ") .. plain(stats.mostDeaths.record.fullName) .. " (" .. counted(stats.mostDeaths.value, "mort confirmée", "morts confirmées") .. ").\n" end
-        if stats.mostKilled then story[#story + 1] = L("Votre adversaire le plus vaincu : ") .. plain(stats.mostKilled.record.fullName) .. " (" .. counted(stats.mostKilled.value, "victoire confirmée", "victoires confirmées") .. ").\n" end
+            L("Vous avez remporté ") .. counted(stats.kills, "victoire", "victoires") .. L(" et subi ") .. counted(stats.deaths, "mort", "morts") .. ".", "" }
+        if stats.aggressions > 0 then story[#story + 1] = L("Le registre compte aussi ") .. counted(stats.aggressions, "agression", "agressions") .. ".\n" end
+        if stats.mostDeaths then story[#story + 1] = L("Votre némésis sur cette période : ") .. plain(stats.mostDeaths.record.fullName) .. " (" .. counted(stats.mostDeaths.value, "mort", "morts") .. ").\n" end
+        if stats.mostKilled then story[#story + 1] = L("Votre adversaire le plus vaincu : ") .. plain(stats.mostKilled.record.fullName) .. " (" .. counted(stats.mostKilled.value, "victoire", "victoires") .. ").\n" end
         if (stats.events or 0) == 0 then
             story = stats.honorAwards > 0 and {} or { L("Le récit de cette période reste à écrire."), "", L("Aucun fait PvP comptabilisé dans cette sélection. Essayez une période plus large ou un autre personnage.") }
         end
@@ -1053,8 +1067,8 @@ local function refreshJournal()
     local help = history and L("Ouvrez les détails d’un événement. Validez la recherche avec Entrée ou OK.")
         or annual and L("Cette carte résume les faits PvP conservés pour l’année et les personnages choisis.")
         or f.mode == "story" and L("Choisissez une période et les personnages dont vous souhaitez relire les combats.")
-        or f.dimension == "opponents" and L("Seules les morts confirmées figurent au podium. Cliquez sur un adversaire pour ouvrir sa fiche.")
-        or f.dimension == "initiative" and L("La rancune est celle du journal avant le combat. Une revanche est une victoire que vous engagez après une mort confirmée contre ce joueur avec le même personnage.")
+        or f.dimension == "opponents" and L("Seules les morts figurent au podium. Cliquez sur un adversaire pour ouvrir sa fiche.")
+        or f.dimension == "initiative" and L("La rancune est celle du journal avant le combat. Une revanche est une victoire que vous engagez après une mort contre ce joueur avec le même personnage.")
         or f.dimension == "zone" and L("Cliquez sur une zone pour lire ses sous-zones. Le temps mesure la présence en monde ouvert depuis l’activation, hors absences et instances.")
         or L("La race et la classe sont celles relevées au combat. « Inconnue » signifie que l'information manque.")
     if f.mode == "summary" and stats.honorAwards > 0 then help = honorDetail(stats) .. "\n\n" .. help end
@@ -1112,7 +1126,7 @@ function GL.ShowJournal(mode)
             f.search:SetText("") GL.ShowJournal("history")
         end, nil, true)
         f.metrics = {}
-        for i, entry in ipairs({ { "kills", L("Victoires confirmées") }, { "deaths", L("Morts confirmées") }, { "aggressions", L("Agressions confirmées") } }) do
+        for i, entry in ipairs({ { "kills", L("Victoires") }, { "deaths", L("Morts") }, { "aggressions", L("Agressions") } }) do
             local card = CreateFrame("Frame", nil, f.summary) card:SetPoint("TOPLEFT", 356 + (i - 1) * 185, -245) card:SetSize(176, 80)
             parchmentPanel(card)
             local icons = { "Interface\\Icons\\Ability_DualWield", "Interface\\Icons\\Ability_Rogue_FeignDeath", "Interface\\Icons\\Ability_Warrior_Challange" }
@@ -1146,7 +1160,7 @@ function GL.ShowJournal(mode)
         for _, group in ipairs({
             { x = 356, y = 449, title = L("Joueurs distincts"), {"victims", L("Vaincus")}, {"attackers", L("Vous ayant blessé")}, {"ratio", L("Vaincus / attaquants")} },
             { x = 356, y = 556, title = L("Premier dégât observé"), {"initiated", L("Porté par vous")}, {"responded", L("Porté par l’adversaire")} },
-            { x = 633, y = 449, title = L("Victoires confirmées"), {"initiatedKillsNoGrudge"}, {"initiatedKillsGrudge"},
+            { x = 633, y = 449, title = L("Victoires"), {"initiatedKillsNoGrudge"}, {"initiatedKillsGrudge"},
                 {"revengeKills"}, {"responseKills"}, {"unknownOpeningKills"} },
         }) do
             bookText(f.initiative, group.x, group.y, 271, 25, 16, group.title)
@@ -1232,7 +1246,7 @@ function GL.ShowJournal(mode)
             annual.metrics[entry[1]]:SetJustifyH("CENTER")
             bookText(annual, x, 142, 172, 25, 15, entry[2]):SetJustifyH("CENTER")
         end
-        bookText(annual, 14, 173, 520, 21, 12, L("Faits PvP confirmés"), theme.inkMuted):SetJustifyH("CENTER")
+        bookText(annual, 14, 173, 520, 21, 12, L("Faits PvP"), theme.inkMuted):SetJustifyH("CENTER")
         for i, entry in ipairs({ { "mostDeaths", L("Votre pire antagoniste") }, { "mostKilled", L("Votre adversaire le plus vaincu") } }) do
             local row = CreateFrame("Button", nil, annual)
             row:SetPoint("TOPLEFT", 16, -207 - (i - 1) * 58) row:SetSize(516, 54)
@@ -1310,13 +1324,13 @@ local function eventPlace(e)
 end
 
 local function eventCertainty(e)
-    if e.kind == "trade" then return L("Échange confirmé") end
+    if e.kind == "trade" then return L("Échange terminé") end
     if e.voidReason == "battleground" then return L("Champ de bataille · exclu") end
     if e.voided then return L("Annulé · exclu") end
     if e.kind == "honor" then return L("Honneur") end
     if e.kind == "opening" then return L("Initiative") end
     if e.playerConfirmedAt then return L("Témoignage") end
-    if pvpNames[e.kind] then return e.confidence == "confirmed" and L("Confirmé") or L("Certitude inconnue") end
+    if pvpNames[e.kind] then return L("JcJ") end
     return e.source == "emote" and L("Geste") or e.kind == "grouped" and L("Groupe") or L("Journal")
 end
 
@@ -1325,7 +1339,6 @@ local function honorRecipient(e)
 end
 
 local function eventAction(e)
-    if pvpNames[e.kind] and e.confidence ~= "confirmed" then return pvpNames[e.kind] .. L(" consignée") end
     local delta = type(e.delta) == "number" and e.delta ~= 0 and (L(" — avis ") .. (e.delta > 0 and "+" or "") .. e.delta) or ""
     return eventTitle(e) .. delta
 end
@@ -1335,7 +1348,7 @@ local function eventReason(e)
         return honorRecipient(e) .. "\n" .. L("Le jeu annonce votre gain d’honneur. Plusieurs joueurs peuvent recevoir de l’honneur pour le même combat.")
     end
     if e.voidReason == "other-killer" then return L("Le jeu a attribué le coup fatal à un autre joueur.") end
-    if e.playerConfirmedAt then return L("Coup fatal confirmé manuellement le %s."):format(stamp(e.playerConfirmedAt)) end
+    if e.playerConfirmedAt then return L("Coup fatal indiqué le %s."):format(stamp(e.playerConfirmedAt)) end
 end
 
 local function refreshCorrections()
@@ -1401,7 +1414,7 @@ inspectEvent = function(record, e)
     local combat = combatDetails(e)
     if combat then evidence[#evidence+1] = combat end
     if e.questTitle then evidence[#evidence+1] = L("Quête suivie : ") .. plain(e.questTitle) end
-    if e.guildSource and e.guild then evidence[#evidence+1] = L("Guilde mémorisée : ") .. plain(e.guild) .. (e.guildRealm and " (" .. plain(e.guildRealm) .. ")" or "") .. (e.guildSource == "last-known" and L(" — observée auparavant") or "") end
+    if e.guildSource and e.guild then evidence[#evidence+1] = L("Guilde mémorisée : ") .. plain(e.guild) .. (e.guildRealm and " (" .. realmLabel(e.guildRealm) .. ")" or "") .. (e.guildSource == "last-known" and L(" — observée auparavant") or "") end
     f.proof:SetText(#evidence > 0 and table.concat(evidence, "\n") or L("Aucune précision enregistrée."))
     f.body:SetHeight(math.max(77, f.proof:GetStringHeight() + 8)) f.scroll:SetVerticalScroll(0)
     local identity = f.identity
@@ -1602,7 +1615,7 @@ local function renderDetail()
         local banner = factionPortrait[record.faction]
         if banner then ledger.detailFaction:SetTexture(banner) end
         showIf(ledger.detailFaction, banner)
-        ledger.detailIdentity:SetText(plain(faction .. " · " .. race .. " · " .. class))
+        ledger.detailIdentity:SetText(plain(faction .. " · " .. race .. " · " .. class) .. (GL.ValidLevel(record.level) and " · " .. L("Niveau %d"):format(record.level) or ""))
         ledger.detailGuild:SetText(record.guild and plain(record.guild) or L("Guilde non renseignée"))
         ledger.raceIcon:Show() ledger.classIcon:Show() identityIcons(ledger, record)
         local duels = matchup and GL.ContactMatchup(record)
@@ -1612,7 +1625,7 @@ local function renderDetail()
                 local card = ledger.metrics[field]
                 local n = counts[field] or 0
                 local kills = field == "kills"
-                card.caption:SetText(matchup and (kills and L("Victoires confirmées") or L("Morts confirmées"))
+                card.caption:SetText(matchup and (kills and L("Victoires") or L("Morts"))
                     or (kills and L("Vous l’avez vaincu") or L("Vous a tué")))
                 card.value:SetText(matchup and tostring(n) or (n == 1 and L("1 fois") or L("%d fois"):format(n)))
             end
@@ -1678,7 +1691,7 @@ local function renderDetail()
                 for _, event in ipairs(duels.recent) do
                     lines[#lines + 1] = eventDate(event) .. "   ·   " .. (event.kind == "kill" and L("Victoire") or L("Défaite")) .. "   ·   " .. plain(eventPlace(event))
                 end
-            elseif confirmed > 0 then lines[#lines + 1] = "\n" .. L("Aucun combat confirmé et daté pour ce personnage.")
+            elseif confirmed > 0 then lines[#lines + 1] = "\n" .. L("Aucun combat daté pour ce personnage.")
             else lines[#lines + 1] = "\n" .. L("Aucune victoire ni défaite enregistrée avec ce joueur pour ce personnage.") end
         elseif tab == "history" then
             renderHistory(ledger.historyPage, record)
@@ -2116,7 +2129,7 @@ local function buildLedger()
             local faction, race, class = identityLabels(record)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(plain(record.fullName or record.name))
-            GameTooltip:AddLine(plain(faction .. " · " .. race .. " · " .. class))
+            GameTooltip:AddLine(plain(faction .. " · " .. race .. " · " .. class) .. (GL.ValidLevel(record.level) and " · " .. L("Niveau %d"):format(record.level) or ""))
             GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.archivedPortrait
                 and L("Portrait enregistré de l’Armurerie") or L("Icône générique"), 0.82, 0.78, 0.69)
             if record.guild then GameTooltip:AddLine(plain(record.guild)) end

@@ -177,6 +177,10 @@ local function observeOpponent(f, guid, level, live)
         f.opponentCount = f.opponentCount + 1
         f.combatants[guid] = true
     end
+    if live and not level and f.combatants[guid] == true then
+        local token = GL.Clean(GL.Safe(UnitTokenFromGUID, guid), "string")
+        if token and GL.Clean(GL.Safe(UnitGUID, token), "string") == guid then level = GL.ValidLevel(GL.Safe(UnitLevel, token)) end
+    end
     if level and level > 0 and level < math.huge then f.combatants[guid] = level end
 end
 
@@ -359,7 +363,7 @@ function T.Observe(unit, reuseObservation)
             local controlled = bool(UnitPlayerControlled, unit)
             local owner = controlled and petOwner(guid, unit, f)
             if owner and bool(UnitIsPVP, "player") == true then
-                observeOpponent(f, owner.guid, nil, true)
+                observeOpponent(f, owner.guid, owner ~= GL.Get(owner) and owner.level, true)
                 if f.unknownPets then f.unknownPets[guid] = nil end
                 f.petAttackers = f.petAttackers or {}
                 f.petAttackers[owner.key] = { owner = owner, at = GL.Now() }
@@ -792,7 +796,7 @@ local function observeOpening(sub, args, me, src, dst, srcName, dstName, srcFlag
     local event = GL.RecordOpening(identity, opener, hadGrudge, f.id)
     if event then
         f.opening = {guid = identity.guid, opener = opener, hadGrudge = hadGrudge, priorDeath = event.priorDeath}
-        observeOpponent(f, identity.guid, identity.level, true)
+        observeOpponent(f, identity.guid, identity ~= GL.Get(identity) and identity.level, true)
     end
 end
 
@@ -859,7 +863,7 @@ function T.OnCombatLog(...)
             -- Initial damage can arrive before PLAYER_REGEN_DISABLED.
             if not fight then fight = { enemies = {}, id = nextID("fight") } end
             f = fight
-            observeOpponent(f, identity.guid, nil, true)
+            observeOpponent(f, identity.guid, identity ~= GL.Get(identity) and identity.level, true)
             recordAggression(f, identity, "confirmed", viaPet and "Le journal de combat attribue les dégâts au familier de ce joueur."
                 or "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").", viaPet)
             local enemy = f.enemies[identity.key] or { identity = identity }
