@@ -4,7 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
-        ["Niv. %d"] = "Niv. %d",
+        ["Dernier niveau observé : %s"] = "Último nivel observado: %s",
         ["Vous · niv. %d"] = "Tú · niv. %d",
         ["Adversaire · niv. %d"] = "Rival · niv. %d",
         ["Portrait vu en jeu"] = "Retrato visto en el juego",
@@ -868,7 +868,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
-        ["Niv. %d"] = "Lv. %d",
+        ["Dernier niveau observé : %s"] = "Last observed level: %s",
         ["Vous · niv. %d"] = "You · lv. %d",
         ["Adversaire · niv. %d"] = "Opponent · lv. %d",
         ["Portrait vu en jeu"] = "Portrait seen in game",

@@ -1,6 +1,6 @@
-GRUDGE LEDGER — 0.10.5
+GRUDGE LEDGER — 0.10.6
 
-Nouveau : badge de niveau sous le portrait et niveaux côte à côte dans l’histoire. Un portrait visible peut être retenu pendant la session même si le journal est fermé.
+Nouveau : médaillon de niveau sur le coin inférieur gauche du portrait et niveaux côte à côte dans l’histoire. Un portrait visible peut être retenu pendant la session même si le journal est fermé.
 
 Le Bilan affiche les victoires et les morts. Les royaumes Forever sont explicités. Chaque nouveau combat conserve les niveaux disponibles à ce moment-là.
 

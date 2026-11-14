@@ -94,7 +94,7 @@ knownAtlas["raceicon128-dwarf-female"], knownAtlas["raceicon-dwarf-female"] = ni
 GL.ShowLedger(dwarf.key)
 assert(rowFor(record.key).raceIcon.atlas == "raceicon-dwarf-female" and f.raceIcon.atlas == "raceicon-dwarf-female",
     "both the index and the profile support the alternative native race atlas name")
-assert(f.detailIdentity:GetText() == "Alliance · Enano · Chamane" and f.levelBadge:IsShown() and f.levelBadge.caption:GetText() == "Niv. 42", "profile shares the cached native race label with the index")
+assert(f.detailIdentity:GetText() == "Alliance · Enano · Chamane" and f.levelBadge:IsShown() and f.levelBadge.caption:GetText() == "42", "profile shares the cached native race label with the index")
 click(f.relationFilter) assert(f.filters.friend.parent:IsShown())
 click(f.filters.friend) assert(not f.filters.friend.parent:IsShown())
 click(f.factionFilter) click(f.factions.Horde)
