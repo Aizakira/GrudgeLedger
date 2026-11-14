@@ -127,9 +127,9 @@ IsInRaid = savedRaid
 assert(#sent == before, "unknown/protected party context fails closed")
 
 resetView()
-local probable = person("probable")
+local probable = person("confirmed")
 see(probable)
-assert(#sent == before + 1 and sent[#sent]:find("probable", 1, true) and sent[#sent]:find("à confirmer", 1, true))
+assert(#sent == before + 1 and sent[#sent]:find("agression PvP enregistrée", 1, true))
 units.target = nil
 local aggression = person("confirmed", "aggression")
 now = now + 60

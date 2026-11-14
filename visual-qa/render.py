@@ -412,7 +412,7 @@ def main():
     g.QA_TextWidth=lambda text,size,face=None: font(size,face).getlength(plaintext(text))
     g.QA_TextLines=lambda text,width,size,face=None: len(wrap(text,width,size,face))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
-    views=["statistics", "statistics-small", "statistics-readable", "statistics-empty", "guild-rankings", "journal","journal-readable","journal-transparent","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","journal-readable-small-bottom","guilds","note","note-readable","settings","settings-readable","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
+    views=["statistics", "statistics-small", "statistics-readable", "statistics-empty", "guild-rankings", "journal","journal-readable","journal-transparent","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","journal-readable-small-bottom","guilds","note","note-readable","settings","settings-readable","corrections","diagnostic","minimap","minimap-large","alert","alert-after-death","alert-long-guild"]
     views += ["note-edit", "note-delete", "honor", "honor-readable", "honor-small", "honor-empty", "honor-year",
               "chronicle", "chronicle-readable", "chronicle-small", "chronicle-empty", "chronicle-notes"]
     views += ["statistics-encounters", "statistics-recent", "statistics-friends", "statistics-friends-recent",
@@ -427,7 +427,7 @@ def main():
               "honor-races", "honor-classes", "honor-zones", "honor-subzones", "honor-initiative",
               "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
               "guild-exceptions", "guild-rankings-largeprint-small",
-              "settings-appearance-markers", "settings-data-experimental", "alert-preview", "confirm-kill"]
+              "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
     if sys.argv[1:]: views = sys.argv[1:]

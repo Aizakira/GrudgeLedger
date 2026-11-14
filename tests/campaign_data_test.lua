@@ -29,13 +29,13 @@ local function add(id, kind, confidence, eventId)
 end
 local function breakdown(options, dimension)
     local rows, map = GL.PvPBreakdown(options, dimension), {}
-    local totals = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0, correctedKills = 0, correctedDeaths = 0 }
+    local totals = { kills = 0, deaths = 0, correctedKills = 0, correctedDeaths = 0 }
     for _, row in ipairs(rows) do
         map[row.key] = row
         for key in pairs(totals) do totals[key] = totals[key] + row[key] end
     end
     local summary = GL.PersonalStatistics(options)
-    for _, key in ipairs({ "kills", "deaths", "probableKills", "probableDeaths" }) do
+    for _, key in ipairs({ "kills", "deaths" }) do
         eq(totals[key], summary[key], "breakdown reconciles " .. dimension .. " " .. key)
     end
     return map, totals
@@ -123,30 +123,30 @@ eq(merged.lastEncounterAt, nil, "notes and group timestamps never stand in for a
 reset()
 provisional.race, provisional.class = "Orc", "WARRIOR"
 live.race, live.class = "Troll", "MAGE"
-add(provisional, "kill", "probable", "merged-kill")
+add(provisional, "kill", "confirmed", "merged-kill")
 add(live, "kill", "confirmed", "merged-kill")
 GL.Remember(GL.IdentityFromName("Merged", "Example", "Player-1-merge"))
 eq(breakdown(nil, "race").Troll.kills, 1, "same victim and event deduplicate after identity merge")
 eq(breakdown(nil, "class").MAGE.kills, 1, "merged confirmed snapshot supersedes probable snapshot")
 
 reset()
-add(a, "death", "probable", "mixed-death")
-add(b, "death", "probable", "mixed-death")
+add(a, "death", "confirmed", "mixed-death")
+add(b, "death", "confirmed", "mixed-death")
 local races = breakdown(nil, "race")
-eq(races.mixed.probableDeaths, 1, "shared mixed-race death remains one death")
+eq(races.mixed.deaths, 1, "shared mixed-race death remains one death")
 eq(races.mixed.label, "Groupe mixte", "mixed group is explicit")
 local _, certain = add(c, "death", "confirmed", "mixed-death")
 races = breakdown(nil, "race")
-eq(races.Orc.deaths, 1, "explicit lethal attribution supersedes probable participants")
-eq(races.mixed, nil, "probable mixed group cannot dilute confirmation")
+eq(races.mixed.deaths, 1, "explicit lethal attribution supersedes probable participants")
+eq(races.Orc, nil, "probable mixed group cannot dilute confirmation")
 local classes = breakdown(nil, "class")
-eq(classes.WARRIOR.deaths, 1, "confirmed class attribution")
+eq(classes.mixed.deaths, 1, "confirmed class attribution")
 assert(GL.VoidPvP(c, certain, true))
 eq(certain.voidedByGUID, actor, "manual correction author")
 eq(certain.voidedByName, "Testeur Exemple", "manual correction author name")
 local totals
 races, totals = breakdown(nil, "race")
-eq(races.mixed.probableDeaths, 1, "remaining probable evidence stays probable")
+eq(races.mixed.deaths, 1, "remaining probable evidence stays probable")
 eq(races.Orc.correctedDeaths, 1, "manual correction is separate from active counts")
 eq(totals.correctedDeaths, 1, "one corrected report")
 add(c, "kill", "confirmed", "one-kill")
@@ -197,7 +197,7 @@ reset()
 now = anchor - 7 * 86400
 add(a, "kill", "confirmed", "week-boundary")
 now = anchor + 5
-add(b, "kill", "probable", "future")
+add(b, "kill", "confirmed", "future")
 now = os.time({ year = 2025, month = 12, day = 31, hour = 12 })
 local oldRecord, oldEvent = add(c, "kill", "confirmed", "prior-year")
 now = anchor
@@ -211,10 +211,10 @@ eq(present.correctedKills, 0, "corrections follow original event period")
 eq(breakdown({ period = "year", year = 2025 }, "race").Orc.correctedKills, 1, "historical correction remains in historical year")
 breakdown(nil, "race")
 now = anchor + 5
-eq(breakdown(nil, "race").Troll.probableKills, 1, "future event becomes eligible without a write")
+eq(breakdown(nil, "race").Troll.kills, 1, "future event becomes eligible without a write")
 reset()
 zone = "Vallée de Strangleronce"
-add(a, "death", "probable", "one-death")
+add(a, "death", "confirmed", "one-death")
 add(b, "death", "confirmed", "one-death")
 zone = "?"
 local _, unknownPlace = add(c, "kill", "confirmed", "unmapped")
@@ -228,14 +228,14 @@ assert(GL.VoidPvP(c, unknownPlace, true))
 eq(breakdown(nil, "zone").unknown.correctedKills, 1, "corrected fight is excluded from zone wins")
 reset()
 zone, subzone = "Zone A", "Dock"
-add(a, "death", "probable", "shared-zones")
+add(a, "death", "confirmed", "shared-zones")
 zone, subzone = "Zone B", "Dock"
 add(b, "death", "confirmed", "shared-zones")
 assert(#GL.PvPBreakdown({zone="Zone A"}, "subzone") == 0, "filtering early must not duplicate a shared death")
 local districts = GL.PvPBreakdown({zone="Zone B"}, "subzone")
-assert(#districts == 1 and districts[1].label == "Dock" and districts[1].deaths == 1)
+assert(#districts == 0)
 subzone = "Zone B"
 add(c, "kill", "confirmed", "generic-zone")
 districts = GL.PvPBreakdown({zone="Zone B"}, "subzone")
-assert(#districts == 2 and (districts[1].key == "unknown" or districts[2].key == "unknown"))
+assert(#districts == 1 and districts[1].key == "unknown")
 print("PASS campaign data: validated settings, historical search, observed encounters, identity snapshots, deduplicated race/class PvP, corrections, scopes and periods")

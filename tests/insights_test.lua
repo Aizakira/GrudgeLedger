@@ -42,17 +42,17 @@ GL.SetReaction(provisional, "friend") GL.RecordSeen(provisional, true)
 local promoted = GL.IdentityFromName("Promoted", "Example", "Player-1-promoted")
 GL.RecordSeen(promoted, true)
 assert(GL.Get(promoted).encounters.count == 1, "name-to-GUID promotion preserves the encounter")
-GL.RecordPvP(a, "death", "probable", "fixture", "d2")
+GL.RecordPvP(a, "death", "confirmed", "fixture", "d2")
 local probable = r.history[#r.history]
-assert(GL.PlayerStatistics("probableDeaths")[1].value == 1)
+assert(GL.PlayerStatistics("deaths")[1].value == 2)
 a.guild = "New Guild" GL.Remember(a)
 local function guild(name, realm)
     for _, row in ipairs(GL.GuildStatistics()) do if row.name == name and row.realm == (realm or "Forever") then return row end end
 end
-assert(guild("Old Guild").deaths == 1 and guild("Old Guild").probableDeaths == 1)
+assert(guild("Old Guild").deaths == 2)
 assert(guild("New Guild").deaths == 0 and guild("New Guild").grudges == 1 and guild("New Guild").friends == 1)
 GL.VoidPvP(r, probable)
-assert(guild("Old Guild").probableDeaths == 0, "corrections update historical guild attribution")
+assert(guild("Old Guild").deaths == 1, "corrections update historical guild attribution")
 GL.SetGuildReaction("New Guild", "warning")
 local c = identity("Gamma", "New Guild")
 assert(GL.Relation(GL.RecordSeen(c, true)) == "warning")
@@ -65,21 +65,21 @@ GL.RecordPvP(noGuild, "death", "confirmed", "fixture", "d3")
 assert(guild("New Guild").deaths == 0, "missing historical guild is not guessed")
 
 local shared = {}
-for i, confidence in ipairs({ "probable", "confirmed", "probable" }) do
+for i, confidence in ipairs({ "confirmed", "confirmed", "confirmed" }) do
     local record = GL.RecordPvP(identity("Shared" .. i, "Shared Guild"), "death", confidence, "fixture", "shared-death")
     shared[i] = { record, record.history[#record.history] }
 end
-assert(guild("Shared Guild").deaths == 1 and guild("Shared Guild").probableDeaths == 0,
+assert(guild("Shared Guild").deaths == 1,
     "one guild death, strongest evidence wins independently of participant order")
-GL.RecordPvP(identity("OtherParticipant", "Other Guild"), "death", "probable", "fixture", "shared-death")
-assert(guild("Other Guild").probableDeaths == 1, "each involved guild retains its own evidence")
+GL.RecordPvP(identity("OtherParticipant", "Other Guild"), "death", "confirmed", "fixture", "shared-death")
+assert(guild("Other Guild").deaths == 1, "each involved guild retains its own evidence")
 GL.VoidPvP(unpack(shared[2]))
-assert(guild("Shared Guild").deaths == 0 and guild("Shared Guild").probableDeaths == 1,
+assert(guild("Shared Guild").deaths == 1,
     "voided lethal attribution falls back to the other participants, counted once")
 GL.VoidPvP(unpack(shared[1])) GL.VoidPvP(unpack(shared[3]))
-assert(guild("Shared Guild").deaths == 0 and guild("Shared Guild").probableDeaths == 0)
-for i = 1, 2 do GL.RecordPvP(identity("Legacy" .. i, "Legacy Guild"), "death", "probable", "fixture") end
-assert(guild("Legacy Guild").probableDeaths == 2, "legacy events without IDs must not be guessed into one death")
+assert(guild("Shared Guild").deaths == 0)
+for i = 1, 2 do GL.RecordPvP(identity("Legacy" .. i, "Legacy Guild"), "death", "confirmed", "fixture") end
+assert(guild("Legacy Guild").deaths == 2, "legacy events without IDs must not be guessed into one death")
 
 GL.ClearDetectionLog()
 GL.Trace("observed", a, "nameplate1") GL.Trace("observed", a, "nameplate2")
@@ -104,7 +104,7 @@ assert(f:IsShown() and f.rows[1].item)
 assert(f.selected == f.rows[1].item and f.guildDetail.name:GetText() == f.selected.name)
 assert(f.tabs.guilds.selection:IsShown() and not f.tabs.players.selection:IsShown())
 f.groups[2].scripts.OnClick()
-assert(f.groups[3]:GetText() == "Mes règles" and f.choices[4].metric == "probableDeaths")
+assert(f.groups[3]:GetText() == "Mes règles" and not f.choices[4]:IsShown())
 f.groups[3].scripts.OnClick()
 assert(f.rows[1].item and not f.choices[2]:IsShown(), "rules page has its own single choice and works for guilds without combat")
 for _, row in ipairs(f.rows) do
@@ -185,8 +185,8 @@ for _, row in ipairs(f.rows) do if row:IsShown() then assert(row.item.friends > 
 assert(not f.factionButton:IsShown())
 -- Exercise every navigation path and ensure each choice maps to a measured metric.
 local metrics = {
-    players = { {"grudge", "enemiesSeen", "enemiesRecent", "aggressions"}, {"friendsSeen", "reputation", "friendsRecent", "friendsGrouped"}, {"deaths", "kills", "probableDeaths", "probableKills"} },
-    guilds = { {"grudges", "friends"}, {"deaths", "kills", "aggressions", "probableDeaths"} },
+    players = { {"grudge", "enemiesSeen", "enemiesRecent", "aggressions"}, {"friendsSeen", "reputation", "friendsRecent", "friendsGrouped"}, {"deaths", "kills"} },
+    guilds = { {"grudges", "friends"}, {"deaths", "kills", "aggressions"} },
 }
 for mode, groups in pairs(metrics) do
     GL.ShowStatistics(mode)

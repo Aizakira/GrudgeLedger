@@ -12,10 +12,11 @@ end
 -- Build a pre-pause save through the public recording functions (no instance API).
 local onlyID = identity("BattlegroundOnly", "Match Guild")
 local only
-for _, confidence in ipairs({ "confirmed", "probable" }) do
-    only = GL.RecordAggression(onlyID, confidence, "Original evidence", "hit-" .. confidence)
-    GL.RecordPvP(onlyID, "death", confidence, "Original evidence", "death-" .. confidence)
-    GL.RecordPvP(onlyID, "kill", confidence, "Original evidence", "kill-" .. confidence)
+for i = 1, 2 do
+    local confidence = "confirmed"
+    only = GL.RecordAggression(onlyID, confidence, "Original evidence", "hit-" .. i)
+    GL.RecordPvP(onlyID, "death", confidence, "Original evidence", "death-" .. i)
+    GL.RecordPvP(onlyID, "kill", confidence, "Original evidence", "kill-" .. i)
 end
 GL.RecordSeen(onlyID, true)
 local first = only.history[1]
@@ -25,7 +26,7 @@ assert(only.reputation < 0 and #only.history == 6)
 
 local mixedID = identity("Mixed", "Shared Guild")
 zone = "Warsong Gulch"
-local mixed = GL.RecordPvP(mixedID, "death", "probable", "Match evidence", "mixed-bg")
+local mixed = GL.RecordPvP(mixedID, "death", "confirmed", "Match evidence", "mixed-bg")
 local bgDeath = mixed.history[1]
 zone = "Vallée de Strangleronce"
 GL.RecordPvP(mixedID, "death", "confirmed", "Outdoor evidence", "mixed-world")
@@ -70,7 +71,7 @@ assert(first.voided and first.voidReason == "battleground" and first.time == ori
 assert(first.evidence == "Original evidence" and first.zone == "Bassin Arathi")
 assert(corrected.history[1].voidedAt == correctionTime and not corrected.history[1].voidReason, "do not reapply a previous correction")
 assert(GL.Get(mixedID) == mixed and mixed.reputation == -12 and GL.Relation(mixed) == "enemy")
-assert(mixed.pvp.probableDeaths == 0 and mixed.pvp.deaths == 1 and mixed.pvp.aggressions == 1)
+assert(mixed.pvp.probableDeaths == nil and mixed.pvp.deaths == 1 and mixed.pvp.aggressions == 1)
 assert(bgDeath.voided and bgDeath.voidReason == "battleground" and not outdoorDeath.voided and #mixed.history == 4)
 assert(GL.Get(noted) == noted and noted.notes[1].text == "Keep my personal note" and noted.reputation == 0)
 assert(GL.Get(manual) == manual and manual.reputation == -10 and manual.reactionSource == "manual")
@@ -82,9 +83,9 @@ assert(GL.Get(ambiguous) == ambiguous and ambiguous.pvp.deaths == 1 and not ambi
 assert(GL.GetGuildRule("Match Guild").note == "Keep explicit guild rule")
 for _, stat in ipairs(GL.GuildStatistics()) do
     if stat.name == "Match Guild" then
-        assert(stat.members == 0 and stat.probableDeaths == 0 and stat.deaths == 0 and stat.aggressions == 0 and stat.kills == 0)
+        assert(stat.members == 0 and stat.probableDeaths == nil and stat.deaths == 0 and stat.aggressions == 0 and stat.kills == 0)
     elseif stat.name == "Shared Guild" then
-        assert(stat.members == 1 and stat.deaths == 1 and stat.probableDeaths == 0 and stat.aggressions == 1)
+        assert(stat.members == 1 and stat.deaths == 1 and stat.probableDeaths == nil and stat.aggressions == 1)
     end
 end
 for _, stat in ipairs(GL.PlayerStatistics("grudge")) do assert(stat.record ~= only) end
@@ -93,7 +94,7 @@ local messageCount = #mock.messages
 GL.InitDB()
 assert(#GL.db.battlegroundArchive == 2 and #mock.messages == messageCount and mixed.reputation == -12)
 assert(counters.pvp.deaths == 1 and changes == 0, "reloading must never subtract twice")
-assert(not GL.RecordPvP(mixedID, "death", "probable", "Duplicate", "mixed-bg"), "voided evidence still deduplicates")
+assert(not GL.RecordPvP(mixedID, "death", "confirmed", "Duplicate", "mixed-bg"), "voided evidence still deduplicates")
 
 -- Returning outdoors starts a fresh record instead of resurrecting the match debt.
 zone = "Vallée de Strangleronce"

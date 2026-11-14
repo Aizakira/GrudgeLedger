@@ -12,6 +12,7 @@ local knownAtlas = { ["classicon-shaman"] = true, ["raceicon128-dwarf-female"] =
 C_Texture = { GetAtlasInfo = function(atlas) return knownAtlas[atlas] and {} or nil end }
 CLASS_ICON_TCOORDS = { MAGE = { 0.25, 0.5, 0, 0.25 } }
 local methods = getmetatable(UIParent).__index
+function methods:SetParent(parent) self.parent = parent end
 function methods:SetAtlas(atlas) assert(knownAtlas[atlas]) self.atlas, self.texture = atlas, nil end
 function methods:SetTexture(path) self.texture, self.atlas = path, nil end
 
@@ -244,17 +245,17 @@ portraitEvent("UNIT_PORTRAIT_UPDATE", "nameplate1")
 assert(painted > before, "a changed live appearance repaints the open book")
 units.nameplate1, units.target = { guid = "Player-1-different" }, nil
 portraitEvent("NAME_PLATE_UNIT_REMOVED", "nameplate1")
-assert(f.raceIcon.texture:find("INV_BannerPVP_02") and row.raceIcon.texture == f.raceIcon.texture, "recycled unit token cannot paint a different face")
+assert(f.raceIcon.texture == "face:" .. record.guid and row.raceIcon.texture == f.raceIcon.texture, "recycled unit token cannot paint a different face")
 unitFor[record.guid] = secret
 units.target = { guid = record.guid, distant = true }
 portraitEvent("PLAYER_TARGET_CHANGED")
-assert(f.raceIcon.texture:find("INV_BannerPVP_02"), "invisible units retain a fallback")
+assert(f.raceIcon.texture == "face:" .. record.guid, "invisible units retain a fallback")
 units.target.distant = false
 portraitEvent("PLAYER_TARGET_CHANGED")
 assert(f.raceIcon.texture == "face:" .. record.guid, "valid target fallback for an unavailable GUID resolver")
 function SetPortraitTexture() error("restricted") end
 portraitEvent("UNIT_PORTRAIT_UPDATE", "target")
-assert(f.raceIcon.texture:find("INV_BannerPVP_02"), "restricted texture access clears the live slot")
+assert(f.raceIcon.texture == "face:" .. record.guid, "restricted texture access clears the live slot")
 f:Hide()
 mock.Fire("PORTRAITS_UPDATED")
 assert(not watcher.scripts.OnUpdate, "closed book does not poll portraits")
@@ -277,7 +278,7 @@ portraitEvent("UNIT_PORTRAIT_UPDATE", "target")
 assert(f.raceIcon.texture == "current-face" and not f.archivedPortrait)
 units.target = {guid="Player-42-000000F2"}
 portraitEvent("PLAYER_TARGET_CHANGED")
-assert(f.raceIcon.texture == path and not f.portraitUnit and f.archivedPortrait)
+assert(f.raceIcon.texture == "current-face" and not f.portraitUnit)
 GL.ShowLedger(record.key)
-assert(not f.archivedPortrait and f.raceIcon.texture ~= path, "recycled rows cannot keep someone else's image")
+assert(not f.archivedPortrait and f.raceIcon.texture == "face:" .. record.guid, "recycled rows restore the exact previously observed face")
 print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

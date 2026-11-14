@@ -1,5 +1,4 @@
 -- Grudge Ledger: combat inference and group memories.
--- Heuristic evidence is always recorded as probable, never as a confirmed kill.
 local GL = GrudgeLedger
 local L = GL.L
 local T = {}
@@ -9,7 +8,7 @@ local frame = CreateFrame("Frame")
 local plates, recentCredits = {}, {}
 local petOwners, petSlots, nextPetSlot = {}, {}, 1
 local fight, lastFight
-local pendingDeath, lastDeathAt, lastRecapStamp
+local pendingDeath, resolvedDeath, lastDeathAt, lastRecapStamp
 local duel, deathHandled, registered = false, false, false
 local duelPendingUntil
 local serial, honorBaseline, session = 0, nil, nil
@@ -210,17 +209,17 @@ local function creditKill(identity, confidence, evidence, native)
             GL.Remember(identity)
             recentCredits[identity.alias], recentCredits[key] = nil, previous
         end
-        if confidence == "confirmed" and previous.event.confidence == "probable" and not previous.event.voided then
-            GL.ConfirmKill(identity, previous.event, evidence)
+        if confidence == "confirmed" and previous.observed and not previous.event.voided then
+            previous.observed, previous.event.evidence = nil, evidence
         end
         if native then previous.nativeAt = now end
         return
     end
     observeOpponent(f, identity.guid)
     -- A late PARTY_KILL alone cannot put a new defeat in a completed fight.
-    local record, event = GL.RecordPvP(identity, "kill", confidence, evidence, nextID("kill"), combatSnapshot(f, identity, nil, true))
+    local record, event = GL.RecordPvP(identity, "kill", "confirmed", evidence, nextID("kill"), combatSnapshot(f, identity, nil, true))
     if event then
-        recentCredits[key] = { at = now, nativeAt = native and now, event = event, fightId = f and f.id }
+        recentCredits[key] = { at = now, observed = confidence == "observed", nativeAt = native and now, event = event, fightId = f and f.id }
         if f and f.opening and f.opening.guid == identity.guid then f.opening.defeated = true end
     end
     return record
@@ -241,7 +240,7 @@ local function killingBlow(src, dst, name, evidence, native)
             local age = previous and GL.Now() - previous.at
             -- A later fight against the same GUID need not concern the death we
             -- inferred. Retract only while the corpse/credit was just observed.
-            if age and age >= 0 and age <= 2 and previous.event.confidence == "probable" and not previous.event.voided
+            if age and age >= 0 and age <= 2 and previous.observed and not previous.event.voided
                 and not (f and f.opening and f.opening.guid == dst and previous.fightId ~= f.id) then
                 GL.VoidPvP("guid:" .. dst, previous.event, false, "other-killer")
             end
@@ -319,7 +318,7 @@ local function tryAggression()
                 local pet = f.petAttackers and f.petAttackers[key]
                 local evidence = pet and GL.Now() - pet.at <= 2 and "Votre santé a baissé pendant que le familier de ce joueur vous ciblait en combat."
                     or "Baisse de santé pendant que cet adversaire PvP en combat vous ciblait ; participation déduite, source de dégâts non confirmée."
-                recordAggression(f, identity, "probable", evidence, pet and GL.Now() - pet.at <= 2)
+                recordAggression(f, identity, "confirmed", evidence, pet and GL.Now() - pet.at <= 2)
             end
         end
     end
@@ -441,7 +440,7 @@ local function tryKills()
     if math.abs(e.signalAt - e.deadAt) > 2 or e.deadAt - e.aliveAt > 3 then return end
     if e.deadAt - e.targetingMeAt > 4 or e.deadAt - e.targetedAt > 4 then return end
     e.credited = true
-    creditKill(e.identity, "probable", "Adversaire vu vivant puis mort, combat mutuel isolé et gain d'honneur concordant.")
+    creditKill(e.identity, "observed", "Adversaire vu vivant puis mort, combat mutuel isolé et gain d'honneur concordant.")
 end
 
 -- Forever GlobalStrings, build 1.60.1.70938. Only the four named victories
@@ -572,7 +571,7 @@ function T.OnHonorMessage(message, lineID)
         return
     end
     -- Compatibility with clients missing all named formats: this old signal
-    -- can support an isolated probable kill but cannot establish any points.
+    -- can corroborate an isolated kill but cannot establish any points.
     if not f then return end
     for _, enemy in pairs(f.enemies) do
         local name = enemy.identity.fullName
@@ -632,22 +631,39 @@ local function readRecap(death)
     end
 end
 
-local function resolveDeath()
+local function resolveDeath(flush)
     local death = pendingDeath
     if not death then return end
     if not enabled() then pendingDeath = nil return end
     local rows, stamp = readRecap(death)
-    if not rows and C_DeathRecap and type(C_DeathRecap.GetRecapEvents) == "function"
+    if not flush and not rows and C_DeathRecap and type(C_DeathRecap.GetRecapEvents) == "function"
         and GL.Now() - death.at < 2 then return end
     local participants, lethal, lethalPet = death.candidates, death.confirmed, death.pet
     local petSources
     if rows then
-        participants = {} -- explicit sources replace, rather than extend, guesses
-        local otherLethal, waitingForOwner
+        participants = {}
+        for _, enemy in pairs(death.fight.enemies) do
+            if enemy.damageAt and death.at - enemy.damageAt <= 10 then
+                participants[enemy.identity.guid or enemy.identity.key] = enemy.identity
+            end
+        end
+        local waitingForOwner
         petSources = {}
         for _, row in ipairs(rows) do
             local identity, viaPet
             if hostileFlags(row.flags) then identity, viaPet = attacker(row.guid, row.name, row.flags, death.fight) end
+            if not identity and not row.flags and row.name then
+                -- Some recaps expose the full caster name without reaction flags.
+                -- Match only an engaged hostile already identified in this fight.
+                for _, enemy in pairs(death.fight.enemies) do
+                    if enemy.identity.surname and enemy.identity.fullName == row.name
+                        and (not row.guid or enemy.identity.guid == row.guid)
+                        and (enemy.damageAt or enemy.targetingMeAt) then
+                        if identity then identity = nil break end
+                        identity = enemy.identity
+                    end
+                end
+            end
             local fatal = row.kind == "SPELL_INSTAKILL" or (row.overkill and row.overkill >= 0 and row.overkill < math.huge)
                 or (row.health == 0 and row.at == stamp)
             if identity then
@@ -656,53 +672,58 @@ local function resolveDeath()
                 if viaPet then petSources[key] = true end
                 observeOpponent(death.fight, identity.guid)
                 if fatal and not lethal then lethal, lethalPet = identity, viaPet end
-            else
-                if viaPet then waitingForOwner = true end
-                if fatal then otherLethal = true end
-            end
+            elseif viaPet then waitingForOwner = true end
         end
         for key, identity in pairs(participants) do
             local viaPet = petSources[key]
             recordAggression(death.fight, identity, "confirmed", viaPet and "Le récapitulatif attribue les dégâts au familier de ce joueur."
                 or "Récapitulatif de mort : dégâts reçus de ce joueur hostile.", viaPet)
         end
-        if waitingForOwner and C_TooltipInfo and GL.Now() - death.at < 2 then return end
+        if not flush and waitingForOwner and C_TooltipInfo and GL.Now() - death.at < 2 then return end
         lastRecapStamp = stamp
-        if otherLethal and not lethal then participants = {} end
     end
-    pendingDeath = nil
-    if lethal then participants[lethal.guid or lethal.key] = lethal end
+    pendingDeath, resolvedDeath = nil, death
+    if lethal then
+        participants[lethal.guid or lethal.key] = lethal
+        recordAggression(death.fight, lethal, "confirmed", "Dégâts létaux explicitement attribués à ce joueur.", lethalPet)
+    end
     -- ponytail: reuse per-person death counters for participation in one fatal attack.
-    -- Only an explicit lethal hit is confirmed; other participants remain probable.
     for _, identity in pairs(participants) do
         local confirmed = lethal and (identity.guid or identity.key) == (lethal.guid or lethal.key)
         local pet = death.fight.petAttackers and death.fight.petAttackers[identity.key]
         local evidence = confirmed and (lethalPet and "Le familier de ce joueur vous a porté le coup fatal."
             or "Dégâts létaux explicitement attribués à ce joueur.")
             or (not rows and pet and death.at - pet.at <= 5 and "Le familier de ce joueur vous ciblait en combat juste avant votre mort. Le coup fatal reste incertain.")
-            or "Participation probable à l'attaque ayant causé votre mort ; le coup fatal n'est pas attribué à ce joueur."
+            or "Participation à l’attaque ayant causé votre mort."
         local viaPet = confirmed and lethalPet or (petSources and petSources[identity.guid or identity.key])
             or (not rows and pet and death.at - pet.at <= 5)
-        GL.RecordPvP(identity, "death", confirmed and "confirmed" or "probable", evidence, death.id, combatSnapshot(death.fight, identity, viaPet))
+        GL.RecordPvP(identity, "death", "confirmed", evidence, death.id, combatSnapshot(death.fight, identity, viaPet))
     end
 end
 
 function T.OnDeath(confirmed, viaPet)
     if pendingDeath and confirmed then pendingDeath.confirmed, pendingDeath.pet = confirmed, viaPet return end
-    if deathHandled then return end
+    if deathHandled then
+        if confirmed and resolvedDeath and GL.Now() - resolvedDeath.at <= 2 and enabled() then
+            GL.RecordPvP(confirmed, "death", "confirmed", "Dégâts létaux explicitement attribués à ce joueur.",
+                resolvedDeath.id, combatSnapshot(resolvedDeath.fight, confirmed, viaPet))
+        end
+        return
+    end
+    resolvedDeath = nil
     -- Freeze the encounter before waiting for a delayed recap. Later sightings cannot join it.
     deathHandled = true
     local f, now = combatSession(), GL.Now()
     if enabled() then
         local candidates = {}
-        if f and not unresolvedAttack(f) then
+        if f then
             if f.damageLogged then
                 for _, enemy in pairs(f.enemies) do
-                    if enemy.damageAt and now - enemy.damageAt <= 5 then
+                    if enemy.damageAt and now - enemy.damageAt <= 10 then
                         candidates[enemy.identity.guid or enemy.identity.key] = enemy.identity
                     end
                 end
-            else
+            elseif not unresolvedAttack(f) then
                 for _, identity in pairs(recentAttackers(f, 5)) do candidates[identity.guid or identity.key] = identity end
             end
         end
@@ -971,7 +992,7 @@ function T.HandleEvent(event, ...)
         stopGroupTime(GL.Now())
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         if event == "PLAYER_ENTERING_WORLD" then worldActive = true end
-        recentCredits, idleOpponents = {}, nil
+        recentCredits, idleOpponents, resolvedDeath = {}, nil, nil
         petOwners, petSlots, nextPetSlot = {}, {}, 1
         fight, lastFight, plates, duel, duelPendingUntil, pendingDeath = nil, nil, {}, false, nil, nil
         honorBaseline = GL.Clean(GL.Safe(GetPVPSessionStats), "number")
@@ -1010,7 +1031,8 @@ function T.HandleEvent(event, ...)
         if fight then fight.endedAt = GL.Now() lastFight = fight fight = nil end
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
         if bool(UnitIsDeadOrGhost, "player") == false then
-            deathHandled = false
+            resolveDeath(true)
+            deathHandled, resolvedDeath = false, nil
             fight, lastFight, pendingDeath, idleOpponents = nil, nil, nil, nil
         end
     elseif event == "NAME_PLATE_UNIT_ADDED" then
@@ -1024,7 +1046,14 @@ function T.HandleEvent(event, ...)
         arg = GL.Clean(arg, "string")
         if event == "UNIT_HEALTH" and arg == "player" then T.Poll() else T.Observe(arg) end
     elseif event == "PLAYER_DEAD" then T.OnDeath()
-    elseif event == "PARTY_KILL" then killingBlow(arg, second, nil, "Le jeu vous attribue le coup fatal (PARTY_KILL).", true)
+    elseif event == "PARTY_KILL" then
+        local me = playerGUID()
+        if me and GL.Clean(second, "string") == me and enabled() then
+            local killer = identityForGUID(GL.Clean(arg, "string"))
+            if killer then T.OnDeath(killer) end
+        else
+            killingBlow(arg, second, nil, "Le jeu vous attribue le coup fatal (PARTY_KILL).", true)
+        end
     elseif event == "PLAYER_PVP_KILLS_CHANGED" then T.OnHonorCount()
     elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then T.OnHonorMessage(arg, (select(11, ...))) -- field 12 is the sender, never the victim
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then T.OnCombatLog() end

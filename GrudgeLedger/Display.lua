@@ -58,7 +58,7 @@ local function partyWarning(record, unit)
     local relation, pvp = GL.Relation(record), record.pvp or {}
     if relation ~= "warning" and relation ~= "enemy" then return end
     local confirmed = (pvp.deaths or 0) + (pvp.aggressions or 0) > 0
-    if not confirmed and (pvp.probableDeaths or 0) + (pvp.probableAggressions or 0) <= 0 then return end
+    if not confirmed then return end
     local name = GL.Clean(record.fullName or record.name, "string")
     -- Only the name and a fixed summary leave the personal journal, never notes.
     if not name or name == "" or #name > 120 or name:find("[%z\1-\31\127|{}]") then return end
@@ -86,8 +86,7 @@ local function partyWarning(record, unit)
     local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
     if type(send) ~= "function" then return end
     presence.attemptAt, GL.db.partyWarningLastAttempt[me] = now, now
-    local message = (confirmed and L("[Grudge Ledger] Attention, %s : agression PvP enregistrée dans mon journal.")
-        or L("[Grudge Ledger] Attention, %s : implication PvP probable dans mon journal (à confirmer).")):format(name)
+    local message = L("[Grudge Ledger] Attention, %s : agression PvP enregistrée dans mon journal."):format(name)
     local ok = pcall(send, message, "PARTY")
     if not ok then GL.Debug(L("Avertissement de groupe refusé par le jeu ; aucun nouvel essai pendant cette rencontre.")) end
 end
@@ -114,13 +113,13 @@ end
 
 local function alertTitle(record, relation)
     if GL.RelationSource(record) == "guild" then return guildLabel(record, relation) end
-    return (GL.RelationConfidence(record) == "probable" and L("%s (probable) à proximité") or L("%s à proximité")):format(L(styles[relation].label))
+    return L("%s à proximité"):format(L(styles[relation].label))
 end
 
 local function refreshToastText(frame, record)
     if frame.signal then
         local age = math.max(0, GL.Now() - frame.signalAt)
-        local title = GL.RelationConfidence(record) == "probable" and L("Signal indirect · %s (PvP probable)") or L("Signal indirect · %s")
+        local title = L("Signal indirect · %s")
         frame.title:SetText(title:format(L(styles[frame.relation].label)))
         frame.name:SetText(record.fullName or record.name)
         frame.note:SetText(age == 0 and L("%s · à l’instant\nDistance inconnue"):format(L(frame.signal))
@@ -132,7 +131,6 @@ local function refreshToastText(frame, record)
     if record.guild and GL.RelationSource(record) ~= "guild" then name = name .. " <" .. record.guild .. ">" end
     frame.name:SetText(name)
     local hint = L("Déjà rencontré : %s"):format(record.lastZone or L("lieu inconnu"))
-    if GL.RelationConfidence(record) == "probable" then hint = L("Identification déduite d'un combat — à confirmer") end
     frame.note:SetText(recordNote(record) or hint)
 end
 
@@ -181,7 +179,6 @@ local function hideMarker(marker)
     if not marker then return end
     restoreName(marker)
     GL.Safe(marker.frame.Hide, marker.frame)
-    marker.probable:Hide()
     marker.key, marker.owner = nil, nil
 end
 
@@ -209,12 +206,7 @@ local function ensureMarker(plate)
     icon:SetVertexColor(1, 1, 1)
     icon:SetPoint("TOPLEFT", 2, -2)
     icon:SetPoint("BOTTOMRIGHT", -2, 2)
-    local probable = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    probable:SetPoint("RIGHT", frame, "LEFT", -1, 0)
-    probable:SetText("?")
-    probable:SetTextColor(1, 0.85, 0.3)
-    probable:Hide()
-    local marker = { frame = frame, icon = icon, probable = probable }
+    local marker = { frame = frame, icon = icon }
     markers[plate] = marker
     return marker
 end
@@ -272,7 +264,6 @@ local function updateMarker(entry, reuseObservation)
         marker.anchor = anchor
     end
     if marker.texture ~= style.icon then marker.icon:SetTexture(style.icon) marker.texture = style.icon end
-    if GL.RelationConfidence(record) == "probable" then marker.probable:Show() else marker.probable:Hide() end
     marker.frame:Show()
     if relation ~= "neutral" and GL.Settings().nameColor and font and canChange(font) then
         if marker.font ~= font then restoreName(marker) end
@@ -408,8 +399,8 @@ alert = function(identity, unit)
     local source = GL.RelationSource(record)
     local guildKey = inheritedGuildKey(record)
     local pvp = record.pvp or {}
-    local groupGuild = source == "guild" and (pvp.deaths or 0) + (pvp.probableDeaths or 0)
-        + (pvp.aggressions or 0) + (pvp.probableAggressions or 0) == 0
+    local groupGuild = source == "guild" and (pvp.deaths or 0)
+        + (pvp.aggressions or 0) == 0
     local key = record.key .. ":" .. relation .. ":" .. source .. ":" .. (guildKey or "") .. (groupGuild and ":group" or "")
     if relation ~= "friend" and lastAlert[key] and now - lastAlert[key] < (settings.alertCooldown or 180) then GL.Trace("cooldown", identity, unit) return end
     validateToast()
@@ -598,9 +589,6 @@ function D.Tooltip(tooltip)
     tooltip:AddLine("Grudge Ledger — " .. L(style and style.label or "Neutre"),
         style and style.color[1] or 0.85, style and style.color[2] or 0.85,
         style and style.color[3] or 0.85)
-    if GL.RelationConfidence(record) == "probable" then
-        tooltip:AddLine(L("? Identification PvP probable — à confirmer"), 1, 0.85, 0.3, true)
-    end
     tooltip._grudgeLedgerExpanded = not GL.Settings().compactTooltips or GL.Safe(IsShiftKeyDown) == true
     if not tooltip._grudgeLedgerExpanded then
         tooltip:AddLine(L("Maj : notes et bilan PvP"), 0.8, 0.75, 0.64)
@@ -612,14 +600,11 @@ function D.Tooltip(tooltip)
     if note then tooltip:AddLine(note, 0.9, 0.85, 0.7, true) end
     tooltip:AddLine(L("Camaraderie : %s"):format(tostring(record.reputation or 0)), 0.85, 0.85, 0.85)
     local pvp = record.pvp or {}
-    if (pvp.aggressions or 0) + (pvp.probableAggressions or 0) > 0 then
-        tooltip:AddLine(L("Agressions : %d confirmée(s), %d probable(s)"):format(pvp.aggressions or 0, pvp.probableAggressions or 0), 1, 0.6, 0.1, true)
+    if (pvp.aggressions or 0) > 0 then
+        tooltip:AddLine(L("Agressions") .. " : " .. (pvp.aggressions or 0), 1, 0.6, 0.1, true)
     end
     if (pvp.kills or 0) + (pvp.deaths or 0) > 0 then
         tooltip:AddLine(L("PvP confirmé : %d victoire(s), %d mort(s)"):format(pvp.kills or 0, pvp.deaths or 0), 0.85, 0.85, 0.85, true)
-    end
-    if (pvp.probableKills or 0) + (pvp.probableDeaths or 0) > 0 then
-        tooltip:AddLine(L("PvP probable : %d victoire(s), %d mort(s)"):format(pvp.probableKills or 0, pvp.probableDeaths or 0), 1, 0.7, 0.35, true)
     end
 end
 
@@ -633,6 +618,7 @@ local function scanPlates()
     end
 end
 
+local awaitingResurrection
 function D.OnEvent(_, event, unit, ...)
     if not GL.db then return end
     if event == "CHAT_MSG_SAY" or event == "CHAT_MSG_YELL" then
@@ -666,6 +652,16 @@ function D.OnEvent(_, event, unit, ...)
         if toast then toast:Hide() end
         if previewToast then previewToast:Hide() end
         scanPlates()
+    elseif event == "PLAYER_DEAD" then
+        awaitingResurrection = true
+    elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
+        if awaitingResurrection and GL.Safe(UnitIsDeadOrGhost, "player") == false then
+            awaitingResurrection, lastAlert, lastSound = nil, {}, nil
+            for _, entry in pairs(visible) do entry.recordKey = nil end
+            scanPlates()
+            D.Refresh()
+            observe("target", true)
+        end
     elseif event == "PLAYER_REGEN_ENABLED" or event == "GROUP_ROSTER_UPDATE" then D.Refresh()
     end
 end
@@ -692,7 +688,7 @@ eventFrame:SetScript("OnUpdate", function(_, delta)
     if previewToast and previewToast:IsShown() and GL.Now() >= previewToast.expires then previewToast:Hide() end
 end)
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
-    "UPDATE_MOUSEOVER_UNIT", "MODIFIER_STATE_CHANGED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
+    "UPDATE_MOUSEOVER_UNIT", "MODIFIER_STATE_CHANGED", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
     GL.Safe(eventFrame.RegisterEvent, eventFrame, event)
 end
 GL.On("READY", function()

@@ -305,12 +305,12 @@ D.OnEvent(nil, "NAME_PLATE_UNIT_REMOVED", secret)
 -- Tooltips show notes plus separate probable/confirmed counters exactly once.
 local shifted = false
 IsShiftKeyDown = function() return shifted end
-GL.RecordPvP(delayed, "death", "probable", "target", "test-probable")
+GL.RecordPvP(delayed, "death", "confirmed", "target", "test-probable")
 GL.RecordPvP(delayed, "kill", "confirmed", "combat log", "test-confirmed")
 GL.AddNote(delayed, "Attention à lui")
 tooltipUnit = "nameplate3"
 tooltipCallback(GameTooltip)
-assert(not GL.Settings().compactTooltips and GameTooltip.lines[#GameTooltip.lines][1]:find("PvP probable", 1, true))
+assert(not GL.Settings().compactTooltips and GameTooltip.lines[#GameTooltip.lines][1]:find("PvP confirmé", 1, true))
 GL.SetSetting("compactTooltips", true)
 GameTooltip.hooks.OnTooltipCleared(GameTooltip)
 GameTooltip.lines = {}
@@ -328,7 +328,7 @@ tooltipCallback(GameTooltip)
 assert(#GameTooltip.lines == count)
 local text = ""
 for _, line in ipairs(GameTooltip.lines) do text = text .. tostring(line[1]) end
-assert(text:find("Attention à lui") and text:find("PvP probable") and text:find("PvP confirmé"))
+assert(text:find("Attention à lui") and not text:find("PvP probable") and text:find("PvP confirmé"))
 shifted = false
 D.OnEvent(nil, "MODIFIER_STATE_CHANGED", "LSHIFT")
 assert(#GameTooltip.lines < count and GameTooltip.lines[#GameTooltip.lines][1]:find("Maj", 1, true),
@@ -364,12 +364,29 @@ now = now + 200
 eventFrame.scripts.OnUpdate(eventFrame, 1)
 D.OnEvent(nil, "NAME_PLATE_UNIT_ADDED", "nameplate4")
 assert(not markerFor(warningPlate), "unclassified nearby player starts without a marker")
-GL.RecordAggression(warning, "probable", "hostile target", "test-warning")
+GL.RecordAggression(warning, "confirmed", "hostile target", "test-warning")
+D.OnEvent(nil, "PLAYER_DEAD")
+D.OnEvent(nil, "NAME_PLATE_UNIT_REMOVED", "nameplate4")
+local gone = plates.nameplate4
+plates.nameplate4 = nil
+UnitIsDeadOrGhost = function() return true end
+D.OnEvent(nil, "PLAYER_ALIVE")
+UnitIsDeadOrGhost = function() return false end
+D.OnEvent(nil, "PLAYER_UNGHOST")
+GL.SetSetting("sounds", true)
+local soundsAfterRevive = #sounds
+plates.nameplate4 = gone
+D.OnEvent(nil, "NAME_PLATE_UNIT_ADDED", "nameplate4")
+assert(#sounds == soundsAfterRevive + 1)
+D.OnEvent(nil, "PLAYER_ALIVE")
+D.Refresh()
+assert(#sounds == soundsAfterRevive + 1)
+GL.SetSetting("sounds", false)
 local warningMarker = assert(markerFor(warningPlate))
-assert(warningMarker.shown and warningMarker.children[2].texture:find("RelationWarning"))
+assert(warningMarker.shown and warningMarker.children[2].texture:find("RelationEnemy"))
 assert(warningMarker.children[2].vertex[2] == 1, "keep the custom artwork's original colors")
-assert(toast.relation == "warning" and toast.title.text == "Méfiance (probable) à proximité")
-assert(warningMarker.children[3].shown and warningMarker.children[3].text == "?")
+assert(toast.relation == "enemy" and toast.title.text == "Ennemi à proximité")
+assert(not warningMarker.children[3])
 GL.SetSetting("enemyAlerts", false)
 assert(not toast.shown, "orange alerts use enemyAlerts setting")
 GL.SetSetting("enemyAlerts", true)
@@ -378,47 +395,47 @@ GameTooltip.lines, tooltipUnit = {}, "nameplate4"
 tooltipCallback(GameTooltip)
 text = ""
 for _, line in ipairs(GameTooltip.lines) do text = text .. tostring(line[1]) end
-assert(text:find("Agressions : 0 confirmée%(s%), 1 probable%(s%)"))
+assert(text:find("Agressions : 1"))
 assert(text:find("Camaraderie : %-1"))
-assert(text:find("Identification PvP probable"))
+assert(not text:find("Identification PvP probable"))
 
 -- A personal note cannot conceal uncertainty, and confirmed evidence clears it.
 GL.AddNote(warning, "Note personnelle conservée")
 now = now + 200
 units.target = units.nameplate4
 D.OnEvent(nil, "PLAYER_TARGET_CHANGED")
-assert(toast.note.text == "Note personnelle conservée" and toast.title.text:find("%(probable%)"))
+assert(toast.note.text == "Note personnelle conservée" and not toast.title.text:find("%(probable%)"))
 GameTooltip.hooks.OnTooltipCleared(GameTooltip)
 GameTooltip.lines, tooltipUnit = {}, "nameplate4"
 tooltipCallback(GameTooltip)
 text = ""
 for _, line in ipairs(GameTooltip.lines) do text = text .. tostring(line[1]) end
-assert(text:find("Note personnelle conservée") and text:find("Identification PvP probable"))
+assert(text:find("Note personnelle conservée") and not text:find("Identification PvP probable"))
 GL.RecordAggression(warning, "confirmed", "combat log", "test-warning-confirmed")
-assert(not warningMarker.children[3].shown and toast.title.text == "Méfiance à proximité")
+assert(not warningMarker.children[3] and toast.title.text == "Ennemi à proximité")
 local warningRecord = GL.Get(warning)
 assert(GL.VoidPvP(warning, warningRecord.history[#warningRecord.history]))
-assert(warningMarker.children[3].shown and toast.title.text:find("%(probable%)"), "correction restores uncertainty")
-GL.RecordPvP(warning, "death", "probable", "target", "test-warning-death")
-assert(warningMarker.children[2].texture:find("RelationEnemy") and warningMarker.children[3].shown)
+assert(not warningMarker.children[3] and not toast.title.text:find("%(probable%)"), "correction restores uncertainty")
+GL.RecordPvP(warning, "death", "confirmed", "target", "test-warning-death")
+assert(warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3])
 assert(GL.VoidPvP(warning, warningRecord.history[#warningRecord.history]))
-assert(warningMarker.children[2].texture:find("RelationWarning") and warningMarker.children[3].shown, "voiding death downgrades to aggression")
+assert(warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3], "voiding death downgrades to aggression")
 GL.RecordPvP(warning, "death", "confirmed", "combat log", "test-warning-confirmed-death")
-assert(warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3].shown)
+assert(warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3])
 assert(GL.VoidPvP(warning, warningRecord.history[#warningRecord.history]))
-assert(warningMarker.children[3].shown, "removing confirmed death leaves only probable aggression")
+assert(not warningMarker.children[3], "removing confirmed death leaves only probable aggression")
 GL.SetReaction(warning, "warning")
-assert(not warningMarker.children[3].shown, "manual choices never display inferred uncertainty")
+assert(not warningMarker.children[3], "manual choices never display inferred uncertainty")
 GL.SetReaction(warning, "neutral")
-assert(warningMarker.shown and warningMarker.children[2].texture:find("RelationWarning") and warningMarker.children[3].shown,
+assert(warningMarker.shown and warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3],
     "automatic restores outstanding aggression and its uncertainty instead of hiding it behind neutral")
 warningRecord.reaction = nil
 GL.InitDB()
 D.Refresh()
-assert(warningMarker.children[3].shown)
+assert(not warningMarker.children[3])
 units.nameplate4 = { name = "Recycled", surname = "Player", guid = "Player-1-444" }
 D.OnEvent(nil, "NAME_PLATE_UNIT_ADDED", "nameplate4")
-assert(not warningMarker.shown and not warningMarker.children[3].shown, "recycled plates cannot retain '?' badges")
+assert(not warningMarker.shown and not warningMarker.children[3], "recycled plates cannot retain '?' badges")
 
 -- A guild rule applies immediately to already visible, previously unknown members.
 units.nameplate6 = { name = "Guild", surname = "Member", guid = "Player-1-66", guild = "Les Corbeaux" }
@@ -432,7 +449,7 @@ now = now + 200
 GL.SetGuildReaction("Les Corbeaux", "warning", "Ils nous ont agressés")
 local guildMarker = assert(markerFor(guildPlate), "guild rule must refresh already visible members")
 assert(guildMarker.shown and guildMarker.children[2].texture:find("RelationWarning"))
-assert(not guildMarker.children[3].shown, "guild opinions do not claim inferred PvP evidence")
+assert(not guildMarker.children[3], "guild opinions do not claim inferred PvP evidence")
 assert(not markerFor(otherGuildPlate), "a different guild must not inherit this rule")
 assert(toast.shown and toast.relation == "warning" and toast.title.text == "Rancune de guilde : Les Corbeaux")
 assert(toast.name.text == "Guild Member" and toast.note.text == "Ils nous ont agressés")
@@ -526,7 +543,7 @@ assert(toast.guildBurst.count == 1, "per-person cooldown survives later guild bu
 units.nameplate13 = { name = "Burst", surname = "Member13", guid = "Player-1-burst13", guild = "Burst Guild" }
 makePlate("nameplate13")
 local thirteenth = GL.Identity("nameplate13")
-GL.RecordAggression(thirteenth, "probable", "target", "voided-burst-danger")
+GL.RecordAggression(thirteenth, "confirmed", "target", "voided-burst-danger")
 local thirteenthRecord = GL.Get(thirteenth)
 assert(GL.VoidPvP(thirteenth, thirteenthRecord.history[#thirteenthRecord.history]))
 D.OnEvent(nil, "NAME_PLATE_UNIT_ADDED", "nameplate13")
@@ -548,11 +565,11 @@ units.nameplate15 = { name = "Audit", surname = "Source", guid = "Player-1-audit
 makePlate("nameplate15")
 D.OnEvent(nil, "NAME_PLATE_UNIT_ADDED", "nameplate15")
 local audit = GL.Identity("nameplate15")
-GL.RecordAggression(audit, "probable", "target", "audit-probable")
-assert(toast.note.text:find("déduite", 1, true))
+GL.RecordAggression(audit, "confirmed", "target", "audit-probable")
+assert(not toast.note.text:find("déduite", 1, true))
 local auditSounds, auditExpires = #sounds, toast.expires
 GL.RecordAggression(audit, "confirmed", "combat log", "audit-confirmed")
-assert(not toast.title.text:find("probable", 1, true) and not toast.note.text:find("déduite", 1, true))
+assert(not toast.title.text:find("confirmed", 1, true) and not toast.note.text:find("déduite", 1, true))
 GL.AddNote(audit, "Note fraîche")
 assert(toast.note.text == "Note fraîche")
 GL.AddNote(audit, "Note corrigée")
@@ -604,17 +621,17 @@ units.nameplate19 = {name="Debt", surname="Example", guid="Player-1-debt-example
 local debtPlate = makePlate("nameplate19")
 D.OnEvent(nil, "NAME_PLATE_UNIT_ADDED", "nameplate19")
 local debt = GL.Identity("nameplate19")
-GL.RecordPvP(debt, "death", "probable", "Observed", "debt-d")
+GL.RecordPvP(debt, "death", "confirmed", "Observed", "debt-d")
 GL.AdjustReputation(debt, -1, "SPIT", "emote")
-GL.RecordPvP(debt, "kill", "probable", "Observed", "debt-k1")
-GL.RecordPvP(debt, "kill", "probable", "Observed", "debt-k2")
+GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k1")
+GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k2")
 local debtMarker = markerFor(debtPlate)
 assert(GL.Get(debt).reputation == -9 and debtMarker.shown and debtMarker.children[2].texture:find("RelationWarning"))
 assert(toast.shown and toast.relation == "warning", "partial repayment must keep a visible danger alert")
-for i=3,11 do GL.RecordPvP(debt, "kill", "probable", "Observed", "debt-k" .. i) end
+for i=3,11 do GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k" .. i) end
 local repaidSounds = #sounds
 assert(GL.Get(debt).reputation == 0 and debtMarker.shown and debtMarker.children[2].texture:find("RelationNeutral"))
-assert(not toast.shown and not debtMarker.children[3].shown)
+assert(not toast.shown and not debtMarker.children[3])
 D.Refresh()
 assert(#sounds == repaidSounds and not toast.shown, "repaid debt becomes a silent neutral marker")
 
@@ -723,10 +740,10 @@ voice("CHAT_MSG_YELL", threat.guid)
 assert(toast.shown and toast.key == threat.key and #sounds == silent)
 do
     local uncertain = GL.IdentityFromName("Unknown", "Attacker", "Player-1-inferred")
-    GL.RecordPvP(uncertain, "death", "probable", "fixture", "indirect-only-death")
+    GL.RecordPvP(uncertain, "death", "confirmed", "fixture", "indirect-only-death")
     now = now + 31
     voice("CHAT_MSG_YELL", uncertain.guid)
-    assert(toast.shown and toast.signal and toast.title.text == "Signal indirect · Ennemi (PvP probable)",
+    assert(toast.shown and toast.signal and toast.title.text == "Signal indirect · Ennemi",
         "the identity in a chat event is certain, but its historical PvP attribution is still inferred")
     assert(toast.note.text:find("Distance inconnue", 1, true) and not GL.Get(uncertain).encounters)
     GL.RecordPvP(uncertain, "death", "confirmed", "fixture", "confirmed-later")

@@ -10,7 +10,7 @@ local factionFilter = "all"
 local notesOnly = false
 local listSort, listDetail = "recent", "identity"
 local sortChoices = { { "recent", L("Dernière interaction") }, { "name", L("Nom") }, { "reputation", L("Réputation") }, { "kills", L("Victoires") }, { "deaths", L("Morts") }, { "encounters", L("Nb de rencontres") } }
-local detailChoices = { { "identity", L("Identité") }, { "guild", L("Guilde") }, { "pvp", L("PvP confirmé") }, { "notes", L("Notes") } }
+local detailChoices = { { "identity", L("Identité") }, { "guild", L("Guilde") }, { "pvp", L("PvP") }, { "notes", L("Notes") } }
 local drafts = {}
 local guildDrafts = {}
 local relationNames = { friend = L("Ami"), warning = L("Méfiance"), enemy = L("Ennemi"), neutral = L("Neutre") }
@@ -91,25 +91,74 @@ local function portraitUnit(record)
     end
 end
 
+-- ponytail: retain 64 spare native portraits plus the visible slots this session.
+-- The Armory archive covers reloads and evicted faces.
+local spareFaces = {}
+local function usePortrait(row, guid)
+    local current = row.raceIcon
+    if guid == row.faceGUID then return current end
+    local shown = current:IsShown()
+    current:Hide()
+    if row.faceGUID then
+        spareFaces[#spareFaces + 1] = {guid = row.livePortraitGUID, face = current}
+    else
+        row.faceAnchor = current
+    end
+    local face = row.faceAnchor
+    if guid then
+        local slot
+        for i = #spareFaces, 1, -1 do
+            if spareFaces[i].guid == guid then slot = i break end
+            if not spareFaces[i].guid then slot = i end
+        end
+        if slot or #spareFaces >= 64 then
+            local saved = table.remove(spareFaces, slot or 1)
+            face = saved.face
+            face:SetParent(row)
+            face:ClearAllPoints()
+            row.livePortraitGUID = saved.guid == guid and guid or nil
+        else
+            face = row:CreateTexture(nil, "ARTWORK")
+            row.livePortraitGUID = nil
+        end
+        face:SetAllPoints(row.faceAnchor)
+    else
+        row.livePortraitGUID = nil
+    end
+    row.raceIcon, row.faceGUID = face, guid
+    if shown then face:Show() else face:Hide() end
+    return face
+end
+
 local function paintPortrait(row, record, unit)
-    local face = row.raceIcon
+    local guid = GL.Clean(record.guid, "string")
+    local known = guid and row.livePortraitGUID == guid
+    if guid and not known and not unit then
+        for _, saved in ipairs(spareFaces) do
+            if saved.guid == guid then known = true break end
+        end
+    end
+    local face = usePortrait(row, (unit or known) and guid or nil)
     row.portraitUnit, row.archivedPortrait = nil, nil
-    face:SetTexture(nil)
     face:SetTexCoord(0, 1, 0, 1)
     row.classIcon:SetTexCoord(0, 1, 0, 1)
     row.classIcon:SetTexture(nil)
     row.classIcon:SetAlpha(classIcon(row.classIcon, record) and 1 or 0)
     if unit and (not IsUnitModelReadyForUI or GL.Safe(IsUnitModelReadyForUI, unit)) and pcall(SetPortraitTexture, face, unit, true) then
+        row.livePortraitGUID = record.guid
         row.portraitUnit = unit
         return
     end
-    local guid = GL.Clean(record.guid, "string")
+    if guid and row.livePortraitGUID == guid then return end
+    face = usePortrait(row, nil)
     if guid and type(GrudgeLedgerPortraitIndex) == "table" and GrudgeLedgerPortraitIndex[guid] == true
         and guid:match("^Player%-%d+%-%x+$") then
         face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. guid)
+        row.livePortraitGUID = nil
         row.archivedPortrait = true
         return
     end
+    face:SetTexture(nil)
     local race = GL.Clean(record.race, "string")
     local sex = record.sex == 2 and "male" or record.sex == 3 and "female"
     local suffix = race and sex and (race:lower() .. "-" .. sex)
@@ -165,9 +214,6 @@ local function honorDetail(stats)
         text = text .. " · " .. L("Sans adversaire identifié : %d"):format(stats.unassignedHonor)
     end
     return text
-end
-local function outcomeCount(confirmed, probable)
-    return probable > 0 and L("%d · %d prob."):format(confirmed, probable) or tostring(confirmed)
 end
 local function eventEvidence(event)
     return GL.LocalizeEvidence and GL.LocalizeEvidence(event) or event.evidence
@@ -227,10 +273,9 @@ local function eventTitle(event)
         end
     end
     if event.kind == "trade" then return L("Échange terminé") end
-    local confirmed = event.confidence == "confirmed"
-    if event.kind == "death" then return confirmed and L("Vous a tué") or L("Participation possible à votre mort") end
-    if event.kind == "kill" then return confirmed and L("Vous l'avez vaincu") or L("Victoire probable contre ce joueur") end
-    if event.kind == "aggression" then return confirmed and L("Vous a infligé des dégâts") or L("Agression suspectée") end
+    if event.kind == "death" then return L("Vous a tué") end
+    if event.kind == "kill" then return L("Vous l'avez vaincu") end
+    if event.kind == "aggression" then return L("Vous a infligé des dégâts") end
     if event.kind == "reputation" then
         if event.source == "emote" then
             local token = type(event.evidence) == "string" and event.evidence:match("/([A-Za-z]+)$")
@@ -439,8 +484,7 @@ local function showIf(region, visible)
 end
 local encounterHelp = L("Une rencontre recommence après plus de 10 min sans observation. Le total inclut les rencontres avant le changement d'avis ; les anciens passages ne sont pas reconstitués.")
 local recentHelp = L("Dernière observation enregistrée, tous tes personnages confondus. Une personne vue récemment n'est pas forcément encore à proximité.")
-local confirmedHelp = L("Faits confirmés uniquement. Les attributions probables ont leur propre classement. Pour choisir un personnage ou une période, ouvre Mon bilan PvP.")
-local probableHelp = L("Attributions déduites des indices disponibles, pas des coups fatals confirmés. Ouvre une fiche pour vérifier ou corriger les événements.")
+local confirmedHelp = L("Mon bilan PvP")
 local statisticsChoices = {
     players = {
         { name = L("Menaces"), entries = {
@@ -459,8 +503,6 @@ local statisticsChoices = {
         { name = L("Combats"), entries = {
             { "deaths", L("Ceux qui m'ont le plus tué"), L("Les joueurs auxquels le plus de tes morts sont attribuées avec confirmation."), "mort", L("Morts confirmées"), confirmedHelp },
             { "kills", L("Adversaires les plus vaincus"), L("Les joueurs contre lesquels tu as le plus de victoires confirmées."), "victoire", L("Victoires confirmées"), confirmedHelp },
-            { "probableDeaths", L("Morts probables"), L("Participations possibles à ta mort : un classement séparé, à vérifier."), "mort", L("Morts probables"), probableHelp },
-            { "probableKills", L("Victoires probables"), L("Victoires déduites des observations : un classement séparé, à vérifier."), "victoire", L("Victoires probables"), probableHelp },
         } },
     },
     guilds = {
@@ -470,9 +512,8 @@ local statisticsChoices = {
         } },
         { name = L("Combats"), entries = {
             { "deaths", L("Guildes qui m'ont le plus tué"), L("Morts confirmées, rattachées à la guilde connue au moment des faits."), "mort", L("Morts confirmées"), L("Une même mort n'est comptée qu'une fois par guilde impliquée. Les faits sans guilde connue restent non attribués.") },
-            { "kills", L("Guildes les plus vaincues"), L("Victoires confirmées contre les membres de ces guildes."), "victoire", L("Victoires confirmées"), L("Guilde mémorisée au moment du combat. Les victoires probables et les faits sans guilde connue sont exclus.") },
+            { "kills", L("Guildes les plus vaincues"), L("Victoires confirmées contre les membres de ces guildes."), "victoire", L("Victoires confirmées"), L("Guilde mémorisée au moment du combat.") },
             { "aggressions", L("Le plus d'agressions"), L("Agressions confirmées attribuées aux membres de ces guildes."), "agression", L("Agressions confirmées"), L("Guilde mémorisée lors des faits. Plusieurs membres peuvent participer à un même épisode ; les faits sans guilde restent non attribués.") },
-            { "probableDeaths", L("Morts probables"), L("Participations possibles à ta mort, séparées des morts confirmées."), "mort", L("Morts probables"), probableHelp },
         } },
         { name = L("Mes règles"), entries = {
             { "rules", L("Mes règles de guilde"), L("Les avis de guilde que vous avez enregistrés, par ordre alphabétique."), "avis", L("Avis de guilde"), L("Les avis individuels restent prioritaires. La fiche indique les exceptions à la règle choisie.") },
@@ -507,7 +548,7 @@ local function refreshStatistics()
     f.heading:SetText(guild and L("Les guildes de votre histoire") or choice[2])
     f.description:SetText(choice[3])
     f.columnName:SetText(guild and L("Guilde") or L("Joueur"))
-    local guildColumns = { rules = L("Avis"), grudges = L("Personnes"), friends = L("Personnes"), deaths = L("Morts"), kills = L("Victoires"), aggressions = L("Agressions"), probableDeaths = L("Morts") }
+    local guildColumns = { rules = L("Avis"), grudges = L("Personnes"), friends = L("Personnes"), deaths = L("Morts"), kills = L("Victoires"), aggressions = L("Agressions") }
     f.columnValue:SetText(guild and guildColumns[choice[1]] or choice[5])
     showIf(f.relationButton, not guild and f.category == 1)
     f.relationButton:SetText(f.relation and relationNames[f.relation] or L("Tous les avis"))
@@ -833,10 +874,6 @@ local function refreshJournal()
         for key, metric in pairs(f.metrics) do
             local value = stats[key] or 0
             metric.value:SetText(tostring(value))
-            if metric.qualifier then
-                metric.qualifier:SetText(value > 1 and L("probables") or L("probable"))
-                showIf(metric.value, value > 0) showIf(metric.qualifier, value > 0)
-            end
         end
         for key, control in pairs(f.recaps) do
             local item = stats[key]
@@ -870,8 +907,8 @@ local function refreshJournal()
             local known, peaceful = {}, {}
             for _, item in ipairs(breakdown) do known[item.key] = true end
             for place, seconds in pairs(exposure) do
-                if not known[place] then peaceful[#peaceful + 1] = {key = place, label = place, kills = 0, probableKills = 0,
-                    deaths = 0, probableDeaths = 0, correctedKills = 0, correctedDeaths = 0, seconds = seconds} end
+                if not known[place] then peaceful[#peaceful + 1] = {key = place, label = place, kills = 0,
+                    deaths = 0, correctedKills = 0, correctedDeaths = 0, seconds = seconds} end
             end
             table.sort(peaceful, function(a, b) return a.seconds > b.seconds or a.seconds == b.seconds and a.key < b.key end)
             for _, item in ipairs(peaceful) do breakdown[#breakdown + 1] = item end
@@ -881,7 +918,7 @@ local function refreshJournal()
         showIf(f.zoneTracking, geographic and GL.ZoneTimes ~= nil)
         f.zoneTracking:SetText(GL.Settings().zoneTime and L("Suspendre le suivi du temps") or L("Mesurer le temps par zone"))
         f.zoneBack:SetText(L("‹ Toutes les zones"))
-        f.breakdownLabel:SetText(zoom and plain(f.zoneLabel) or geographic and L("Zone · ouvrir les lieux") or L("Confirmées / probables"))
+        f.breakdownLabel:SetText(zoom and plain(f.zoneLabel) or geographic and L("Zone · ouvrir les lieux") or L("Combats"))
         moveTo(f.breakdownLabel, zoom and 484 or 356, 451)
         f.breakdownLabel:SetWidth(zoom and 150 or showTime and 176 or 270)
         showIf(f.podium, podium) showIf(f.initiative, initiative) showIf(f.breakdown, not podium and not initiative)
@@ -934,8 +971,8 @@ local function refreshJournal()
                 if showTime then
                     row.time:SetText(seconds and groupDurationText(seconds) or "—")
                 end
-                row.kills:SetText(outcomeCount(item.kills, item.probableKills))
-                row.deaths:SetText(outcomeCount(item.deaths, item.probableDeaths))
+                row.kills:SetText(tostring(item.kills))
+                row.deaths:SetText(tostring(item.deaths))
                 row:Show()
             else row:Hide() end
         end
@@ -962,12 +999,10 @@ local function refreshJournal()
             if item then identityIcons(recap, item.record) end
             showIf(recap.raceIcon, item ~= nil) showIf(recap.classIcon, item ~= nil) recap:SetEnabled(item ~= nil)
         end
-        card.probable:SetText(L("Faits probables · ") .. counted(stats.probableKills, "victoire") .. " · " .. counted(stats.probableDeaths, "mort") .. " · " .. counted(stats.probableAggressions, "agression"))
         card.honor:SetText(honorTotal(stats))
         card.coverage:SetText((stats.events > 0 or stats.honorAwards > 0) and counted(stats.events, "fait de combat", "faits de combat") .. L(" · Hors champs de bataille et arènes.") or L("Aucun fait PvP conservé pour cette année et cette sélection."))
         local text = table.concat({ "Grudge Ledger · " .. period .. " · " .. scope,
             L("Confirmés : ") .. counted(stats.kills, "victoire") .. ", " .. counted(stats.deaths, "mort") .. ", " .. counted(stats.aggressions, "agression") .. ".",
-            L("Probables : ") .. counted(stats.probableKills, "victoire") .. ", " .. counted(stats.probableDeaths, "mort") .. ", " .. counted(stats.probableAggressions, "agression") .. ".",
             honorTotal(stats) }, "\n")
         if text ~= f.annualText then f.cardCopy:Hide() end
         f.annualText = text
@@ -975,9 +1010,6 @@ local function refreshJournal()
         local story = {
             L("Vous avez remporté ") .. counted(stats.kills, "victoire confirmée", "victoires confirmées") .. L(" et subi ") .. counted(stats.deaths, "mort confirmée", "morts confirmées") .. ".", "" }
         if stats.aggressions > 0 then story[#story + 1] = L("Le registre compte aussi ") .. counted(stats.aggressions, "agression confirmée", "agressions confirmées") .. ".\n" end
-        if stats.probableKills + stats.probableDeaths + stats.probableAggressions > 0 then
-            story[#story + 1] = L("Faits probables : ") .. counted(stats.probableKills, "victoire") .. ", " .. counted(stats.probableDeaths, "mort") .. L(" et ") .. counted(stats.probableAggressions, "agression") .. ".\n"
-        end
         if stats.mostDeaths then story[#story + 1] = L("Votre némésis sur cette période : ") .. plain(stats.mostDeaths.record.fullName) .. " (" .. counted(stats.mostDeaths.value, "mort confirmée", "morts confirmées") .. ").\n" end
         if stats.mostKilled then story[#story + 1] = L("Votre adversaire le plus vaincu : ") .. plain(stats.mostKilled.record.fullName) .. " (" .. counted(stats.mostKilled.value, "victoire confirmée", "victoires confirmées") .. ").\n" end
         if (stats.events or 0) == 0 then
@@ -999,7 +1031,6 @@ local function refreshJournal()
                 local event, record = item.event, item.record
                 local title = pvpNames[event.kind] or eventTitle(event)
                 if event.kind == "note" then title = event.text or L("Note personnelle") end
-                if pvpNames[event.kind] then title = title .. (event.confidence == "confirmed" and L(" confirmée") or L(" probable")) end
                 if event.voided then title = title .. L(" — exclu des compteurs") end
                 local place = event.subzone or event.zone
                 local author = not event.actorGUID and L(" · auteur inconnu") or f.scope == "all" and (" · " .. plain(event.actorName or L("Autre personnage"))) or ""
@@ -1024,8 +1055,8 @@ local function refreshJournal()
         or f.mode == "story" and L("Choisissez une période et les personnages dont vous souhaitez relire les combats.")
         or f.dimension == "opponents" and L("Seules les morts confirmées figurent au podium. Cliquez sur un adversaire pour ouvrir sa fiche.")
         or f.dimension == "initiative" and L("La rancune est celle du journal avant le combat. Une revanche est une victoire que vous engagez après une mort confirmée contre ce joueur avec le même personnage.")
-        or f.dimension == "zone" and L("Cliquez sur une zone pour lire ses sous-zones. Victoires et morts : confirmées / probables. Le temps mesure la présence en monde ouvert depuis l’activation, hors absences et instances.")
-        or L("Les colonnes distinguent les faits confirmés et probables.\n\nLa race et la classe sont celles relevées au combat. « Inconnue » signifie que l'information manque.")
+        or f.dimension == "zone" and L("Cliquez sur une zone pour lire ses sous-zones. Le temps mesure la présence en monde ouvert depuis l’activation, hors absences et instances.")
+        or L("La race et la classe sont celles relevées au combat. « Inconnue » signifie que l'information manque.")
     if f.mode == "summary" and stats.honorAwards > 0 then help = honorDetail(stats) .. "\n\n" .. help end
     f.help:SetText(help)
 end
@@ -1081,7 +1112,7 @@ function GL.ShowJournal(mode)
             f.search:SetText("") GL.ShowJournal("history")
         end, nil, true)
         f.metrics = {}
-        for i, entry in ipairs({ { "kills", L("Victoires confirmées"), "probableKills" }, { "deaths", L("Morts confirmées"), "probableDeaths" }, { "aggressions", L("Agressions confirmées"), "probableAggressions" } }) do
+        for i, entry in ipairs({ { "kills", L("Victoires confirmées") }, { "deaths", L("Morts confirmées") }, { "aggressions", L("Agressions confirmées") } }) do
             local card = CreateFrame("Frame", nil, f.summary) card:SetPoint("TOPLEFT", 356 + (i - 1) * 185, -245) card:SetSize(176, 80)
             parchmentPanel(card)
             local icons = { "Interface\\Icons\\Ability_DualWield", "Interface\\Icons\\Ability_Rogue_FeignDeath", "Interface\\Icons\\Ability_Warrior_Challange" }
@@ -1089,9 +1120,7 @@ function GL.ShowJournal(mode)
             local value = bookText(card, 42, 0, 128, 34, 23, "0")
             local caption = label(card, entry[2], nil, 8, -34, 160) caption:SetTextColor(unpack(theme.inkMuted))
             journalFont(caption, "GameFontHighlightSmall", 11) caption:SetHeight(30)
-            local probable = label(card, "0", nil, 10, -60, 36) probable:SetTextColor(unpack(theme.inkMuted))
-            local qualifier = label(card, "", nil, 43, -60, 120) qualifier:SetTextColor(unpack(theme.inkMuted))
-            f.metrics[entry[1]], f.metrics[entry[3]] = { value = value, caption = caption }, { value = probable, qualifier = qualifier }
+            f.metrics[entry[1]] = { value = value, caption = caption }
         end
         f.recaps = {}
         for i, entry in ipairs({ { "mostDeaths", L("Votre pire antagoniste") }, { "mostKilled", L("Votre adversaire le plus vaincu") } }) do
@@ -1216,7 +1245,6 @@ function GL.ShowJournal(mode)
             row:SetScript("OnClick", function(self) if self.record then GL.ShowLedger(self.record.key) end end)
             annual.recaps[entry[1]] = row
         end
-        annual.probable = bookText(annual, 16, 322, 516, 22, 13, "", theme.inkMuted)
         annual.honor = bookText(annual, 16, 345, 516, 22, 14)
         annual.coverage = bookText(annual, 16, 369, 516, 26, 12)
         GL.Safe(annual.coverage.SetWordWrap, annual.coverage, true)
@@ -1288,7 +1316,7 @@ local function eventCertainty(e)
     if e.kind == "honor" then return L("Honneur") end
     if e.kind == "opening" then return L("Initiative") end
     if e.playerConfirmedAt then return L("Témoignage") end
-    if pvpNames[e.kind] then return e.confidence == "confirmed" and L("Confirmé") or e.confidence == "probable" and L("Probable") or L("Certitude inconnue") end
+    if pvpNames[e.kind] then return e.confidence == "confirmed" and L("Confirmé") or L("Certitude inconnue") end
     return e.source == "emote" and L("Geste") or e.kind == "grouped" and L("Groupe") or L("Journal")
 end
 
@@ -1297,7 +1325,7 @@ local function honorRecipient(e)
 end
 
 local function eventAction(e)
-    if pvpNames[e.kind] and e.confidence ~= "probable" and e.confidence ~= "confirmed" then return pvpNames[e.kind] .. L(" consignée") end
+    if pvpNames[e.kind] and e.confidence ~= "confirmed" then return pvpNames[e.kind] .. L(" consignée") end
     local delta = type(e.delta) == "number" and e.delta ~= 0 and (L(" — avis ") .. (e.delta > 0 and "+" or "") .. e.delta) or ""
     return eventTitle(e) .. delta
 end
@@ -1308,10 +1336,6 @@ local function eventReason(e)
     end
     if e.voidReason == "other-killer" then return L("Le jeu a attribué le coup fatal à un autre joueur.") end
     if e.playerConfirmedAt then return L("Coup fatal confirmé manuellement le %s."):format(stamp(e.playerConfirmedAt)) end
-    if e.confidence == "probable" then
-        return ({ death = L("Indices de participation à l'attaque ; coup fatal non identifié."), kill = L("Mort observée après un combat ; victoire à confirmer."),
-            aggression = L("Attaque soupçonnée ; source des dégâts non confirmée.") })[e.kind]
-    end
 end
 
 local function refreshCorrections()
@@ -1319,13 +1343,12 @@ local function refreshCorrections()
     if not f or not f:IsShown() or not f.event then return end
     local e = f.event
     f.certainty:SetText(eventCertainty(e))
-    showIf(f.attest, e.kind == "kill" and e.confidence == "probable" and not e.voided)
     f.effect:SetText(e.voided and L("Ce fait reste dans l’histoire. Il est exclu des statistiques et du solde automatique.")
-        or e.kind == "honor" and L("Le jeu ne communique pas l’honneur reçu par votre adversaire.")
+        or e.kind == "honor" and L("Honneur adverse inconnu")
         or pvpNames[e.kind] and L("Annuler retire ce fait des statistiques et du solde automatique. Il reste lisible dans l’histoire.")
         or L("Cet événement reste dans votre journal personnel."))
     if pvpNames[e.kind] then f.confirm:Show() else f.confirm:Hide() end
-    f.confirm:SetEnabled(not e.voided and (e.confidence == "confirmed" or e.confidence == "probable"))
+    f.confirm:SetEnabled(not e.voided and e.confidence == "confirmed")
     f.keep:SetText(pvpNames[e.kind] and not e.voided and L("Conserver") or L("Fermer"))
 end
 
@@ -1359,7 +1382,6 @@ inspectEvent = function(record, e)
         f.effect = field(26, -334, 532, 49, 13)
         f.keep = button(f, L("Fermer"), 24, -396, 105, function() f:Hide() end, true, true)
         UI.selectButton(f.keep, true)
-        f.attest = button(f, L("J’ai porté le coup fatal"), 135, -396, 210, nil, nil, true)
         f.confirm = button(f, L("Annuler cet événement"), 351, -396, 211, nil, nil, true)
     end
     local f = correctionWindow
@@ -1383,9 +1405,6 @@ inspectEvent = function(record, e)
     f.proof:SetText(#evidence > 0 and table.concat(evidence, "\n") or L("Aucune précision enregistrée."))
     f.body:SetHeight(math.max(77, f.proof:GetStringHeight() + 8)) f.scroll:SetVerticalScroll(0)
     local identity = f.identity
-    f.attest:SetScript("OnClick", function()
-        if f.event == e and f:IsShown() and GL.ConfirmKill(identity, e) then inspectEvent(record, e) end
-    end)
     f.confirm:SetScript("OnClick", function()
         if f.event ~= e or not f:IsShown() then return end
         local ok, err = GL.VoidPvP(identity, e)
@@ -1511,7 +1530,7 @@ local function renderHistory(p, record)
             row.date:SetText(eventDate(e) .. "   ·   " .. plain(eventPlace(e)))
             row.title:SetText(eventAction(e))
             row.badge:SetText(eventCertainty(e))
-            row.badge:SetTextColor(unpack(e.voided and theme.inkMuted or e.confidence == "probable" and inkColors.warning or theme.ink))
+            row.badge:SetTextColor(unpack(e.voided and theme.inkMuted or theme.ink))
             local hint = e.kind == "honor" and honorRecipient(e) or combatDetails(e, true)
                 or e.questTitle and (L("Quête suivie : ") .. plain(e.questTitle)) or eventReason(e)
             if not hint and e.source ~= "emote" and not pvpNames[e.kind] and e.evidence ~= "Avis personnel" then hint = plain(eventEvidence(e)) end
@@ -1519,7 +1538,7 @@ local function renderHistory(p, record)
             row.hint:SetText(hint or "")
             local icon = ({death="Ability_Rogue_FeignDeath", kill="Ability_DualWield", aggression="Ability_Warrior_Charge"})[e.kind]
             row.icon:SetTexture(icon and ("Interface\\Icons\\" .. icon) or GL.icon)
-            row.details:SetText(pvpNames[e.kind] and e.confidence == "probable" and not e.voided and L("Vérifier") or L("Détails"))
+            row.details:SetText(L("Détails"))
             row:Show()
         else row:Hide() end
     end
@@ -1589,23 +1608,22 @@ local function renderDetail()
         local duels = matchup and GL.ContactMatchup(record)
         if summary or matchup then
             local counts = duels or pvp
-            for _, entry in ipairs({ { "kills", "probableKills" }, { "deaths", "probableDeaths" } }) do
-                local card = ledger.metrics[entry[1]]
-                local probable, n = counts[entry[2]] or 0, counts[entry[1]] or 0
-                local kills = entry[1] == "kills"
+            for _, field in ipairs({ "kills", "deaths" }) do
+                local card = ledger.metrics[field]
+                local n = counts[field] or 0
+                local kills = field == "kills"
                 card.caption:SetText(matchup and (kills and L("Victoires confirmées") or L("Morts confirmées"))
                     or (kills and L("Vous l’avez vaincu") or L("Vous a tué")))
                 card.value:SetText(matchup and tostring(n) or (n == 1 and L("1 fois") or L("%d fois"):format(n)))
-                card.probable:SetText(probable > 0 and counted(probable, "probable") or "")
             end
         end
         if summary then
             local score, raw, gestures = GL.AutomaticBalance(record)
             ledger.balance:SetText(tostring(score))
             ledger.balance:SetTextColor(unpack(score < 0 and inkColors.enemy or score > 0 and inkColors.friend or theme.ink))
-            local deaths = (pvp.deaths or 0) + (pvp.probableDeaths or 0)
-            local wins = (pvp.kills or 0) + (pvp.probableKills or 0)
-            local hits = (pvp.aggressions or 0) + (pvp.probableAggressions or 0)
+            local deaths = (pvp.deaths or 0)
+            local wins = (pvp.kills or 0)
+            local hits = (pvp.aggressions or 0)
             local formula = counted(deaths, "mort") .. " × −10  +  " .. counted(wins, "victoire")
             if hits > 0 then formula = formula .. "  −  " .. counted(hits, "agression") end
             if gestures ~= 0 then
@@ -1638,16 +1656,18 @@ local function renderDetail()
                 lines[#lines + 1] = plain(preview) .. (count > 80 and L("… (suite dans Notes)") or "")
             else lines[#lines + 1] = "\n" .. L("Aucune note personnelle.") end
             lines[#lines + 1] = "\n" .. L("Rencontres mémorisées : %d"):format(record.encounters and record.encounters.count or 0)
-            lines[#lines + 1] = L("Agressions : %s, %s."):format(counted(pvp.aggressions or 0, "confirmée"), counted(pvp.probableAggressions or 0, "probable"))
+            lines[#lines + 1] = counted(pvp.aggressions or 0, "agression")
+            local awards = GL.ContactMatchup(record)
+            lines[#lines + 1] = honorTotal(awards)
+            lines[#lines + 1] = L("Honneur adverse inconnu")
             if guildRule and guildRule.note and guildRule.note ~= "" then lines[#lines + 1] = L("Note de guilde : %s"):format(plain(guildRule.note)) end
             if (record.groupCount or 0) > 0 then lines[#lines + 1] = subdued(L("Sessions de groupe : %d"):format(record.groupCount)) end
         elseif matchup then
             local confirmed = duels.kills + duels.deaths
-            local probable = duels.probableKills + duels.probableDeaths
-            ledger.matchupHistory:SetEnabled(confirmed + probable + duels.honorAwards > 0)
+            ledger.matchupHistory:SetEnabled(confirmed + duels.honorAwards > 0)
             lines = { subdued(L("Ce personnage · Monde ouvert")), honorTotal(duels) }
             if duels.honorAwards > 0 then lines[#lines + 1] = honorDetail(duels) end
-            lines[#lines + 1] = subdued(L("Le jeu ne communique pas l’honneur reçu par votre adversaire."))
+            lines[#lines + 1] = subdued(L("Honneur adverse inconnu"))
             if duels.run > 1 then
                 lines[#lines + 1] = L("Série en cours : %s de suite."):format(counted(duels.run, duels.lastKind == "kill" and "victoire" or "défaite"))
             end
@@ -1659,7 +1679,6 @@ local function renderDetail()
                     lines[#lines + 1] = eventDate(event) .. "   ·   " .. (event.kind == "kill" and L("Victoire") or L("Défaite")) .. "   ·   " .. plain(eventPlace(event))
                 end
             elseif confirmed > 0 then lines[#lines + 1] = "\n" .. L("Aucun combat confirmé et daté pour ce personnage.")
-            elseif probable > 0 then lines[#lines + 1] = "\n" .. L("Les résultats probables peuvent être vérifiés dans l’histoire.")
             else lines[#lines + 1] = "\n" .. L("Aucune victoire ni défaite enregistrée avec ce joueur pour ce personnage.") end
         elseif tab == "history" then
             renderHistory(ledger.historyPage, record)
@@ -2219,8 +2238,6 @@ local function buildLedger()
         card.value = label(card, "0", "large", 6, -29, 262)
         journalFont(card.value, "GameFontNormalLarge", 28)
         card.value:SetTextColor(unpack(theme.ink)) card.value:SetHeight(34) card.value:SetJustifyH("CENTER")
-        card.probable = label(card, "", nil, 6, -65, 262) card.probable:SetJustifyH("CENTER")
-        journalFont(card.probable, "GameFontHighlightSmall", 11) card.probable:SetTextColor(unpack(theme.inkMuted))
         f.metrics[entry[1]] = card
     end
     f.balancePanel = CreateFrame("Frame", nil, f.counters) f.balancePanel:SetAllPoints()

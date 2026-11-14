@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON, private = ...
-GrudgeLedger = { version = "0.10.2", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { version = "0.10.3", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local translations = private and private.translations
@@ -244,9 +244,9 @@ function GL.AutomaticBalance(record)
     end
     cached.total, cached.count = social, #events
     local pvp = record.pvp
-    local balance = (pvp.kills or 0) + (pvp.probableKills or 0)
-        - 10 * ((pvp.deaths or 0) + (pvp.probableDeaths or 0))
-        - (pvp.aggressions or 0) - (pvp.probableAggressions or 0)
+    local balance = (pvp.kills or 0)
+        - 10 * (pvp.deaths or 0)
+        - (pvp.aggressions or 0)
     -- Friendly gestures cannot conceal an unsettled attack; victories repay one
     -- point at a time but cannot by themselves make an opponent a friend.
     local score = balance < 0 and math.min(0, social) + balance
@@ -338,7 +338,7 @@ local function normalize(record)
         if not manualScore then record.reactionSource = "automatic" end
     end
     record.pvp = type(record.pvp) == "table" and record.pvp or {}
-    for _, field in ipairs({ "kills", "deaths", "probableKills", "probableDeaths", "aggressions", "probableAggressions" }) do
+    for _, field in ipairs({ "kills", "deaths", "aggressions" }) do
         record.pvp[field] = tonumber(record.pvp[field]) or 0
     end
     record.groupCount = tonumber(record.groupCount) or 0
@@ -421,8 +421,26 @@ local function merge(provisional, record)
         end
     end
     for _, note in ipairs(provisional.notes or {}) do table.insert(record.notes, note) end
-    for _, event in ipairs(provisional.history or {}) do table.insert(record.history, event) end
-    for _, field in ipairs({ "kills", "deaths", "probableKills", "probableDeaths", "aggressions", "probableAggressions" }) do
+    local seen = {}
+    local fields = {death="deaths", kill="kills", aggression="aggressions"}
+    for _, event in ipairs(record.history) do
+        if fields[event.kind] and event.eventId then seen[event.eventId] = event end
+    end
+    for _, event in ipairs(provisional.history or {}) do
+        local field = fields[event.kind]
+        local existing = field and seen[event.eventId]
+        if existing and existing.kind == event.kind then
+            if not event.voided then provisional.pvp[field] = math.max(0, provisional.pvp[field] - 1) end
+            if event.voided and not existing.voided then
+                for key, value in pairs(event) do existing[key] = value end
+                record.pvp[field] = math.max(0, record.pvp[field] - 1)
+            end
+        else
+            table.insert(record.history, event)
+            if field and event.eventId then seen[event.eventId] = event end
+        end
+    end
+    for _, field in ipairs({ "kills", "deaths", "aggressions" }) do
         record.pvp[field] = record.pvp[field] + (provisional.pvp[field] or 0)
     end
     if not record.reaction or ((record.reactionSource == "emote" or record.reactionSource == "automatic")
@@ -547,12 +565,12 @@ local function effectiveRelation(record)
     local opinion = record.reaction == "friend" or record.reaction == "enemy" or record.reaction == "neutral" or record.reaction == "warning"
     if opinion and record.reactionSource ~= "emote" and record.reactionSource ~= "automatic" then return record.reaction, "manual" end
     local pvp = record.pvp or {}
-    if (pvp.deaths or 0) + (pvp.probableDeaths or 0) > 0 and (record.reputation or 0) < 0 then
-        return record.reputation <= -10 and "enemy" or "warning", "pvp"
+    if (pvp.deaths or 0) > 0 and (record.reputation or 0) < 0 then
+        return (record.reputation <= -10 or (pvp.aggressions or 0) > 0) and "enemy" or "warning", "pvp"
     end
     local rule = GL.GetGuildRule(record)
     if rule and rule.reaction == "enemy" then return "enemy", "guild" end
-    if (pvp.aggressions or 0) + (pvp.probableAggressions or 0) > 0 and (record.reputation or 0) < 0 then return "warning", "pvp" end
+    if (pvp.aggressions or 0) > 0 and (record.reputation or 0) < 0 then return "enemy", "pvp" end
     if opinion and record.reactionSource == "emote" then return record.reaction, "emote" end
     if rule then return rule.reaction, "guild" end
     if opinion then return record.reaction, "automatic" end
@@ -572,9 +590,7 @@ end
 function GL.RelationConfidence(record)
     local relation, source = effectiveRelation(record)
     if source ~= "pvp" then return nil end
-    local confirmed = (record.pvp.deaths or 0) + (record.pvp.probableDeaths or 0) > 0
-        and record.pvp.deaths or record.pvp.aggressions
-    return (confirmed or 0) > 0 and "confirmed" or "probable"
+    return "confirmed"
 end
 local function currentActor()
     local name, surname = GL.Safe(UnitName, "player")
@@ -662,7 +678,7 @@ local function buildGuildStatistics()
         if not key then return end
         if not guilds[key] then
             guilds[key] = { key = key, name = clean, realm = server, members = 0, grudges = 0,
-                friends = 0, deaths = 0, probableDeaths = 0, kills = 0, aggressions = 0 }
+                friends = 0, deaths = 0, kills = 0, aggressions = 0 }
         end
         return guilds[key]
     end
@@ -681,8 +697,7 @@ local function buildGuildStatistics()
         for _, event in ipairs(record.history or {}) do
             if not event.voided and event.guild then
                 local historical = get(event.guild, event.guildRealm)
-                local field = event.kind == "death" and (event.confidence == "confirmed" and "deaths"
-                    or event.confidence == "probable" and "probableDeaths")
+                local field = event.kind == "death" and event.confidence == "confirmed" and "deaths"
                     or event.confidence == "confirmed" and ({ kill = "kills", aggression = "aggressions" })[event.kind]
                 if historical and field then
                     if event.kind == "death" then
@@ -874,9 +889,9 @@ function GL.DeleteProfile(record)
     return true
 end
 local pvpFields = {
-    kill = { confirmed = "kills", probable = "probableKills" },
-    death = { confirmed = "deaths", probable = "probableDeaths" },
-    aggression = { confirmed = "aggressions", probable = "probableAggressions" },
+    kill = { confirmed = "kills" },
+    death = { confirmed = "deaths" },
+    aggression = { confirmed = "aggressions" },
 }
 function GL.HonorPoints(event)
     local n = type(event) == "table" and event.kind == "honor" and GL.Clean(event.honor, "number")
@@ -959,7 +974,7 @@ end
 function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat)
     if GL.IsPvPInstance() then return nil end
     if kind ~= "kill" and kind ~= "death" then return nil end
-    if confidence ~= "confirmed" and confidence ~= "probable" then return nil end
+    if confidence ~= "confirmed" then return nil end
     local record = GL.Remember(identity)
     if not record then return nil end
     if eventId then
@@ -974,7 +989,7 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat)
 end
 function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     if GL.IsPvPInstance() then return nil end
-    if confidence ~= "confirmed" and confidence ~= "probable" then return nil end
+    if confidence ~= "confirmed" then return nil end
     local record = GL.Remember(identity)
     if not record then return nil end
     if eventId then
@@ -991,24 +1006,6 @@ local function hasEvent(record, event)
     for _, entry in ipairs(record.history) do if entry == event then return true end end
 end
 
-function GL.ConfirmKill(identity, event, evidence)
-    local record = GL.Get(identity)
-    if not record or type(event) ~= "table" or event.kind ~= "kill" or event.voided
-        or event.confidence ~= "probable" or not hasEvent(record, event) or (record.pvp.probableKills or 0) < 1 then return false end
-    if evidence then
-        event.evidence = evidence
-    else
-        event.confirmedByGUID, event.confirmedByName = currentActor()
-        event.playerConfirmedAt = GL.Now()
-    end
-    event.confidence = "confirmed"
-    record.pvp.probableKills = record.pvp.probableKills - 1
-    record.pvp.kills = record.pvp.kills + 1
-    -- Both kinds of victory already earned one point. Only the evidence and its totals change.
-    guildStatistics = nil
-    GL.Emit("CHANGED", record)
-    return true
-end
 
 function GL.VoidPvP(identity, event, silent, reason)
     local record = GL.Get(identity)
@@ -1132,8 +1129,7 @@ local function addEventText(parts, event)
     end
     parts[#parts + 1] = searchKinds[event.kind]
     if event.reaction then parts[#parts + 1] = searchRelations[event.reaction] end
-    if event.confidence == "confirmed" then parts[#parts + 1] = L("Confirmé")
-    elseif event.confidence == "probable" then parts[#parts + 1] = L("Probable") end
+    if event.confidence == "confirmed" then parts[#parts + 1] = L("Confirmé") end
     if event.evidence and GL.LocalizeEvidence then
         local display = GL.LocalizeEvidence(event)
         if display ~= event.evidence then parts[#parts + 1] = display end
@@ -1309,7 +1305,7 @@ local function pvpEventKey(row, byOpponent)
 end
 function GL.ContactMatchup(record, withHistory)
     local actor, now = currentActor(), GL.Now()
-    local result = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0, honor = 0, honorAwards = 0, bestHonor = 0,
+    local result = { kills = 0, deaths = 0, honor = 0, honorAwards = 0, bestHonor = 0,
         run = 0, recent = {}, indices = withHistory and {} or nil }
     if not actor or not record then return result end
     -- ponytail: only the open contact is read. Rebuild on demand so corrections and
@@ -1326,8 +1322,7 @@ function GL.ContactMatchup(record, withHistory)
                 if not row then
                     row = { at = at, index = i, event = event }
                     seen[key], entries[#entries + 1] = row, row
-                elseif row.event.confidence == "probable" and event.confidence == "confirmed" then
-                    row.at, row.index, row.event = at, i, event
+
                 end
             end
         end
@@ -1385,11 +1380,11 @@ function GL.PersonalStatistics(options)
     local now, nextAt = GL.Now()
     if personalStatistics and personalStatistics.key == key and now >= personalStatistics.at
         and (not personalStatistics.nextAt or now < personalStatistics.nextAt) then return statisticsCopy(personalStatistics.value) end
-    local stats = { kills = 0, deaths = 0, probableKills = 0, probableDeaths = 0,
+    local stats = { kills = 0, deaths = 0,
         honor = 0, honorAwards = 0, bestHonor = 0, unassignedHonor = 0,
         victims = 0, attackers = 0, initiated = 0, responded = 0, revengeKills = 0,
         initiatedKillsNoGrudge = 0, initiatedKillsGrudge = 0, responseKills = 0, unknownOpeningKills = 0,
-        aggressions = 0, probableAggressions = 0, events = 0, unknownActorEvents = 0,
+        aggressions = 0, events = 0, unknownActorEvents = 0,
         unlinkedEvents = 0, currentActor = actor, actorName = actorName, scope = scope, topDeaths = {} }
     local counted, unknown, ranked, rankings = {}, {}, {}, { kill = {}, death = {} }
     local attackers, openings = {}, {}
@@ -1417,8 +1412,7 @@ function GL.PersonalStatistics(options)
             end
             if inScope(row.actor, scope, actor) then
                 if event.confidence == "confirmed" and (event.kind == "aggression" or event.kind == "death") then attackers[record.key] = true end
-                local previous = counted[id]
-                if not previous or event.confidence == "confirmed" then counted[id] = row end
+                counted[id] = counted[id] or row
                 if not stats.firstAt or at < stats.firstAt then stats.firstAt = at end
                 if not stats.lastAt or at > stats.lastAt then stats.lastAt = at end
                 if event.confidence == "confirmed" and rankings[event.kind] then
@@ -1496,11 +1490,10 @@ function GL.PvPBreakdown(options, dimension)
                     local counts = event.voided and corrected or active
                     local id = pvpEventKey(row)
                     local previous = counts[id]
-                    if not previous or event.confidence == "confirmed" and previous.confidence ~= "confirmed" then
+                    if not previous then
                         counts[id] = { key = category, label = label, raceID = dimension == "race" and event.raceID or nil, kind = event.kind, confidence = event.confidence, zone = zone }
-                    elseif event.confidence == previous.confidence then
-                        -- Resolve a shared death before filtering by location. A probable
-                        -- participant cannot create a second death in another district.
+                    else
+                        -- Group all participants before filtering by district.
                         if subzones and previous.zone ~= zone then
                             previous.zone = (zone == "unknown" or previous.zone == "unknown") and "unknown" or "mixed"
                         end
@@ -1517,7 +1510,7 @@ function GL.PvPBreakdown(options, dimension)
             for _, entry in pairs(counts) do
                 if not subzones or entry.zone == parentZone then
                     local bucket = buckets[entry.key] or { key = entry.key, label = entry.label, kills = 0, deaths = 0,
-                        probableKills = 0, probableDeaths = 0, correctedKills = 0, correctedDeaths = 0 }
+                        correctedKills = 0, correctedDeaths = 0 }
                     local field = counts == corrected and (entry.kind == "kill" and "correctedKills" or "correctedDeaths")
                         or pvpFields[entry.kind][entry.confidence]
                     bucket.raceID = bucket.raceID or entry.raceID
@@ -1530,7 +1523,7 @@ function GL.PvPBreakdown(options, dimension)
         local rows = {}
         for _, bucket in pairs(buckets) do rows[#rows + 1] = bucket end
         table.sort(rows, function(a, b)
-            local av, bv = a.kills + a.deaths + a.probableKills + a.probableDeaths, b.kills + b.deaths + b.probableKills + b.probableDeaths
+            local av, bv = a.kills + a.deaths, b.kills + b.deaths
             if av ~= bv then return av > bv end
             if a.label ~= b.label then return a.label < b.label end
             return a.key < b.key
@@ -1577,7 +1570,7 @@ function GL.InitDB()
     traceLast = {}
     if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end
     GL.db = GrudgeLedgerDB
-    GL.db.schema = 1
+    local migratePvP = GL.db.schema ~= 2
     GL.db.players = type(GL.db.players) == "table" and GL.db.players or {}
     if GL.db.unassignedHonor ~= nil and type(GL.db.unassignedHonor) ~= "table" then
         GL.db.quarantine = GL.db.quarantine or {}
@@ -1600,6 +1593,31 @@ function GL.InitDB()
     for key, record in pairs(GL.db.players) do
         if type(key) == "string" and type(record) == "table" then
             record.key = key
+            if migratePvP or type(record.pvp) == "table" and (record.pvp.probableDeaths or record.pvp.probableKills or record.pvp.probableAggressions) then
+                local pvp = record.pvp
+                if type(pvp) == "table" then
+                    for old, field in pairs({probableDeaths="deaths", probableKills="kills", probableAggressions="aggressions"}) do
+                        pvp[field] = (tonumber(pvp[field]) or 0) + (tonumber(pvp[old]) or 0)
+                        pvp[old] = nil
+                    end
+                end
+                local seen = {}
+                for _, event in ipairs(type(record.history) == "table" and record.history or {}) do
+                    if type(event) == "table" and event.confidence == "probable" then
+                        event.confidence = "confirmed"
+                        if event.kind == "death" and type(event.evidence) == "string" and event.evidence:find("Participation probable", 1, true) then
+                            event.evidence = "Participation à l’attaque ayant causé votre mort."
+                        end
+                    end
+                    if type(event) == "table" and pvpFields[event.kind] and event.eventId and not event.voided then
+                        local field = pvpFields[event.kind][event.confidence]
+                        if field and seen[event.eventId] == field then
+                            event.voided, event.voidReason = true, "duplicate"
+                            if type(pvp) == "table" then pvp[field] = math.max(0, (pvp[field] or 0) - 1) end
+                        elseif field then seen[event.eventId] = field end
+                    end
+                end
+            end
             normalize(record)
         else
             GL.db.quarantine = GL.db.quarantine or {}
@@ -1608,6 +1626,7 @@ function GL.InitDB()
             GL.Debug(L("Entrée sauvegardée invalide conservée dans quarantine : ") .. tostring(key))
         end
     end
+    GL.db.schema = 2
     cleanBattlegroundHistory()
     GL.Emit("READY")
 end
