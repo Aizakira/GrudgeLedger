@@ -750,6 +750,18 @@ do
     assert(toast.title.text == "Signal indirect · Ennemi" and #sounds == silent,
         "confidence updates on the existing hint without a second notification")
 end
+local messages={}
+GL.Print=function(text) messages[#messages+1]=text end
+units.target={name="Nearby",surname="Rival",guid="Player-1-ffff"}
+local tracked=GL.Remember(GL.Identity("target"));tracked.followEncounter=true
+local corpse=true
+UnitIsVisible=function()return true end
+UnitIsDeadOrGhost=function()return corpse end
+GL.Display.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+corpse=false
+GL.Display.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+GL.Display.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+assert(#messages==1 and messages[1]:find("ressuscit",1,true))
 GL.SetSetting("enemyAlerts", false)
 assert(not toast.shown and not eventFrame.events.CHAT_MSG_SAY and not eventFrame.events.UNIT_TARGET)
 assert(#GL.errors == 0)

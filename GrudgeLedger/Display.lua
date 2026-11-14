@@ -211,6 +211,28 @@ local function ensureMarker(plate)
     return marker
 end
 
+local nearbyDead,followAlerts={},{}
+local function encounterState(record,unit)
+    if not record or not record.guid or not GL.Settings().enemyAlerts then return end
+    local watched=record.followEncounter
+    if not watched and GL.Relation(record)~="enemy" then return end
+    local now=GL.Now()
+    local dead=GL.Safe(UnitIsDeadOrGhost,unit)
+    if dead==true then
+        nearbyDead[record.guid]=now
+    elseif dead==false then
+        local seen=nearbyDead[record.guid]
+        nearbyDead[record.guid]=nil
+        if seen and now>=seen and now-seen<=120 then
+            GL.Print(record.fullName.." vient de ressusciter à proximité.")
+            followAlerts[record.guid]=now
+        elseif watched and (not followAlerts[record.guid] or now-followAlerts[record.guid]>=90) then
+            GL.Print(record.fullName.." est à proximité.")
+        end
+        if watched then followAlerts[record.guid]=now end
+    end
+end
+
 local function updateMarker(entry, reuseObservation)
     local plate = C_NamePlate and GL.Safe(C_NamePlate.GetNamePlateForUnit, entry.unit)
     if entry.plate ~= plate then
@@ -225,6 +247,7 @@ local function updateMarker(entry, reuseObservation)
     -- Refresh membership as well as identity: guild rules can change while the
     -- same player stays visible, and leaving a guild must remove its marker.
     local record = identity and GL.RecordSeen(identity, true)
+    encounterState(record,entry.unit)
     partyWarning(record, entry.unit)
     local relation = record and GL.Relation(record)
     local guildKey = record and inheritedGuildKey(record)
@@ -508,6 +531,7 @@ local function observe(unit, notify, reuseObservation)
         GL.Trace("observed", identity, unit)
         if GL.Bounties and notify and GL.db.settings.enemyAlerts then GL.Bounties.Observe(identity.guid) end
         local record = GL.RecordSeen(identity, true)
+        encounterState(record,unit)
         partyWarning(record, unit)
         if notify or (record and GL.Relation(record) == "friend") then alert(identity, unit) end
     elseif notify then
@@ -649,6 +673,7 @@ function D.OnEvent(_, event, unit, ...)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         for token in pairs(visible) do removeUnit(token) end
         guildBursts = {}
+        nearbyDead,followAlerts={},{}
         signals, latestSignal = {}, nil
         if toast then toast:Hide() end
         if previewToast then previewToast:Hide() end
@@ -657,6 +682,7 @@ function D.OnEvent(_, event, unit, ...)
         awaitingResurrection = true
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
         if awaitingResurrection and GL.Safe(UnitIsDeadOrGhost, "player") == false then
+            followAlerts={}
             awaitingResurrection, lastAlert, lastSound = nil, {}, nil
             for _, entry in pairs(visible) do entry.recordKey = nil end
             scanPlates()

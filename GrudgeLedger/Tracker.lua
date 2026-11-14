@@ -254,7 +254,11 @@ local function killingBlow(src, dst, name, evidence, native)
         evidence = "Votre familier a porté le coup fatal à ce joueur."
     end
     creditKill(identityForGUID(dst, name), "confirmed", evidence, native)
-    if enabled() and not GL.IsPvPInstance() then GL.Emit("BOUNTY_KILL",dst) end
+    local credit=recentCredits[dst]
+    if credit and not credit.guildReported and not credit.event.voided and not GL.IsPvPInstance() then
+        credit.guildReported=true
+        GL.Emit("BOUNTY_KILL",dst)
+    end
 end
 
 local function recordAggression(f, identity, confidence, evidence, viaPet)

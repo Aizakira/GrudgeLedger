@@ -17,3 +17,13 @@ Le client [dessine le portrait à partir d’une unité](https://github.com/Geth
 - **Présentation recommandée :** distinguer « Observé en jeu à … » et « Dernière fiche Armurerie du … ». Une nouvelle consultation ne doit jamais réécrire le souvenir d’un combat. Prévoir aussi une fiche indisponible, une inspection partielle et un changement d’équipement après le combat dans la validation.
 
 Conclusion : un onglet autonome peut présenter ce que le jeu a permis d’observer. Un onglet alimenté automatiquement par le site pour n’importe quel ennemi exige un composant extérieur au jeu ; même alors, la fiche web ne prouve pas l’équipement porté à l’instant du combat.
+
+## Import privé et commandes de la branche de développement
+
+Depuis le dépôt, lancer `python tools/sync_portraits.py "chemin/vers/_forever_" --region eu --profiles-only` après une sauvegarde des contacts du journal. Le module privé GrudgeLedgerPortraits charge les profils lors du prochain chargement du jeu. À sa première création, redémarrer le client et vérifier son activation. Retirer --profiles-only pour importer aussi les miniatures. Le cache local évite une nouvelle requête pendant sept jours. --force permet une actualisation anticipée.
+
+La clé du catalogue est le contenu complet de la variante portée. Deux capes de même identifiant avec des statistiques, bonus ou enchantements différents restent distinctes. Les emplacements des personnages référencent ces variantes. Chaque profil conserve le dernier relevé disponible. Le journal conserve séparément les rencontres. Les noms et les effets sont actuellement ceux de la fiche anglaise. Les absences de profil ou d’identité vérifiable conservent le relevé précédent.
+
+- /glfiche sur une cible connue affiche l’équipement, les statistiques de base de chaque pièce, les talents et le bilan de guilde. /glfiche voir GUID consulte un contact hors de portée. Les détails des variantes sont disponibles par GrudgeLedger.ArmoryItem(fiche, emplacement).
+- /glfiche suivre et /glfiche arreter activent et retirent le suivi privé de la cible. Une réapparition après une absence de 90 secondes et le passage observé de mort à vivant produisent un message si les alertes ennemies sont activées.
+- /glfiche partager oui ou non règle le partage des futurs résultats JcJ pour ce personnage et cette guilde. Les membres échangent les totaux cumulés par auteur et adversaire pour que la réception répétée d’un message ne multiplie pas les morts. Le réseau repose sur la confiance entre membres. Le partage des fiches Armurerie entre clients et leur téléchargement en jeu ne sont pas implémentés.

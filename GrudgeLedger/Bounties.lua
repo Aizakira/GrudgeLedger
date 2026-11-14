@@ -150,6 +150,38 @@ local function schedule(s,msg)
     if active~=s then active,queue,queued=s,{},{} end
     if not queued[msg] then queue[#queue+1]=msg; queued[msg]=true end
 end
+-- Per-member cumulative totals survive replay and offline catch-up.
+local function mergeScore(s,actor,target,wins,losses)
+    s.scores=s.scores or {}
+    local scores=s.scores[target] or {}
+    s.scores[target]=scores
+    local old=scores[actor] or {0,0}
+    scores[actor]={math.max(old[1],wins),math.max(old[2],losses)}
+end
+local function scoreMessage(actor,target,wins,losses)
+    return table.concat({"G",actor,target,wins,losses},";")
+end
+local function countFight(target,index)
+    local s,me=scope()
+    if not (s and s.shareFights and s.shareFights[me] and guid(target)) then return end
+    local totals=s.scores and s.scores[target] and s.scores[target][me] or {0,0}
+    local wins,losses=totals[1],totals[2]
+    if index==1 then wins=wins+1 else losses=losses+1 end
+    mergeScore(s,me,target,wins,losses)
+    schedule(s,scoreMessage(me,target,wins,losses))
+end
+function B.ShareFights(enabled)
+    local s,me=scope()
+    if s then s.shareFights=s.shareFights or {}; s.shareFights[me]=enabled==true end
+end
+function B.GuildFights(target)
+    local s=scope()
+    local wins,losses=0,0
+    for _,n in pairs(s and s.scores and s.scores[target] or {}) do
+        wins=wins+n[1]; losses=losses+n[2]
+    end
+    return wins,losses
+end
 local function declare(kind,order,value,detail)
     local s,me=scope()
     if not s then return nil,"guild" end
@@ -234,6 +266,7 @@ local function finalize(s,me)
     end
 end
 function B.Kill(target)
+    countFight(target,1)
     local s,me=scope()
     if not s then return end
     if s==joined and openTargets and not openTargets[target] then return end
@@ -264,6 +297,7 @@ function B.ShareDeaths(enabled)
     if s then s.shareDeaths=s.shareDeaths or {}; s.shareDeaths[me]=enabled==true end
 end
 function B.Death(target,name)
+    countFight(target,2)
     local s,me=scope()
     if s and s.shareDeaths and s.shareDeaths[me] and guid(target) and plain(name,64) then
         if declare("D",target,"",name) then autoOrder(s,me,target,name) end
@@ -281,11 +315,22 @@ local function receive(msg,sender)
     if msg=="Q" then
         if budget.lastQ and now-budget.lastQ<10 then return end
         budget.lastQ=now
+        for target,scores in pairs(s.scores or {}) do
+            for actor,n in pairs(scores) do schedule(s,"R;"..scoreMessage(actor,target,n[1],n[2])) end
+        end
         for _,raw in pairs(s.events) do if unpackEvent(raw) then schedule(s,"R;"..raw) end end
         return
     end
     local relay=msg:sub(1,2)=="R;"
     local raw=relay and msg:sub(3) or msg
+    if raw:sub(1,2)=="G;" then
+        local actor,target,wins,losses=raw:match("^G;([^;]+);([^;]+);(%d+);(%d+)$")
+        wins,losses=number(wins,0,10000000),number(losses,0,10000000)
+        if guid(actor) and guid(target) and wins and losses and actor~=me and (relay or actor==sender) then
+            mergeScore(s,actor,target,wins,losses)
+        end
+        return
+    end
     local e=unpackEvent(raw)
     if not e or s.events[e.key] then return end
     if not relay and e.actor~=sender then return end

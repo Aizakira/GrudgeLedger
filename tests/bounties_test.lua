@@ -144,5 +144,12 @@ c.hook.BOUNTY_DEATH(rampage,"Enemy");flush()
 local n=0
 for _,o in pairs(a.b.List()) do if o.target==rampage then n=n+1 end end
 assert(n==1)
+a.b.ShareFights(true);b.b.ShareFights(true)
+a.b.Kill(target);b.b.Death(target,"Target");flush()
+local wins,losses=c.b.GuildFights(target)
+assert(wins==1 and losses==1)
+local late=client(4);flush()
+wins,losses=late.b.GuildFights(target)
+assert(wins==1 and losses==1)
 c.guild="Other";c.event(nil,"PLAYER_GUILD_UPDATE");assert(not next(c.b.List()))
 print("PASS guild bounties: offline relay, duplicate messages, owner resolution, split, partial payments, expiration, withdrawal, automatic order, guild isolation.")

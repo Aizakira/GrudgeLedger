@@ -32,6 +32,8 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
     addon.mkdir(parents=True)
     (addon / "GrudgeLedger.toc").touch()
     contacts = {guid: {"test keeper"}}
+    character.update(gear={"back":{"id":999999,"name":"New cloak","bonus_list":[14],
+                                  "stats":[{"type":{"type":"AGILITY"},"value":5}]}}, specs=[])
     portraits.sync(root, "eu", contacts)
     folder = addon.parent / "GrudgeLedgerPortraits"
     texture = folder / (guid + ".tga")
@@ -39,6 +41,18 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
         assert image.size == (64, 64) and image.mode == "RGB"
     before = texture.read_bytes()
     assert guid in (folder / "Portraits.lua").read_text()
+    archive=(folder/"Profiles.lua").read_text()
+    assert "999999" in archive and "AGILITY" in archive and "bonus_list" in archive
+    other=guid.replace("2A","2B")
+    duplicate=folder/(other+".json")
+    duplicate.write_bytes((folder/(guid+".json")).read_bytes())
+    portraits.publish_profiles(folder)
+    assert (folder/"Profiles.lua").read_text().count("New cloak")==1
+    second=json.loads(duplicate.read_bytes())
+    second["gear"]["back"]["stats"][0]["value"]=9
+    duplicate.write_text(json.dumps(second))
+    portraits.publish_profiles(folder)
+    assert (folder/"Profiles.lua").read_text().count("New cloak")==2
     requests.reset_mock()
     portraits.sync(root, "eu", contacts)
     assert requests.call_count == 0

@@ -1,5 +1,6 @@
 """Import verified Forever Armory avatars into a private, optional WoW media addon."""
 import argparse
+import gzip
 import io
 import json
 import os
@@ -21,31 +22,45 @@ TOC = b"## Interface: 16001\n## Title: Grudge Ledger - Private portraits\nPortra
 
 
 def fetch(url, limit):
-    request = Request(url, headers={"User-Agent": "GrudgeLedger/portrait-import"})
+    request = Request(url, headers={"User-Agent": "GrudgeLedger/armory-import", "Accept-Encoding": "gzip"})
     with urlopen(request, timeout=12) as response:
         if urlsplit(response.geturl()).netloc != urlsplit(url).netloc:
             raise ValueError("unexpected redirect")
         data = response.read(limit + 1)
+        if response.headers.get("Content-Encoding", "").lower() == "gzip" and len(data) <= limit:
+            with gzip.GzipFile(fileobj=io.BytesIO(data)) as stream:
+                data = stream.read(limit + 1)
     if len(data) > limit:
         raise ValueError("oversized response")
     return data
 
 
-def portrait(region, name, guid):
+def character_profile(region, name, guid):
     if not re.fullmatch(GUID, guid) or region not in ("eu", "us", "kr", "tw"):
         raise ValueError("invalid character or region")
     slug = "-".join(name.casefold().split())
     html = fetch(f"https://worldofwarcraft.blizzard.com/en-us/forever/{region}/armory/character/{quote(slug, safe='')}", 4_000_000).decode()
     start = PROFILE.search(html)
-    if not start:
-        raise ValueError("no Armory profile")
-    data = json.JSONDecoder().raw_decode(html[start.end():].lstrip())[0]["character"]
+    if start:
+        data = json.JSONDecoder().raw_decode(html[start.end():].lstrip())[0]["character"]
+    else:
+        model = re.search(r'<script id="model">\s*model\s*=\s*', html)
+        if not model:
+            raise ValueError("no Armory profile")
+        mounts = json.JSONDecoder().raw_decode(html[model.end():].lstrip())[0]["reactMounts"]
+        data = next((m["initialState"]["character"] for m in mounts if m.get("id") == "character-profile-mount"), {})
+
     if data["region"] != region or (data["name"] + " " + data["surname"]).casefold() != name.casefold():
         raise ValueError("character name or region mismatch")
     media = data["avatar"]["url"]
     player_id = int(guid.rsplit("-", 1)[1], 16)
     if not re.fullmatch(rf"https://render\.worldofwarcraft\.com/forever-{region}/character/[0-9]+/{player_id}-avatar\.jpg", media):
         raise ValueError("no individual avatar matching the saved character ID")
+    return data
+
+
+def portrait(data):
+    media = data["avatar"]["url"]
     with Image.open(io.BytesIO(fetch(media, 512_000))) as img:
         if img.format != "JPEG" or img.width != img.height or not 32 <= img.width <= 512:
             raise ValueError("unexpected avatar format")
@@ -68,7 +83,58 @@ def write_atomic(path, data):
             tmp.unlink(missing_ok=True)
 
 
-def sync(root, region, contacts, force=False):
+def compact(data):
+    def details(node):
+        if isinstance(node, list):
+            return [details(v) for v in node]
+        if isinstance(node, dict):
+            return {k: details(v) for k, v in node.items() if k not in
+                    {"key", "media", "icon", "color", "display_color", "_links", "href"}}
+        return node
+
+    gear = {}
+    for slot, item in data.get("gear", {}).items():
+        gear[slot] = details({k: item[k] for k in ("id", "name", "quality", "level", "armor", "weapon",
+            "stats", "bonus_list", "enchantments", "sockets", "spells", "set", "requirements") if k in item})
+    return {"gear": gear, "updated": data.get("lastUpdatedTimestamp", {}).get("epoch"),
+            "level": data.get("level"), "averageItemLevel": data.get("averageItemLevel"),
+            "trees": [{"name": t["name"], "points": t["spentPoints"], "talents":
+                      [[v["id"], v["name"], v["rank"]] for v in t.get("talents", [])]}
+                     for t in data.get("specs", [])]}
+
+
+def lua(v):
+    if v is None:
+        return "nil"
+    if isinstance(v, bool):
+        return str(v).lower()
+    if isinstance(v, (float, int)):
+        return json.dumps(v, allow_nan=False)
+    if isinstance(v, str):
+        return '"' + re.sub(r'[\x00-\x1f\x7f"\\]', lambda m: chr(92) + ("%03d" % ord(m[0])), v) + '"'
+    if isinstance(v, list):
+        return "{" + ",".join(map(lua, v)) + "}"
+    return "{" + ",".join("[" + lua(k) + "]=" + lua(val) for k,val in sorted(v.items())) + "}"
+
+
+def publish_profiles(folder):
+    profiles, variants, indices = {}, [], {}
+    for file in sorted(folder.glob("Player-*.json")):
+        if not re.fullmatch(GUID, file.stem):
+            continue
+        profile = json.loads(file.read_text("utf8"))
+        for slot, item in profile["gear"].items():
+            key = lua(item)
+            if key not in indices:
+                variants.append(item)
+                indices[key] = len(variants)
+            profile["gear"][slot] = indices[key]
+        profiles[file.stem] = profile
+    write_atomic(folder / "Profiles.lua", ("GrudgeLedgerArmory = " +
+                 lua({"profiles": profiles, "items": variants}) + "\n").encode())
+
+
+def sync(root, region, contacts, force=False, profiles_only=False):
     addons = root / "Interface" / "AddOns"
     if not (addons / "GrudgeLedger" / "GrudgeLedger.toc").is_file():
         raise ValueError("Grudge Ledger is missing from the selected game folder")
@@ -79,20 +145,28 @@ def sync(root, region, contacts, force=False):
         if not re.fullmatch(GUID, guid):
             raise ValueError("invalid character GUID")
         path = folder / (guid + ".tga")
-        if not force and path.is_file() and 0 <= time.time() - path.stat().st_mtime < 7 * 86400:
+        cache = path.with_suffix(".json")
+        required = (cache,) if profiles_only else (cache, path)
+        if not force and all(f.is_file() and 0 <= time.time() - f.stat().st_mtime < 7 * 86400 for f in required):
             fresh += 1
             continue
         for name in sorted(names):
             try:
-                data = portrait(region, name, guid)
+                character = character_profile(region, name, guid)
+                profile = json.dumps(compact(character), ensure_ascii=False, separators=(",", ":")).encode()
+                if not profiles_only:
+                    data = portrait(character)
             except HTTPError as exc:
                 if exc.code == 404:
                     continue
                 raise
             except (ValueError, KeyError, UnidentifiedImageError):
                 continue
-            write_atomic(path, data)
-            path.touch()
+            write_atomic(cache, profile)
+            cache.touch()
+            if not profiles_only:
+                write_atomic(path, data)
+                path.touch()
             updated += 1
             break
         else:
@@ -102,7 +176,8 @@ def sync(root, region, contacts, force=False):
     keys = sorted(p.stem for p in folder.glob("Player-*.tga") if re.fullmatch(GUID, p.stem))
     index = "GrudgeLedgerPortraitIndex = {\n" + "".join(f'    ["{k}"] = true,\n' for k in keys) + "}\n"
     write_atomic(folder / "Portraits.lua", index.encode("ascii"))
-    write_atomic(folder / "GrudgeLedgerPortraits.toc", TOC)
+    publish_profiles(folder)
+    write_atomic(folder / "GrudgeLedgerPortraits.toc", TOC + b"Profiles.lua\n")
     print(f"{updated} updated, {fresh} recent, {unavailable} unavailable. {len(keys)} portraits in {folder}")
 
 
@@ -112,6 +187,7 @@ def main():
     parser.add_argument("--region", choices=("eu", "us", "kr", "tw"), required=True)
     parser.add_argument("--name", help="only synchronize this full character name")
     parser.add_argument("--force", action="store_true", help="refresh even within seven days")
+    parser.add_argument("--profiles-only", action="store_true", help="import gear and talents without downloading images")
     args = parser.parse_args()
     contacts = {}
     for save in (args.game / "WTF" / "Account").glob("*/SavedVariables/GrudgeLedger.lua"):
@@ -121,7 +197,7 @@ def main():
     if not contacts:
         parser.exit(1, "No matching saved contacts. Save the journal with /reload and try again.\n")
     try:
-        sync(args.game, args.region, contacts, args.force)
+        sync(args.game, args.region, contacts, args.force, args.profiles_only)
     except (ValueError, OSError, URLError) as exc:
         parser.exit(1, f"Portrait import interrupted: {exc}\n")
 

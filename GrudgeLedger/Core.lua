@@ -1648,3 +1648,58 @@ boot:RegisterEvent("ADDON_LOADED")
 boot:SetScript("OnEvent", function(_, _, name)
     if name == ADDON then GL.InitDB() boot:UnregisterEvent("ADDON_LOADED") end
 end)
+
+-- Imported equipment is shared between profiles by exact variant.
+function GL.ArmoryProfile(record)
+    local archive=GrudgeLedgerArmory
+    return archive and record and record.guid and archive.profiles[record.guid]
+end
+function GL.ArmoryItem(record,slot)
+    local profile=GL.ArmoryProfile(record)
+    return profile and GrudgeLedgerArmory.items[profile.gear[slot]]
+end
+if SlashCmdList then
+    SLASH_GLPROFILE1="/glfiche"
+    SlashCmdList.GLPROFILE=function(input)
+        local cmd,arg=input:match("^%s*(%S*)%s*(.-)%s*$")
+        if cmd=="partager" and (arg=="oui" or arg=="non") then
+            if not GL.Bounties or not GL.Safe(GetGuildInfo,"player") then GL.Print("Guilde indisponible."); return end
+            GL.Bounties.ShareFights(arg=="oui")
+            GL.Print(arg=="oui" and "Partage des combats activé." or "Partage des combats désactivé.")
+            return
+        end
+        local identity=GL.Identity("target")
+        local record=arg~="" and GL.Get("guid:"..arg) or (arg=="" and identity and GL.Get(identity))
+        if cmd=="suivre" and not record and arg=="" and identity then record=GL.Remember(identity) end
+        if not record then GL.Print("Sélectionnez un personnage ou indiquez son GUID."); return end
+        if cmd=="suivre" or cmd=="arreter" then
+            record.followEncounter=cmd=="suivre" or nil
+            GL.Print((record.followEncounter and "Suivi activé : " or "Suivi arrêté : ")..record.fullName)
+            return
+        end
+        if GL.Bounties then
+            local wins,losses=GL.Bounties.GuildFights(record.guid)
+            GL.Print(record.fullName.." — Victoires de la guilde : "..wins.." · Morts de la guilde : "..losses)
+        end
+        local profile=GL.ArmoryProfile(record)
+        if not profile then GL.Print("Aucun relevé Armurerie importé."); return end
+        if profile.updated then GL.Print("Armurerie · "..date("%d/%m/%Y %H:%M",math.floor(profile.updated/1000))) end
+        for _,tree in ipairs(profile.trees) do
+            local ranks={}
+            for _,t in ipairs(tree.talents) do ranks[#ranks+1]=t[2].." "..t[3] end
+            GL.Print(tree.name.." ("..tree.points..") : "..table.concat(ranks,", "))
+        end
+        local slots={}
+        for slot in pairs(profile.gear) do slots[#slots+1]=slot end
+        table.sort(slots)
+        for _,slot in ipairs(slots) do
+            local item=GL.ArmoryItem(record,slot)
+            local values={}
+            if item.armor then values[#values+1]=tostring(item.armor.value).." armure" end
+            for _,stat in ipairs(item.stats or {}) do
+                values[#values+1]=stat.display and stat.display.display_string or tostring(stat.value).." "..stat.type.name
+            end
+            GL.Print((item.name or tostring(item.id)).." "..table.concat(values,", "))
+        end
+    end
+end
