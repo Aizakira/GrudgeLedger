@@ -319,17 +319,7 @@ local function onSend(to,subject)
     end
     draft=nil
 end
--- Open the native Send Mail tab first. Never overwrite a draft or send gold.
-function B.PrepareMail(id,hunter)
-    local s,me=scope()
-    if not s or joined~=s then return nil,"guild" end
-    if MailFrame and MailFrame:IsShown() and MailFrameTab2 and SendMailFrame and not SendMailFrame:IsShown() then MailFrameTab2:Click() end
-    if not (SendMailFrame and SendMailFrame:IsShown() and SendMailNameEditBox and SendMailSubjectEditBox
-        and SendMailBodyEditBox and SendMailMoney and MoneyInputFrame_SetCopper and MoneyInputFrame_GetCopper
-        and GetSendMailItem and SendMailSendMoneyButton and SendMailRadioButton_OnClick and hooksecurefunc and SendMail) then return nil,"mailbox" end
-    if SendMailNameEditBox:GetText()~="" or SendMailSubjectEditBox:GetText()~="" or SendMailBodyEditBox:GetText()~=""
-        or MoneyInputFrame_GetCopper(SendMailMoney)~=0 or not SendMailSendMoneyButton:GetChecked() then return nil,"draft" end
-    for i=1,ATTACHMENTS_MAX_SEND or 12 do if GetSendMailItem(i) then return nil,"draft" end end
+local function nextDebt(s,me,id,hunter)
     local orders=view(s)
     local picked,to,due
     for key,o in pairs(orders) do
@@ -341,16 +331,67 @@ function B.PrepareMail(id,hunter)
             end
         end
     end
+    return picked,to,due,orders[picked]
+end
+-- Open the native Send Mail tab first. Never overwrite a draft or send gold.
+function B.PrepareMail(id,hunter,expectedAmount)
+    local s,me=scope()
+    if not s or joined~=s then return nil,"guild" end
+    if MailFrame and MailFrame:IsShown() and MailFrameTab2 and SendMailFrame and not SendMailFrame:IsShown() then MailFrameTab2:Click() end
+    if not (SendMailFrame and SendMailFrame:IsShown() and SendMailNameEditBox and SendMailSubjectEditBox
+        and SendMailBodyEditBox and SendMailMoney and MoneyInputFrame_SetCopper and MoneyInputFrame_GetCopper
+        and GetSendMailItem and SendMailSendMoneyButton and SendMailRadioButton_OnClick and hooksecurefunc and SendMail) then return nil,"mailbox" end
+    if SendMailNameEditBox:GetText()~="" or SendMailSubjectEditBox:GetText()~="" or SendMailBodyEditBox:GetText()~=""
+        or MoneyInputFrame_GetCopper(SendMailMoney)~=0 or not SendMailSendMoneyButton:GetChecked() then return nil,"draft" end
+    for i=1,ATTACHMENTS_MAX_SEND or 12 do if GetSendMailItem(i) then return nil,"draft" end end
+    local picked,to,due,o=nextDebt(s,me,id,hunter)
     if not picked then return nil,"no_payable_recipient" end
+    if expectedAmount and expectedAmount~=due then return nil,"changed" end
     if GetMoney and GetMoney()<due then return nil,"funds" end
     if pending and GL.Now()-pending.at<=60 then return nil,"pending" end
     if not hooked then hooksecurefunc("SendMail",onSend); hooked=true end
     SendMailRadioButton_OnClick(1)
     SendMailNameEditBox:SetText(addresses[to])
-    SendMailSubjectEditBox:SetText("Prime : "..orders[picked].name)
+    SendMailSubjectEditBox:SetText("Prime : "..o.name)
     MoneyInputFrame_SetCopper(SendMailMoney,due)
     draft={guild=s,id=picked,hunter=to,amount=due,to=addresses[to],subject=SendMailSubjectEditBox:GetText()}
     return picked,to,due
+end
+local payButton
+local function showPayment()
+    local s,me=scope()
+    local id,hunter,amount
+    if s and joined==s then id,hunter,amount=nextDebt(s,me) end
+    if not id or not MailFrame or not SendMailMailButton then
+        if payButton then payButton:Hide() end
+        return
+    end
+    if not payButton then
+        payButton=CreateFrame("Button",nil,MailFrame,"UIPanelButtonTemplate")
+        payButton:SetPoint("BOTTOMLEFT",MailFrame,"TOPLEFT",8,2)
+        payButton:SetHeight(24)
+        payButton:SetClampedToScreen(true)
+        payButton:SetScript("OnClick",function(self)
+            if self.lastClick and GetTime()-self.lastClick<1 then return end
+            self.lastClick=GetTime()
+            local ok,why=B.PrepareMail(self.order,self.hunter,self.amount)
+            if not ok then
+                if why=="draft" then GL.Print("Le courrier en cours a été conservé.")
+                elseif why=="funds" then GL.Print("Fonds insuffisants.")
+                elseif why=="pending" then GL.Print("Un envoi est en cours.")
+                else GL.Print("Paiement indisponible. Vérifiez la prime et la boîte aux lettres.") end
+                showPayment()
+                return
+            end
+            self:Hide()
+            if SendMailMailButton:IsEnabled() then SendMailMailButton:Click()
+            else GL.Print("Courrier préparé. Vérifiez le montant et les frais de port.") end
+        end)
+    end
+    payButton.order,payButton.hunter,payButton.amount=id,hunter,amount
+    payButton:SetText("Payer "..addresses[hunter].." : "..(GetCoinTextureString and GetCoinTextureString(amount) or amount.." pc"))
+    payButton:SetWidth(payButton:GetFontString():GetStringWidth()+28)
+    payButton:Show()
 end
 if SlashCmdList then
     SLASH_GLBOUNTY1="/glprime"
@@ -396,20 +437,27 @@ local function join()
         end
     end
 end
-for _,event in ipairs({"MAIL_SEND_SUCCESS","MAIL_FAILED","MAIL_CLOSED"}) do frame:RegisterEvent(event) end
+for _,event in ipairs({"MAIL_SHOW","MAIL_SEND_SUCCESS","MAIL_FAILED","MAIL_CLOSED"}) do frame:RegisterEvent(event) end
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
+    if event=="MAIL_SHOW" then showPayment(); return end
     if event=="MAIL_SEND_SUCCESS" then
         local sent=pending
         pending=nil
         if sent and scope()==sent.guild and GL.Now()-sent.at<=60 then
             B.ConfirmPayment(sent.id,sent.hunter,sent.amount)
         end
+        if MailFrame and MailFrame:IsShown() then showPayment() end
         return
-    elseif event=="MAIL_FAILED" or event=="MAIL_CLOSED" then draft,pending=nil,nil; return end
+    elseif event=="MAIL_CLOSED" then draft=nil; return
+    elseif event=="MAIL_FAILED" then
+        draft,pending=nil,nil
+        if MailFrame and MailFrame:IsShown() then showPayment() end
+        return
+    end
     if not (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix and C_ChatInfo.SendAddonMessage and C_Timer and C_Timer.NewTicker) then return end
     if event=="PLAYER_LOGIN" then
         joined=nil

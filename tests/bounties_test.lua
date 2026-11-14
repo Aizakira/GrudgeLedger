@@ -104,6 +104,24 @@ local function refill()
 end
 refill();b.event(nil,"MAIL_FAILED")
 assert(b.b.Due(b.b.List()[order],b.id,c.id)==21000)
+env.SendMailNameEditBox.v="";env.SendMailSubjectEditBox.v="";env.SendMailMoney.n=0
+local button,clicks=nil,0
+env.GetTime=function()return now end
+env.MailFrame={IsShown=function()return true end}
+env.CreateFrame=function()
+ button=setmetatable({lastClick=false,SetScript=function(self,_,fn)self.click=fn end,
+    GetFontString=function()return {GetStringWidth=function()return 100 end}end},
+    {__index=function()return function()end end})
+ return button
+end
+env.SendMailMailButton={IsEnabled=function()return true end,Click=function()
+ clicks=clicks+1;send(env.SendMailNameEditBox.v,env.SendMailSubjectEditBox.v)
+end}
+b.event(nil,"MAIL_SHOW")
+assert(button and clicks==0)
+button:click();button:click()
+assert(clicks==1 and env.SendMailNameEditBox.v==a.name and env.SendMailMoney.n==25000)
+b.event(nil,"MAIL_FAILED")
 refill();b.event(nil,"MAIL_SEND_SUCCESS");b.event(nil,"MAIL_SEND_SUCCESS");flush()
 assert(a.b.Due(a.b.List()[order],b.id,c.id)==0)
 assert(b.b.ConfirmPayment(order,a.id,25000));assert(a.b.ConfirmPayment(order,c.id,50000));flush()
