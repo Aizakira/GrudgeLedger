@@ -1,18 +1,22 @@
 """Offline approximation of actual Lua-native UI geometry, never a game screenshot.
 
 Loads the real addon files in Lua5.1 and captures SetPoint/size/font/color/texture
-calls. Pillow approximates WoW fonts, templates and texture rendering. No desktop,
-client, SavedVariables or installed addon files are accessed or modified.
+calls. Run native_art.py once for matching Classic texture references. Optional
+extracted FRIZQT__.TTF, ARIALN.TTF and MORPHEUS.TTF can be placed in
+renders/native/Fonts or supplied with GRUDGE_LEDGER_QA_FONTS. All rendering is
+offline, with no desktop, client or SavedVariables access.
 """
 from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sys
 from pathlib import Path
 from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont, ImageChops
+from native_art import CACHE, PATHS
 
 BASE = Path(__file__).resolve().parent
 WORK = BASE.parent
@@ -21,8 +25,9 @@ sys.path.insert(0, str(WORK / "test-runtime"))
 from lupa.lua51 import LuaRuntime
 
 FONTS = Path("C:/Windows/Fonts")
-OUT = BASE / "renders"
-OUT.mkdir(exist_ok=True)
+LOCALE = os.environ.get("GRUDGE_LEDGER_QA_LOCALE", "frFR")
+OUT = BASE / "renders" if LOCALE == "frFR" else BASE / "renders" / LOCALE
+OUT.mkdir(exist_ok=True, parents=True)
 POINTS = {"TOPLEFT": (0, 0), "TOP": (.5, 0), "TOPRIGHT": (1, 0),
           "LEFT": (0, .5), "CENTER": (.5, .5), "RIGHT": (1, .5),
           "BOTTOMLEFT": (0, 1), "BOTTOM": (.5, 1), "BOTTOMRIGHT": (1, 1)}
@@ -40,8 +45,25 @@ def fontsize(obj):
 
 
 @lru_cache(maxsize=100)
-def font(size, title=False):
-    return ImageFont.truetype(str(FONTS / ("georgia.ttf" if title else "arial.ttf")), max(1, size))
+def font(size, face=None):
+    return ImageFont.truetype(str(font_path(face)), max(1, size))
+
+
+@lru_cache(maxsize=32)
+def font_path(face):
+    name = (face or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if name.startswith("ptserif-"):
+        return ADDON / "Media" / "Fonts" / face.replace("\\", "/").rsplit("/", 1)[-1]
+    candidates = {"frizqt__.ttf": ("FRIZQT__.TTF", "georgia.ttf"),
+                  "morpheus.ttf": ("MORPHEUS.TTF", "georgia.ttf"),
+                  "arialn.ttf": ("ARIALN.TTF", "arial.ttf")}
+    if name in candidates:
+        actual, substitute = candidates[name]
+        for folder in (os.environ.get("GRUDGE_LEDGER_QA_FONTS"), CACHE / "Fonts", FONTS):
+            if folder and (Path(folder) / actual).is_file():
+                return Path(folder) / actual
+        return FONTS / substitute
+    return FONTS / "arial.ttf"
 
 
 def plaintext(value):
@@ -49,8 +71,8 @@ def plaintext(value):
     return re.sub(r"\|c[0-9a-fA-F]{8}|\|r", "", text).replace("\x01", "|")
 
 
-def wrap(text, width, size, title=False, wordwrap=True):
-    f = font(size, title)
+def wrap(text, width, size, face=None, wordwrap=True):
+    f = font(size, face)
     result = []
     for para in plaintext(text).split("\n"):
         if not wordwrap or width <= 0:
@@ -67,8 +89,8 @@ def wrap(text, width, size, title=False, wordwrap=True):
     return result or [""]
 
 
-def textheight(text, width, size, spacing=0, title=False):
-    count = len(wrap(text, width, size, title))
+def textheight(text, width, size, spacing=0, face=None):
+    count = len(wrap(text, width, size, face))
     return count * (size + 2) + max(0, count - 1) * spacing
 
 
@@ -97,7 +119,8 @@ class Layout:
 
     def visible(self, n):
         r = self.frames[n]
-        if r.get("buttonState") == "pushed" or r.get("layer") == "HIGHLIGHT": return False
+        if r.get("buttonState") in ("pushed", "highlight") or r.get("layer") == "HIGHLIGHT": return False
+        if r.get("buttonState") == "normal" and not self.frames[r["parent"]].get("enabled", True) and self.frames[r["parent"]].get("hasDisabledTexture"): return False
         if r.get("buttonState") == "disabled" and self.frames[r["parent"]].get("enabled",True): return False
         return r.get("shown", True) and (self.visible(r["parent"]) if r.get("parent") else True)
 
@@ -120,7 +143,7 @@ class Layout:
         w = r.get("width")
         h = r.get("height")
         if w is None:
-            w = font(size).getlength(plaintext(r.get("text"))) if r.get("text") else 0
+            w = font(size, r.get("font")).getlength(plaintext(r.get("text"))) if r.get("text") else 0
         if h is None: h = size + 2 if r["kind"] == "FontString" else 0
         w, h = w * scale, h * scale
         parent = r.get("parent")
@@ -142,8 +165,7 @@ class Layout:
             return ((eq[0][1] - eq[0][0] * length) if eq else default), length
         x, w = solve(equations[0], w, pb[0])
         if r["kind"] == "FontString" and r.get("height") is None:
-            title = any(style in str(r.get("fontObject") or r.get("template") or "") for style in ("Large", "Fancy"))
-            lines = wrap(r.get("text"), w / max(scale, .01), size, title, wordwrap=r.get("wordWrap", True))
+            lines = wrap(r.get("text"), w / max(scale, .01), size, r.get("font"), wordwrap=r.get("wordWrap", True))
             if r.get("maxLines"): lines = lines[:int(r["maxLines"])]
             h = (len(lines) * (size + 2) + max(0, len(lines) - 1) * r.get("spacing", 0)) * scale
         y, h = solve(equations[1], h, pb[1])
@@ -175,6 +197,7 @@ def color(value, alpha=1, fallback=(1, 1, 1, 1)):
     return tuple(round(max(0, min(1, v)) * 255) for v in value[:3]) + (round(max(0, min(1, value[3] * alpha)) * 255),)
 
 
+@lru_cache(maxsize=96)
 def actual_texture(path):
     if not path: return None
     parts = path.replace("\\", "/").split("/")
@@ -182,6 +205,8 @@ def actual_texture(path):
         p = ADDON.joinpath(*parts[parts.index("GrudgeLedger") + 1:])
         if not p.suffix: p = p.with_suffix(".tga")
         if p.is_file(): return Image.open(p).convert("RGBA")
+    native = PATHS.get("/".join(parts).lower())
+    if native and native.is_file(): return Image.open(native).convert("RGBA")
     return None
 
 
@@ -202,9 +227,6 @@ def draw_native_icon(draw, box, path, fill):
         draw.line((cx,cy-rad*.4,cx,cy+rad*.35), fill=(20,15,15,255), width=max(1,round(rad*.15)))
     elif "TrackingBorder" in (path or "") or "Border" in (path or ""):
         draw.ellipse(box, outline=(151,113,55,255), width=max(1,round(rad*.12)))
-    else:
-        draw.rounded_rectangle(box, radius=max(1,rad*.16), fill=(80,30,34,255), outline=(160,119,59,255), width=1)
-        draw.line((x+3,y+3,x+3,y2-3), fill=(200,161,90,255), width=1)
 
 
 def render(name, frames, root):
@@ -250,7 +272,12 @@ def render(name, frames, root):
             tex = tex.resize((max(1,round(w)),max(1,round(h))), Image.Resampling.LANCZOS)
             tex = ImageChops.multiply(tex, Image.new("RGBA", tex.size, color(r.get("tint"), alpha)))
             if r.get("mask"):
-                mask = Image.new("L", tex.size, 0); ImageDraw.Draw(mask).ellipse((0,0,tex.width,tex.height), fill=255)
+                native_mask = actual_texture(r["mask"])
+                if native_mask:
+                    mask = native_mask.getchannel("A").resize(tex.size, Image.Resampling.LANCZOS)
+                else:
+                    mask = Image.new("L", tex.size, 0)
+                    ImageDraw.Draw(mask).ellipse((0,0,tex.width,tex.height), fill=255)
                 tex.putalpha(ImageChops.multiply(tex.getchannel("A"), mask))
             layer.alpha_composite(tex, (round(x),round(y)))
         elif not missing_paper and r.get("texture") and r["kind"] == "Texture":
@@ -266,8 +293,8 @@ def render(name, frames, root):
         if r.get("text") and not r.get("fontString"):
             region_scale = lay.scale(r["id"])
             size = (r.get("fontSize") or fontsize(r.get("fontObject") or r.get("template"))) * region_scale
-            title = any(style in str(r.get("fontObject") or r.get("template") or "") for style in ("Large", "Fancy"))
-            f = font(size/region_scale,title)
+            face = r.get("font")
+            f = font(size/region_scale,face)
             inset = r.get("insets") or [0,0,0,0]
             if isinstance(inset,dict): inset=list(inset.values())
             ix,ir,it,ib = (list(inset)+[0]*4)[:4]
@@ -276,7 +303,7 @@ def render(name, frames, root):
             textw = max(1,w-ix-ir)
             wrapping = r.get("wordWrap", r["kind"] == "FontString" or r["kind"] == "EditBox")
             # Layout wraps in UI units, before scale; scaled glyph hinting must not reflow it.
-            lines = wrap(r["text"],textw/region_scale,size/region_scale,title,wrapping)
+            lines = wrap(r["text"],textw/region_scale,size/region_scale,face,wrapping)
             line_height, spacing = size + 2*region_scale, r.get("spacing",0)*region_scale
             natural = len(lines)*line_height + max(0,len(lines)-1)*spacing
             all_lines = lines
@@ -289,7 +316,7 @@ def render(name, frames, root):
             td = ImageDraw.Draw(textlayer)
             rgba=color(r.get("textColor"), alpha, fallback=(.91,.86,.74,1))
             owner = lay.frames.get(r.get("parent"), {})
-            if not r.get("enabled",True) or (owner.get("kind") == "Button" and not owner.get("enabled",True)):
+            if not r.get("textColor") and (not r.get("enabled",True) or (owner.get("kind") == "Button" and not owner.get("enabled",True))):
                 rgba=(110,105,96,round(alpha*255))
             for line in lines:
                 if not wrapping or r.get("maxLines"):
@@ -305,6 +332,9 @@ def render(name, frames, root):
                     if phrase and phrase in line:
                         linecolor=tuple(int(hexcolor[k:k+2],16) for k in (2,4,6))+(int(hexcolor[:2],16),)
                         break
+                if r.get("shadow") and r.get("shadowOffset"):
+                    dx, dy = r["shadowOffset"]
+                    td.text((tx/region_scale+dx,ty/region_scale-dy),line,font=f,fill=color(r["shadow"],alpha),anchor="lt")
                 td.text((tx/region_scale,ty/region_scale),line,font=f,fill=linecolor,anchor="lt")
                 ty += line_height+spacing
             if region_scale != 1:
@@ -376,20 +406,36 @@ def render(name, frames, root):
 def main():
     lua=LuaRuntime(unpack_returned_tuples=True)
     g=lua.globals();g.TEST_ROOT=ADDON.as_posix();g.TEST_WORK=WORK.as_posix()
+    g.GetLocale=lambda: LOCALE
     g.QA_FontSize=fontsize
     g.QA_TextHeight=textheight
-    g.QA_TextWidth=lambda text,size,title=False: font(size,title).getlength(plaintext(text))
-    g.QA_TextLines=lambda text,width,size,title=False: len(wrap(text,width,size,title))
+    g.QA_TextWidth=lambda text,size,face=None: font(size,face).getlength(plaintext(text))
+    g.QA_TextLines=lambda text,width,size,face=None: len(wrap(text,width,size,face))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
     views=["statistics", "statistics-small", "statistics-readable", "statistics-empty", "guild-rankings", "journal","journal-readable","journal-transparent","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","journal-readable-small-bottom","guilds","note","note-readable","settings","settings-readable","corrections","diagnostic","minimap","minimap-large","alert","alert-probable","alert-long-guild"]
     views += ["note-edit", "note-delete", "honor", "honor-readable", "honor-small", "honor-empty", "honor-year",
               "chronicle", "chronicle-readable", "chronicle-small", "chronicle-empty", "chronicle-notes"]
     views += ["statistics-encounters", "statistics-recent", "statistics-friends", "statistics-friends-recent",
               "statistics-group", "statistics-combat", "statistics-horde", "guild-rankings-combat", "statistics-readable-small"]
+    views += ["journal-history", "journal-matchup", "journal-notes", "journal-history-small", "journal-notes-readable-small",
+              "settings-alerts", "settings-relations", "settings-shortcuts", "settings-data", "settings-readable-alerts-small",
+              "honor-story", "guide"]
+    views += ["journal-largeprint", "journal-history-largeprint-small", "statistics-largeprint",
+              "honor-largeprint-small", "settings-readable-alerts-largeprint-small"]
+    views += ["journal-compact", "journal-history-page2", "journal-history-filter", "correction-voided",
+              "honor-annual", "honor-annual-copy", "honor-annual-empty", "honor-annual-largeprint-small", "honor-podium",
+              "honor-races", "honor-classes", "honor-zones", "honor-subzones", "honor-initiative",
+              "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
+              "guild-exceptions", "guild-rankings-largeprint-small",
+              "settings-appearance-markers", "settings-data-experimental", "alert-preview", "confirm-kill"]
+    # Explicit view names keep a visual correction cycle small; no arguments run
+    # the complete set of real Lua page flows.
+    if sys.argv[1:]: views = sys.argv[1:]
     images, report, snapshots=[],{},{}
     for name in views:
         root=g.QA.capture(name)
         assert root is not None, name+" frame absent"
+        assert len(g.GrudgeLedger.errors) == 0, name+" raised an addon error"
         raw, root_id=g.QA.snapshot(root)
         frames=convert(raw)
         snapshots[name]={"root":root_id,"frames":frames}
@@ -404,7 +450,7 @@ def main():
         sheet.paste(preview,(i%3*tilew+(tilew-preview.width)//2,i//3*tileh+10))
     sheet.save(OUT/"contact-sheet.png")
     # Inspect the actual generated icon at native 32 pixels and enlarged 128 pixels.
-    icon=actual_texture("Interface\\AddOns\\GrudgeLedger\\Media\\LedgerIcon")
+    icon=actual_texture(g.GrudgeLedger.minimapIcon)
     if icon:
         icon.resize((32,32),Image.Resampling.LANCZOS).save(OUT/"icon-32px.png")
         swatch=Image.new("RGBA",(360,180),(25,23,23,255));d=ImageDraw.Draw(swatch)
@@ -412,6 +458,11 @@ def main():
             swatch.alpha_composite(icon.resize((size,size),Image.Resampling.LANCZOS),(x,30))
             d.text((x,162),str(size)+" px",font=font(11),fill=(218,207,176,255))
         swatch.convert("RGB").save(OUT/"icon-natural-and-zoom.png")
+    requested = {r["texture"] for view in snapshots.values() for r in view["frames"] if r.get("texture")}
+    faces = {r["font"] for view in snapshots.values() for r in view["frames"] if r.get("font")}
+    assets = {"fonts": {face: font_path(face).name for face in sorted(faces)},
+              "missing_texture_files": sorted(path for path in requested if not actual_texture(path))}
+    (OUT/"asset-report.json").write_text(json.dumps(assets,ensure_ascii=False,indent=2),encoding="utf-8")
     (OUT/"geometry-report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
     (OUT/"captured-frames.json").write_text(json.dumps(snapshots,ensure_ascii=False,indent=2),encoding="utf-8")
     print(json.dumps({"views":len(views),"issues":report,"contact_sheet":str(OUT/"contact-sheet.png")},ensure_ascii=False))

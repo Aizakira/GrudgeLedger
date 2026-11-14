@@ -4,6 +4,10 @@ local qaClock = 1794400000
 time = function() return qaClock end
 date = function(format, timestamp) return os.date(format or "%c", timestamp or qaClock) end
 local methods = getmetatable(UIParent).__index
+function methods:Click()
+    assert(self:IsEnabled(), "Attempt to click a disabled control: " .. self:GetText())
+    self:GetScript("OnClick")(self, "LeftButton")
+end
 local oldFrame, oldTexture, oldFont = CreateFrame, methods.CreateTexture, methods.CreateFontString
 local function tag(region, kind, template, layer)
     region.qaKind, region.qaTemplate, region.qaLayer = kind, template, layer
@@ -42,7 +46,11 @@ function methods:SetAllPoints(relative)
 end
 function methods:SetFontObject(value) self.qaFontObject, self.qaFont, self.qaFontSize, self.qaFontFlags = value, nil, nil, nil end
 function methods:SetFont(path, size, flags) self.qaFont, self.qaFontSize, self.qaFontFlags = path, size, flags return true end
-function methods:GetFont() return self.qaFont or "Fonts\\FRIZQT__.TTF", self.qaFontSize or QA_FontSize(self.qaFontObject), self.qaFontFlags or "" end
+function methods:GetFont()
+    local path = self.qaFontObject == "ChatFontNormal" and "Fonts\\ARIALN.TTF"
+        or self.qaFontObject == "QuestFont_Large" and "Fonts\\MORPHEUS.TTF" or "Fonts\\FRIZQT__.TTF"
+    return self.qaFont or path, self.qaFontSize or QA_FontSize(self.qaFontObject), self.qaFontFlags or ""
+end
 function methods:SetJustifyH(value) self.qaJustifyH = value end
 function methods:SetJustifyV(value) self.qaJustifyV = value end
 function methods:SetWordWrap(value) self.qaWordWrap = value end
@@ -51,12 +59,33 @@ function methods:SetMaxLines(value) self.qaMaxLines = value end
 function methods:SetSpacing(value) self.qaSpacing = value end
 function methods:GetSpacing() return self.qaSpacing or 0 end
 function methods:SetTextInsets(...) self.qaInsets = { ... } end
-local function serif(region) return not not tostring(region.qaFontObject):find("Large") or not not tostring(region.qaFontObject):find("Fancy") end
-function methods:GetStringHeight() return QA_TextHeight(self:GetText(), self.width or 400, self.qaFontSize or QA_FontSize(self.qaFontObject), self.qaSpacing or 0, serif(self)) end
-function methods:GetStringWidth() return QA_TextWidth(self:GetText(), self.qaFontSize or QA_FontSize(self.qaFontObject), serif(self)) end
-function methods:GetNumLines() return QA_TextLines(self:GetText(), self.width or 400, self.qaFontSize or QA_FontSize(self.qaFontObject), serif(self)) end
+function methods:GetStringHeight()
+    local path, size = self:GetFont()
+    return QA_TextHeight(self:GetText(), self.width or 400, size, self.qaSpacing or 0, path)
+end
+function methods:GetStringWidth()
+    local path, size = self:GetFont()
+    return QA_TextWidth(self:GetText(), size, path)
+end
+function methods:GetNumLines()
+    local path, size = self:GetFont()
+    return QA_TextLines(self:GetText(), self.width or 400, size, path)
+end
 function methods:SetColorTexture(...) self.qaFill = { ... } end
 function methods:SetTexture(value) self.texture = value end
+-- Classic reference sheet: Ketho/BlizzardInterfaceResources a7142e9e,
+-- Resources/AtlasInfo.lua. Only supply entries supported by this exact sheet.
+local raceArt = "Interface\\Glues\\CharacterCreate\\CharacterCreateIcons"
+local atlasCoords = {
+    ["raceicon-dwarf-male"] = {0.646484375, 0.771484375, 0.001953125, 0.126953125},
+    ["raceicon-orc-male"] = {0.130859375, 0.255859375, 0.517578125, 0.642578125},
+}
+C_Texture = { GetAtlasInfo = function(atlas) return atlasCoords[atlas] end }
+function methods:SetAtlas(atlas)
+    self:SetTexture(raceArt)
+    self:SetTexCoord(unpack(assert(atlasCoords[atlas])))
+end
+CLASS_ICON_TCOORDS = { SHAMAN = {0.25, 0.49609375, 0.25, 0.5} }
 function methods:SetVertexColor(...) self.qaTint = { ... } end
 function methods:SetTextColor(...) self.qaTextColor = { ... } end
 function methods:GetTextColor() return unpack(self.qaTextColor or { 1, 1, 1, 1 }) end
@@ -80,9 +109,10 @@ function methods:SetNormalTexture(value)
         self.normalTexture = self.normalTexture or self:CreateTexture(nil, "ARTWORK")
         self.normalTexture:SetAllPoints() self.normalTexture:SetTexture(value)
     else self.normalTexture = value end
+    if self.normalTexture then self.normalTexture.qaButtonState = "normal" end
 end
 function methods:GetNormalTexture() return self.normalTexture end
-function methods:SetHighlightTexture(value) self.qaHighlight = value end
+function methods:SetHighlightTexture(value) self.qaHighlight = value if type(value) == "table" then value.qaButtonState = "highlight" end end
 function methods:SetPushedTexture(value) self.pushedTexture = value if type(value) == "table" then value.qaButtonState = "pushed" end end
 function methods:SetDisabledTexture(value) self.disabledTexture = value if type(value) == "table" then value.qaButtonState = "disabled" end end
 function methods:SetNormalFontObject(value) self.normalFont = value if self.fontString then self.fontString.qaFontObject = value end end
@@ -120,10 +150,11 @@ DoEmote = function() end
 StartDuel = function() end
 C_NamePlate = { GetNamePlates = function() return {} end }
 SetCVar("nameplateShowFriends", 1) SetCVar("nameplateShowEnemies", 1)
+local namespace = {}
 local toc = assert(io.open(TEST_ROOT .. "/GrudgeLedger.toc", "r"))
 for line in toc:lines() do
     line = line:gsub("\r", "")
-    if line:match("%.lua$") then assert(loadfile(TEST_ROOT .. "/" .. line))("GrudgeLedger") end
+    if line:match("%.lua$") then assert(loadfile(TEST_ROOT .. "/" .. line))("GrudgeLedger", namespace) end
 end
 toc:close()
 mock.Fire("ADDON_LOADED", "GrudgeLedger")
@@ -161,24 +192,45 @@ record.reaction = nil
 GL.AddNote(record, "Très bon tank au monastère. A pris le temps d'expliquer les mécaniques et de partager le butin.")
 GL.AddNote(record, "Rencontre suivante plus tendue : à recontacter pour éclaircir le malentendu.")
 GL.RecordGroup(record, "qa-group-1", "Monastère écarlate")
+local oldZone, oldSubzone = GetRealZoneText, GetSubZoneText
+local districts = {"Base de Kurzen", "Ruines de Tkashi", "Baie-du-Butin"}
+local district = 1
+GetRealZoneText = function() return "Vallée de Strangleronce" end
+GetSubZoneText = function() return districts[district] end
+IsInInstance = function() return false, "none" end
+assert(GL.RecordHonor(record, 38))
+assert(GL.RecordHonor(record, 17))
+assert(GL.RecordHonor(nil, 12))
 for i = 1, 7 do
+    district = (i - 1) % #districts + 1
     GL.RecordPvP(record, "death", i % 2 == 0 and "confirmed" or "probable", "Un seul adversaire hostile vous ciblait avant la mort. Attribution déduite ; aucune confirmation du coup fatal.", "qa-event-" .. i)
 end
 GL.RecordAggression(record, "probable", "Baisse de santé observée pendant qu'un seul adversaire vous ciblait.", "qa-attack")
 GL.RecordPvP(records[3], "kill", "confirmed", "Coup fatal observé.", "qa-victory")
+qaClock = qaClock + 1
+for i, entry in ipairs({ {records[5], "player", false}, {records[12], "player", true}, {record, "player", true}, {records[8], "opponent", false} }) do
+    local id = "qa-opening-" .. i
+    local opening = assert(GL.RecordOpening(entry[1], entry[2], entry[3], id))
+    if entry[2] == "opponent" then GL.RecordAggression(entry[1], "confirmed", nil, id .. "-hit", opening) end
+    GL.RecordPvP(entry[1], "kill", "confirmed", nil, id .. "-kill", opening)
+end
+district = 2
 GL.RecordPvP(records[7], "kill", "probable", "Adversaire observé mort après le combat.", "qa-probable-victory")
+GetRealZoneText, GetSubZoneText = oldZone, oldSubzone
 for i, r in ipairs(records) do
     r.encounters = { count = 15 - i, seen = { ["Player-1-self"] = qaClock - 3600 * i } }
+    r.lastEncounterAt = qaClock - 3600 * i
+    r.lastEncounterZone, r.lastEncounterSubzone = "Vallée de Strangleronce", "Baie-du-Butin"
     if GL.Relation(r) == "friend" then r.groupCount = 15 - i end
 end
 local function hideWindows()
-    for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert" }) do
+    for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert", "GrudgeLedgerAlertPreview", "GrudgeLedgerGuide" }) do
         if _G[name] then _G[name]:Hide() end
     end
 end
 local function click(label)
     for _, f in ipairs(mock.frames) do
-        if f:GetText() == label and f.scripts.OnClick then f.scripts.OnClick(f, "LeftButton") return end
+        if f:GetText() == GL.L(label) and f.scripts.OnClick then f.scripts.OnClick(f, "LeftButton") return end
     end
     error("Missing UI action: " .. label)
 end
@@ -186,15 +238,25 @@ QA = { mock = mock, records = records, selected = record }
 function QA.capture(name)
     hideWindows()
     GL.SetSetting("readableFont", name:find("%-readable") ~= nil)
+    GL.SetSetting("readingScale", name:find("%-largeprint") and 1.25 or 1)
+    GL.SetSetting("compactMode", name == "journal-compact")
     name = name:gsub("%-readable", "")
+    name = name:gsub("%-largeprint", "")
     UIParent:SetSize(1920, 1080)
-    if name == "journal" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" then
+    if name == "journal" or name == "journal-compact" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" or name:find("^journal%-history") or name:find("^journal%-notes") or name == "journal-matchup" then
         if name:find("^journal%-small") then UIParent:SetSize(1024, 600) end
+        if name:find("%-small$") then UIParent:SetSize(1024, 600) end
         GL.ShowLedger(record.key)
         GrudgeLedgerWindow.search:SetText("")
         GrudgeLedgerWindow.filters.all.scripts.OnClick()
         GrudgeLedgerWindow.factions.all.scripts.OnClick()
         GL.ShowLedger(record.key)
+        local tab = name:find("%-history") and "history" or name:find("%-notes") and "notes" or name == "journal-matchup" and "matchup" or "summary"
+        local f = GrudgeLedgerWindow
+        if f.detailTabs then f.detailTabs[tab].scripts.OnClick(f.detailTabs[tab]) end
+        if name == "journal-history-page2" then f.historyPage.next:Click() end
+        if name == "journal-history-filter" then f.historyPage.options.pvp:Click() end
+        if name == "journal-history-honor" then f.historyPage.options.honor:Click() end
         if name == "journal-small-bottom" then
             local f = GrudgeLedgerWindow
             assert(f.detailBody:GetHeight() >= f.detailText:GetStringHeight() + 12)
@@ -203,23 +265,39 @@ function QA.capture(name)
         return GrudgeLedgerWindow
     elseif name:find("^honor") or name:find("^chronicle") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
-        local mode = name:find("^honor") and "summary" or "history"
+        local mode = name:find("%-annual") and "year" or name:find("%-story") and "story" or name:find("^honor") and "summary" or "history"
         GL.ShowJournal(mode)
         local f = GrudgeLedgerJournal
+        if name == "honor-podium" then f.dimensionButtons.opponents:Click() end
+        if name:find("^honor%-initiative") then f.dimensionButtons.initiative:Click() end
+        if name == "honor-races" then f.dimensionButtons.race:Click() end
+        if name == "honor-classes" then f.dimensionButtons.class:Click() end
+        if name == "honor-zones" or name == "honor-subzones" then f.dimensionButtons.zone:Click() end
         f.period, f.scope, f.kind, f.offset = "all", "character", "all", 0
         f.search:SetText("")
         if name:find("%-empty") then f.scope = "legacy" end
         if name:find("%-year") then f.period, f.year = "year", tonumber(date("%Y", qaClock)) end
         if name:find("%-notes") then f.kind = "notes" end
+        if name == "chronicle-honor" then f.kind = "honor" end
         GL.ShowJournal(mode)
+        if name == "honor-subzones" then
+            f.breakdownRows[1]:Click()
+            assert(f.zoneKey == "Vallée de Strangleronce" and f.breakdownRows[3]:IsShown())
+        end
+        if name == "honor-annual-copy" then f.copyAnnual:Click() end
         return f
     elseif name == "journal-horde-friends" then
         GL.ShowLedger(records[1].key)
         GrudgeLedgerWindow.filters.friend.scripts.OnClick()
         GrudgeLedgerWindow.factions.Horde.scripts.OnClick()
         return GrudgeLedgerWindow
-    elseif name == "journal-empty" then GL.ShowLedger() GrudgeLedgerWindow.search:SetText("Aucune correspondance QA") return GrudgeLedgerWindow
-    elseif name:find("^statistics") or name:find("^guild%-rankings") then
+    elseif name == "journal-empty" then
+        GL.ShowLedger()
+        local f = GrudgeLedgerWindow
+        f.search:SetText("Aucune correspondance QA")
+        f.search.scripts.OnEnterPressed(f.search)
+        return f
+    elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
         local guild = name:find("^guild") ~= nil
         GL.ShowStatistics(guild and "guilds" or "players")
@@ -234,15 +312,37 @@ function QA.capture(name)
         if name:find("%-horde") then f.faction = "Horde" end
         GL.ShowStatistics(guild and "guilds" or "players")
         if guild and f.rows[1].item then f.rows[1].scripts.OnClick(f.rows[1]) end
+        if name == "guild-exceptions" and f.guildDetail.exceptionButton:IsEnabled() then f.guildDetail.exceptionButton:Click() end
         return f
     elseif name == "guilds" then GL.ShowGuilds(record) return GrudgeLedgerGuilds
     elseif name == "note-edit" or name == "note-delete" then
         GL.EditNote(record, record.notes[1])
         if name == "note-delete" then GrudgeLedgerNote.remove.scripts.OnClick() end
-        return GrudgeLedgerNote
-    elseif name == "note" then GL.EditNote(record) GrudgeLedgerNote.edit:SetText("Une bonne équipe au monastère.\n\nJoueur patient, consignes claires et partage équitable du butin. À retrouver pour une prochaine sortie.") return GrudgeLedgerNote
-    elseif name == "settings" then SlashCmdList.GRUDGELEDGER("settings") return GrudgeLedgerSettings
-    elseif name == "corrections" then GL.ShowLedger(record.key) click("Corriger le PvP") GrudgeLedgerWindow:Hide() return GrudgeLedgerCorrections
+        return GrudgeLedgerWindow
+    elseif name == "note" then GL.EditNote(record) GrudgeLedgerNote.edit:SetText("Une bonne équipe au monastère.\n\nJoueur patient, consignes claires et partage équitable du butin. À retrouver pour une prochaine sortie.") return GrudgeLedgerWindow
+    elseif name == "settings" or name:find("^settings%-") then
+        SlashCmdList.GRUDGELEDGER("settings")
+        local f = GrudgeLedgerSettings
+        local category = name:match("^settings%-([a-z]+)") or "appearance"
+        category = category:gsub("%-small$", "")
+        if name:find("%-small$") then UIParent:SetSize(1024, 600) f:Hide() f:Show() end
+        if f.tabs then
+            local tab = assert(f.tabs[category], "Missing settings category: " .. category)
+            tab.scripts.OnClick(tab)
+        end
+        if name == "settings-appearance-markers" then GL.SetSetting("iconSize", 40) end
+        if name == "settings-data-experimental" then f.experimental:Click() end
+        return f
+    elseif name == "alert-preview" then GL.Display.PreviewAlert("enemy") return GrudgeLedgerAlertPreview
+    elseif name == "guide" then GL.ShowGuide() return GrudgeLedgerGuide
+    elseif name == "corrections" or name == "correction-voided" or name == "confirm-kill" then
+        GL.ShowLedger(name == "confirm-kill" and records[7].key or record.key)
+        click("Corriger le PvP")
+        local details = GrudgeLedgerWindow.historyPage.rows[1].details
+        details:Click()
+        if name == "confirm-kill" then assert(GrudgeLedgerCorrections.attest:IsShown()) end
+        if name == "correction-voided" then GrudgeLedgerCorrections.confirm:Click() details:Click() end
+        return GrudgeLedgerCorrections
     elseif name == "diagnostic" then SlashCmdList.GRUDGELEDGER("debug") return GrudgeLedgerDiagnostic
     elseif name == "minimap" or name == "minimap-large" then
         Minimap:SetSize(name == "minimap" and 160 or 260, name == "minimap" and 160 or 260)
@@ -282,11 +382,12 @@ function QA.snapshot(root)
             width = f.width, height = f.height, scale = f.scale or 1, anchors = anchors,
             layer = f.qaLayer, sublevel = f.qaSublevel, level = f.qaLevel, strata = f.qaStrata,
             shown = f.shown, enabled = f.enabled, text = f.text, checked = f.checked, fontString = f.fontString and f.fontString.qaID,
-            buttonState = f.qaButtonState,
-            template = f.qaTemplate, fontObject = f.qaFontObject, font = f.qaFont, fontSize = f.qaFontSize,
+            buttonState = f.qaButtonState, hasDisabledTexture = f.disabledTexture ~= nil,
+            template = f.qaTemplate, fontObject = f.qaFontObject, font = (f.qaKind == "FontString" or f.qaKind == "EditBox") and f:GetFont() or nil, fontSize = f.qaFontSize,
+            shadow = f.qaShadow, shadowOffset = f.qaShadowOffset,
             color = f.qaFill, textColor = f.qaTextColor, tint = f.qaTint, alpha = f.qaAlpha,
             ignoreParentAlpha = f.qaIgnoreAlpha, texCoord = f.texCoord,
-            texture = type(f.texture) == "string" and f.texture or nil, mask = f.mask ~= nil,
+            texture = type(f.texture) == "string" and f.texture or nil, mask = f.mask and f.mask.texture,
             justifyH = f.qaJustifyH, justifyV = f.qaJustifyV, spacing = f.qaSpacing,
             maxLines = f.qaMaxLines, wordWrap = f.qaWordWrap, insets = f.qaInsets,
             scrollChild = f.scrollChild and f.scrollChild.qaID, vertical = f.vertical or 0 }

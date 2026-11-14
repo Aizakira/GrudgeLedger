@@ -29,13 +29,53 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 
 ![Offline preview of the ancient-book journal, with synthetic example records](docs/journal.png)
 
-The journal is an open, aged book with two parchment pages, stitched red leather, layered page edges and restrained brass corners. The index keeps a relationship icon, explicit label and dark readable ink. Classification and note-taking stay at the top; less frequent actions sit at the foot of the page. Its visual direction was inspired by Overlord, using original artwork. This preview is rendered from the actual Lua layout outside WoW, with synthetic records and approximated native fonts/icons.
+The campaign register brings together the journal, rankings, guilds and personal PvP summary. Filter contacts by relationship and faction, then open a record to see its automatic score, latest encounter, history or notes. Race portraits and class icons use identity information supplied by the game.
 
-The book follows its transparent artwork outline, without a rectangular black shadow. Shared buttons use gold lettering on leather and brown ink on parchment, with subtle underlines and separate hover, pressed, disabled and selected states.
+The leather, cloth and parchment share a decorative background. The medallion, title plaque, settings and close buttons have independent textures. The gold wordmark is a separate texture. WoW renders names and journal entries in PT Serif, with bold headings and italic annotations. Classic mode uses the native game font. The offline preview uses fictional contacts.
 
-Titles, names and journal text use WoW’s native calligraphic font families (Morpheus for the Latin alphabet). Notes use a 15-pixel reading/editing font; compact controls and small labels retain their regular font.
+Open the cog or use `/gl settings` to set the font, text size and spacing. The first-use guide can be opened again from **Données et aide**.
 
-In **Settings** (`/gl settings`), enable **“Police classique (plus lisible)”** to use the native chat font at the same sizes instead of calligraphy. Disable it to restore the grimoire style. Titles, names and notes update immediately, drafts are preserved, and the choice is saved. Compact buttons keep their regular font.
+The index opens with the most recent interaction first. A new encounter, fight, gesture, trade or note can move a contact up. Submitting a search restores the preferred result order. Clearing it returns the index to chronological order.
+
+### Keeping portraits when players leave view
+
+The journal prefers the live portrait, then the saved Armory avatar for that exact character. Hover over a journal row to see the source. The optional desktop importer needs Python 3 and Pillow. Run it on demand and choose your own game folder and region.
+
+```powershell
+python -m pip install Pillow
+python tools/sync_portraits.py "F:/game/World of Warcraft/_forever_" --region eu
+```
+
+Add `--name "First Surname"` for one contact. WoW writes journal records at logout or on `/reload`. The importer looks up saved names on Blizzard's public Armory, checks each avatar's character ID and saves a 64 × 64 texture. Notes, opinions and events stay on your computer. Restart the game after importing and enable **Grudge Ledger - Private portraits**. A subsequent run refreshes images after seven days, or immediately with `--force`. Images live in the separate `Interface/AddOns/GrudgeLedgerPortraits` folder. Share only `GrudgeLedger`. To clear the image cache, remove the private folder while the game is closed.
+
+### New in 0.10.0
+
+**Summary → Overview → Initiative** shows who opened observed fights and how confirmed victories break down. **Revenge** requires a confirmed earlier death of this character to the same opponent, an observed opening hit from your side, and a confirmed victory. Winning after the opponent opens counts as a response. Victories with a missing opening still count under **Unknown initiative**, including older fights.
+
+Select **Honor received** to review recorded outdoor PvP rewards for the selected period and character. **Journal → Head-to-head** shows rewards tied to one opponent. Shared honor counts even when a teammate lands the killing blow. The game reports the honor paid to your character. Your opponent’s payout is unknown.
+
+### New in 0.9.2
+
+**Head-to-head** separates this character’s confirmed and likely outcomes. Open the matching fight history to review the evidence. Shared honor is excluded when the game identifies a different killer in the same encounter. A delayed combat-log confirmation for a continuously observed corpse updates the original victory.
+
+Repeat-encounter rankings start on the second recorded meeting. Indirect alerts identify feuds based on likely PvP events. Zone statistics label likely outcomes and display incomplete time coverage alongside excluded fights.
+
+### New in 0.9.1
+
+The Journal opens the most recent contact on first use with an existing ledger. Guilds shows the first matching guild, and the PvP summary puts personal rivals directly below the counters. Press Enter or click the magnifying glass to search the Journal.
+
+In outdoor PvP, a personal killing-blow event can confirm a victory even when the combat log is unavailable. A matching later signal upgrades the original entry. To correct a past victory that you witnessed, open **History → Verify → I dealt the killing blow**. The original fight stays in place and the history identifies your personal confirmation.
+
+### New in 0.8.0
+
+- **Journal → Face-à-face** shows this character’s confirmed outcomes against a contact, the current streak and the most recent win following a loss. Each victory still counts as +1. New combat history can show levels, health at first PvP observation, distinct opponents and pet or NPC involvement.
+- **Bilan → Par zone** opens the combat breakdown for each district. The optional zone clock measures connected outdoor time from activation and pauses while AFK or in instances. **Mon année** can prepare a text copy of the selected confirmed and probable totals.
+- The friends ranking includes observed time grouped together. An optional trade history records completed exchanges with existing contacts, including items and money given and received.
+- Optional indirect alerts distinguish a known threat heard nearby or targeted by a visible party member from a direct sighting. Appearance settings offer local relationship icons in chat and compact tooltips with Shift for details. The new indirect alerts, badges, compact tooltips, trade history and zone clock are off by default.
+
+In 0.7.2, visible contacts can show their current in-game portrait. When a player is unavailable, their record uses a race, class or faction emblem. The personal summary also groups fights by zone. Combat and death evidence from pets can be attributed to their owners when the client supplies the link.
+
+In 0.7.1, open an event in **Histoire** to review its attribution before cancelling it. Use **Notes** to write, edit and browse a player's notes. In the summary, **Mon année** opens the chronicle for the selected year. Each guild page shows its rule and any individual exceptions. Type `/gl version` to check which version Forever has loaded.
 
 ## Grudge balance
 
@@ -302,7 +342,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 No other addon is required. Disable Grudgebook and Worth Remembering if they are installed for the same purpose, to avoid duplicate menus, markers and alerts. GitHub's automatic **Source code** archive contains developer files; only its inner `GrudgeLedger` folder belongs in `AddOns`.
 
-Left-click the minimap book to open the journal, right-click it for settings, or drag it around the minimap. Right-click a player portrait or chat name to start adding people. Search and slash commands are optional. The in-game interface is currently primarily **French**.
+Left-click the minimap book to open the journal, right-click it for settings, or drag it around the minimap. Right-click a player portrait or chat name to start adding people. Search and slash commands are optional. The interface follows the WoW text language. French, English and Spanish (Spain and Latin America) are supported. Other locales use English. Switching languages keeps player names, guild names and personal notes as written.
 
 For visible icons and colors, click **“Activer le repérage (icônes + couleurs)”** in settings, or run `/gl reperage` outside combat. This enables Forever's friendly-player nameplates, enemy nameplates and out-of-combat display, along with the addon's markers and name coloring. Plain floating world names are not editable nameplate labels. A friend in your party keeps their heart; only the nearby popup is suppressed. If the tooltip says Friend but the heart is missing, enable recognition outside combat. Native name-only nameplates are supported, including when Threat Plates hides its own name text. A player classified as **Ennemi** is red; **Méfiance** or a single negative opinion is orange.
 

@@ -4,6 +4,7 @@
 -- https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua
 -- https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_APIDocumentationGenerated/ChatInfoDocumentation.lua
 local GL = GrudgeLedger
+local L = GL.L
 local gestures = {
     KISS = 1, WINK = 1, HUG = 1, WAVE = 1, THANK = 1, BOW = 1,
     SALUTE = 1, CHEER = 1, APPLAUD = 1, SMILE = 1, LOVE = 1,
@@ -89,11 +90,14 @@ end
 function GL.SendGesture(token)
     if token ~= "KISS" and token ~= "SPIT" then return false end
     local identity = GL.Identity("target")
-    if not identity then GL.Print("Sélectionne un joueur pour lui envoyer ce geste.") return false end
-    if not GL.Settings().socialTracking then GL.Print("Active « Avis via mes émotes » dans les réglages.") return false end
+    if not identity then GL.Print(L("Sélectionne un joueur pour lui envoyer ce geste.")) return false end
+    if not GL.Settings().socialTracking then
+        GL.Print(L("Active « %s » dans les réglages."):format(L("Noter mes gestes envers les joueurs")))
+        return false
+    end
     local modern = C_ChatInfo and type(C_ChatInfo.PerformEmote) == "function"
     local perform = modern and C_ChatInfo.PerformEmote or DoEmote
-    if type(perform) ~= "function" then GL.Print("Les émotes ne sont pas disponibles sur ce client.") return false end
+    if type(perform) ~= "function" then GL.Print(L("Les émotes ne sont pas disponibles sur ce client.")) return false end
     -- Match the native bare /kiss or /spit: "" uses the selected unit. The literal
     -- "target" is a character NAME to this API, not a unit token (Forever full names too).
     -- The native Forever chat parser treats a truthy return as RESTRICTED, despite
@@ -104,7 +108,7 @@ function GL.SendGesture(token)
     sending = false
     local publicResult = GL.Clean(restricted)
     if not ok or (modern and (publicResult == nil and type(restricted) ~= "nil" or publicResult)) then
-        GL.Print("Le jeu a refusé le geste. Aucun avis ajouté.") return false
+        GL.Print(L("Le jeu a refusé le geste. Aucun avis ajouté.")) return false
     end
     recordGesture(token, identity)
     return true
@@ -114,15 +118,15 @@ GL.On("READY", function()
     if installed then return end
     installed = true
     if type(hooksecurefunc) ~= "function" then
-        GL.Debug("Les gestes sortants ne sont pas disponibles : hooksecurefunc absent.")
+        GL.Debug(L("Les gestes sortants ne sont pas disponibles : hooksecurefunc absent."))
         return
     end
     if C_ChatInfo and type(C_ChatInfo.PerformEmote) == "function" then
         local ok, err = pcall(hooksecurefunc, C_ChatInfo, "PerformEmote", outgoing)
-        if not ok then GL.Debug("Gestes sortants : " .. tostring(err)) end
+        if not ok then GL.Debug(L("Gestes sortants : %s"):format(tostring(err))) end
     end
     if type(DoEmote) == "function" then
         local ok, err = pcall(hooksecurefunc, "DoEmote", outgoing)
-        if not ok then GL.Debug("Gestes hérités : " .. tostring(err)) end
+        if not ok then GL.Debug(L("Gestes hérités : %s"):format(tostring(err))) end
     end
 end)

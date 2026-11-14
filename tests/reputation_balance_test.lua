@@ -65,6 +65,9 @@ GL.AdjustReputation(zero, 1, "Opinion", "manual")
 GL.RecordPvP(zero, "death", "confirmed", "Direct", "manual-zero-death")
 GL.InitDB()
 assert(zero.reputation == 0 and GL.Relation(zero) == "neutral" and zero.reactionSource == "manual")
+local auto, pvp = GL.AutomaticBalance(zero)
+assert(auto == -10 and pvp == -10 and zero.reputation == 0 and GL.Relation(zero) == "neutral",
+    "viewing the automatic balance must not change a personal classification")
 
 -- Positive gestures do not hide outstanding PvP danger; corrections restore them.
 local friendly = GL.IdentityFromName("Gestures", "Balance", "Player-1-gestures-balance")

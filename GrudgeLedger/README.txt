@@ -1,4 +1,8 @@
-GRUDGE LEDGER — 0.6.0
+GRUDGE LEDGER — 0.10.2
+
+Interface en français, anglais ou espagnol selon la langue du jeu. Anglais par défaut pour les autres langues.
+The interface follows your WoW text language: English, French or Spanish.
+La interfaz utiliza el idioma del juego: español, francés o inglés.
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -6,6 +10,83 @@ Copier le dossier GrudgeLedger dans Interface/AddOns, puis redémarrer le jeu.
 Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Worth
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
+
+0.10.2 — Portraits hors de portée
+
+Le portrait en direct a priorité. Le livre affiche ensuite le portrait enregistré
+de l’Armurerie si le module local GrudgeLedgerPortraits contient ce personnage.
+Les portraits personnels sont séparés du dossier GrudgeLedger à partager.
+
+0.10.1 — Depuis la synthèse, Autres actions > Supprimer la fiche… demande
+confirmation pour le joueur nommé. Les bilans sont recalculés après suppression.
+Le badge de classe s’affiche au premier plan lorsqu’il chevauche un portrait.
+
+0.10.0 — Initiative et honneur en PvP sauvage
+
+Dans Bilan > Vue d’ensemble > Initiative, « Revanche » compte une victoire
+confirmée quand votre personnage engage un adversaire qui l’avait déjà tué.
+Si le début du combat manque, la victoire compte avec « Initiative inconnue ».
+Cliquez sur « Honneur reçu » pour retrouver les gains annoncés par le jeu dans
+la période choisie. La fiche Face-à-face réunit les gains liés à cet adversaire.
+L’honneur partagé peut être reçu sans avoir porté le coup fatal.
+
+0.9.2 — Relire et vérifier un combat
+
+Journal > Face-à-face distingue les combats confirmés des résultats probables de
+ce personnage. « Voir les combats dans l’histoire » ouvre les événements comptés.
+Si le jeu attribue le coup fatal à un autre joueur, une victoire déduite du gain
+d’honneur pour ce même combat est écartée. Les signaux indirects précisent la
+nature probable d’une rancune. Les classements des amis et menaces les plus
+recroisés commencent à la deuxième rencontre enregistrée sur le compte.
+
+0.9.1 — Journal et victoires PvP
+
+Le Journal et les Guildes ouvrent une fiche quand la liste contient des résultats.
+Un coup fatal attribué à votre personnage ou à son familier peut confirmer une
+victoire déjà détectée. Pour une ancienne victoire probable dont vous avez été
+témoin, ouvrez Histoire > Vérifier > J’ai porté le coup fatal. La confirmation
+personnelle compte une victoire à la date du combat et garde sa provenance.
+
+0.8.2 — Police du journal
+
+Au premier chargement de cette version, le journal adopte « Grimoire · PT Serif ».
+Vous pouvez ensuite choisir la police du jeu dans Réglages > Apparence > Classique.
+Votre choix est mémorisé pour le compte.
+
+0.8.1 — Lecture du journal
+
+En ouvrant le Journal, la personne avec qui vous avez interagi en dernier figure en tête.
+Une recherche validée avec Entrée ou la loupe retrouve votre tri préféré. Effacer la recherche
+rétablit la chronologie. Dans Réglages > Apparence, choisissez Grimoire pour la nouvelle
+typographie. Le titre doré du livre apparaît dans les deux modes de lecture.
+
+0.8.0 — Rencontres et monde ouvert
+
+Journal > Face-à-face présente les résultats confirmés de votre personnage avec ce contact.
+Histoire précise les circonstances de combat que le jeu a permis d'observer.
+Bilan > Par zone ouvre les sous-zones et propose de mesurer le temps passé en monde ouvert.
+Mon année prépare un résumé chiffré à copier. Classements > Amis permet de trier par temps en groupe.
+Dans Réglages, activez à votre convenance les signaux indirects (Alertes), l'historique privé
+des échanges terminés (Relations et PvP), les badges du chat ou les infobulles compactes (Apparence).
+
+0.7.2 — Portraits et PvP sauvage
+
+Le livre affiche le portrait d’un joueur si le client le rend disponible.
+Une fois le joueur hors de vue, sa fiche utilise ses emblèmes connus.
+Les dégâts et les morts causés par un familier peuvent être attribués à son
+maître lorsque son identité est établie. La fiche précise la preuve.
+Dans Bilan, « Par zone » regroupe les victoires et les morts au lieu du combat.
+Dans Réglages > Apparence, « Grimoire · PT Serif » utilise des titres gras et des annotations en italique. « Classique » conserve la police du jeu.
+
+0.7.1 — Registre de campagne
+
+Ouvrez le livre avec /gl. L’onglet Journal présente les rencontres et les notes.
+Classements, Guildes et Bilan sont accessibles depuis le même bandeau.
+La roue dentée ouvre les réglages de lecture, les alertes et le guide.
+Les fiches restent dans les SavedVariables de votre compte.
+La commande /gl version indique la version chargée par le jeu.
+Histoire permet de vérifier un fait PvP. Notes conserve les brouillons pendant
+la session. Le Bilan comprend une carte annuelle et un classement des adversaires.
 
 0.6.0 : bilan personnel et chronique
 

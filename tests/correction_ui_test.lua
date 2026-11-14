@@ -3,6 +3,7 @@ getmetatable(UIParent).__index.HighlightText = function(self) self.highlighted =
 function GetBuildInfo() return "1.16.0", "63690", "Nov 1 2026", 16001 end
 C_AddOns = { IsAddOnLoaded = function(name) return name == "TidyPlates_ThreatPlates" end }
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
+assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
 GL.InitDB()
@@ -23,43 +24,79 @@ GL.RecordAggression(first, "confirmed", "Preuve directe |cff00ff00", "aggression
 local latest = record.history[#record.history]
 local historyLength = #record.history
 GL.ShowLedger(record.key)
-click(button(GrudgeLedgerWindow, "Corriger le PvP"))
+local function openCorrections()
+    click(GrudgeLedgerWindow.tools)
+    assert(GrudgeLedgerWindow.toolsMenu:IsShown())
+    click(button(GrudgeLedgerWindow.toolsMenu, "Corriger le PvP"))
+end
+openCorrections()
+local history = GrudgeLedgerWindow.historyPage
+assert(history.kind == "pvp" and history.total:GetText():find("sur 9",1,true))
+assert(not GrudgeLedgerCorrections, "selecting the PvP filter does not prompt or change a counter")
+click(history.rows[1].details)
 local f = GrudgeLedgerCorrections
 assert(f:IsShown() and f.topLevel and f.raised > 0)
-assert(f.rows[1].title:GetText():find("Agression (confirmé)", 1, true))
-assert(f.rows[1].evidence:GetText():find("||cff00ff00", 1, true), "evidence is literal text")
-assert(f.total:GetText():find("9 événement(s)", 1, true), "non-PvP history excluded")
-local originalUndo = f.rows[1].undo.scripts.OnClick
-click(f.next)
-assert(f.offset == 6 and f.rows[3].evidence:GetText() == "Déduction 1", "pagination reaches earliest event")
-click(button(f, "Précédent"))
-
--- Changing the game target and the journal selection cannot redirect an open correction.
+assert(f.certainty:GetText() == "Confirmé" and f.proof:GetText():find("||cff00ff00",1,true))
+assert(f.who:GetText() == record.fullName and f.event == latest and not latest.voided)
+click(f.keep) assert(not f:IsShown() and not latest.voided, "Conserver leaves the event and statistics unchanged")
+click(history.next) click(history.next)
+assert(history.offset == 6 and history.rows[3].event.evidence == "Déduction 1")
+click(history.prev) click(history.prev)
+click(history.rows[1].details)
+local originalUndo = f.confirm.scripts.OnClick
 mock.units.target = { name = "Megumin", surname = "Crimson", guid = "Player-1-megumin" }
 local other = GL.SetReaction(GL.Identity("target"), "friend")
-GL.RecordPvP(other, "death", "confirmed", "Autre personne", "otherdeath")
+GL.RecordPvP(other,"death","confirmed","Autre personne","otherdeath")
 GL.ShowLedger(other.key)
-originalUndo()
+click(f.confirm)
 assert(latest.voided and record.pvp.aggressions == 0 and #record.history == historyLength)
-assert(other.pvp.deaths == 1 and other.reaction == "friend", "original event remains bound to original person")
-assert(f.rows[1].undo.enabled == false and f.rows[1].undo.text == "Annulé")
-assert(f.rows[1].title:GetText():find("annulé", 1, true), "voided events remain visible")
+assert(other.pvp.deaths == 1 and other.reaction == "friend", "selection cannot redirect the pending correction")
 originalUndo()
-assert(record.pvp.aggressions == 0 and f.status:GetText():find("déjà annulé", 1, true), "stale callbacks cannot subtract twice")
-assert(not GL.RecordAggression(first, "confirmed", "same observation", "aggression"), "correction retains event dedup")
+assert(record.pvp.aggressions == 0, "stale callbacks cannot subtract twice")
+assert(not GL.RecordAggression(first,"confirmed","same observation","aggression"))
 GL.ShowLedger(record.key)
-assert(GrudgeLedgerWindow.detailText:GetText():find("annulé", 1, true), "main history also annotates cancellation")
-assert(#record.notes == 1 and record.notes[1].text == "PRIVATE note inside journal", "notes unaffected")
-
-GL.ShowLedger(other.key)
-click(button(GrudgeLedgerWindow, "Corriger le PvP"))
-click(f.rows[1].undo)
-assert(other.pvp.deaths == 0 and other.reaction == "friend" and other.reputation == 1, "manual opinion unchanged")
-local empty = GL.Remember(GL.IdentityFromName("Nobody", "Else", "Player-1-empty"))
-GL.ShowLedger(empty.key)
-click(button(GrudgeLedgerWindow, "Corriger le PvP"))
-assert(f.total:GetText() == "Aucun événement PvP." and not f.rows[1]:IsShown())
-assert(not f.rows[1].undo.scripts.OnClick, "empty rows discard stale callbacks")
+click(GrudgeLedgerWindow.detailTabs.history)
+assert(history.rows[1].badge:GetText():find("Annulé",1,true))
+click(history.rows[1].details)
+assert(not f.confirm.enabled and f.effect:GetText():find("exclu",1,true))
+click(f.keep)
+assert(#record.notes == 1 and record.notes[1].text == "PRIVATE note inside journal")
+GL.ShowLedger(other.key) openCorrections()
+click(history.rows[1].details)
+originalUndo()
+assert(other.pvp.deaths == 1, "stale confirmation cannot mutate a newly presented event")
+click(f.confirm)
+assert(other.pvp.deaths == 0 and other.reaction == "friend" and other.reputation == 1)
+-- Two distinct victories after one death. Attesting to one preserves the original fight
+-- and moves that one win between buckets, even if the UI callback fires twice.
+GL.RecordPvP(other, "death", "confirmed", "log", "ambush")
+local _, win1 = GL.RecordPvP(other, "kill", "probable", "honor", "win-1")
+local _, win2 = GL.RecordPvP(other, "kill", "probable", "honor", "win-2")
+local balance, eventCount = other.reputation, #other.history
+assert(not GL.ConfirmKill(first, win1))
+GL.ShowLedger(other.key) openCorrections()
+click(history.rows[1].details)
+assert(f.attest:IsShown() and f.event == win2)
+local attest = f.attest.scripts.OnClick
+click(f.attest) attest()
+assert(not f.attest:IsShown() and f.certainty:GetText() == "Témoignage")
+assert(f.proof:GetText():find("confirmé manuellement", 1, true) and win2.evidence == "honor")
+assert(other.pvp.kills == 1 and other.pvp.probableKills == 1 and win1.confidence == "probable")
+click(f.keep) click(history.rows[2].details) click(f.attest)
+assert(other.pvp.kills == 2 and other.pvp.probableKills == 0 and other.pvp.deaths == 1)
+assert(other.reputation == balance and #other.history == eventCount)
+assert(GL.ContactMatchup(other).kills == 2 and GL.PersonalStatistics({scope="character"}).kills == 2)
+click(f.confirm)
+assert(win1.voided and other.pvp.kills == 1 and not GL.ConfirmKill(other, win1))
+local _, sharedHonor = GL.RecordPvP(other, "kill", "probable", "Honneur partagé", "shared")
+assert(GL.VoidPvP(other, sharedHonor, false, "other-killer"))
+click(history.rows[1].details)
+assert(not f.attest:IsShown() and f.proof:GetText():find("un autre joueur", 1, true)
+    and f.proof:GetText():find("Honneur partagé", 1, true) and not f.proof:GetText():find("à confirmer", 1, true))
+click(f.keep)
+local empty = GL.Remember(GL.IdentityFromName("Nobody","Else","Player-1-empty"))
+GL.ShowLedger(empty.key) openCorrections()
+assert(history.total:GetText() == "0 événement" and not history.rows[1]:IsShown() and history.rows[1].event == nil)
 
 GL.SetGuildReaction("PRIVATE guild", "enemy", "PRIVATE guild note")
 GL.errors = { { text = "PRIVATE raw error Aqua Player-1-aqua" }, { text = "PRIVATE more details" } }
@@ -68,7 +105,8 @@ mock.cvars.nameplateShowFriendlyPlayers = 0
 mock.cvars.nameplateShowEnemies = 1
 mock.cvars.nameplateShowAll = "PRIVATE invalid CVar value"
 SlashCmdList.GRUDGELEDGER("settings")
-click(button(GrudgeLedgerSettings, "Diagnostic"))
+click(GrudgeLedgerSettings.tabs.data)
+click(button(GrudgeLedgerSettings.pages.data, "Afficher le rapport"))
 local d = GrudgeLedgerDiagnostic
 local text = d.edit:GetText()
 assert(d:IsShown() and d.edit.focus and d.edit.highlighted and d.topLevel)

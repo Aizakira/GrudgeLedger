@@ -51,11 +51,13 @@ Les statistiques de rencontre non datées ne deviennent pas des bilans annuels.
   sans transformer un test ponctuel en promesse de détection continue fiable.
 - Évolution des illustrations et du grimoire après retours sur le vrai client.
 
-Revue visuelle facultative hors jeu (Windows, polices Arial/Georgia) :
+Revue visuelle facultative hors jeu (Windows, PT Serif fourni avec l’addon) :
   python -m pip install Pillow==12.1.1
   python visual-qa/render.py
 Le rendu provient des cadres Lua réels exécutés avec des API simulées.
-Polices/textures natives approximées ; exemples fictifs, aucune capture du jeu.
+Le style Grimoire utilise les trois fichiers PT Serif livrés au jeu. Le style
+Classique utilise la police native de lecture, remplacée par Arial si le cache
+de développement ne la contient pas. Les personnages des aperçus sont fictifs.
 
 Le renderer vérifie 39 vues (dont les deux styles de police, le bilan et la chronique) : états rempli, filtré, vide, petit écran, bas de
 défilement, texture du livre absente, toutes les textures de parchemin absentes, fenêtres secondaires, minimap et alertes. La vue journal-transparent exporte

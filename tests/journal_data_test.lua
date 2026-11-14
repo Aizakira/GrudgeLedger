@@ -34,6 +34,9 @@ local stats = GL.PersonalStatistics()
 eq(stats.deaths, 1, "three aggressors count as one own death")
 eq(stats.probableDeaths, 0, "confirmed evidence supersedes probable participants")
 eq(stats.mostDeaths.record, rb, "confirmed opponent ranking")
+eq(#stats.topDeaths, 1, "probable participants never enter the podium")
+stats.topDeaths[1].value = 888
+eq(GL.PersonalStatistics().topDeaths[1].value, 1, "the podium returned to UI must not mutate the cache")
 stats.deaths, stats.mostDeaths.value = 999, 999
 eq(GL.PersonalStatistics().deaths, 1, "returned stats cannot corrupt cached totals")
 eq(GL.PersonalStatistics().mostDeaths.value, 1, "returned rankings cannot corrupt cache")
@@ -41,6 +44,7 @@ assert(GL.VoidPvP(rb, eb, true))
 eq(GL.PersonalStatistics().probableDeaths, 1, "silent correction invalidates summary cache")
 eq(GL.PersonalStatistics().deaths, 0, "corrected confirmation is excluded")
 eq(#GL.JournalEvents({ kind = "pvp" }), 3, "chronicle retains corrected evidence for audit")
+eq(#GL.PersonalStatistics().topDeaths, 0, "corrected deaths are removed from the podium")
 assert(GL.VoidPvP(ra, ea, true) and GL.VoidPvP(rc, ec, true))
 eq(GL.PersonalStatistics().events, 0, "voided events excluded from every total")
 
@@ -159,6 +163,39 @@ eq(GL.SearchPlayers({ sort = "encounters" })[1], iaRecord, "lifetime encounter s
 now = now + 1
 GL.RecordSeen(ib, true)
 eq(GL.SearchPlayers({ sort = "recent" })[1], ibRecord, "recent sighting sorting reads live metadata")
+now = now + 30
+GL.AddNote(ia, "Updated after coming home")
+eq(GL.SearchPlayers({ sort = "recent" })[1], iaRecord, "a new note is a real journal interaction")
+now = now + 1 GL.RecordSeen(ib, true) GL.RecordSeen(icRecord) GL.Remember(icRecord)
+eq(GL.SearchPlayers()[1], iaRecord, "continuous observation and passive metadata do not overtake the note")
+now = now + 1 GL.RecordTrade(ib, "Échange") -- disabled by default
+eq(GL.SearchPlayers()[1], iaRecord, "an untracked trade cannot reorder the journal")
+GL.SetSetting("tradeTracking", true) GL.RecordTrade(ib, "Échange")
+eq(GL.SearchPlayers()[1], ibRecord, "completed trade updates recency")
+now = now + 1 GL.RecordGroup(ia, "known-group", "Zone")
+eq(GL.SearchPlayers()[1], iaRecord, "a recorded group with a known person updates recency")
+now = now + 1 GL.AdjustReputation(ib, -1, "/spit", "emote")
+eq(GL.SearchPlayers()[1], ibRecord, "a directed gesture updates recency")
+now = now + 1 GL.RecordPvP(icRecord, "death", "confirmed", "witness", "newest-fight")
+eq(GL.SearchPlayers()[1], icRecord, "a death outranks an older gesture")
+assert(GL.VoidPvP(icRecord, icRecord.history[#icRecord.history]))
+eq(GL.SearchPlayers()[1], ibRecord, "a voided result no longer sets order")
+now = now + 1 GL.UpdateNote(ia, iaRecord.notes[#iaRecord.notes], "Revised")
+eq(GL.SearchPlayers()[1], iaRecord, "editing a note updates journal recency")
+GL.DeleteNote(ia, iaRecord.notes[#iaRecord.notes])
+eq(GL.SearchPlayers()[1], ibRecord, "deleting a note removes its timestamp")
+-- Legacy histories can be out of order. Ties have a stable identity key,
+-- and neither invalid/future dates nor a passive lastSeen supply an interaction.
+local newest = now + 1
+now = newest
+iaRecord.history[#iaRecord.history + 1] = {kind="reputation", time=newest}
+iaRecord.history[#iaRecord.history + 1] = {kind="reaction", time=newest - 10}
+ibRecord.history[#ibRecord.history + 1] = {kind="reaction", time=newest}
+icRecord.history[#icRecord.history + 1] = {kind="trade", time=now + 50000}
+icRecord.lastSeen = now + 60000
+GL.InitDB()
+eq(GL.SearchPlayers()[1], iaRecord, "legacy equal timestamps sorted deterministically")
+eq(GL.SearchPlayers()[2], ibRecord, "legacy recovery scans the original timestamp of every relevant event")
 local grouped = GL.Remember(person("GroupOnly"))
 grouped.groupCount, grouped.history = 1, { { kind = "grouped", time = now } }
 eq(#GL.SearchPlayers(), 3, "group-only records do not pollute list")
@@ -180,4 +217,14 @@ eq(GL.Relation(GL.Get(a)), "neutral", "victories never create friendship")
 IsInInstance = function() return true, "pvp" end
 assert(not GL.RecordPvP(b, "death", "confirmed", "battleground", "bg-death"))
 eq(GL.PersonalStatistics().deaths, 2, "battleground deaths never enter personal journal")
+reset()
+local rivals = {person("Zulu"), person("Alpha"), person("Delta"), person("Bravo")}
+for i, rival in ipairs(rivals) do
+    for n = 1, i == 1 and 3 or 2 do add(rival, "death", "confirmed", i .. "-" .. n) end
+end
+local podium = GL.PersonalStatistics().topDeaths
+eq(#podium, 3, "podium has at most three positions")
+eq(podium[1].record.key, rivals[1].key, "most confirmed deaths rank first")
+eq(podium[2].record.key, rivals[2].key, "stable key breaks a tie")
+eq(podium[3].record.key, rivals[4].key, "fourth ranked player stays off the podium")
 print("PASS journal data: provenance, alt/legacy scopes, shared deaths, merge dedup, corrections, periods, cache invalidation, note CRUD, rich search/sort and tenacious PvP score")

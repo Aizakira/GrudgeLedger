@@ -46,15 +46,19 @@ assert(GrudgeLedgerNearbyAlert.key == record.key and GrudgeLedgerNearbyAlert:IsS
 assert(GrudgeLedgerNearbyAlert.title:GetText():find("probable", 1, true))
 GL.ShowLedger(record.key)
 local correctionButton
-for _, child in ipairs(GrudgeLedgerWindow.children) do
+GrudgeLedgerWindow.tools.scripts.OnClick()
+for _, child in ipairs(GrudgeLedgerWindow.toolsMenu.children) do
     if child.text == "Corriger le PvP" then correctionButton = child end
 end
 assert(correctionButton).scripts.OnClick()
-local undo = GrudgeLedgerCorrections.rows[1].undo
+GrudgeLedgerWindow.historyPage.rows[1].details.scripts.OnClick()
+assert(record.pvp.probableDeaths == 1)
+local undo = GrudgeLedgerCorrections.confirm
 undo.scripts.OnClick(undo, "LeftButton")
 assert(record.pvp.probableDeaths == 0 and GL.Relation(record) == "neutral")
 assert(not GrudgeLedgerNearbyAlert:IsShown(), "correction immediately removes the obsolete alert")
-assert(GrudgeLedgerWindow.detailText:GetText():find("annulé", 1, true))
+GrudgeLedgerWindow.detailTabs.history.scripts.OnClick(GrudgeLedgerWindow.detailTabs.history, "LeftButton")
+assert(GrudgeLedgerWindow.historyPage.rows[1].badge:GetText():find("Annulé",1,true))
 -- An Alliance player marked as a personal enemy becomes red after explicit setup.
 SlashCmdList.GRUDGELEDGER("reperage")
 GL.SetReaction(opponent, "enemy")

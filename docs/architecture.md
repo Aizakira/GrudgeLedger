@@ -10,7 +10,7 @@ UI frames and events. A Rust rewrite would not run as a normal WoW addon and
 would not fix API availability or detection restrictions. Python is used only
 for development checks and packaging; users install only `GrudgeLedger/`.
 
-There are nine Lua modules, no third-party runtime library and no external
+There are ten Lua modules, no third-party runtime library and no external
 service. Keep the existing separation instead of adding a framework:
 
 | Module | Responsibility |
@@ -20,6 +20,7 @@ service. Keep the existing separation instead of adding a framework:
 | `Social.lua` | Targeted gestures and opinion changes |
 | `Menu.lua` | Native context-menu integration |
 | `Display.lua` | Nameplate markers, tooltips and encounter alerts |
+| `UITheme.lua` | Shared book frame, text, independent title/medallion and illustrated button layers |
 | `UI.lua` | Journal, settings, statistics and manual corrections |
 | `QuickGestures.lua` | Floating gesture buttons |
 | `MinimapProbe.lua`, `DruidRadar.lua` | Isolated, manual experiments; unchanged in this review |
@@ -32,6 +33,10 @@ a second scoring system. Confirmed and inferred events stay distinguishable.
 Source files belong in `Interface/AddOns/GrudgeLedger`; the game's SavedVariables
 belong in `WTF`. Tests, previews and benchmarks use fictional records. Neither
 packaging nor deployment should copy journals into the addon or repository.
+
+## Campaign artwork in 0.7.0
+
+The original PNGs live in `art/campaign/`. From the checkout, run `python art/campaign/export.py` with Pillow installed to regenerate the client textures. The background contains the frame, leather, blank paper and drapes. Position the separate medallion, blank plaque, live FontString and button textures in `UITheme.lua`. The shared navigation in `UI.lua` switches pages. Runtime packages include only `GrudgeLedger/`.
 
 ## Ranking UX and data contracts in 0.6.1
 

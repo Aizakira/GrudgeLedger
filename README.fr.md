@@ -31,13 +31,60 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 ![Aperçu hors jeu du journal sur parchemin, avec des personnages fictifs](docs/journal.png)
 
-Le journal est un livre ouvert : deux pages de parchemin vieilli, du cuir rouge cousu, des tranches de feuilles et de fines ferrures. L’index conserve les icônes et les libellés de relation, avec une encre sombre lisible. Le classement et la prise de notes restent en haut ; les actions moins fréquentes passent au pied de la page. L’inspiration vient d’Overlord, avec des illustrations originales. Cet aperçu provient du véritable agencement Lua, simulé hors jeu avec des personnages fictifs ; les polices et icônes natives sont approximées.
+Le registre de campagne réunit le Journal, les Classements, les Guildes et le Bilan. Dans le Journal, filtrez les rencontres par avis et faction, puis ouvrez une fiche pour consulter le solde automatique, la dernière rencontre, l’histoire et les notes. Les portraits de race et les icônes de classe utilisent l’identité connue du jeu.
 
-Les titres, les noms et le texte de la fiche utilisent désormais les familles calligraphiques natives de WoW (Morpheus pour l’alphabet latin). Les notes se lisent et se saisissent en 15 pixels ; les commandes et petites indications conservent une police compacte.
+Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartouche, la roue dentée et la croix sont des éléments indépendants. Le lettrage doré est une texture indépendante. Le jeu affiche les noms et le contenu du livre en PT Serif, avec des titres gras et des annotations en italique. Le réglage Classique utilise la police native du jeu. L’aperçu hors jeu utilise des personnages fictifs.
 
-Le livre suit le contour transparent de son illustration, sans ombre noire rectangulaire. Les boutons partagent une écriture dorée sur le cuir ou une encre brune sur le parchemin, un trait discret et des états de survol, clic, désactivation et sélection distincts.
+La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous pouvez agrandir le texte, choisir la police de lecture et compacter l’espacement. Le guide de première ouverture est accessible depuis **Données et aide**.
 
-Dans **Réglages** (`/gl settings`), cocher **« Police classique (plus lisible) »** remplace la calligraphie par la police native du chat, aux mêmes tailles. Décocher rétablit le style grimoire. Le changement est immédiat pour les titres, les noms et les notes, conserve les brouillons et reste sauvegardé. Les boutons compacts restent inchangés.
+La colonne de gauche présente les contacts du plus récemment au plus anciennement rencontré ou annoté. Une interaction comme un combat, un geste ou un échange actualise aussi ce classement. Validez une recherche pour utiliser votre tri préféré. Vider le champ rétablit la chronologie.
+
+### Conserver les portraits hors de portée
+
+Le Journal affiche le portrait en direct, puis l’avatar individuel enregistré de l’Armurerie si le joueur s’éloigne. À défaut, il affiche l’emblème de race, de classe ou de faction disponible. Survolez la ligne pour connaître la source de l’image.
+
+L’importateur facultatif se lance sur votre ordinateur avec Python 3 et Pillow. Il lit les noms et identifiants enregistrés dans les sauvegardes du journal. Il interroge l’Armurerie officielle de la région choisie et vérifie le nom et l’identifiant de chaque avatar avant de l’enregistrer. Les notes, avis et événements restent locaux.
+
+```powershell
+python -m pip install Pillow
+python tools/sync_portraits.py "F:/game/World of Warcraft/_forever_" --region eu
+```
+
+Adaptez le chemin à votre installation et ajoutez `--name "Prénom Nom"` pour un seul joueur. WoW écrit les fiches sur disque à la déconnexion ou avec `/reload`. Après un import, relancez le jeu et activez **Grudge Ledger - Private portraits** dans les addons. Une prochaine exécution actualise les avatars âgés d’au moins sept jours. L’option `--force` actualise immédiatement. Les images 64 × 64 sont dans le dossier privé `Interface/AddOns/GrudgeLedgerPortraits`. Partagez uniquement le dossier `GrudgeLedger`. Supprimer le dossier privé, jeu fermé, efface le cache d’images.
+
+### Depuis la 0.10.0
+
+Dans **Bilan → Vue d’ensemble → Initiative**, retrouvez qui a engagé les combats observés et comment vos victoires confirmées se répartissent. Une **revanche** exige une mort antérieure confirmée de ce personnage face au même adversaire, un premier coup observé de votre côté et une victoire confirmée. Si l’adversaire engage, la victoire compte comme une riposte. Si le début manque, elle compte sous **Initiative inconnue**. Les anciennes victoires gardent leur résultat.
+
+**Honneur reçu** ouvre le détail des gains de PvP sauvage annoncés par le jeu pour la période et le personnage choisis. **Journal → Face-à-face** réunit les gains associés à un adversaire. Un gain partagé entre plusieurs joueurs compte aussi. Seul le coup fatal détermine une victoire personnelle. Le montant reçu par le tueur adverse demeure inconnu.
+
+### Depuis la 0.9.2
+
+**Face-à-face** distingue les résultats confirmés et probables de ce personnage. Ouvrez l’historique associé pour en vérifier la preuve. Une victoire déduite de l’honneur partagé est écartée si le jeu attribue le coup fatal à un autre joueur lors de ce combat. Un coup fatal signalé tardivement pour un adversaire resté mort sous observation complète la victoire déjà inscrite.
+
+Les classements des personnes recroisées commencent à la deuxième rencontre enregistrée. Les signaux indirects précisent si la rancune repose sur un événement PvP probable. Le bilan par zone identifie les résultats probables et signale à la fois les combats annulés et les durées de présence partielles.
+
+### Depuis la 0.9.1
+
+Le Journal ouvre la fiche la plus récente à la première consultation d’un livre déjà rempli. Guildes affiche la première guilde du classement et le Bilan présente vos adversaires marquants juste après les compteurs. Pour rechercher dans le Journal, appuyez sur Entrée ou cliquez sur la loupe.
+
+En PvP sauvage, un coup fatal attribué par le jeu peut confirmer une victoire même si le journal de combat est indisponible. Une preuve reçue après une première estimation confirme la même ligne. Pour corriger une ancienne victoire dont vous avez été témoin, ouvrez **Histoire → Vérifier → J’ai porté le coup fatal**. La date du combat est conservée et l’origine de la confirmation apparaît dans son historique.
+
+### Depuis la 0.8.0
+
+- **Journal → Face-à-face** présente les résultats confirmés de ce personnage contre le contact sélectionné, sa série en cours et sa dernière victoire après une défaite. Une revanche compte pour une victoire (+1). Dans **Histoire**, les nouveaux combats peuvent préciser les adversaires observés, les niveaux, votre vie au premier signal et la présence d’un monstre ou d’un familier.
+- **Bilan → Par zone** ouvre le détail des sous-zones. « Mesurer le temps par zone » compte, à partir de son activation, votre présence en monde ouvert, hors absences et instances. **Bilan → Mon année → Copier le bilan annuel** prépare les chiffres confirmés et probables de la sélection pour une copie manuelle.
+- **Classements → Amis → Temps passé en groupe** utilise les nouvelles durées observées avec un contact en ligne. Dans **Réglages → Relations et PvP**, vous pouvez aussi consigner les échanges terminés avec vos contacts. Les objets et les pièces donnés et reçus sont consultables dans **Histoire → Échanges**.
+- **Réglages → Alertes** propose un signal local et discret pour une menace connue qui parle, crie ou devient la cible d’un équipier visible. La bannière indique d’où vient le signal et depuis combien de temps. **Réglages → Apparence** permet d’ajouter les icônes de relation aux noms dans le chat et de réduire les infobulles aux informations essentielles, avec les détails sous Maj. Les signaux indirects, les badges, les infobulles compactes, le suivi des échanges et la mesure du temps par zone sont facultatifs.
+
+La version 0.7.2 affiche le portrait actuel d’un contact lorsque Forever permet de le voir. À distance, sa fiche reprend un emblème de race, de classe ou de faction. Le Bilan regroupe aussi les combats par zone. Les attaques d’un familier sont rattachées à son maître si le jeu fournit leur lien.
+
+Depuis la version 0.7.1, l’onglet Histoire permet de consulter chaque événement
+et de vérifier son attribution avant de l’annuler. L’onglet Notes permet
+d’écrire, de modifier et de parcourir les notes sur la fiche du joueur.
+Dans Bilan, **Mon année** ouvre la chronique de l’année choisie. La fiche de guilde
+présente sa règle et les exceptions individuelles. Pour vérifier la version
+effectivement chargée par Forever, tapez `/gl version`.
 
 ## Solde de rancune
 
@@ -293,7 +340,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 Aucune dépendance n'est nécessaire. Désactivez Grudgebook et Worth Remembering si vous les utilisez pour le même rôle, afin d'éviter les doublons de menus, marqueurs et alertes. Les archives automatiques **Source code** de GitHub contiennent aussi les fichiers de développement : seul leur dossier intérieur `GrudgeLedger` va dans `AddOns`.
 
-Un clic gauche sur le livre ouvre le journal, un clic droit ouvre les réglages. Vous pouvez le faire glisser autour de la minimap. Pour ajouter quelqu'un, faites un clic droit sur son portrait ou son nom dans le chat, puis survolez **Grudge Ledger**. Pas besoin de recherche ni de commande. L'interface en jeu est actuellement principalement en français.
+Un clic gauche sur le livre ouvre le journal, un clic droit ouvre les réglages. Vous pouvez le faire glisser autour de la minimap. Pour ajouter quelqu'un, faites un clic droit sur son portrait ou son nom dans le chat, puis survolez **Grudge Ledger**. Pas besoin de recherche ni de commande. Le journal suit la langue des textes de WoW. Il est disponible en français, en anglais et en espagnol (Espagne et Amérique latine). Les autres langues utilisent l’anglais. Les noms des joueurs, des guildes et les notes personnelles gardent leur écriture d’origine.
 
 Pour voir les icônes et couleurs, cliquez sur **« Activer le repérage (icônes + couleurs) »** dans les réglages, ou utilisez `/gl reperage` hors combat. Cela active les barres des joueurs alliés, les barres ennemies et leur affichage hors combat, ainsi que les marqueurs et couleurs de l'addon. Les simples noms flottants ne sont pas des barres de noms modifiables. Un ami du groupe conserve son cœur ; seul le popup de proximité est supprimé. Si l'infobulle indique Ami mais que le cœur manque, activer le repérage hors combat. Le mode natif « nom uniquement » est pris en charge, y compris lorsque Threat Plates masque son propre texte. **Ennemi** donne le rouge ; **Méfiance** ou un simple avis négatif donne l'orange.
 

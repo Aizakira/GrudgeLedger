@@ -1,5 +1,6 @@
 """Run source and behavior checks with Lua 5.1, the WoW addon language version."""
 from pathlib import Path
+from hashlib import sha256
 import sys
 
 work = Path(__file__).resolve().parent.parent
@@ -7,12 +8,28 @@ sys.path.insert(0, str(work / "test-runtime"))
 from lupa.lua51 import LuaRuntime
 
 addon = work / "GrudgeLedger"
+font_dir = addon / "Media" / "Fonts"
+assert "SIL OPEN FONT LICENSE" in (font_dir / "OFL.txt").read_text(encoding="utf-8")
+# Unmodified static fonts and their upstream OFL, pinned in CREDITS.txt.
+for filename, digest in {
+    "PTSerif-Regular.ttf": "a4951fade06ff8f09b7673aa81ffb65a8cd409e24d3289a6dc670bc4dda2557a",
+    "PTSerif-Bold.ttf": "038ba7336bd7ea14f12ad155bed51a4345cac5153275d521dec3ba04021c526e",
+    "PTSerif-Italic.ttf": "f57e95ff9dc85691a3b2e193f2028db36f6663939a46c0fc4f286d618b80b7ce",
+    "OFL.txt": "ddf311c28ddf5a5ad9747649837346b67bed9d356789c3072bb27dbce49e514d",
+}.items():
+    assert sha256((font_dir / filename).read_bytes()).hexdigest() == digest, filename
 for name, expected_width, expected_height, transparent in (
-    ("LedgerIcon.tga", 256, 256, True), ("LedgerBook.tga", 256, 256, True),
+    ("LedgerBook.tga", 256, 256, True),
+    ("JournalMedallion.tga", 128, 128, True), ("JournalSettings.tga", 64, 64, True),
+    ("JournalClose.tga", 64, 64, True),
+    ("JournalDialog.tga", 512, 512, True),
+    ("JournalTitlePlate.tga", 512, 64, True),
+    ("JournalWordmark.tga", 512, 128, True),
     ("RelationFriend.tga", 128, 128, True), ("RelationWarning.tga", 128, 128, True), ("RelationEnemy.tga", 128, 128, True),
     ("RelationNeutral.tga", 128, 128, True),
-    ("JournalIllustration.tga", 512, 256, True), ("JournalPaper.tga", 512, 512, False),
+    ("JournalPaper.tga", 512, 512, False),
     ("JournalBookSurface.tga", 1024, 1024, True),
+    ("JournalButtons.tga", 512, 512, True),
     ("GestureKiss.tga", 128, 128, False),
 ):
     texture = (addon / "Media" / name).read_bytes()
@@ -24,9 +41,9 @@ for name, expected_width, expected_height, transparent in (
     assert len(texture) >= pixels + width * height * 4
     alpha = texture[pixels + 3:pixels + width * height * 4:4]
     if transparent:
-        # The resampled book retains its generated alpha (up to 3/255 at corners).
-        corner_limit = 3 if name == "JournalBookSurface.tga" else 0
-        assert all(alpha[y * width + x] <= corner_limit for x in (0, width - 1) for y in (0, height - 1)), "artwork corners must be transparent"
+        # Resampling preserves generated alpha; allow an imperceptible 3/255 fringe.
+        corner_limit = 3 if name in ("JournalBookSurface.tga", "JournalButtons.tga", "JournalDialog.tga") else 0
+        assert all(alpha[y * width + x] <= corner_limit for x in (0, width - 1) for y in (0, height - 1)), name + ": artwork corners must be transparent"
     else:
         assert all(a == 255 for a in alpha), "opaque artwork must remain opaque"
     assert any(alpha), "artwork must not be empty"

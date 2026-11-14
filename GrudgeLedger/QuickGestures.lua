@@ -1,5 +1,6 @@
 -- Native WoW button frames; clicks use the same outgoing gesture path as /kiss and /spit.
 local GL = GrudgeLedger
+local L = GL.L
 local bar
 local function position()
     bar:ClearAllPoints()
@@ -23,8 +24,8 @@ GL.On("READY", function()
     bar:SetClampedToScreen(true)
     bar.buttons = {}
     for i, action in ipairs({
-        { "KISS", "Bisou", "Interface\\AddOns\\GrudgeLedger\\Media\\GestureKiss", "Geste amical : +1" },
-        { "SPIT", "Crachat", "Interface\\Icons\\Spell_Nature_CorrosiveBreath", "Geste négatif : −1" },
+        { "KISS", "Bisou", "Interface\\AddOns\\GrudgeLedger\\Media\\GestureKiss", "Geste amical : +1 sur le joueur ciblé." },
+        { "SPIT", "Crachat", "Interface\\Icons\\Spell_Nature_CorrosiveBreath", "Geste négatif : −1 sur le joueur ciblé." },
     }) do
         local token = action[1]
         local b = CreateFrame("Button", nil, bar)
@@ -63,14 +64,14 @@ GL.On("READY", function()
         b:SetScript("OnEnter", function(self)
             if not GameTooltip then return end
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(title)
-            GameTooltip:AddLine(help .. " sur le joueur ciblé.", 1, 0.85, 0.6)
+            GameTooltip:SetText(L(title))
+            GameTooltip:AddLine(L(help), 1, 0.85, 0.6)
             local recipient = GL.Identity("target")
-            GameTooltip:AddLine(recipient and ("Cible : " .. recipient.fullName:gsub("|", "||")) or "Sélectionne un joueur.", 1, 1, 1)
+            GameTooltip:AddLine(recipient and L("Cible : %s"):format(recipient.fullName:gsub("|", "||")) or L("Sélectionne un joueur."), 1, 1, 1)
             if token == "SPIT" then
-                GameTooltip:AddLine("Le /spit natif peut rester un crachat au sol : le jeu décide du texte reçu, même avec une cible.", 1, 0.75, 0.4, true)
+                GameTooltip:AddLine(L("Le /spit natif peut rester un crachat au sol : le jeu décide du texte reçu, même avec une cible."), 1, 0.75, 0.4, true)
             end
-            GameTooltip:AddLine("Même avis au plus une fois par 30 s.\nCtrl + glisser : déplacer les deux boutons.", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(L("Même avis au plus une fois par 30 s.\nCtrl + glisser : déplacer les deux boutons."), 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
         end)
         b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)

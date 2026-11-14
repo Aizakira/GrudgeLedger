@@ -1,9 +1,24 @@
 -- Explicitly invoked capability test, never an automatic radar. No tracking changes or saved names.
+local L = GrudgeLedger and GrudgeLedger.L or function(source) return source end
 local active, latest
+-- The probe stores its fixed source messages so saved reports follow a locale change.
+local function resultText(text)
+    local step, reason = text:match("^ANNULE %[(.-)%] : (.-) Aucun resultat exploitable%.$")
+    if step then
+        local key = reason:match("^Coordonnee indisponible ou protegee : ([%a]+)%.$")
+        if key then reason = L("Coordonnee indisponible ou protegee : ") .. key .. "."
+        else reason = L(reason) end
+        return L("ANNULE [") .. L(step) .. "] : " .. reason .. L(" Aucun resultat exploitable.")
+    end
+    reason = text:match("^ANNULE : (.+)$")
+    if reason then return L("ANNULE : ") .. L(reason) end
+    return L(text)
+end
+if GrudgeLedger then GrudgeLedger.ProbeResultText = resultText end
 local function public(value, kind)
     return not (issecretvalue and issecretvalue(value)) and type(value) == kind
 end
-local function say(text) print("[GL Probe] " .. text) end
+local function say(text) print("[GL Probe] " .. resultText(text)) end
 local function fail(reason) error({ reason = reason }, 0) end
 local function readNames()
     local data = C_TooltipInfo.GetMinimapMouseover()
@@ -92,8 +107,8 @@ local function start()
     if not ok then aborted(state, err); return end
     active = state
     local _, build = GetBuildInfo()
-    say("v0.2.0 / Build " .. (public(build, "string") and build or "inconnu") ..
-        " : tu as 30 secondes pour survoler le POINT d'un joueur IMMOBILE dans la minimap en haut a droite. Reste immobile aussi.")
+    say("v0.2.0 / Build " .. (public(build, "string") and build or L("inconnu")) ..
+        L(" : tu as 30 secondes pour survoler le POINT d'un joueur IMMOBILE dans la minimap en haut a droite. Reste immobile aussi."))
     local attempts = 0
     local function capture()
         attempts = attempts + 1
