@@ -506,6 +506,7 @@ local function observe(unit, notify, reuseObservation)
     local identity = GL.Identity(unit, reuseObservation)
     if identity then
         GL.Trace("observed", identity, unit)
+        if GL.Bounties and notify and GL.db.settings.enemyAlerts then GL.Bounties.Observe(identity.guid) end
         local record = GL.RecordSeen(identity, true)
         partyWarning(record, unit)
         if notify or (record and GL.Relation(record) == "friend") then alert(identity, unit) end

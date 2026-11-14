@@ -27,7 +27,7 @@ local function client(i)
     env.C_ChatInfo={RegisterAddonMessagePrefix=function() end,SendAddonMessage=function(p,t,ch)
         network[#network+1]={i,p,t,ch,c.name};return 0 end}
     local f=assert(loadfile(TEST_ROOT.."/Bounties.lua"));setfenv(f,env);f()
-    c.b=env.GrudgeLedger.Bounties;c.hook=ev
+    c.env=env;c.b=env.GrudgeLedger.Bounties;c.hook=ev
     c.event(nil,"PLAYER_LOGIN")
     for _,p in ipairs(clients) do if p.online then p.event(nil,"GUILD_ROSTER_UPDATE") end end
     return c
@@ -53,6 +53,14 @@ local order=assert(a.b.Post(target,"Target",100000))
 assert(not a.b.Post(target,"Target",0))
 flush()
 assert(b.b.Pledge(order,50000));flush()
+now=now+100
+assert(not b.b.Update(order,"not mine",true))
+assert(a.b.Update(order,"Patrouille au rivage",true));flush()
+local renewed=b.b.List()[order]
+assert(renewed.note=="Patrouille au rivage" and renewed.expires>renewed.at+7*86400 and renewed.pot[b.id]==50000)
+local notices=0
+b.env.GrudgeLedger.Print=function() notices=notices+1 end
+b.b.Observe(target);b.b.Observe(target);assert(notices==1)
 a.online=false
 local c=client(3);flush()
 assert(c.b.List()[order].pot[b.id]==50000)
@@ -68,7 +76,35 @@ assert(not c.b.Withdraw(order))
 assert(b.b.ConfirmPayment(order,c.id,4000));flush()
 assert(a.b.Due(a.b.List()[order],b.id,c.id)==21000)
 assert(not b.b.ConfirmPayment(order,c.id,22000))
-assert(b.b.ConfirmPayment(order,c.id,21000));flush()
+local env=b.env
+local function field()
+    return {v="",GetText=function(self)return self.v end,SetText=function(self,v) self.v=v end}
+end
+env.SendMailFrame={IsShown=function()return true end}
+env.SendMailNameEditBox,env.SendMailSubjectEditBox,env.SendMailBodyEditBox=field(),field(),field()
+env.SendMailMoney={n=0}
+env.MoneyInputFrame_GetCopper=function(f)return f.n end
+env.MoneyInputFrame_SetCopper=function(f,n) f.n=n end
+env.SendMailSendMoneyButton={GetChecked=function()return true end}
+env.SendMailRadioButton_OnClick=function()end
+env.GetSendMailItem=function()end
+env.SendMail=function()error("must not auto-send")end
+local send
+env.hooksecurefunc=function(name,f)assert(name=="SendMail");send=f end
+assert(b.b.PrepareMail(order,c.id))
+assert(env.SendMailNameEditBox.v==c.name and env.SendMailMoney.n==21000)
+assert(not b.b.PrepareMail(order,c.id))
+b.event(nil,"MAIL_SEND_SUCCESS")
+assert(b.b.Due(b.b.List()[order],b.id,c.id)==21000)
+send("Other",env.SendMailSubjectEditBox.v);b.event(nil,"MAIL_SEND_SUCCESS")
+assert(b.b.Due(b.b.List()[order],b.id,c.id)==21000)
+local function refill()
+ env.SendMailNameEditBox.v="";env.SendMailSubjectEditBox.v="";env.SendMailMoney.n=0
+ assert(b.b.PrepareMail(order,c.id));send(c.name,env.SendMailSubjectEditBox.v)
+end
+refill();b.event(nil,"MAIL_FAILED")
+assert(b.b.Due(b.b.List()[order],b.id,c.id)==21000)
+refill();b.event(nil,"MAIL_SEND_SUCCESS");b.event(nil,"MAIL_SEND_SUCCESS");flush()
 assert(a.b.Due(a.b.List()[order],b.id,c.id)==0)
 assert(b.b.ConfirmPayment(order,a.id,25000));assert(a.b.ConfirmPayment(order,c.id,50000));flush()
 assert(c.b.List()[order].state=="paid")
