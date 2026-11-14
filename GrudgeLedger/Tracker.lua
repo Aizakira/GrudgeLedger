@@ -254,6 +254,7 @@ local function killingBlow(src, dst, name, evidence, native)
         evidence = "Votre familier a porté le coup fatal à ce joueur."
     end
     creditKill(identityForGUID(dst, name), "confirmed", evidence, native)
+    if enabled() and not GL.IsPvPInstance() then GL.Emit("BOUNTY_KILL",dst) end
 end
 
 local function recordAggression(f, identity, confidence, evidence, viaPet)
@@ -702,7 +703,8 @@ local function resolveDeath(flush)
             or "Participation à l’attaque ayant causé votre mort."
         local viaPet = confirmed and lethalPet or (petSources and petSources[identity.guid or identity.key])
             or (not rows and pet and death.at - pet.at <= 5)
-        GL.RecordPvP(identity, "death", "confirmed", evidence, death.id, combatSnapshot(death.fight, identity, viaPet))
+        local recorded = GL.RecordPvP(identity, "death", "confirmed", evidence, death.id, combatSnapshot(death.fight, identity, viaPet))
+        if recorded and confirmed then GL.Emit("BOUNTY_DEATH",identity.guid,identity.fullName) end
     end
 end
 
@@ -710,8 +712,9 @@ function T.OnDeath(confirmed, viaPet)
     if pendingDeath and confirmed then pendingDeath.confirmed, pendingDeath.pet = confirmed, viaPet return end
     if deathHandled then
         if confirmed and resolvedDeath and GL.Now() - resolvedDeath.at <= 2 and enabled() then
-            GL.RecordPvP(confirmed, "death", "confirmed", "Dégâts létaux explicitement attribués à ce joueur.",
+            local recorded = GL.RecordPvP(confirmed, "death", "confirmed", "Dégâts létaux explicitement attribués à ce joueur.",
                 resolvedDeath.id, combatSnapshot(resolvedDeath.fight, confirmed, viaPet))
+            if recorded then GL.Emit("BOUNTY_DEATH",confirmed.guid,confirmed.fullName) end
         end
         return
     end

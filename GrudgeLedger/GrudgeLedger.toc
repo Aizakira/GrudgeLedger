@@ -26,3 +26,4 @@ Trades.lua
 QuickGestures.lua
 MinimapProbe.lua
 DruidRadar.lua
+Bounties.lua
