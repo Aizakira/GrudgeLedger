@@ -259,4 +259,25 @@ f:Hide()
 mock.Fire("PORTRAITS_UPDATED")
 assert(not watcher.scripts.OnUpdate, "closed book does not poll portraits")
 assert(record.portraitUnit == nil and record.portrait == nil, "no portrait texture or token is persisted")
+local saved = GL.SetReaction(GL.IdentityFromName("Example", "Keeper", "Player-42-000000F1"), "friend")
+GL.ShowLedger(saved.key)
+assert(not f.archivedPortrait)
+GrudgeLedgerPortraitIndex = { [saved.guid] = true }
+GL.InitDB()
+GL.ShowLedger(saved.key)
+local path = "Interface\\AddOns\\GrudgeLedgerPortraits\\" .. saved.guid
+assert(f.raceIcon.texture == path and rowFor(saved.key).archivedPortrait)
+units.target = {guid=saved.guid}
+SetPortraitTexture = function(texture) texture:SetTexture("current-face") end
+IsUnitModelReadyForUI = function() return false end
+portraitEvent("PLAYER_TARGET_CHANGED")
+assert(f.raceIcon.texture == path and not f.portraitUnit)
+IsUnitModelReadyForUI = function() return true end
+portraitEvent("UNIT_PORTRAIT_UPDATE", "target")
+assert(f.raceIcon.texture == "current-face" and not f.archivedPortrait)
+units.target = {guid="Player-42-000000F2"}
+portraitEvent("PLAYER_TARGET_CHANGED")
+assert(f.raceIcon.texture == path and not f.portraitUnit and f.archivedPortrait)
+GL.ShowLedger(record.key)
+assert(not f.archivedPortrait and f.raceIcon.texture ~= path, "recycled rows cannot keep someone else's image")
 print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

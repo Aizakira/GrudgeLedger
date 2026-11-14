@@ -93,14 +93,21 @@ end
 
 local function paintPortrait(row, record, unit)
     local face = row.raceIcon
-    row.portraitUnit = nil
+    row.portraitUnit, row.archivedPortrait = nil, nil
     face:SetTexture(nil)
     face:SetTexCoord(0, 1, 0, 1)
     row.classIcon:SetTexCoord(0, 1, 0, 1)
     row.classIcon:SetTexture(nil)
     row.classIcon:SetAlpha(classIcon(row.classIcon, record) and 1 or 0)
-    if unit and pcall(SetPortraitTexture, face, unit, true) then
+    if unit and (not IsUnitModelReadyForUI or GL.Safe(IsUnitModelReadyForUI, unit)) and pcall(SetPortraitTexture, face, unit, true) then
         row.portraitUnit = unit
+        return
+    end
+    local guid = GL.Clean(record.guid, "string")
+    if guid and type(GrudgeLedgerPortraitIndex) == "table" and GrudgeLedgerPortraitIndex[guid] == true
+        and guid:match("^Player%-%d+%-%x+$") then
+        face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. guid)
+        row.archivedPortrait = true
         return
     end
     local race = GL.Clean(record.race, "string")
@@ -2091,7 +2098,8 @@ local function buildLedger()
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(plain(record.fullName or record.name))
             GameTooltip:AddLine(plain(faction .. " · " .. race .. " · " .. class))
-            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or L("Emblème d’identité"), 0.82, 0.78, 0.69)
+            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.archivedPortrait
+                and L("Portrait enregistré de l’Armurerie") or L("Icône générique"), 0.82, 0.78, 0.69)
             if record.guild then GameTooltip:AddLine(plain(record.guild)) end
             GameTooltip:Show()
         end)

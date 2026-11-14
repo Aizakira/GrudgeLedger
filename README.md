@@ -37,6 +37,17 @@ Open the cog or use `/gl settings` to set the font, text size and spacing. The f
 
 The index opens with the most recent interaction first. A new encounter, fight, gesture, trade or note can move a contact up. Submitting a search restores the preferred result order. Clearing it returns the index to chronological order.
 
+### Keeping portraits when players leave view
+
+The journal prefers the live portrait, then the saved Armory avatar for that exact character. Hover over a journal row to see the source. The optional desktop importer needs Python 3 and Pillow. Run it on demand and choose your own game folder and region.
+
+```powershell
+python -m pip install Pillow
+python tools/sync_portraits.py "F:/game/World of Warcraft/_forever_" --region eu
+```
+
+Add `--name "First Surname"` for one contact. WoW writes journal records at logout or on `/reload`. The importer looks up saved names on Blizzard's public Armory, checks each avatar's character ID and saves a 64 × 64 texture. Notes, opinions and events stay on your computer. Restart the game after importing and enable **Grudge Ledger - Private portraits**. A subsequent run refreshes images after seven days, or immediately with `--force`. Images live in the separate `Interface/AddOns/GrudgeLedgerPortraits` folder. Share only `GrudgeLedger`. To clear the image cache, remove the private folder while the game is closed.
+
 ### New in 0.10.0
 
 **Summary → Overview → Initiative** shows who opened observed fights and how confirmed victories break down. **Revenge** requires a confirmed earlier death of this character to the same opponent, an observed opening hit from your side, and a confirmed victory. Winning after the opponent opens counts as a response. Victories with a missing opening still count under **Unknown initiative**, including older fights.

@@ -39,6 +39,19 @@ La roue dentée ou `/gl settings` ouvre les réglages. Dans **Apparence**, vous 
 
 La colonne de gauche présente les contacts du plus récemment au plus anciennement rencontré ou annoté. Une interaction comme un combat, un geste ou un échange actualise aussi ce classement. Validez une recherche pour utiliser votre tri préféré. Vider le champ rétablit la chronologie.
 
+### Conserver les portraits hors de portée
+
+Le Journal affiche le portrait en direct, puis l’avatar individuel enregistré de l’Armurerie si le joueur s’éloigne. À défaut, il affiche l’emblème de race, de classe ou de faction disponible. Survolez la ligne pour connaître la source de l’image.
+
+L’importateur facultatif se lance sur votre ordinateur avec Python 3 et Pillow. Il lit les noms et identifiants enregistrés dans les sauvegardes du journal. Il interroge l’Armurerie officielle de la région choisie et vérifie le nom et l’identifiant de chaque avatar avant de l’enregistrer. Les notes, avis et événements restent locaux.
+
+```powershell
+python -m pip install Pillow
+python tools/sync_portraits.py "F:/game/World of Warcraft/_forever_" --region eu
+```
+
+Adaptez le chemin à votre installation et ajoutez `--name "Prénom Nom"` pour un seul joueur. WoW écrit les fiches sur disque à la déconnexion ou avec `/reload`. Après un import, relancez le jeu et activez **Grudge Ledger - Private portraits** dans les addons. Une prochaine exécution actualise les avatars âgés d’au moins sept jours. L’option `--force` actualise immédiatement. Les images 64 × 64 sont dans le dossier privé `Interface/AddOns/GrudgeLedgerPortraits`. Partagez uniquement le dossier `GrudgeLedger`. Supprimer le dossier privé, jeu fermé, efface le cache d’images.
+
 ### Depuis la 0.10.0
 
 Dans **Bilan → Vue d’ensemble → Initiative**, retrouvez qui a engagé les combats observés et comment vos victoires confirmées se répartissent. Une **revanche** exige une mort antérieure confirmée de ce personnage face au même adversaire, un premier coup observé de votre côté et une victoire confirmée. Si l’adversaire engage, la victoire compte comme une riposte. Si le début manque, elle compte sous **Initiative inconnue**. Les anciennes victoires gardent leur résultat.
