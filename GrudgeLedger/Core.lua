@@ -1658,6 +1658,15 @@ function GL.ArmoryItem(record,slot)
     local profile=GL.ArmoryProfile(record)
     return profile and GrudgeLedgerArmory.items[profile.gear[slot]]
 end
+-- Shared presentation for the compact PvP summary. Armory item/talent icon
+-- numbers are Blizzard texture IDs and can also be passed to SetTexture.
+GL.ArmoryStatInfo = {
+    {"HEALTH", "Vie", "Interface\\Icons\\inv_potion_54"},
+    {"MANA", "Mana", "Interface\\Icons\\inv_potion_76"},
+    {"ARMOR", "Armure", "Interface\\Icons\\inv_chest_plate04"},
+    {"ATTACKPOWER", "Puissance d’attaque", "Interface\\Icons\\ability_meleedamage"},
+    {"SPELLPOWER", "Puissance des sorts", "Interface\\Icons\\spell_nature_lightning"},
+}
 if SlashCmdList then
     SLASH_GLPROFILE1="/glfiche"
     SlashCmdList.GLPROFILE=function(input)
@@ -1684,6 +1693,20 @@ if SlashCmdList then
         local profile=GL.ArmoryProfile(record)
         if not profile then GL.Print("Aucun relevé Armurerie importé."); return end
         if profile.updated then GL.Print("Armurerie · "..date("%d/%m/%Y %H:%M",math.floor(profile.updated/1000))) end
+        if profile.honorableKills~=nil then GL.Print("Victoires honorables : "..profile.honorableKills) end
+        if profile.pvpRank~=nil then GL.Print("Rang JcJ : "..profile.pvpRank) end
+        local summary={}
+        for _,stat in ipairs(GL.ArmoryStatInfo) do
+            local amount=profile.stats and profile.stats[stat[1]]
+            if type(amount)=="number" then summary[#summary+1]=stat[2].." "..amount end
+        end
+        if #summary>0 then GL.Print(table.concat(summary," · ")) end
+        if profile.achievements then
+            GL.Print("Hauts faits JcJ obtenus : "..#profile.achievements)
+            for _,a in ipairs(profile.achievements) do
+                GL.Print(a.name..(a.accountWide and " (compte)" or ""))
+            end
+        end
         for _,tree in ipairs(profile.trees) do
             local ranks={}
             for _,t in ipairs(tree.talents) do ranks[#ranks+1]=t[2].." "..t[3] end

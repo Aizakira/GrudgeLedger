@@ -62,4 +62,23 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
             portraits.sync(root, "eu", contacts, force=True)
         assert texture.read_bytes() == before
     assert requests.call_count == 4
+    icon = "https://render.worldofwarcraft.com/forever-eu/icons/56/133761.jpg"
+    character.update(pvp={"honorableKills":{"value":0}},
+                     stats={"groups":[{"stats":[{"enum":"MANA","value":{"value":1879}},
+                            {"enum":"DAMAGE","value":{"type":"RANGE","min":{"value":12},"max":{"value":18}}}]}]},
+                     specs=[{"name":"Feral","spentPoints":3,"talents":[{"id":11,"name":"Ferocity","rank":3,"icon":{"url":icon}}]}])
+    character["gear"]["back"]["media"]={"content":{"assets":[{"key":"icon","value":icon}]}}
+    category={"category":"player-vs-player","subcategories":{"ranks":{"achievements":[
+        {"id":2,"name":"Earned rank","time":{"epoch":1},"accountWide":True,"icon":{"url":icon}},
+        {"id":3,"name":"Locked rank"}]}}}
+    with patch.object(portraits,"armory_state",side_effect=[{"character":character},
+            {"character":character,"achievementCategory":category}]):
+        portraits.sync(root,"eu",contacts,force=True,profiles_only=True,achievements=True)
+    result=json.loads((folder/(guid+".json")).read_text())
+    assert result["stats"]=={"MANA":1879,"DAMAGE":[12,18]} and result["honorableKills"]==0 and result["pvpRank"] is None
+    assert result["gear"]["back"]["icon"]==result["trees"][0]["talents"][0][3]==133761
+    assert [a["id"] for a in result["achievements"]]==[2] and result["achievements"][0]["accountWide"]
+    with patch.object(portraits,"pvp_achievements",side_effect=ValueError("missing category")):
+        portraits.sync(root,"eu",contacts,force=True,profiles_only=True,achievements=True)
+    assert json.loads((folder/(guid+".json")).read_text())["achievementsAt"]==result["achievementsAt"]
 print("PASS exact offline GUID match, 64px TGA, cache reuse and preserving a good avatar on failure")
