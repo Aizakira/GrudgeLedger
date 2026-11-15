@@ -13,6 +13,8 @@ Un petit addon pour **World of Warcraft Forever**, qui rassemble amis, ennemis, 
 
 [English](README.md) · [Télécharger](https://github.com/Aizakira/GrudgeLedger/releases/latest) · [Signaler un problème ou proposer une idée](https://github.com/Aizakira/GrudgeLedger/issues)
 
+**[Essayer les primes de guilde (0.11.0-alpha.7)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0-alpha.7)** pour publier un contrat, suivre la chasse, répartir l’or par courrier et comparer les avis datés des membres. Le ZIP installable et les consignes de test figurent sur la page de la version.
+
 ## Pourquoi cet addon ?
 
 Il a été créé assez vite pour répondre à un besoin tout simple en jouant : reconnaître les personnes avec qui on a passé un bon moment, celles qui nous ont agressés, et se rappeler pourquoi un nom nous dit quelque chose.
