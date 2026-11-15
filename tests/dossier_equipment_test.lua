@@ -22,14 +22,22 @@ GameTooltip={
     Hide=function(self) self.shown=false self.owner=nil end, Show=function(self) self.shown=true end,
 }
 local function draw(guid)
-    GL.DrawDossierEquipment(parent,{guid=guid},GrudgeLedgerArmory.profiles[guid],slots,
+    GL.DrawDossierEquipment(parent,{guid=guid,race=guid==archived and "Scourge" or nil,sex=2},GrudgeLedgerArmory.profiles[guid],slots,
         function(key) return order[key:lower()] or 20 end,function(item) return item.variant end)
     return parent.equipment
 end
 local view=draw(archived)
 assert(#view.buttons==19 and view.stage:GetWidth()>=150)
 assert(view.buttons[17].slotName=="weapon" and view.buttons[19].slotName=="ranged")
-assert(view.stage:IsShown() and view.image:IsShown() and view.bodyPath:find(archived.."-body.tga",1,true))
+assert(not view.stage:IsShown(), "a GUID-named web image is insufficient")
+local dressed={}
+view.preview.ClearModel=function(self) self.display=nil end
+view.preview.SetDisplayInfo=function(self,id) self.display=id end
+view.preview.Undress=function() dressed={} end
+view.preview.TryOn=function(self,link) dressed[link]=true end
+draw(archived)
+assert(view.preview.display==57 and view.preview:IsShown() and dressed[cape.ref] and view.stage:IsShown(),
+    "the archived undead wears the recorded cape even when the web body is wrong")
 local back=view.buttons[4]
 assert(back.item==cape and back.scripts.OnClick)
 function strsplit(delim,s)
@@ -81,5 +89,5 @@ view:Hide()
 assert(not GameTooltip.shown)
 GrudgeLedgerNativePortraits={[archived]=true}
 draw(archived)
-assert(not view.image:IsShown() and view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
+assert(not view.preview:IsShown() and view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
 print("PASS equipment: body or expanded gear, model GUID, native variant tooltip, cold cache and chat draft")
