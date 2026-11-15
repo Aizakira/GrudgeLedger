@@ -184,19 +184,54 @@ local function iconButton(parent, textureName, title, x, y, size, onClick)
     return b
 end
 
+local function fitToScreen(frame)
+    local w, h = UIParent:GetWidth(), UIParent:GetHeight()
+    if w > 24 and h > 24 then
+        frame:SetScale(math.min(1, (w - 24) / frame:GetWidth(), (h - 24) / frame:GetHeight()))
+    end
+end
+
+-- WoW stores placement by frame name. All pages inherit this frame's position and scale.
+local bookAnchor = _G.GrudgeLedgerBookAnchor
+if not bookAnchor then
+    bookAnchor = CreateFrame("Frame", "GrudgeLedgerBookAnchor", UIParent)
+    bookAnchor:SetSize(960, 700)
+    bookAnchor:SetPoint("CENTER")
+    bookAnchor:SetMovable(true)
+    bookAnchor:SetClampedToScreen(true)
+    bookAnchor:EnableMouse(false)
+    UIParent:HookScript("OnSizeChanged", function() fitToScreen(bookAnchor) end)
+end
+
 local function window(name, title, width, height, isBook)
-    local f = CreateFrame("Frame", name, UIParent)
+    local f = CreateFrame("Frame", name, isBook and bookAnchor or UIParent)
     f:SetSize(width, height)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
     f:SetToplevel(true)
-    f:SetClampedToScreen(true)
+    if isBook then
+        if f.SetDontSavePosition then f:SetDontSavePosition(true) end
+    else
+        f:SetMovable(true)
+        f:SetClampedToScreen(true)
+    end
     f:EnableMouse(true)
-    f:SetMovable(true)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnMouseDown", function(self) self:Raise() end)
-    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    local mover = isBook and bookAnchor or f
+    local dragging = false
+    f:SetScript("OnDragStart", function()
+        mover:StartMoving()
+        dragging = true
+    end)
+    local function stopMoving()
+        if dragging then
+            mover:StopMovingOrSizing()
+            dragging = false
+        end
+    end
+    f:SetScript("OnDragStop", stopMoving)
+    f:SetScript("OnHide", stopMoving)
     f.lining = surface(f, theme.background, isBook and 20 or 14, -4)
     if not isBook then
         local cover = f:CreateTexture(nil, "BACKGROUND", nil, -2)
@@ -215,8 +250,11 @@ local function window(name, title, width, height, isBook)
     f.closeButton = iconButton(f, "JournalClose", GL.L("Fermer"), width - 37, -9, 26, function() f:Hide() end)
     f:SetScript("OnShow", function(self)
         self:Raise()
-        local w, h = UIParent:GetWidth(), UIParent:GetHeight()
-        self:SetScale(math.min(1, (w - 24) / width, (h - 24) / height))
+        fitToScreen(mover)
+        if isBook then
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", bookAnchor, "CENTER")
+        end
     end)
     if UISpecialFrames then table.insert(UISpecialFrames, name) end
     f:Hide()
@@ -224,7 +262,7 @@ local function window(name, title, width, height, isBook)
 end
 
 local function bookWindow(name, title)
-    local f = window(name, title, 960, 700, true)
+    local f = window(name, title, bookAnchor:GetWidth(), bookAnchor:GetHeight(), true)
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)
     f.closeButton:SetSize(32, 32)

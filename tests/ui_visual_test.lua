@@ -17,7 +17,9 @@ function methods:SetAlpha(value) self.alpha = value end
 function methods:SetDrawLayer(layer, sublevel) self.drawLayer, self.sublevel = layer, sublevel end
 function methods:SetJustifyV(value) self.justifyV = value end
 function methods:HighlightText() self.highlighted = true end
-function methods:GetEffectiveScale() return self.effectiveScale or 1 end
+function methods:GetEffectiveScale()
+    return self.effectiveScale or self:GetScale() * (self.parent and self.parent:GetEffectiveScale() or 1)
+end
 function methods:GetCenter() return self.cx or 500, self.cy or 300 end
 function methods:IsVisible() return self.shown end
 local shape, cursorX, cursorY = "ROUND", 500, 300
@@ -225,7 +227,8 @@ click(ledger.reset)
 assert(not ledger.empty:IsShown())
 GL.ShowLedger(identity.key)
 UIParent:SetSize(800, 600) ledger:Hide() ledger:Show()
-assert(ledger:GetWidth() * ledger.scale <= 776 and ledger:GetHeight() * ledger.scale <= 576)
+local bookScale = ledger:GetEffectiveScale() / UIParent:GetEffectiveScale()
+assert(ledger:GetWidth() * bookScale <= 776 and ledger:GetHeight() * bookScale <= 576)
 UIParent:SetSize(1920, 1080)
 GL.EditNote(identity)
 assert(GrudgeLedgerNote.edit.justifyV == "TOP" and ledger.search.justifyV == "MIDDLE")
