@@ -81,4 +81,25 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
     with patch.object(portraits,"pvp_achievements",side_effect=ValueError("missing category")):
         portraits.sync(root,"eu",contacts,force=True,profiles_only=True,achievements=True)
     assert json.loads((folder/(guid+".json")).read_text())["achievementsAt"]==result["achievementsAt"]
+    requests.reset_mock()
+    character["gear"]["back"]["name"]="Cape de test"
+    portraits.sync(root,"eu",contacts,locale="fr-fr",profiles_only=True)
+    translated=json.loads((folder/(guid+".json")).read_text())
+    assert requests.call_args.args[0].startswith("https://worldofwarcraft.blizzard.com/fr-fr/")
+    assert translated["gear"]["back"]["name"]=="Cape de test" and translated["locale"]=="fr-fr"
+    save=root/"WTF/Account/example/SavedVariables/GrudgeLedger.lua"
+    save.parent.mkdir(parents=True)
+    save.write_text('["name:Test Keeper"] = "guid:'+guid+'",\n')
+    def polling_ticks():
+        yield  # next pass: identical file, no second sync
+        save.write_text(save.read_text()+'["name:Second Keeper"] = "guid:Player-42-0000002B",\n')
+        yield
+        raise KeyboardInterrupt
+    ticks=polling_ticks()
+    with patch.object(sys,"argv",["sync",str(root),"--region","eu","--watch"]), patch.object(portraits,"sync") as watcher, patch.object(portraits.time,"sleep",side_effect=lambda _:next(ticks)):
+        try:
+            portraits.main()
+        except KeyboardInterrupt:
+            pass
+        assert [len(call.args[2]) for call in watcher.call_args_list]==[1,2]
 print("PASS exact offline GUID match, 64px TGA, cache reuse and preserving a good avatar on failure")

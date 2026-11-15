@@ -4,6 +4,14 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Primes"] = "Recompensas", ["Armurerie"] = "Armería", ["Voir la prime"] = "Ver recompensa",
+        ["Créer une prime"] = "Crear recompensa", ["Équipement et talents"] = "Equipo y talentos",
+        ["Régler la prime : %s"] = "Pagar recompensa: %s", ["Autre prime"] = "Otra recompensa",
+        ["Vérifiez le dernier courrier avant de reprendre le règlement."] = "Comprueba el último correo antes de continuar.",
+        ["Courrier préparé. Vérifiez la part puis cliquez sur Envoyer."] = "Correo preparado. Revisa la cantidad y pulsa Enviar.",
+        ["Terminez ou effacez le courrier en cours."] = "Termina o borra el borrador actual.",
+        ["Aucun envoi incertain à vérifier."] = "No hay envíos pendientes de verificación.",
+        ["Courrier incertain : vérifiez l’envoi puis /glprime courrier envoye ou /glprime courrier nonenvoye."] = "Envío no confirmado: compruébalo y usa /glprime courrier envoye o /glprime courrier nonenvoye.",
         ["Dernier niveau observé : %s"] = "Último nivel observado: %s",
         ["Vous · niv. %d"] = "Tú · niv. %d",
         ["Adversaire · niv. %d"] = "Rival · niv. %d",
@@ -868,6 +876,14 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Primes"] = "Bounties", ["Armurerie"] = "Armory", ["Voir la prime"] = "View bounty",
+        ["Créer une prime"] = "Create bounty", ["Équipement et talents"] = "Equipment and talents",
+        ["Régler la prime : %s"] = "Settle bounty: %s", ["Autre prime"] = "Next bounty",
+        ["Vérifiez le dernier courrier avant de reprendre le règlement."] = "Check the last mail before resuming payment.",
+        ["Courrier préparé. Vérifiez la part puis cliquez sur Envoyer."] = "Mail prepared. Check the share, then click Send.",
+        ["Terminez ou effacez le courrier en cours."] = "Finish or clear the current draft.",
+        ["Aucun envoi incertain à vérifier."] = "No uncertain mail to check.",
+        ["Courrier incertain : vérifiez l’envoi puis /glprime courrier envoye ou /glprime courrier nonenvoye."] = "Unconfirmed mail: check the transfer, then use /glprime courrier envoye or /glprime courrier nonenvoye.",
         ["Dernier niveau observé : %s"] = "Last observed level: %s",
         ["Vous · niv. %d"] = "You · lv. %d",
         ["Adversaire · niv. %d"] = "Opponent · lv. %d",

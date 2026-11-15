@@ -35,9 +35,11 @@ def fetch(url, limit):
     return data
 
 
-def armory_state(region, name, suffix=""):
+def armory_state(region, name, suffix="", locale="en-us"):
+    if locale not in ("en-us", "fr-fr", "es-es"):
+        raise ValueError("unsupported Armory language")
     slug = "-".join(name.casefold().split())
-    html = fetch(f"https://worldofwarcraft.blizzard.com/en-us/forever/{region}/armory/character/{quote(slug, safe='')}{suffix}", 4_000_000).decode()
+    html = fetch(f"https://worldofwarcraft.blizzard.com/{locale}/forever/{region}/armory/character/{quote(slug, safe='')}{suffix}", 4_000_000).decode()
     start = PROFILE.search(html)
     model = re.search(r'<script id="model">\s*model\s*=\s*', html)
     if model:
@@ -48,10 +50,10 @@ def armory_state(region, name, suffix=""):
     raise ValueError("no Armory profile")
 
 
-def character_profile(region, name, guid):
+def character_profile(region, name, guid, locale="en-us"):
     if not re.fullmatch(GUID, guid) or region not in ("eu", "us", "kr", "tw"):
         raise ValueError("invalid character or region")
-    data = armory_state(region, name)["character"]
+    data = armory_state(region, name, locale=locale)["character"]
 
     if data["region"] != region or (data["name"] + " " + data["surname"]).casefold() != name.casefold():
         raise ValueError("character name or region mismatch")
@@ -92,8 +94,8 @@ def icon_id(url):
         return int(match[1])
 
 
-def pvp_achievements(character, name):
-    state = armory_state(character["region"], name, "/achievements/player-vs-player")
+def pvp_achievements(character, name, locale="en-us"):
+    state = armory_state(character["region"], name, "/achievements/player-vs-player", locale)
     category = state["achievementCategory"]
     if state["character"]["avatar"]["url"] != character["avatar"]["url"] or category["category"] != "player-vs-player":
         raise ValueError("unexpected achievement profile")
@@ -135,7 +137,11 @@ def compact(data):
             elif value.get("type") == "RANGE":
                 stats[stat["enum"]] = [value[k]["value"] for k in ("min", "max")]
     pvp = data.get("pvp", {})
-    return {"stats": stats, "honorableKills": pvp.get("honorableKills", {}).get("value"),
+    # Identity also serves contacts known only through a guild contract.
+    identity = {key: data[key]["name"] for key in ("race", "class", "faction", "guild")
+                if isinstance(data.get(key), dict) and isinstance(data[key].get("name"), str)}
+    identity["name"] = " ".join(n for n in (data.get("name"), data.get("surname")) if isinstance(n, str) and n)
+    return {"identity": identity, "stats": stats, "honorableKills": pvp.get("honorableKills", {}).get("value"),
             "pvpRank": pvp.get("rank", {}).get("value"),
             "gear": gear, "updated": data.get("lastUpdatedTimestamp", {}).get("epoch"),
             "level": data.get("level"), "averageItemLevel": data.get("averageItemLevel"),
@@ -176,7 +182,7 @@ def publish_profiles(folder):
                  lua({"profiles": profiles, "items": variants}) + "\n").encode())
 
 
-def sync(root, region, contacts, force=False, profiles_only=False, achievements=False):
+def sync(root, region, contacts, force=False, profiles_only=False, achievements=False, locale="en-us"):
     addons = root / "Interface" / "AddOns"
     if not (addons / "GrudgeLedger" / "GrudgeLedger.toc").is_file():
         raise ValueError("Grudge Ledger is missing from the selected game folder")
@@ -191,20 +197,22 @@ def sync(root, region, contacts, force=False, profiles_only=False, achievements=
         required = (cache,) if profiles_only else (cache, path)
         previous = json.loads(cache.read_text("utf8")) if cache.is_file() else {}
         fresh_achievements = 0 <= time.time() - (previous.get("achievementsAt") or 0) < 7 * 86400
-        if not force and "stats" in previous and (not achievements or fresh_achievements) and all(
+        same_locale = previous.get("locale", "en-us") == locale
+        if not force and same_locale and "stats" in previous and (not achievements or fresh_achievements) and all(
                 f.is_file() and 0 <= time.time() - f.stat().st_mtime < 7 * 86400 for f in required):
             fresh += 1
             continue
         for name in sorted(names):
             try:
-                character = character_profile(region, name, guid)
+                character = character_profile(region, name, guid, locale)
                 snapshot = compact(character)
-                if "achievements" in previous:
+                snapshot["locale"] = locale
+                if same_locale and "achievements" in previous:
                     snapshot["achievements"] = previous["achievements"]
                     snapshot["achievementsAt"] = previous.get("achievementsAt")
                 if achievements:
                     try:
-                        snapshot["achievements"] = pvp_achievements(character, name)
+                        snapshot["achievements"] = pvp_achievements(character, name, locale)
                         snapshot["achievementsAt"] = int(time.time())
                     except (ValueError, KeyError, URLError) as exc:
                         print(f"PvP achievements unavailable for {name}: {exc}")
@@ -240,22 +248,39 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("game", type=Path, help="the _forever_ directory")
     parser.add_argument("--region", choices=("eu", "us", "kr", "tw"), required=True)
+    parser.add_argument("--locale", choices=("en-us", "fr-fr", "es-es"), default="en-us", help="language of equipment, enchantments and talents")
     parser.add_argument("--name", help="only synchronize this full character name")
     parser.add_argument("--force", action="store_true", help="refresh even within seven days")
     parser.add_argument("--profiles-only", action="store_true", help="import gear and talents without downloading images")
     parser.add_argument("--pvp-achievements", action="store_true", help="also fetch completed PvP achievements")
+    parser.add_argument("--watch", action="store_true", help="watch locally saved journals; stop with Ctrl+C")
     args = parser.parse_args()
-    contacts = {}
-    for save in (args.game / "WTF" / "Account").glob("*/SavedVariables/GrudgeLedger.lua"):
-        for name, guid in ALIAS.findall(save.read_text(encoding="utf-8-sig")):
-            if not args.name or name.casefold() == args.name.casefold():
-                contacts.setdefault(guid, set()).add(name)
-    if not contacts:
-        parser.exit(1, "No matching saved contacts. Save the journal with /reload and try again.\n")
-    try:
-        sync(args.game, args.region, contacts, args.force, args.profiles_only, args.pvp_achievements)
-    except (ValueError, OSError, URLError) as exc:
-        parser.exit(1, f"Portrait import interrupted: {exc}\n")
+    if not (args.game / "Interface/AddOns/GrudgeLedger/GrudgeLedger.toc").is_file():
+        parser.error("select the _forever_ folder containing GrudgeLedger")
+    last, check_at = None, 0
+    while True:
+        try:
+            saves = sorted((args.game / "WTF/Account").glob("*/SavedVariables/GrudgeLedger.lua"))
+            revision = [(s, s.stat().st_mtime_ns, s.stat().st_size) for s in saves]
+            if revision != last or time.monotonic() >= check_at:
+                contacts = {}
+                for save in saves:
+                    for name, guid in ALIAS.findall(save.read_text(encoding="utf-8-sig")):
+                        if not args.name or name.casefold() == args.name.casefold():
+                            contacts.setdefault(guid, set()).add(name)
+                if contacts:
+                    sync(args.game, args.region, contacts, args.force, args.profiles_only, args.pvp_achievements, args.locale)
+                    args.force = False
+                elif not args.watch:
+                    parser.exit(1, "No matching saved contacts. Save the journal with /reload and try again.\n")
+                last, check_at = revision, time.monotonic() + 86400
+        except (ValueError, OSError, URLError) as exc:
+            if not args.watch:
+                parser.exit(1, f"Portrait import interrupted: {exc}\n")
+            print(f"Import paused; will retry: {exc}", flush=True)
+        if not args.watch:
+            return
+        time.sleep(120)
 
 
 if __name__ == "__main__":

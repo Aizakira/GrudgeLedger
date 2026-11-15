@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.10.8
+GRUDGE LEDGER — 0.11.0-alpha.1
+
+Alpha : ouvrir /gl, puis Primes. Le nom d’un joueur ouvre son équipement, ses talents et son bilan JcJ. À la boîte aux lettres, sélectionner la prime ; le jeu prépare une part à la fois. Cliquer manuellement sur Envoyer pour chaque destinataire.
 
 Nouveau : médaillon de niveau sur le coin inférieur gauche du portrait et niveaux côte à côte dans l’histoire. Un portrait visible peut être retenu pendant la session même si le journal est fermé.
 

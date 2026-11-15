@@ -91,6 +91,9 @@ env.GetSendMailItem=function()end
 env.SendMail=function()error("must not auto-send")end
 local send
 env.hooksecurefunc=function(name,f)assert(name=="SendMail");send=f end
+env.HasSendMailItem=function(i)return i==1 end
+assert(not b.b.PrepareMail(order,c.id) and env.SendMailMoney.n==0)
+env.HasSendMailItem=nil
 assert(b.b.PrepareMail(order,c.id))
 assert(env.SendMailNameEditBox.v==c.name and env.SendMailMoney.n==21000)
 assert(not b.b.PrepareMail(order,c.id))
@@ -102,6 +105,9 @@ local function refill()
  env.SendMailNameEditBox.v="";env.SendMailSubjectEditBox.v="";env.SendMailMoney.n=0
  assert(b.b.PrepareMail(order,c.id));send(c.name,env.SendMailSubjectEditBox.v)
 end
+refill();b.event(nil,"MAIL_CLOSED")
+assert(not b.b.PrepareMail(order,c.id))
+assert(b.b.ReconcileMail(false) and b.b.Due(b.b.List()[order],b.id,c.id)==21000)
 refill();b.event(nil,"MAIL_FAILED")
 assert(b.b.Due(b.b.List()[order],b.id,c.id)==21000)
 env.SendMailNameEditBox.v="";env.SendMailSubjectEditBox.v="";env.SendMailMoney.n=0
@@ -109,7 +115,7 @@ local button,clicks=nil,0
 env.GetTime=function()return now end
 env.MailFrame={IsShown=function()return true end}
 env.CreateFrame=function()
- button=setmetatable({lastClick=false,SetScript=function(self,_,fn)self.click=fn end,
+ button=setmetatable({SetText=function(self,v)self.text=v end,SetScript=function(self,_,fn)self.click=fn end,
     GetFontString=function()return {GetStringWidth=function()return 100 end}end},
     {__index=function()return function()end end})
  return button
@@ -118,13 +124,24 @@ env.SendMailMailButton={IsEnabled=function()return true end,Click=function()
  clicks=clicks+1;send(env.SendMailNameEditBox.v,env.SendMailSubjectEditBox.v)
 end}
 b.event(nil,"MAIL_SHOW")
-assert(button and clicks==0)
+assert(button and clicks==0 and button.text:find("Target",1,true) and not button.text:find(a.name,1,true))
 button:click();button:click()
-assert(clicks==1 and env.SendMailNameEditBox.v==a.name and env.SendMailMoney.n==25000)
-b.event(nil,"MAIL_FAILED")
-refill();b.event(nil,"MAIL_SEND_SUCCESS");b.event(nil,"MAIL_SEND_SUCCESS");flush()
+assert(clicks==0 and env.SendMailNameEditBox.v==a.name and env.SendMailMoney.n==25000)
+env.SendMailMailButton:Click()
+b.event(nil,"MAIL_FAILED") -- retain the user's prepared draft; retry only by native click
+assert(b.b.Due(b.b.List()[order],b.id,a.id)==25000 and clicks==1)
+env.SendMailMailButton:Click()
+env.SendMailNameEditBox.v="";env.SendMailSubjectEditBox.v="";env.SendMailMoney.n=0
+b.event(nil,"MAIL_SEND_SUCCESS")
+assert(clicks==2 and env.SendMailNameEditBox.v==c.name and env.SendMailMoney.n==21000)
+assert(b.b.Due(b.b.List()[order],b.id,a.id)==0 and b.b.Due(b.b.List()[order],b.id,c.id)==21000)
+b.event(nil,"MAIL_SEND_SUCCESS") -- second draft was only prepared; repeated event cannot pay it
+assert(b.b.Due(b.b.List()[order],b.id,c.id)==21000)
+env.SendMailMailButton:Click()
+b.event(nil,"MAIL_SEND_SUCCESS");b.event(nil,"MAIL_SEND_SUCCESS");flush()
 assert(a.b.Due(a.b.List()[order],b.id,c.id)==0)
-assert(b.b.ConfirmPayment(order,a.id,25000));assert(a.b.ConfirmPayment(order,c.id,50000));flush()
+assert(clicks==3 and not b.b.ConfirmPayment(order,a.id,25000))
+assert(a.b.ConfirmPayment(order,c.id,50000));flush()
 assert(c.b.List()[order].state=="paid")
 local other=assert(a.b.Post("Player-3-b","Other",0));assert(a.b.Withdraw(other));flush()
 assert(c.b.List()[other].state=="withdrawn")

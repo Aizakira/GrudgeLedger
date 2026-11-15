@@ -1,5 +1,7 @@
 # Grudge Ledger — Le journal des rancunes
 
+**Alpha 0.11.0 :** [essayer le registre de primes, le dossier Équipement/Talents et les paiements de groupe par courrier](docs/alpha-fonctionnelle.fr.md).
+
 La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde ouvert, même si une créature porte le dernier coup. Les anciens compteurs sont réunis à la mise à jour. La résurrection réactive les alertes. Le journal conserve les portraits récemment vus pendant la session et affiche votre honneur enregistré dans la synthèse. Le gain adverse est inconnu.
 
 

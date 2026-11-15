@@ -1281,6 +1281,20 @@ test("a full recap name identifies a known hostile in mixed combat without sourc
     assert(total("deaths") == 1 and total("aggressions") == 1)
 end)
 
+test("mixed recap with hostile flags but no GUID credits only the matching player", function()
+    for _, flags in ipairs({64, 64 + 1024, 16, 64 + 2048, 64 + 4096}) do
+        fixture()
+        local foe = start()
+        local row = recapRow(foe, 12)
+        row.sourceGUID, row.sourceFlags = nil, flags
+        recapAPI({row, recapRow({guid="Creature-1-tiger", name="Tigresse"})})
+        T.HandleEvent("PLAYER_DEAD")
+        T.Poll()
+        local expected = (flags == 64 or flags == 64 + 1024) and 1 or 0
+        assert(count() == expected and total("deaths") == expected and total("aggressions") == expected)
+    end
+end)
+
 test("fatal NPC recap credits the hostile player who dealt damage", function()
     local e = start()
     local npc = { guid = "Creature-1-wolf", name = "Loup" }

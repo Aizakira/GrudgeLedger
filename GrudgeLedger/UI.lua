@@ -232,6 +232,7 @@ for _, event in ipairs({ "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "PORTRAIT
     GL.Safe(portraitFrames.RegisterEvent, portraitFrames, event)
 end
 local function subdued(text) return "|cff5c4029" .. text .. "|r" end
+GL.PaintBookPortrait = identityIcons
 local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
 local frenchNumbers = not GetLocale or GetLocale() == "frFR"
 local function counted(n, singular, plural)
@@ -331,7 +332,10 @@ local function eventTitle(event)
     if event.kind == "grouped" or event.kind == "group" then return L("Vous avez partagé un groupe") end
     return event.kind == "note" and L("Vous avez ajouté une note") or L("Événement enregistré")
 end
+local activeBook
 local function showBook(frame)
+    if activeBook and activeBook ~= frame then activeBook:Hide() end
+    activeBook = frame
     for _, page in pairs({ ledger, statisticsWindow, journalWindow, settingsWindow }) do
         if page ~= frame then page:Hide() end
     end
@@ -347,8 +351,9 @@ local function bookNavigation(f, selected)
         { "players", L("Classements"), function() GL.ShowStatistics("players") end },
         { "guilds", L("Guildes"), function() GL.ShowStatistics("guilds") end },
         { "journal", L("Bilan"), function() GL.ShowJournal("summary") end },
+        { "bounties", L("Primes"), function() GL.OpenBounties() end },
     }) do
-        local b = button(f, entry[2], 76 + (i - 1) * 204, -96, 196, entry[3], true)
+        local b = button(f, entry[2], 72 + (i - 1) * 165, -96, 156, entry[3], true)
         b:SetHeight(38)
         journalFont(b.caption, "GameFontNormalLarge", 19)
         b.caption:SetHeight(32)
@@ -360,6 +365,14 @@ local function bookNavigation(f, selected)
 end
 
 local function currentRecord() return selectedKey and GL.Get(selectedKey) end
+GL.SetupBookNavigation, GL.ShowBookPage = bookNavigation, showBook
+local function activeBounty(guid)
+    if not guid or not GL.Bounties then return end
+    return GL.Bounties.OpenFor and GL.Bounties.OpenFor(guid)
+end
+function GL.OpenContactBounty(guid)
+    if guid then return GL.OpenBounties(guid, activeBounty(guid) and "view" or "create") end
+end
 local refresh
 
 local function selectedRealm(f)
@@ -1612,6 +1625,10 @@ local function renderDetail()
     for _, b in ipairs(ledger.actions) do b:SetEnabled(record ~= nil) end
     ledger.guildButton:SetEnabled(record ~= nil and record.guild ~= nil)
     ledger.tools:SetEnabled(record ~= nil)
+    showIf(ledger.contactBounty, record and record.guid and tab == "summary")
+    if record and record.guid and tab == "summary" and ledger:IsShown() then
+        ledger.contactBounty:SetText(activeBounty(record.guid) and L("Voir la prime") or L("Créer une prime"))
+    end
     if not record then ledger.toolsMenu:Hide() end
     for reaction, control in pairs(ledger.reactions) do
         UI.selectButton(control, record and GL.Relation(record) == reaction)
@@ -2214,6 +2231,17 @@ local function buildLedger()
     f.levelBadge:SetScript("OnLeave", function() GameTooltip:Hide() end)
     f.detailTitle = label(f, "", "large", 433, -149, 330)
     f.detailTitle:SetHeight(37)
+    local function dossier()
+        local r = currentRecord()
+        if r and r.guid and GL.OpenPlayerDossier then GL.OpenPlayerDossier(r.guid, function() GL.ShowLedger() end, r.fullName or r.name) end
+    end
+    local nameLink = CreateFrame("Button", nil, f)
+    nameLink:SetAllPoints(f.detailTitle)
+    nameLink:SetScript("OnClick", dossier)
+    nameLink:SetScript("OnEnter", function(self)
+        if currentRecord() then GameTooltip:SetOwner(self, "ANCHOR_RIGHT") GameTooltip:SetText(L("Équipement et talents")) GameTooltip:Show() end
+    end)
+    nameLink:SetScript("OnLeave", function() GameTooltip:Hide() end)
     GL.Safe(f.detailTitle.SetWordWrap, f.detailTitle, false)
     journalFont(f.detailTitle, "Fancy24Font", 24)
     f.detailIcon = f:CreateTexture(nil, "ARTWORK")
@@ -2294,13 +2322,18 @@ local function buildLedger()
         if record then StaticPopup_Show(deleteDialog, plain(record.fullName or record.key), nil, record) end
     end)
     f.toolsMenu:Hide()
+    f.contactBounty = button(f, L("Créer une prime"), 546, -634, 178, function()
+        local r = currentRecord()
+        if r then GL.OpenContactBounty(r.guid) end
+    end, nil, true)
     f.detailTabs = {}
     for i, entry in ipairs({ { "summary", L("Synthèse") }, { "history", L("Histoire") }, { "notes", L("Notes") }, { "matchup", L("Face-à-face") } }) do
         local key = entry[1]
-        f.detailTabs[key] = button(f, entry[2], 354 + (i - 1) * 119, -234, 114, function()
+        f.detailTabs[key] = button(f, entry[2], 354 + (i - 1) * 112, -234, 108, function()
             f.detailTab = key f.detailScroll:SetVerticalScroll(0) renderDetail()
         end, true, true)
     end
+    f.detailTabs.dossier = button(f, L("Armurerie"), 802, -234, 111, dossier, true, true)
     f.counters = CreateFrame("Frame", nil, f)
     f.counters:SetPoint("TOPLEFT", 354, -269) f.counters:SetSize(558, 160)
     f.metrics = {}
@@ -2377,10 +2410,10 @@ local function buildLedger()
     f.detailText:SetTextColor(unpack(theme.ink))
     f.detailText:SetSpacing(4)
     f.detailScroll:SetScrollChild(f.detailBody)
-    local hint = label(f, L("Votre choix personnel reste prioritaire."), nil, 356, -640, 360)
+    local hint = label(f, L("Votre choix personnel reste prioritaire."), nil, 356, -632, 181)
     f.hint = hint
     journalFont(hint, "GameFontHighlightSmall", 12, true)
-    hint:SetHeight(20)
+    hint:SetHeight(34)
     hint:SetTextColor(unpack(theme.inkMuted))
     local first = CreateFrame("Frame", nil, f)
     f.emptyPage = first
@@ -2859,6 +2892,7 @@ SlashCmdList.GRUDGELEDGER = function(message)
     elseif command == "stats" then GL.ShowStatistics("players")
     elseif command == "bilan" then GL.ShowJournal("summary")
     elseif command == "chronique" then GL.ShowJournal("history")
+    elseif command == "primes" or command == "bounties" then GL.OpenBounties()
     elseif command == "guildes" then GL.ShowStatistics("guilds")
     elseif command == "guide" then GL.ShowGuide()
     elseif command == "settings" or command == "options" then showSettings()

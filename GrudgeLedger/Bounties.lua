@@ -15,6 +15,16 @@ local function number(s, lo, hi)
     local n = tonumber(s)
     return n and n == math.floor(n) and n >= lo and n <= hi and n
 end
+local groups={solo="s",party="p"}
+local shares={winner="w",equal="e"}
+local souvenirs={none="n",screenshot="s",video="v"}
+local function rules(opts)
+    local quota=number(opts.quota or 1,1,99)
+    local group,split,media=opts.group or "party",opts.split or "winner",opts.souvenir or "none"
+    if not quota or not groups[group] or not shares[split] or not souvenirs[media]
+        or group=="solo" and split~="winner" or not plain(opts.note or "",100) then return end
+    return quota,groups[group]..shares[split]..souvenirs[media]
+end
 local function scope()
     if not GL.db or not GetGuildInfo or not GetNormalizedRealmName then return end
     local name, _, _, realm = GL.Safe(GetGuildInfo,"player")
@@ -25,10 +35,11 @@ local function scope()
     GL.db.bountyGuilds = GL.db.bountyGuilds or {}
     local key = realm.."/"..name
     local s = GL.db.bountyGuilds[key] or {events={}, seq=0}
+    s.guildKey=key
     GL.db.bountyGuilds[key] = s
     return s, me
 end
-local function unpackEvent(raw)
+local function unpackEvent(raw,archiving)
     if type(raw) ~= "string" or #raw > 250 then return end
     local f = {}
     for v in (raw..";"):gmatch("(.-);") do f[#f+1]=v end
@@ -36,9 +47,19 @@ local function unpackEvent(raw)
     local kind,actor,id,stamp,order,value,detail=unpack(f)
     if not id:match("^%d+$") then return end
     stamp=number(stamp,1,GL.Now()+60)
-    if not guid(actor) or not stamp or stamp < GL.Now()-38*DAY or not number(id,1,9999999999999) then return end
+    if not guid(actor) or not stamp or (not archiving and stamp < GL.Now()-38*DAY) or not number(id,1,9999999999999) then return end
     local key=actor..":"..id
-    if kind=="O" or kind=="A" then
+    local quota,group,split,souvenir,playerLevel,opponentLevel
+    if kind=="N" then
+        local copper,q,g,p,m=value:match("^(%d+),(%d+),([sp])([we])([nsv])$")
+        quota=number(q,1,99)
+        if not quota or not number(copper,0,1000*GOLD) or g=="s" and p~="w"
+            or not guid(order) or not plain(detail,64) or detail=="" then return end
+        value=copper
+        group=g=="s" and "solo" or "party"
+        split=p=="w" and "winner" or "equal"
+        souvenir=m=="s" and "screenshot" or m=="v" and "video" or "none"
+    elseif kind=="O" or kind=="A" then
         if not guid(order) or not number(value,0,1000*GOLD) or not plain(detail,64) or detail=="" then return end
         if kind=="A" and value~="0" then return end
     elseif kind=="D" then
@@ -48,8 +69,17 @@ local function unpackEvent(raw)
         if not guid(owner) or not number(seq,1,9999999999999) then return end
         if kind=="P" then
             if not number(value,1,1000*GOLD) or detail~="" then return end
-        elseif kind=="K" then
-            if value~="" or not plain(detail,140) then return end
+        elseif kind=="K" or kind=="H" then
+            if kind=="H" then
+                local flag,p,t=value:match("^([01]),(%d+),(%d+)$")
+                if flag then
+                    p,t=number(p,0,1000),number(t,0,1000)
+                    if not p or not t then return end
+                    value,playerLevel,opponentLevel=flag,p>0 and p or nil,t>0 and t or nil
+                end
+            end
+            if (kind=="K" and value~="") or (kind=="H" and value~="0" and value~="1")
+                or not plain(detail,140) then return end
             local seen,count={[actor]=true},0
             if detail~="" then
                 for helper in (detail..","):gmatch("(.-),") do
@@ -67,20 +97,38 @@ local function unpackEvent(raw)
             if not guid(detail) or not number(value,1,1000*GOLD) then return end
         else return end
     end
-    return {kind=kind,actor=actor,key=key,time=stamp,order=order,value=value,detail=detail}
+    return {kind=kind,actor=actor,key=key,time=stamp,order=order,value=value,detail=detail,
+        quota=quota,group=group,split=split,souvenir=souvenir,playerLevel=playerLevel,opponentLevel=opponentLevel}
 end
 local function earlier(a,b)
     return a.time<b.time or a.time==b.time and a.key<b.key
 end
-local function view(s)
+local function view(s,archiving)
     local orders,events={},{}
     for _,raw in pairs(s.events) do
-        local e=unpackEvent(raw)
+        local e=unpackEvent(raw,archiving)
         if e then
-            if e.kind=="O" or e.kind=="A" then
+            if e.kind=="O" or e.kind=="A" or e.kind=="N" then
                 orders[e.key]={id=e.key,owner=e.actor,target=e.order,name=e.detail,at=e.time,
-                    expires=e.time+(e.kind=="A" and 3 or 7)*DAY,auto=e.kind=="A",pot={[e.actor]=tonumber(e.value)},paid={}}
+                    custom=e.kind=="N",quota=e.quota or 1,group=e.group or "party",
+                    split=e.split or "equal",souvenir=e.souvenir or "none",progress={},
+                    guildKey=s.guildKey,expires=e.time+(e.kind=="A" and 3 or 7)*DAY,auto=e.kind=="A",
+                    pot={[e.actor]=tonumber(e.value)},paid={},receipts={}}
             else events[#events+1]=e end
+        end
+    end
+    -- A payer can settle an old debt after its guild event log has rotated away.
+    local history=GL.db.bountyHistory and GL.db.bountyHistory[GL.Safe(UnitGUID,"player")]
+    for id,item in pairs(history or {}) do
+        if not orders[id] and item.guildKey==s.guildKey and item.state=="fulfilled" and item.winner
+            and item.at<GL.Now()-38*DAY then
+            local o={}
+            for k,v in pairs(item) do o[k]=v end
+            o.closed,o.archived="fulfilled",true
+            o.paid,o.receipts={},{}
+            for k,v in pairs(item.paid) do o.paid[k]=v end
+            for k in pairs(item.receipts or {}) do o.receipts[k]=true end
+            orders[id]=o
         end
     end
     table.sort(events,earlier)
@@ -88,10 +136,16 @@ local function view(s)
     for _,e in ipairs(events) do
         local o=orders[e.order]
         if o and e.time>=o.at and e.time<=o.expires and not o.closed then
-            if e.kind=="K" then
-                o.claims=o.claims or {}; o.claims[e.key]=e
-                o.first=o.first or e
-            elseif e.kind=="U" and not o.first then
+            if (not o.custom and e.kind=="K") or (o.custom and e.kind=="H"
+                and (o.group=="party" or e.value=="0") and (o.split=="equal" or e.detail=="")
+                and (e.value=="1" or e.detail=="")) then
+                local wins=(o.progress[e.actor] or 0)+1
+                o.progress[e.actor]=math.min(wins,o.quota)
+                if wins==o.quota then
+                    o.claims=o.claims or {}; o.claims[e.key]=e
+                    o.first=o.first or e
+                end
+            elseif e.kind=="U" and (not o.first or e.time==o.at) then
                 o.note=e.detail
                 -- Leave at least seven days of history before the 38-day archive cutoff.
                 if e.value=="1" then o.expires=math.min(o.at+31*DAY,e.time+(o.auto and 3 or 7)*DAY) end
@@ -108,11 +162,12 @@ local function view(s)
     end
     for _,e in ipairs(events) do
         local o=orders[e.order]
-        if o and e.kind=="P" and e.time>=o.at and e.time<=o.expires and (not o.winner or e.time<=o.winner.time) then
+        if o and not o.archived and e.kind=="P" and e.time>=o.at and e.time<=o.expires and (not o.winner or e.time<=o.winner.time) then
             o.pot[e.actor]=math.min(1000*GOLD,(o.pot[e.actor] or 0)+tonumber(e.value))
-        elseif o and o.winner and e.kind=="Y" and e.time>=o.winner.time then
+        elseif o and o.winner and e.kind=="Y" and e.time>=o.winner.time and not o.receipts[e.key] then
             local k=e.actor.."/"..e.detail
             o.paid[k]=(o.paid[k] or 0)+tonumber(e.value)
+            o.receipts[e.key]=true
         end
     end
     for _,o in pairs(orders) do
@@ -130,22 +185,82 @@ local function view(s)
     end
     return orders
 end
+function B.Progress(o,hunter)
+    hunter=hunter or GL.Safe(UnitGUID,"player")
+    return o and o.progress and o.progress[hunter] or 0
+end
+local function remember(orders,me)
+    if not guid(me) then return end
+    local all=GL.db.bountyHistory or {}
+    GL.db.bountyHistory=all
+    local history=all[me] or {}
+    all[me]=history
+    for id,o in pairs(orders) do
+        local w=o.winner
+        local mine=o.owner==me or o.pot[me]~=nil or B.Progress(o,me)>0
+        if w then
+            for h in w.detail:gmatch("[^,]+") do if h==me then mine=true end end
+        end
+        if mine and (w or o.state=="withdrawn" or o.state=="expired") then
+            local previous=history[id]
+            local progress=B.Progress(o,me)
+            local copy={id=id,owner=o.owner,target=o.target,name=o.name,at=o.at,expires=o.expires,auto=o.auto,
+                quota=o.quota,group=o.group,split=o.split,souvenir=o.souvenir,note=o.note,state=o.state,
+                winner=w,pot=o.pot,paid=o.paid,progress={[me]=progress},guildKey=o.guildKey,
+                receipts=o.state=="fulfilled" and o.receipts or nil}
+            history[id]=copy
+            if w and (not previous or not previous.winner) and GL.Print then
+                if me==o.owner then
+                    GL.Print("Prime accomplie : "..o.name..". "..(o.state=="paid" and "Aucun versement en attente." or "Consultez les parts dans Primes → Mon historique."))
+                elseif w.actor==me then GL.Print("Prime accomplie : "..o.name..".") end
+            end
+        end
+    end
+    return history
+end
+function B.History()
+    local s,me=scope()
+    if s then return remember(view(s),me) or {} end
+    return GL.db and GL.db.bountyHistory and GL.db.bountyHistory[GL.Safe(UnitGUID,"player")] or {}
+end
 function B.List()
     local s=scope()
     return s and view(s) or {}
 end
-function B.Due(o,payer,hunter)
-    if not o or not o.winner or payer==hunter then return 0 end
+-- Gross amount to mail, followed by the share a contributing hunter keeps.
+function B.Share(o,payer,hunter)
+    if not o or not o.winner then return 0,0 end
     local w=o.winner
     local n,member=1,w.actor==hunter
     for h in w.detail:gmatch("[^,]+") do n=n+1; member=member or h==hunter end
-    if not member then return 0 end
+    if not member then return 0,0 end
     local sum=o.pot[payer] or 0
     local share=math.floor(sum/n)+(hunter==w.actor and sum%n or 0)
+    if payer==hunter then return 0,share end
+    return share,0
+end
+function B.Due(o,payer,hunter)
+    local share=B.Share(o,payer,hunter)
+    if share==0 then return 0 end
     return math.max(0,share-(o.paid[payer.."/"..hunter] or 0))
 end
 local queue,queued,active={}, {},nil
-local joined, openTargets, lastAlert
+local joined, openTargets, lastAlert, indexedScope
+local roster,addresses={},{}
+local pendingRefresh={}
+local function changed(s,me)
+    if pendingRefresh[s] then return end
+    local function refresh()
+        pendingRefresh[s]=nil
+        if scope()~=s then return end
+        remember(view(s),me)
+        if GL.Emit then GL.Emit("BOUNTIES_CHANGED") end
+    end
+    if C_Timer and C_Timer.After then
+        pendingRefresh[s]=true
+        C_Timer.After(0,refresh)
+    else refresh() end
+end
 local function schedule(s,msg)
     if active~=s then active,queue,queued=s,{},{} end
     if not queued[msg] then queue[#queue+1]=msg; queued[msg]=true end
@@ -191,9 +306,10 @@ local function declare(kind,order,value,detail)
     if not e then return nil,"invalid" end
     openTargets=nil
     s.seq=seq; s.events[e.key]=raw; schedule(s,raw)
+    if kind~="D" then changed(s,me) end
     return e.key
 end
-function B.Post(target,name,copper,auto)
+function B.Post(target,name,copper,opts)
     local s,me=scope()
     if not s or not guid(target) or target==me or not plain(name,64) or name=="" or not number(copper,0,1000*GOLD) then return nil,"invalid" end
     local count=0
@@ -204,7 +320,16 @@ function B.Post(target,name,copper,auto)
         end
     end
     if count>=10 then return nil,"limit" end
-    return declare(auto and "A" or "O",target,copper,name)
+    if type(opts)=="table" then
+        local quota,flags=rules(opts)
+        if not quota then return nil,"invalid" end
+        -- Legacy clients ignore N/H, so a one-kill claim cannot close a multi-kill order.
+        local id,err=declare("N",target,copper..","..quota..","..flags,name)
+        if id and opts.note and opts.note~="" then declare("U",id,"0",opts.note) end
+        return id,err
+    end
+    if opts~=nil and type(opts)~="boolean" then return nil,"invalid" end
+    return declare(opts and "A" or "O",target,copper,name)
 end
 function B.Pledge(id,copper)
     local s,me=scope()
@@ -220,16 +345,24 @@ function B.Update(id,note,renew)
     if note~=nil and not plain(note,100) then return nil,"invalid" end
     return declare("U",id,renew and "1" or "0",note==nil and (o.note or "") or note)
 end
-function B.Observe(target)
-    if not joined or not guid(target) then return end
-    if not openTargets then
+function B.OpenFor(target)
+    if not guid(target) then return end
+    local s=scope()
+    if not s then return end
+    if not openTargets or indexedScope~=s then
         openTargets={}
-        for _,o in pairs(view(joined)) do
-            if o.state=="open" then openTargets[o.target]=o end
+        indexedScope=s
+        for _,o in pairs(view(s)) do
+            if o.state=="open" or o.state=="claimed" then openTargets[o.target]=o end
         end
     end
     local o=openTargets[target]
-    if not o then return end
+    if o and (o.state=="claimed" or GL.Now()<=o.expires) then return o end
+end
+function B.Observe(target)
+    if not joined then return end
+    local o=B.OpenFor(target)
+    if not o or o.state~="open" then return end
     local now=GL.Now()
     if now<=o.expires and (not lastAlert[o.id] or now-lastAlert[o.id]>=120) then
         lastAlert[o.id]=now
@@ -247,14 +380,14 @@ function B.ConfirmPayment(id,hunter,copper)
     if not s or not guid(hunter) or not number(copper,1,B.Due(view(s)[id],me,hunter)) then return nil,"invalid" end
     return declare("Y",id,copper,hunter)
 end
-local function helpers()
+local function helpers(guildOnly)
     local out,seen={},{}
-    local raid=IsInRaid()
-    for i=1,GetNumGroupMembers() do
+    local raid=GL.Safe(IsInRaid)
+    for i=1,GL.Safe(GetNumGroupMembers) or 0 do
         local u=(raid and "raid" or "party")..i
-        if UnitExists(u) and not UnitIsUnit(u,"player") and UnitIsVisible(u) then
-            local h=UnitGUID(u)
-            if guid(h) and not seen[h] then out[#out+1]=h; seen[h]=true end
+        if GL.Safe(UnitExists,u) and GL.Safe(UnitIsUnit,u,"player")~=true and GL.Safe(UnitIsVisible,u) then
+            local h=GL.Safe(UnitGUID,u)
+            if guid(h) and not seen[h] and (not guildOnly or addresses[h]) then out[#out+1]=h; seen[h]=true end
             if #out==4 then break end
         end
     end
@@ -265,7 +398,7 @@ local function finalize(s,me)
         if o.owner==me and o.state=="claimed" then declare("F",id,o.first.key,"") end
     end
 end
-function B.Kill(target)
+function B.Kill(target,combat)
     countFight(target,1)
     local s,me=scope()
     if not s then return end
@@ -273,7 +406,18 @@ function B.Kill(target)
     local owned
     for id,o in pairs(view(s)) do
         if o.target==target and o.state=="open" then
-            if declare("K",id,"",helpers()) and o.owner==me then owned=true end
+            local claim
+            if o.custom then
+                local count=GL.Safe(GetNumGroupMembers)
+                if count and GL.Safe(IsInRaid)~=true and count<=5 and (o.group=="party" or count==0) then
+                    local flag=count>0 and "1" or "0"
+                    local p=combat and number(combat.playerLevel,1,1000)
+                    local t=combat and number(combat.opponentLevel,1,1000)
+                    if p or t then flag=flag..","..(p or 0)..","..(t or 0) end
+                    claim=declare("H",id,flag,o.split=="equal" and helpers(true) or "")
+                end
+            else claim=declare("K",id,"",helpers()) end
+            if claim and o.owner==me then owned=true end
         end
     end
     if owned then finalize(s,me) end
@@ -338,11 +482,11 @@ local function receive(msg,sender)
     if e.actor==me then return end
     openTargets=nil
     s.events[e.key]=raw
-    if e.kind=="K" and e.order:match("^([^:]+)")==me then finalize(s,me) end
+    if (e.kind=="K" or e.kind=="H") and e.order:match("^([^:]+)")==me then finalize(s,me) end
+    if e.kind~="D" then changed(s,me) end
 end
 local frame=CreateFrame("Frame")
 local lastPrune
-local roster,addresses={},{}
 local function refreshRoster()
     roster,addresses={},{}
     if not GetNumGuildMembers or not GetGuildRosterInfo then return end
@@ -355,12 +499,29 @@ local function refreshRoster()
         end
     end
 end
-local draft,pending,hooked
+function B.MemberName(id)
+    local r=guid(id) and GL.Get and GL.Get("guid:"..id)
+    return addresses[id] or (r and (r.fullName or r.name))
+end
+local draft,pending,hooked,selectedOrder
+local function noItems()
+    for i=1,ATTACHMENTS_MAX_SEND or 12 do
+        if (HasSendMailItem and HasSendMailItem(i)) or GetSendMailItem(i) then return false end
+    end
+    return true
+end
 local function onSend(to,subject)
-    pending=nil
-    if draft and to==draft.to and subject==draft.subject and SendMailSendMoneyButton:GetChecked()
-        and MoneyInputFrame_GetCopper(SendMailMoney)==draft.amount then
+    -- A new unrelated native send makes the old acknowledgement ambiguous.
+    -- Keep its durable marker for reconciliation, never credit that mail.
+    if pending then pending,draft=nil,nil; return end
+    if not pending and draft and to==draft.to and subject==draft.subject and SendMailSendMoneyButton:GetChecked()
+        and MoneyInputFrame_GetCopper(SendMailMoney)==draft.amount and noItems() then
         pending=draft; pending.at=GL.Now()
+        local s,me=scope()
+        if s==draft.guild then
+            s.mailUncertain=s.mailUncertain or {}
+            s.mailUncertain[me]={id=draft.id,hunter=draft.hunter,amount=draft.amount}
+        end
     end
     draft=nil
 end
@@ -388,12 +549,12 @@ function B.PrepareMail(id,hunter,expectedAmount)
         and GetSendMailItem and SendMailSendMoneyButton and SendMailRadioButton_OnClick and hooksecurefunc and SendMail) then return nil,"mailbox" end
     if SendMailNameEditBox:GetText()~="" or SendMailSubjectEditBox:GetText()~="" or SendMailBodyEditBox:GetText()~=""
         or MoneyInputFrame_GetCopper(SendMailMoney)~=0 or not SendMailSendMoneyButton:GetChecked() then return nil,"draft" end
-    for i=1,ATTACHMENTS_MAX_SEND or 12 do if GetSendMailItem(i) then return nil,"draft" end end
+    if not noItems() then return nil,"draft" end
+    if pending or (s.mailUncertain and s.mailUncertain[me]) then return nil,"pending" end
     local picked,to,due,o=nextDebt(s,me,id,hunter)
     if not picked then return nil,"no_payable_recipient" end
     if expectedAmount and expectedAmount~=due then return nil,"changed" end
     if GetMoney and GetMoney()<due then return nil,"funds" end
-    if pending and GL.Now()-pending.at<=60 then return nil,"pending" end
     if not hooked then hooksecurefunc("SendMail",onSend); hooked=true end
     SendMailRadioButton_OnClick(1)
     SendMailNameEditBox:SetText(addresses[to])
@@ -402,48 +563,98 @@ function B.PrepareMail(id,hunter,expectedAmount)
     draft={guild=s,id=picked,hunter=to,amount=due,to=addresses[to],subject=SendMailSubjectEditBox:GetText()}
     return picked,to,due
 end
-local payButton
+-- A reload can lose the acknowledgement after the gold has left. Never retry
+-- that share until the payer has checked their sent mail or the recipient.
+function B.ReconcileMail(wasSent)
+    local s,me=scope()
+    local t=s and s.mailUncertain and s.mailUncertain[me]
+    if not t or type(wasSent)~="boolean" then return end
+    if pending and not pending.closed and GL.Now()-pending.at<60 then return end
+    pending=nil
+    if wasSent then
+        local remaining=B.Due(B.List()[t.id],me,t.hunter)
+        if remaining>0 and not B.ConfirmPayment(t.id,t.hunter,math.min(remaining,t.amount)) then return end
+    end
+    s.mailUncertain[me]=nil
+    return true
+end
+local payButton,cycleButton
+local ML=GL.L or function(s) return s end
+local function payable(s,me)
+    local ids,orders={},view(s)
+    for key,o in pairs(orders) do
+        if o.winner then
+            for h in (o.winner.actor..","..o.winner.detail):gmatch("[^,]+") do
+                if B.Due(o,me,h)>0 then ids[#ids+1]=key; break end
+            end
+        end
+    end
+    table.sort(ids)
+    return ids,orders
+end
 local function showPayment()
     local s,me=scope()
-    local id,hunter,amount
-    if s and joined==s then id,hunter,amount=nextDebt(s,me) end
-    if not id or not MailFrame or not SendMailMailButton then
+    local ids,orders={},{}
+    if s and joined==s then ids,orders=payable(s,me) end
+    if not ids[1] or not MailFrame or not SendMailMailButton then
         if payButton then payButton:Hide() end
+        if cycleButton then cycleButton:Hide() end
         return
     end
+    local index=1
+    for i,id in ipairs(ids) do if id==selectedOrder then index=i; break end end
+    selectedOrder=ids[index]
     if not payButton then
         payButton=CreateFrame("Button",nil,MailFrame,"UIPanelButtonTemplate")
         payButton:SetPoint("BOTTOMLEFT",MailFrame,"TOPLEFT",8,2)
-        payButton:SetHeight(24)
+        payButton:SetHeight(32)
         payButton:SetClampedToScreen(true)
         payButton:SetScript("OnClick",function(self)
-            if self.lastClick and GetTime()-self.lastClick<1 then return end
-            self.lastClick=GetTime()
-            local ok,why=B.PrepareMail(self.order,self.hunter,self.amount)
+            if draft and draft.id==self.order and SendMailNameEditBox:GetText()==draft.to
+                and SendMailSubjectEditBox:GetText()==draft.subject and MoneyInputFrame_GetCopper(SendMailMoney)==draft.amount then return end
+            local ok,why=B.PrepareMail(self.order)
             if not ok then
                 if why=="draft" then GL.Print("Le courrier en cours a été conservé.")
                 elseif why=="funds" then GL.Print("Fonds insuffisants.")
-                elseif why=="pending" then GL.Print("Un envoi est en cours.")
+                elseif why=="pending" then GL.Print(ML("Vérifiez le dernier courrier avant de reprendre le règlement."))
                 else GL.Print("Paiement indisponible. Vérifiez la prime et la boîte aux lettres.") end
                 showPayment()
                 return
             end
-            self:Hide()
-            if SendMailMailButton:IsEnabled() then SendMailMailButton:Click()
-            else GL.Print("Courrier préparé. Vérifiez le montant et les frais de port.") end
+            GL.Print(ML("Courrier préparé. Vérifiez la part puis cliquez sur Envoyer."))
         end)
     end
-    payButton.order,payButton.hunter,payButton.amount=id,hunter,amount
-    payButton:SetText("Payer "..addresses[hunter].." : "..(GetCoinTextureString and GetCoinTextureString(amount) or amount.." pc"))
-    payButton:SetWidth(payButton:GetFontString():GetStringWidth()+28)
+    payButton.order=selectedOrder
+    payButton:SetText(ML("Régler la prime : %s"):format(orders[selectedOrder].name))
+    payButton:SetWidth(math.max(200,payButton:GetFontString():GetStringWidth()+28))
     payButton:Show()
+    if #ids>1 then
+        if not cycleButton then
+            cycleButton=CreateFrame("Button",nil,MailFrame,"UIPanelButtonTemplate")
+            cycleButton:SetPoint("LEFT",payButton,"RIGHT",3,0)
+            cycleButton:SetSize(100,28)
+        end
+        cycleButton:SetText(ML("Autre prime").." ›")
+        cycleButton:SetScript("OnClick",function()
+            if pending or (draft and SendMailNameEditBox:GetText()~="") then
+                GL.Print(ML("Terminez ou effacez le courrier en cours.")); return
+            end
+            selectedOrder=ids[index%#ids+1];showPayment()
+        end)
+        cycleButton:Show()
+    elseif cycleButton then cycleButton:Hide() end
 end
 if SlashCmdList then
     SLASH_GLBOUNTY1="/glprime"
     SlashCmdList.GLBOUNTY=function(input)
         local action,id,arg=(input or ""):match("^%s*(%S*)%s*(%S*)%s*(.-)%s*$")
         local ok,reason
-        if action=="courrier" then ok,reason=B.PrepareMail(id~="" and id or nil,arg~="" and arg or nil)
+        if action=="" and GL.OpenBounties then GL.OpenBounties();return
+        elseif action=="courrier" and (id=="envoye" or id=="nonenvoye") then
+            ok=B.ReconcileMail(id=="envoye"); if ok and MailFrame and MailFrame:IsShown() then showPayment() end
+            if not ok then GL.Print(ML("Aucun envoi incertain à vérifier.")) end
+            return
+        elseif action=="courrier" then ok,reason=B.PrepareMail(id~="" and id or nil,arg~="" and arg or nil)
         elseif action=="note" then ok,reason=B.Update(id,arg,false)
         elseif action=="renouveler" then ok,reason=B.Update(id,arg~="" and arg or nil,true)
         elseif action=="regler" then
@@ -465,6 +676,7 @@ end
 local function join()
     local s,me=scope()
     if s and (not lastPrune or GL.Now()-lastPrune>=3600) then
+        remember(view(s,true),me)
         for k,raw in pairs(s.events) do if not unpackEvent(raw) then s.events[k]=nil end end
         lastPrune=GL.Now()
     end
@@ -488,18 +700,42 @@ frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
-    if event=="MAIL_SHOW" then showPayment(); return end
+    if event=="MAIL_SHOW" then
+        local s,me=scope()
+        if s and s.mailUncertain and s.mailUncertain[me] then
+            GL.Print(ML("Courrier incertain : vérifiez l’envoi puis /glprime courrier envoye ou /glprime courrier nonenvoye."))
+        end
+        showPayment();return
+    end
     if event=="MAIL_SEND_SUCCESS" then
         local sent=pending
         pending=nil
-        if sent and scope()==sent.guild and GL.Now()-sent.at<=60 then
-            B.ConfirmPayment(sent.id,sent.hunter,sent.amount)
+        local s,me=scope()
+        if sent and s==sent.guild and B.ConfirmPayment(sent.id,sent.hunter,sent.amount) then
+            if s.mailUncertain then s.mailUncertain[me]=nil end
+            local function advance()
+                if not MailFrame or not MailFrame:IsShown() or scope()~=s then return end
+                if nextDebt(s,me,sent.id) then
+                    selectedOrder=sent.id
+                    B.PrepareMail(sent.id)
+                end
+                showPayment()
+            end
+            if C_Timer and C_Timer.After then C_Timer.After(0,advance) else advance() end
+            return
         end
         if MailFrame and MailFrame:IsShown() then showPayment() end
         return
-    elseif event=="MAIL_CLOSED" then draft=nil; return
+    elseif event=="MAIL_CLOSED" then
+        if pending then pending.closed=true end
+        draft,selectedOrder=nil,nil; return
     elseif event=="MAIL_FAILED" then
-        draft,pending=nil,nil
+        local s,me=scope()
+        if pending and pending.guild==s then
+            s.mailUncertain[me]=nil
+            draft=pending
+        end
+        pending=nil
         if MailFrame and MailFrame:IsShown() then showPayment() end
         return
     end

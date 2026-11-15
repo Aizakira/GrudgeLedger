@@ -257,7 +257,7 @@ local function killingBlow(src, dst, name, evidence, native)
     local credit=recentCredits[dst]
     if credit and not credit.guildReported and not credit.event.voided and not GL.IsPvPInstance() then
         credit.guildReported=true
-        GL.Emit("BOUNTY_KILL",dst)
+        GL.Emit("BOUNTY_KILL",dst,credit.event.combat)
     end
 end
 
@@ -661,9 +661,12 @@ local function resolveDeath(flush)
         petSources = {}
         for _, row in ipairs(rows) do
             local identity, viaPet
-            if hostileFlags(row.flags) then identity, viaPet = attacker(row.guid, row.name, row.flags, death.fight) end
-            if not identity and not row.flags and row.name then
-                -- Some recaps expose the full caster name without reaction flags.
+            local hostile = hostileFlags(row.flags)
+            if hostile then identity, viaPet = attacker(row.guid, row.name, row.flags, death.fight) end
+            -- Combat log bits 10 through 14 identify player, NPC, pet, guardian or object.
+            local sourceType = hostile and math.floor(row.flags / 1024) % 32
+            local nameOnly = not row.flags or (not row.guid and (sourceType == 0 or sourceType == 1))
+            if not identity and nameOnly and row.name then
                 -- Match only an engaged hostile already identified in this fight.
                 for _, enemy in pairs(death.fight.enemies) do
                     if enemy.identity.surname and enemy.identity.fullName == row.name

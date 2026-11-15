@@ -1,5 +1,7 @@
 # Moteur de primes de guilde (branche de préparation)
 
+Historique du prototype 0.10.8. Pour les règles de groupe, le quota, les écrans et le courrier manuel de l’alpha, voir le [guide 0.11.0-alpha.1](alpha-fonctionnelle.fr.md). Le bouton au nom de la cible prépare le courrier ; seul le joueur l’envoie.
+
 GrudgeLedger.Bounties expose les opérations suivantes, sans fenêtre, commande de jeu ni transfert automatique d’or. Les fonctions de modification renvoient un identifiant de déclaration ou nil avec le motif. Les sommes sont des entiers en cuivre.
 
 | Appel | Fonction |
