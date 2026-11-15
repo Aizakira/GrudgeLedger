@@ -1,6 +1,6 @@
-GRUDGE LEDGER — 0.11.0
+GRUDGE LEDGER — 0.11.1
 
-Armurerie : les contacts ajoutés par nom complet depuis le chat peuvent recevoir une fiche du compagnon. Le Journal conserve le dernier relevé chargé dès que le contact est connu. L’onglet Équipement affiche le modèle du personnage identifié en jeu tant qu’il est visible. Hors de vue, la fiche affiche son image d’Armurerie enregistrée sur le parchemin. Sans image, les emplacements occupent toute la largeur. Le compagnon lit le Journal après /reload ou à la déconnexion. Après l’import, un nouveau /reload charge les données. La première installation du module privé peut nécessiter un redémarrage du jeu.
+Armurerie : les contacts ajoutés par nom complet depuis le chat peuvent recevoir une fiche du compagnon. Le Journal conserve le dernier relevé chargé dès que le contact est connu. L’onglet Équipement affiche le modèle du personnage identifié en jeu tant qu’il est visible. Hors de vue, la fiche reconstitue la tenue avec la race et le sexe observés et les pièces enregistrées. Sans modèle identifié, les emplacements occupent toute la largeur. Le compagnon lit le Journal après /reload ou à la déconnexion. Après l’import, un nouveau /reload charge les données. La première installation du module privé peut nécessiter un redémarrage du jeu.
 
 Journal → Fiches de guilde. Sélectionnez un contact et publiez sa fiche pour ouvrir les avis de guilde. Chaque membre peut donner ou retirer ses étiquettes. La synthèse compte les avis actifs et l’historique indique le personnage et la date. « Masquer pour moi » est personnel. Le compte qui a publié dispose aussi de « Retirer pour la guilde ». Le partage automatique des nouvelles fiches et des prochaines étiquettes se règle par guilde.
 

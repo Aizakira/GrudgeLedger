@@ -196,6 +196,10 @@ def compact(data):
     identity = {key: data[key]["name"] for key in ("race", "class", "faction", "guild")
                 if isinstance(data.get(key), dict) and isinstance(data[key].get("name"), str)}
     identity["name"] = " ".join(n for n in (data.get("name"), data.get("surname")) if isinstance(n, str) and n)
+    identity["raceID"] = data.get("race", {}).get("id")
+    gender = data.get("gender", {}).get("enum")
+    if gender in ("MALE", "FEMALE"):
+        identity["sex"] = 2 if gender == "MALE" else 3
     identity["classFile"] = data.get("class", {}).get("enum")
     return {"armorySchema": 3, "identity": identity, "stats": stats, "honorableKills": pvp.get("honorableKills", {}).get("value"),
             "pvpRank": pvp.get("rank", {}).get("value"),
@@ -414,9 +418,9 @@ def main():
     parser.add_argument("--locale", choices=("en-us", "fr-fr", "es-es"), default="en-us", help="language of equipment, enchantments and talents")
     parser.add_argument("--name", help="only synchronize this full character name")
     parser.add_argument("--force", action="store_true", help="refresh even within seven days")
-    parser.add_argument("--profiles-only", action="store_true", default=False, help="import character data only, without artwork")
+    parser.add_argument("--profiles-only", action="store_true", default=True, help="import character data only (default)")
     parser.add_argument("--archive-web-images", dest="profiles_only", action="store_false",
-                        help="archive individual Armory artwork (default)")
+                        help="archive website artwork for reference")
     parser.add_argument("--pvp-achievements", action="store_true", help="also fetch completed PvP achievements")
     parser.add_argument("--watch", action="store_true", help="watch locally saved journals; stop with Ctrl+C")
     parser.add_argument("--native-portraits", action="store_true", help="archive observed portrait tiles on Windows while watching")

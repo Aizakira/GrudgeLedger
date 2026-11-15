@@ -1,6 +1,6 @@
 # Grudge Ledger — Le journal des rancunes
 
-**Alpha 0.11.0 :** [essayer le registre de primes, le dossier Équipement/Talents et les paiements de groupe par courrier](docs/alpha-fonctionnelle.fr.md).
+**Alpha 0.11.1 :** [essayer le registre de primes, le dossier Équipement/Talents et les paiements de groupe par courrier](docs/alpha-fonctionnelle.fr.md).
 
 La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde ouvert, même si une créature porte le dernier coup. Les anciens compteurs sont réunis à la mise à jour. La résurrection réactive les alertes. Le journal conserve les portraits récemment vus pendant la session et affiche votre honneur enregistré dans la synthèse. Le gain adverse est inconnu.
 
@@ -11,9 +11,9 @@ La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde
 
 Un petit addon pour **World of Warcraft Forever**, qui rassemble amis, ennemis, notes personnelles, avis sur les guildes et souvenirs de PvP.
 
-[English](README.md) · [Télécharger](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0) · [Signaler un problème ou proposer une idée](https://github.com/Aizakira/GrudgeLedger/issues)
+[English](README.md) · [Télécharger](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.1) · [Signaler un problème ou proposer une idée](https://github.com/Aizakira/GrudgeLedger/issues)
 
-**[Essayer les primes de guilde (0.11.0)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0)** pour publier un contrat, suivre la chasse, répartir l’or par courrier et comparer les avis datés des membres. Le ZIP installable et les consignes de test figurent sur la page de la version.
+**[Essayer les primes de guilde (0.11.1)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.1)** pour publier un contrat, suivre la chasse, répartir l’or par courrier et comparer les avis datés des membres. Le ZIP installable et les consignes de test figurent sur la page de la version.
 
 ## Pourquoi cet addon ?
 
@@ -340,7 +340,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger le paquet de l'addon **`GrudgeLedger-<version>.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0).
+1. Télécharger le paquet de l'addon **`GrudgeLedger-<version>.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.1).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 

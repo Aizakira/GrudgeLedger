@@ -80,7 +80,7 @@ local positionButton
 local function paintBody(view)
     local record=view.record
     if not record then return end
-    view.image:Hide()
+    view.preview:Hide()
     local unit=GL.VisiblePortraitUnit(record)
     if unit and record.guid and GL.Safe(UnitGUID,unit)==record.guid and view.model.SetUnit
         and (not IsUnitModelReadyForUI or GL.Safe(IsUnitModelReadyForUI,unit)) then
@@ -96,12 +96,11 @@ local function paintBody(view)
     else
         clearModel(view)
     end
-    if not view.modelGUID and view.bodyPath then
-        view.image:SetTexture(view.bodyPath)
-        view.image:Show()
-        view.caption:SetText(L("Armurerie"))
+    if not view.modelGUID and view.previewReady then
+        view.preview:Show()
+        view.caption:SetText(L("Tenue reconstituée"))
     end
-    local hasBody=view.modelGUID or view.bodyPath
+    local hasBody=view.modelGUID or view.previewReady
     if hasBody then view.stage:Show() else view.stage:Hide() end
     local rail=hasBody and math.floor(view.w*.32) or math.floor((view.w-8)/2)
     if rail~=view.rail then
@@ -113,13 +112,16 @@ local function build(parent,slots)
     local view=CreateFrame("Frame",nil,parent)
     view:SetAllPoints()
     view.stage=CreateFrame("Frame",nil,view)
-    view.image=view.stage:CreateTexture(nil,"ARTWORK")
-    view.image:SetPoint("CENTER",view.stage,"CENTER",0,8)
     view.model=CreateFrame("PlayerModel",nil,view.stage)
     view.model:SetPoint("TOPLEFT",view.stage,"TOPLEFT",2,-2)
     view.model:SetPoint("BOTTOMRIGHT",view.stage,"BOTTOMRIGHT",-2,24)
     view.model:EnableMouse(false)
     GL.Safe(view.model.SetPortraitZoom,view.model,0)
+    view.preview=CreateFrame("DressUpModel",nil,view.stage)
+    view.preview:SetAllPoints(view.model)
+    GL.Safe(view.preview.SetKeepModelOnHide,view.preview,true)
+    view.preview:EnableMouse(false)
+    view.preview:Hide()
     view.caption=oneLine(view.stage,11,UI.theme.ink)
     view.caption:SetPoint("BOTTOM",view.stage,"BOTTOM",0,8)
     view.caption:SetJustifyH("CENTER")
@@ -170,14 +172,37 @@ positionButton=function(b,i,w,h,rail,rowHeight)
         label:SetJustifyH(anchor)
     end
 end
+-- Classic ChrRaces male and female display IDs, indexed by the client race token.
+local raceDisplay = {
+    Human={49,50}, Orc={51,52}, Dwarf={53,54}, NightElf={55,56},
+    Scourge={57,58}, Tauren={59,60}, Gnome={1563,1564}, Troll={1478,1479},
+}
+local raceByID={"Human","Orc","Dwarf","NightElf","Scourge","Tauren","Gnome","Troll"}
+local function dressPreview(view,identity)
+    local model=view.preview
+    local race=view.record.race or raceByID[view.record.raceID]
+    local catalogRace=type(identity)=="table" and raceByID[identity.raceID]
+    local displays=raceDisplay[race or catalogRace]
+    local sex=view.record.sex or (catalogRace and (not race or catalogRace==race) and identity.sex)
+    local id=displays and (sex==2 or sex==3) and displays[sex-1]
+    view.previewReady=nil
+    if not (id and model.ClearModel and model.SetDisplayInfo and model.TryOn and model.Undress) then return end
+    model:ClearModel()
+    local ok,result=pcall(model.SetDisplayInfo,model,id)
+    if not ok or result==false then return end
+    model:Undress()
+    for i,b in ipairs(view.buttons) do
+        if i<=12 or i>=17 then
+            local item=b.inspectedLink or (b.item and (b.item.ref or (b.item.id and ("item:"..b.item.id))))
+            if item then GL.Safe(model.TryOn,model,item,i==18 and "SecondaryHandSlot" or nil) end
+        end
+    end
+    view.previewReady=true
+end
 function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetails)
     local view=parent.equipment or build(parent,slots)
     parent.equipment=view
     view.record=record
-    local mediaKey=profile.mediaKey or record.guid
-    view.bodyPath=GrudgeLedgerArmory and profile.body==true and type(mediaKey)=="string"
-        and (mediaKey:match("^Player%-%d+%-%x+$") or mediaKey:match("^Name%-%x+$"))
-        and ("Interface\\AddOns\\GrudgeLedgerPortraits\\"..mediaKey.."-body.tga") or nil
     local w,h=parent:GetWidth(),parent:GetHeight()
     local rowHeight=math.min(45,math.floor((h-6)/9))
     view.w,view.h,view.rowHeight,view.rail=w,h,rowHeight,nil
@@ -186,10 +211,7 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
     view.stage:ClearAllPoints()
     view.stage:SetPoint("TOP",view,"TOP",0,0)
     view.stage:SetSize(stageWidth,stageHeight)
-    local imageWidth=math.min(stageWidth-4,(stageHeight-32)/2)
-    view.image:SetSize(imageWidth,imageWidth*2)
     view.caption:SetWidth(stageWidth-4)
-    paintBody(view)
     local variantKeys={}
     if type(profile.gear)=="table" then
         for key in pairs(profile.gear) do
@@ -219,4 +241,6 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
         b.icon:SetAlpha((link or b.item or not texture) and 1 or .45)
         b.title:SetText(b.itemName or "—")
     end
+    dressPreview(view,profile.identity)
+    paintBody(view)
 end
