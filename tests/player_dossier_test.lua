@@ -114,4 +114,7 @@ GetCurrentRegion=function() return 3 end
 assert(GL.ArmoryProfile({fullName=named.fullName,guid="Player-9-00002A",armorySnapshot=named.armorySnapshot}))
 local promoted=GL.Remember(GL.IdentityFromName("Named","Friend","Player-9-00002B"))
 assert(GL.Relation(promoted)=="enemy" and not GL.ArmoryProfile(promoted))
+assert(GL.OpenPlayerDossier("Player-42-00CA",nil,"Guild Contact"))
+assert(GL.db.armoryRequests["guid:Player-42-00CA|guild contact"]==GL.Now())
+assert(not GL.Get("guid:Player-42-00CA"),"requesting a guild dossier must not add it to the journal")
 print("PASS dossier: exact item variants, canonical slots, long effects, talents, provenance, private vs guild scores, guild-only identity and return")

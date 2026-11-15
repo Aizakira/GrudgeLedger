@@ -26,18 +26,45 @@ local function draw(guid)
         function(key) return order[key:lower()] or 20 end,function(item) return item.variant end)
     return parent.equipment
 end
+local create=CreateFrame
+local dressed,model={},nil
+function CreateFrame(kind,...)
+    local widget=create(kind,...)
+    if kind=="DressUpModel" then
+        model=widget
+        function widget:ClearModel() self.display=nil; self.file=nil end
+        function widget:SetDisplayInfo(id) self.requested=id; self.requests=(self.requests or 0)+1 end
+        function widget:GetDisplayInfo() return self.display end
+        function widget:GetModelFileID() return self.file end
+        function widget:Undress() dressed={} end
+        function widget:TryOn(link) dressed[link]=true end
+    end
+    return widget
+end
+function UnitSex(unit) return unit=="player" and 3 or nil end
+function UnitIsVisible(unit) return unit=="player" end
+local timers={}
+C_Timer={After=function(delay,cb) timers[#timers+1]=cb end}
+local cachedForPreview=false
+C_Item={IsItemDataCachedByID=function() return cachedForPreview end,RequestLoadItemDataByID=function(id) assert(id==9890) end}
 local view=draw(archived)
 assert(#view.buttons==19 and view.stage:GetWidth()>=150)
 assert(view.buttons[17].slotName=="weapon" and view.buttons[19].slotName=="ranged")
-assert(not view.stage:IsShown(), "a GUID-named web image is insufficient")
-local dressed={}
-view.preview.ClearModel=function(self) self.display=nil end
-view.preview.SetDisplayInfo=function(self,id) self.display=id end
-view.preview.Undress=function() dressed={} end
-view.preview.TryOn=function(self,link) dressed[link]=true end
+assert(view.stage:IsShown() and view.face:IsShown() and model.requested==1574,"offline male undead loads without a matching visible donor or scene")
 draw(archived)
-assert(view.preview.display==57 and view.preview:IsShown() and dressed[cape.ref] and view.stage:IsShown(),
-    "the archived undead wears the recorded cape even when the web body is wrong")
+assert(model.requests==1,"redrawing while the native model is streaming must not restart it")
+model.display,model.file=3851,111
+model.scripts.OnModelLoaded(model)
+assert(view.face:IsShown() and not view.previewReady,"a stale orc load is rejected")
+model.display,model.file=model.requested,42
+model.scripts.OnModelLoaded(model)
+assert(view.previewReady and not view.face:IsShown() and not dressed[cape.ref] and view.pendingItems[9890])
+view.scripts.OnEvent(view,"ITEM_DATA_LOAD_RESULT",9890,false)
+assert(not view.face:IsShown() and view.itemRetries[9890],"one uncached item cannot replace the body with a portrait")
+timers[#timers]()
+cachedForPreview=true
+view.scripts.OnEvent(view,"ITEM_DATA_LOAD_RESULT",9890,true)
+assert(dressed[cape.ref] and not view.pendingItems[9890],"cold item is worn when the cache supplies it")
 local back=view.buttons[4]
 assert(back.item==cape and back.scripts.OnClick)
 function strsplit(delim,s)
@@ -82,12 +109,12 @@ assert(view.model:IsShown() and view.model.loaded==live)
 assert(not GameTooltip.shown and not back.item)
 mock.units.target.guid=archived
 view.scripts.OnEvent(view,"PLAYER_TARGET_CHANGED")
-assert(not view.model:IsShown() and view.model.loaded==nil and not view.stage:IsShown()
-    and back:GetWidth()>parent:GetWidth()*.45,"without a body the two gear columns reclaim the space")
+assert(not view.model:IsShown() and view.model.loaded==nil and view.stage:IsShown() and view.face:IsShown(),
+    "without a matching model the contact portrait stays on the equipment page")
 missing.scripts.OnEnter(missing)
 view:Hide()
 assert(not GameTooltip.shown)
 GrudgeLedgerNativePortraits={[archived]=true}
 draw(archived)
-assert(not view.preview:IsShown() and view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
+assert(not view.face:IsShown() and view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
 print("PASS equipment: body or expanded gear, model GUID, native variant tooltip, cold cache and chat draft")

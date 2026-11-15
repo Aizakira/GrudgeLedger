@@ -53,9 +53,13 @@ with tempfile.TemporaryDirectory() as tmp:
     black=first.copy()
     black.paste((0,0,0),(0,16,64,80))
     # A single frame, a damaged tag and a blank portrait must never claim the slot.
-    with patch.object(native,"window_tile",return_value=[first,broken,black,black]),patch.object(native.time,"sleep"):
+    with patch.object(native,"window_tile",return_value=[first,broken,black,first,black,black]),patch.object(native.time,"sleep"):
         native.watch(folder,folder,write_atomic,lua)
     assert not list(folder.glob("*.tga"))
+    # A valid TGA header can contain a placeholder from an earlier capture.
+    broken_dest = folder/(one+"-native.tga")
+    black.crop((0,16,64,80)).save(broken_dest)
+    assert one not in native.native_guids(folder)
     with patch.object(native,"window_tile",return_value=[first,first,second,second]),patch.object(native.time,"sleep"):
         native.watch(folder,folder,write_atomic,lua)
     for guid,image in ((one,first),(two,second)):
@@ -66,6 +70,17 @@ with tempfile.TemporaryDirectory() as tmp:
     changed=first.copy()
     changed.paste(second.crop((0,16,64,80)),(0,16))
     with patch.object(native,"window_tile",return_value=[changed,changed]),patch.object(native.time,"sleep"):
+        native.watch(folder,folder,write_atomic,lua)
+    assert dest.read_bytes()==before
+    # Losing the file while the companion is already running reopens its slot.
+    clock=[0]
+    def damage_after_start(game):
+        dest.write_bytes(b"truncated")
+        clock[0] = 61
+        yield None
+        yield first
+        yield first
+    with patch.object(native,"window_tile",damage_after_start), patch.object(native.time,"sleep"), patch.object(native.time,"monotonic",lambda:clock[0]):
         native.watch(folder,folder,write_atomic,lua)
     assert dest.read_bytes()==before
     vm.execute((folder/"NativePortraits.lua").read_text())
