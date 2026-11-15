@@ -37,7 +37,7 @@ drag(ledger, 110, -48)
 click(ledger.navigation.players)
 local stats = GrudgeLedgerStatistics
 at(stats, 110, -48)
-click(stats.navigation.guilds)
+click(stats.sections[4])
 at(stats, 110, -48)
 click(stats.navigation.bounties)
 local primes = GrudgeLedgerBounties

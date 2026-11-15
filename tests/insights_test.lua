@@ -1,5 +1,9 @@
 local mock = assert(loadfile(TEST_WORK .. "/tests/wow_mock.lua"))()
 local methods = getmetatable(UIParent).__index
+function methods:Click()
+    assert(self:IsVisible() and self:IsEnabled())
+    self:GetScript("OnClick")(self, "LeftButton")
+end
 function methods:HighlightText() self.highlighted = true end
 local now = 1000
 GetServerTime = function() return now end
@@ -98,19 +102,23 @@ GL.ClearDetectionLog() assert(#GL.db.detectionLog == 0)
 
 assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
-GL.ShowStatistics("guilds")
+SlashCmdList.GRUDGELEDGER("guildes")
 local f = GrudgeLedgerStatistics
 assert(f:IsShown() and f.rows[1].item)
 assert(f.selected == f.rows[1].item and f.guildDetail.name:GetText() == f.selected.name)
-assert(f.tabs.guilds.selection:IsShown() and not f.tabs.players.selection:IsShown())
-f.groups[2].scripts.OnClick()
-assert(f.groups[3]:GetText() == "Mes règles" and not f.choices[4]:IsShown())
-f.groups[3].scripts.OnClick()
-assert(f.rows[1].item and not f.choices[2]:IsShown(), "rules page has its own single choice and works for guilds without combat")
+local guildFilters = f.filters.guilds
+assert(f.navigation.players.active and f.sections[4].active and not f.navigation.guilds)
+for _, panel in ipairs(guildFilters) do assert(panel:IsVisible()) end
+guildFilters[2].choices[1]:Click()
+guildFilters[3].choices[1]:Click()
+assert(f.rows[1].item and f.choice == 1 and f.category == 3, "guild rules work even without combat")
+f.navigation.journal:Click()
+GrudgeLedgerJournal.navigation.players:Click()
+assert(f:IsVisible() and f.sections[4].active and guildFilters[3].choices[1].active)
 for _, row in ipairs(f.rows) do
     if row:IsShown() then assert(GL.GetGuildRule(row.item.name, row.item.realm) and row.value:GetText() ~= "") end
 end
-f.groups[1].scripts.OnClick()
+guildFilters[1].choices[1]:Click()
 assert(f.scope:GetText() == "Compte · Relations actuelles")
 f.rows[1].scripts.OnClick(f.rows[1])
 local chosen = f.selected
@@ -125,7 +133,8 @@ end
 f.guildDetail.exceptionButton.scripts.OnClick()
 assert(not f.guildDetail.exceptionsOnly and f.guildDetail.rows[1].record)
 GL.ShowStatistics("players")
-assert(f.tabs.players.selection:IsShown() and not f.tabs.guilds.selection:IsShown())
+assert(f.navigation.players.active and f.sections[1].active and not f.sections[4].active)
+for _, panel in ipairs(guildFilters) do assert(not panel:IsVisible()) end
 assert(f.rows[1].item.value >= 1 and not f.guildActions[1]:IsShown())
 f.relationButton.scripts.OnClick()
 for _, row in ipairs(f.rows) do if row:IsShown() then assert(GL.Relation(row.item.record) == "enemy") end end
@@ -136,7 +145,7 @@ local selected = f.rows[1].item.record
 f.rows[1].scripts.OnClick(f.rows[1])
 assert(not f:IsShown() and GrudgeLedgerWindow:IsShown())
 assert(GrudgeLedgerWindow.detailTitle:GetText():find(selected.fullName, 1, true))
-GL.ShowStatistics("players") f.groups[2].scripts.OnClick()
+GL.ShowStatistics("players") f.sections[2]:Click()
 assert(not f.rows[1]:IsShown() and f.empty:GetText():find("deuxième rencontre", 1, true))
 now = now + 601 GL.RecordSeen(b, true) GL.RecordSeen(promoted, true)
 GL.ShowStatistics("players")
@@ -172,7 +181,7 @@ assert(f.selected == f.rows[1].item and f.guildDetail.name:GetText() == f.select
 f.manage.scripts.OnClick()
 assert(GrudgeLedgerGuilds:IsShown() and f:IsShown(), "the guild editor must return to the rankings when closed")
 GrudgeLedgerGuilds:Hide()
-f.choices[2].scripts.OnClick()
+guildFilters[1].choices[2]:Click()
 assert(f.offset == 0)
 if f.rows[1]:IsShown() then
     assert(f.selected == f.rows[1].item and f.guildActions[1].enabled and f.guildDetail.name:GetText() == f.selected.name,
@@ -185,24 +194,28 @@ for _, row in ipairs(f.rows) do if row:IsShown() then assert(row.item.friends > 
 assert(not f.factionButton:IsShown())
 -- Exercise every navigation path and ensure each choice maps to a measured metric.
 local metrics = {
-    players = { {"grudge", "enemiesSeen", "enemiesRecent", "aggressions"}, {"friendsSeen", "reputation", "friendsRecent", "friendsGrouped"}, {"deaths", "kills"} },
-    guilds = { {"grudges", "friends"}, {"deaths", "kills", "aggressions"} },
+    players = { {"grudge", "enemiesSeen", "enemiesRecent", "aggressions"}, {"friendsSeen", "reputation", "friendsRecent", "friendsGrouped", "friendsOnline"}, {"deaths", "kills"} },
+    guilds = { {"grudges", "friends"}, {"deaths", "kills", "aggressions"}, {"rules"} },
 }
 for mode, groups in pairs(metrics) do
     GL.ShowStatistics(mode)
     for i, choices in ipairs(groups) do
-        f.groups[i].scripts.OnClick()
+        f.sections[mode == "guilds" and 4 or i]:Click()
         for j, metric in ipairs(choices) do
-            f.choices[j].scripts.OnClick()
-            assert(f.choices[j].metric == metric and f.choices[j].selection:IsShown())
+            local control = f.filters[mode][i].choices[j]
+            assert(control:IsVisible())
+            control:Click()
+            assert(control.metric == metric and control.active and f.category == i and f.choice == j)
+            f.navigation.players:Click()
+            assert(f.mode == mode and control.active, "active Rankings tab keeps the current section and filter")
             assert(f.description:GetText() ~= "" and f.footnote:GetText() ~= "")
             for _, row in ipairs(f.rows) do
-                if row:IsShown() then assert((mode == "guilds" and row.item[metric] or row.item.value) > 0) end
+                if row:IsShown() and metric ~= "rules" then assert((mode == "guilds" and row.item[metric] or row.item.value) > 0) end
             end
         end
     end
 end
-GL.ShowStatistics("players") f.groups[3].scripts.OnClick() f.choices[2].scripts.OnClick()
+f.sections[3]:Click() f.filters.players[3].choices[2]:Click()
 assert(not f.rows[1]:IsShown() and f.empty:GetText() ~= "" and not f.next.enabled)
 assert(f.selection:GetText() == "", "empty rankings must not invite selecting a missing row")
 -- Commands use the same entry points as buttons: only one book may be visible.

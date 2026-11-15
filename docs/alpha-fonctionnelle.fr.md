@@ -1,6 +1,6 @@
 # Grudge Ledger 0.11.0-alpha.2 — essai en jeu
 
-Ouvrir le livre avec `/gl`. **Journal**, **Classements**, **Guildes** et **Bilan** gardent leur rôle. **Primes** ouvre le registre de la guilde. Les nouveaux écrans utilisent la fenêtre du livre ; leur présentation reste celle d’une alpha.
+Ouvrir le livre avec `/gl`. Dans **Classements**, choisir **Menaces**, **Amis**, **Combats** ou **Guildes**. La rubrique **Guildes** donne accès aux relations, aux combats et aux règles de guilde. **Primes** ouvre le registre des contrats de la guilde.
 
 **Fiche d’un joueur.** Dans le Journal, cliquer sur le nom de la fiche ouverte ou sur **Armurerie**. Depuis une prime, cliquer sur le portrait. **Retour** retrouve le contrat sélectionné. Les caractéristiques se trouvent dans la colonne gauche. **Équipement** présente la tenue autour du personnage : survoler une pièce pour lire sa variante, ses statistiques et ses effets. Le rendu en pied provient du dernier import réussi ; à défaut, le livre utilise un modèle en jeu au GUID vérifié ou le portrait individuel disponible. **Talents** place les talents selon les arbres du client Forever ; le survol affiche leurs détails. **JcJ** sépare victoires honorables, rang et champs de bataille publics des combats personnels et de guilde. **Réputations** liste les factions et leur progression publiée. Un champ absent reste inconnu ; un zéro publié reste un zéro. Les niveaux observés au combat et le niveau de l’Armurerie restent distincts. Le dossier ne donne pas de position en temps réel.
 

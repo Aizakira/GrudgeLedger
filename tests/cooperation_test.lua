@@ -93,7 +93,7 @@ local ranked = GL.PlayerStatistics("friendsOnline")
 assert(#ranked == 1 and ranked[1].record == aqua and ranked[1].value == 240)
 GL.ShowStatistics("players")
 local stats = GrudgeLedgerStatistics
-click(stats.groups[2]) click(stats.choices[5])
+click(stats.sections[2]) click(stats.filters.players[2].choices[5])
 assert(stats.rows[1].item.record == aqua and stats.rows[1].value:GetText() == "4 min")
 GL.ShowLedger(aqua.key) click(book.detailTabs.history) click(book.historyPage.options.group)
 assert(book.historyPage.rows[1].title:GetText():find("4 min en ligne",1,true))

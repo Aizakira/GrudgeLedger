@@ -36,7 +36,7 @@ C'est un petit projet personnel, partagé tel quel. Il pourra évoluer avec les 
 
 ![Aperçu hors jeu du journal sur parchemin, avec des personnages fictifs](docs/journal.png)
 
-Le registre de campagne réunit le Journal, les Classements, les Guildes et le Bilan. Dans le Journal, filtrez les rencontres par avis et faction, puis ouvrez une fiche pour consulter le solde automatique, la dernière rencontre, l’histoire et les notes. Les portraits de race et les icônes de classe utilisent l’identité connue du jeu.
+Le registre de campagne réunit le Journal, les Classements, le Bilan et les Primes. Les statistiques et avis de guilde se trouvent dans **Classements → Guildes**. Dans le Journal, filtrez les rencontres par avis et faction, puis ouvrez une fiche pour consulter le solde automatique, la dernière rencontre, l’histoire et les notes. Les portraits de race et les icônes de classe utilisent l’identité connue du jeu.
 
 Le cuir, les drapés et le parchemin forment le décor. Le médaillon, le cartouche, la roue dentée et la croix sont des éléments indépendants. Le lettrage doré est une texture indépendante. Le jeu affiche les noms et le contenu du livre en PT Serif, avec des titres gras et des annotations en italique. Le réglage Classique utilise la police native du jeu. L’aperçu hors jeu utilise des personnages fictifs.
 

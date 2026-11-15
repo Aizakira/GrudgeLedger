@@ -359,12 +359,11 @@ local function bookNavigation(f, selected)
     f.navigation = {}
     for i, entry in ipairs({
         { "ledger", L("Journal"), function() GL.ShowLedger() end },
-        { "players", L("Classements"), function() GL.ShowStatistics("players") end },
-        { "guilds", L("Guildes"), function() GL.ShowStatistics("guilds") end },
+        { "players", L("Classements"), function() GL.ShowStatistics() end },
         { "journal", L("Bilan"), function() GL.ShowJournal("summary") end },
         { "bounties", L("Primes"), function() GL.OpenBounties() end },
     }) do
-        local b = button(f, entry[2], 72 + (i - 1) * 165, -96, 156, entry[3], true)
+        local b = button(f, entry[2], 72 + (i - 1) * 208, -96, 192, entry[3], true)
         b:SetHeight(38)
         journalFont(b.caption, "GameFontNormalLarge", 19)
         b.caption:SetHeight(32)
@@ -617,7 +616,7 @@ local function refreshStatistics()
         end)
     end
     f.offset = math.min(f.offset, math.max(0, math.floor((#rows - 1) / rankingPageSize) * rankingPageSize))
-    f.heading:SetText(guild and L("Les guildes de votre histoire") or choice[2])
+    f.heading:SetText(choice[2])
     f.description:SetText(choice[3])
     f.columnName:SetText(guild and L("Guilde") or L("Joueur"))
     local guildColumns = { rules = L("Avis"), grudges = L("Personnes"), friends = L("Personnes"), deaths = L("Morts"), kills = L("Victoires"), aggressions = L("Agressions") }
@@ -628,29 +627,25 @@ local function refreshStatistics()
     local showSessions = choice[1] == "friendsOnline"
     f.columnExtra:SetText(guild and "" or showOpinion and L("Avis") or showSessions and L("Groupes") or L("Guilde connue"))
     f.scope:SetText(guild and f.category ~= 2 and L("Compte · Relations actuelles") or choice[4] == "date" and L("Compte · Dernières observations") or choice[4] == "point" and L("Compte · Soldes actuels") or L("Compte · Toutes périodes"))
-    for mode, tab in pairs(f.tabs) do UI.selectButton(tab, mode == f.mode) end
+    for i, tab in ipairs(f.sections) do
+        UI.selectButton(tab, i == (guild and #f.sections or f.category))
+    end
     if guild then f.factionButton:Hide() else f.factionButton:Show() end
     f.factionButton:SetText(f.faction == "all" and L("Toutes les factions") or factionNames[f.faction] or L("Faction inconnue"))
     f.manage:SetText(guild and L("Gérer les avis de guilde") or L("Mon bilan PvP"))
-    local y = 157
-    for i, control in ipairs(f.choices) do control:Hide() end
-    for i, control in ipairs(f.groups) do
-        local group = groups[i]
-        showIf(control, group ~= nil)
-        if group then
-            moveTo(control, 36, y) control:SetText(group.name)
-            UI.selectButton(control, i == f.category)
-            y = y + 36
-            if i == f.category then
-                for j, entry in ipairs(choices) do
-                    local b = f.choices[j]
-                    moveTo(b, 54, y) b:SetText(entry[2]) b.metric = entry[1] b:Show()
-                    UI.selectButton(b, j == f.choice)
-                    y = y + 32
+    for mode, panels in pairs(f.filters) do
+        for i, panel in ipairs(panels) do
+            local visible = mode == f.mode and (guild or i == f.category)
+            showIf(panel, visible)
+            if visible then
+                for j, control in ipairs(panel.choices) do
+                    UI.selectButton(control, i == f.category and j == f.choice)
                 end
             end
         end
     end
+    moveTo(f.helpHeading, 36, guild and 495 or 433)
+    moveTo(f.footnote, 36, guild and 522 or 462)
     f.columnBand:SetWidth(guild and 211 or 548)
     f.columnValue:SetWidth(guild and 87 or 145)
     moveTo(f.columnValue, guild and 478 or 608, 255)
@@ -768,28 +763,69 @@ local function refreshStatistics()
         or L("Clique sur une personne pour lire son histoire."))
     f.footnote:SetText(choice[6])
 end
-function GL.ShowStatistics(mode)
+function GL.ShowStatistics(mode, category)
     if not GL.db then return end
+    mode = mode or (statisticsWindow and statisticsWindow.mode)
     mode = mode == "guilds" and "guilds" or "players"
+    if not statisticsChoices[mode][category] then category = nil end
     if not statisticsWindow then
         local f = bookWindow("GrudgeLedgerStatistics", "Grudge Ledger")
         statisticsWindow = f
-        f.rows, f.groups, f.choices, f.guildActions = {}, {}, {}, {}
+        f.rows, f.sections, f.filters, f.guildActions = {}, {}, {}, {}
         bookNavigation(f, "players")
-        f.tabs = { players = f.navigation.players, guilds = f.navigation.guilds }
-        for i = 1, 3 do
-            f.groups[i] = button(f, "", 36, -157, 256, function()
-                f.category, f.choice, f.offset, f.selected = i, 1, 0, nil refreshStatistics()
-            end, true)
-            journalFont(f.groups[i].caption, "GameFontNormalLarge", 14)
+        local playerGroups = statisticsChoices.players
+        for i = 1, #playerGroups + 1 do
+            local group = playerGroups[i]
+            local tab = button(f, group and group.name or L("Guildes"), 36 + ((i - 1) % 2) * 140,
+                -157 - math.floor((i - 1) / 2) * 35, 134, function()
+                    GL.ShowStatistics(group and "players" or "guilds", group and i or nil)
+                end, true)
+            tab:SetHeight(30)
+            tab.caption:SetWidth(126)
+            journalFont(tab.caption, "GameFontNormalLarge", 14)
+            f.sections[i] = tab
         end
-        for i = 1, 5 do
-            f.choices[i] = button(f, "", 54, -195 - (i - 1) * 32, 237, function()
-                f.choice, f.offset, f.selected = i, 0, nil refreshStatistics()
-            end, true)
-            f.choices[i].caption:SetJustifyH("LEFT")
+        for scope, groups in pairs(statisticsChoices) do
+            local y = 236
+            f.filters[scope] = {}
+            for i, group in ipairs(groups) do
+                local panel = CreateFrame("Frame", nil, f)
+                f.filters[scope][i] = panel
+                panel.choices = {}
+                panel:SetPoint("TOPLEFT", 36, -y)
+                local offset = 0
+                if scope == "guilds" and #group.entries > 1 then
+                    bookText(panel, 2, 0, 260, 20, 13, group.name, theme.paper)
+                    offset = 22
+                end
+                for j, entry in ipairs(group.entries) do
+                    local control = button(panel, entry[2], 0, -offset, 274, function()
+                        f.category, f.choice, f.offset, f.selected = i, j, 0, nil
+                        refreshStatistics()
+                    end, true)
+                    control.skin:Hide()
+                    journalFont(control.caption, "GameFontHighlight", 13)
+                    control.caption:SetWidth(258)
+                    control.caption:SetJustifyH("LEFT")
+                    control:SetScript("OnEnter", function(self)
+                        if self.caption.IsTruncated and self.caption:IsTruncated() then
+                            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                            GameTooltip:SetText(self:GetText())
+                            GameTooltip:Show()
+                        end
+                    end)
+                    control:SetScript("OnLeave", function(self)
+                        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+                    end)
+                    control.metric = entry[1]
+                    panel.choices[j] = control
+                    offset = offset + 30
+                end
+                panel:SetSize(274, offset)
+                if scope == "guilds" then y = y + offset + 8 end
+            end
         end
-        bookText(f, 36, 433, 256, 21, 13, L("Comment lire ce classement"), theme.paper)
+        f.helpHeading = bookText(f, 36, 433, 256, 21, 13, L("Comment lire ce classement"), theme.paper)
         f.footnote = label(f, "", nil, 36, -462, 256)
         f.footnote:SetTextColor(unpack(theme.muted))
         f.manage = button(f, "", 36, -620, 256, function()
@@ -890,7 +926,10 @@ function GL.ShowStatistics(mode)
         end
     end
     local f = statisticsWindow
-    if f.mode ~= mode then f.mode, f.category, f.choice, f.offset, f.selected = mode, 1, mode == "players" and 2 or 1, 0, nil end
+    if f.mode ~= mode or (category and category ~= f.category) then
+        f.mode, f.category, f.choice = mode, category or 1, (mode == "players" and not category) and 2 or 1
+        f.offset, f.selected = 0, nil
+    end
     f.faction = f.faction or "all"
     showBook(f)
     refreshStatistics()

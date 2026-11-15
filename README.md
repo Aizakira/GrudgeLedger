@@ -32,7 +32,7 @@ It is a small hobby project, shared as it is, and it may evolve with playtesting
 
 ![Offline preview of the ancient-book journal, with synthetic example records](docs/journal.png)
 
-The campaign register brings together the journal, rankings, guilds and personal PvP summary. Filter contacts by relationship and faction, then open a record to see its automatic score, latest encounter, history or notes. Race portraits and class icons use identity information supplied by the game.
+The campaign register brings together the journal, rankings, personal PvP summary and bounties. Open **Rankings → Guilds** for guild statistics and ratings. Filter contacts by relationship and faction, then open a record to see its automatic score, latest encounter, history or notes. Race portraits and class icons use identity information supplied by the game.
 
 The leather, cloth and parchment share a decorative background. The medallion, title plaque, settings and close buttons have independent textures. The gold wordmark is a separate texture. WoW renders names and journal entries in PT Serif, with bold headings and italic annotations. Classic mode uses the native game font. The offline preview uses fictional contacts.
 
