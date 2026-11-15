@@ -8,6 +8,8 @@ A small personal player journal for **World of Warcraft Forever**: friends, enem
 
 [Français](README.fr.md) · [Download](https://github.com/Aizakira/GrudgeLedger/releases/latest) · [Report a bug or suggest an idea](https://github.com/Aizakira/GrudgeLedger/issues)
 
+**[Try the guild bounties alpha (0.11.0-alpha.7)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0-alpha.7)** to post contracts, track a hunt, split the gold by mail and compare dated guild opinions. The release includes the installable ZIP and playtest notes.
+
 ## Why this exists
 
 This was put together quickly to solve a simple problem while playing: remembering who was great to group with, who attacked us, and why a familiar name rang a bell. It was **created with the help of ChatGPT, through Codex**, with several rounds of fixes and automated checks. The red book and relationship icons were also generated with OpenAI's image tools.
