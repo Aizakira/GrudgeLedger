@@ -991,7 +991,7 @@ local function combatContext(value)
     end
     if next(snapshot) then return snapshot end
 end
-function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat)
+function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat, report)
     if GL.IsPvPInstance() then return nil end
     if kind ~= "kill" and kind ~= "death" then return nil end
     if confidence ~= "confirmed" then return nil end
@@ -1003,7 +1003,8 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat)
     local field = pvpFields[kind][confidence]
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
-    local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, combat = withLevels(combatContext(combat), identity, record) })
+    local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId,
+        combat = withLevels(combatContext(combat), identity, record), report = report })
     GL.Emit("CHANGED", record)
     return record, event
 end

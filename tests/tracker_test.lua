@@ -1687,4 +1687,93 @@ test("protected health and unknown levels produce no guessed fight context", fun
     assert(h[1].combat.opponents == 1 and not h[1].combat.healthPct and not h[1].combat.playerLevel and not h[1].combat.opponentLevel)
 end)
 
+local function outcome(e, kind)
+    for _, event in ipairs(assert(GL.Get("guid:" .. e.guid)).history) do
+        if event.kind == kind then return event end
+    end
+    error("missing " .. kind)
+end
+
+test("a victory freezes public actions, including the first hit and third parties", function()
+    local e, me = opponent("Duelist"), unitData.player
+    unitData.target = e
+    cle("SPELL_DAMAGE", me, e, -1, 16, 64)
+    start(e)
+    now = now + 1
+    cle("SPELL_DAMAGE", e, me, -1, 64, 16)
+    local npc = { guid="Creature-1-test", name="Loup", surname="Gris" }
+    cle("SWING_DAMAGE", npc, me, -1, 576, 16)
+    cle("RANGE_DAMAGE", opponent("Helper"), e, -1, 16, 64)
+    cle("SWING_DAMAGE", opponent("Unrelated"), npc, -1, 64, 576)
+    T.OnCombatLog(now, "ENVIRONMENTAL_DAMAGE", false, nil, nil, 0, 0, me.guid, nil, 16, 0, "FALLING", 42, -1)
+    T.HandleEvent("PARTY_KILL", me.guid, e.guid)
+    local log = assert(outcome(e, "kill").report.live)
+    assert(#log == 5 and log[1].src == me.guid and log[1].spell == "Sort" and log[1].at < log[2].at)
+    assert(log[2].src == e.guid and log[3].from == "Loup Gris" and log[4].dst == e.guid)
+    assert(log[5].environment == "FALLING" and log[5].amount == 42)
+    cle("SWING_DAMAGE", e, me, -1, 64)
+    assert(#log == 5 and not GL.Get("guid:Player-1-Unrelated"))
+end)
+
+test("the death recap of a newly recorded opponent retains NPC and environmental damage in time order", function()
+    local e = opponent("Hidden", "Adversaire", "Invisible")
+    local npc = { guid="Creature-1-test", name="Loup" }
+    local final = recapRow(npc, 6, now, "SWING_DAMAGE")
+    local hit = recapRow(e, -1, now - 2) hit.spellName = "Éclair"
+    local fall = {event="ENVIRONMENTAL_DAMAGE", amount=25, environmentalType="FALLING", timestamp=now-1}
+    recapAPI({final, hit, fall})
+    T.HandleEvent("PLAYER_DEAD")
+    local event = outcome(e, "death")
+    local rows = event.report.recap
+    assert(not event.report.live and #rows == 3 and rows[1].spell == "Éclair" and rows[1].src == e.guid)
+    assert(rows[2].environment == "FALLING" and rows[2].amount == 25 and rows[2].dst == unitData.player.guid)
+    assert(rows[3].src == npc.guid and rows[3].fatal and rows[3].amount == 294 and count() == 1)
+end)
+
+test("live and native descriptions of one death stay separate, including concealed values", function()
+    local e, me = start(), unitData.player
+    T.OnCombatLog(now, "SPELL_DAMAGE", false, e.guid, secret, 64, 0, me.guid, nil, 16, 0, 1, secret, 1, secret, -1)
+    cle("SWING_DAMAGE", e, me, -1, 64, 16)
+    recapAPI({recapRow(e, 0, now, "SWING_DAMAGE")})
+    T.HandleEvent("PLAYER_DEAD")
+    local report = outcome(e, "death").report
+    assert(#report.live == 2 and #report.recap == 1 and not report.live[1].spell and not report.live[1].amount)
+    assert(report.live[2].amount == 300 and report.recap[1].amount == 300 and total("deaths") == 1)
+end)
+
+test("long fights retain only the latest 64 actions and subsequent lives start fresh", function()
+    local e = start()
+    for n=1,67 do
+        now = now + 1
+        cle("SWING_DAMAGE", unitData.player, e, -1, 16, 64)
+    end
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    local report = outcome(e, "kill").report
+    assert(report.clipped and #report.live == 64 and report.live[1].at == now - 63)
+    T.HandleEvent("PLAYER_REGEN_ENABLED")
+    now = now + 15
+    local newEnemy = start(opponent("Next"))
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, newEnemy.guid)
+    assert(not outcome(newEnemy, "kill").report)
+end)
+
+test("without a damage stream only successful casts on the identified opponent appear", function()
+    local e = start()
+    local targetName = e.name .. " " .. e.surname
+    local old = GetSpellInfo
+    GetSpellInfo = function(id) if id == 77 then return "Éclair" end end
+    T.HandleEvent("UNIT_SPELLCAST_SENT", "player", e.name, "ambiguous", 77)
+    T.HandleEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "ambiguous", 77)
+    T.HandleEvent("UNIT_SPELLCAST_SENT", "player", targetName, "good", 77)
+    T.HandleEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "different", 77)
+    unitData.target = opponent("Other")
+    T.HandleEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "good", 77)
+    T.HandleEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "good", 77)
+    unitData.target = e
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    GetSpellInfo = old
+    local rows = outcome(e, "kill").report.live
+    assert(#rows == 1 and rows[1].dst == e.guid and rows[1].spell == "Éclair" and not rows[1].amount)
+end)
+
 print("PASS: " .. passed .. " tracker scenarios (actual Core.lua + Tracker.lua).")

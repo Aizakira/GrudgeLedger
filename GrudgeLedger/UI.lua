@@ -1463,6 +1463,61 @@ local function refreshCorrections()
     f.keep:SetText(pvpNames[e.kind] and not e.voided and L("Conserver") or L("Fermer"))
 end
 
+local function renderCombatReport(f)
+    local e, report = f.event, f.event.report
+    local rows = report and report[f.source]
+    local text = {}
+    local opponent, actor = f.identity and f.identity.guid, e.actorGUID
+    local function participant(guid, name, pet)
+        if pet and name then return plain(name) end
+        if guid and guid == actor then return L("Vous") end
+        if guid and guid == opponent then return f.who:GetText() end
+        return plain(name or L("Source inconnue"))
+    end
+    local dealt, received, others
+    if rows and #rows > 0 then
+        local lines = {}
+        for _, hit in ipairs(rows) do
+            local outgoing = actor and opponent and hit.src == actor and hit.dst == opponent
+            local incoming = actor and opponent and hit.src == opponent and hit.dst == actor
+            if hit.amount then
+                if outgoing then dealt = (dealt or 0) + hit.amount
+                elseif incoming then received = (received or 0) + hit.amount
+                elseif actor and hit.dst == actor and (hit.src or hit.kind == "ENVIRONMENTAL_DAMAGE") then
+                    others = (others or 0) + hit.amount
+                end
+            end
+            if not f.pairOnly or incoming or outgoing then
+                local from = participant(hit.src, hit.from, hit.srcPet)
+                local action = hit.spell
+                if hit.kind == "ENVIRONMENTAL_DAMAGE" then
+                    from = L("Environnement")
+                    action = hit.environment and _G["ACTION_ENVIRONMENTAL_DAMAGE_" .. hit.environment:upper()] or from
+                elseif hit.kind == "SWING_DAMAGE" then action = ACTION_SWING or L("Attaque de mêlée") end
+                local detail = hit.amount and tostring(hit.amount) or (hit.kind == "SPELL_CAST_SUCCESS" and L("Sort lancé") or "—")
+                if hit.fatal then detail = detail .. " · " .. L("Coup fatal") end
+                lines[#lines+1] = ("+%d s   %s › %s   ·   %s   ·   %s"):format(
+                    math.max(0, math.floor(hit.at - rows[1].at)), from, participant(hit.dst, hit.to, hit.dstPet),
+                    plain(action or L("Sort non identifié")), detail)
+            end
+        end
+        text[#text+1] = L("Dégâts observés") .. "\n" .. L("Infligés à l’adversaire") .. "  " .. (dealt or "—")
+            .. "     ·     " .. L("Reçus de l’adversaire") .. "  " .. (received or "—")
+            .. "\n" .. L("Reçus d’autres sources") .. "  " .. (others or "—")
+        if f.source == "live" and report.clipped then text[#text+1] = L("Seules les 64 dernières actions sont conservées.") end
+        text[#text+1] = #lines > 0 and table.concat(lines, "\n") or L("Aucun échange direct relevé.")
+    elseif e.kind == "kill" or e.kind == "death" then
+        text[#text+1] = L("Aucun relevé de dégâts disponible pour ce combat.")
+    end
+    if f.evidenceText ~= "" then text[#text+1] = f.evidenceText end
+    f.proof:SetText(table.concat(text, "\n\n"))
+    f.body:SetHeight(math.max(f.scroll:GetHeight(), f.proof:GetStringHeight() + 8))
+    f.scroll:SetVerticalScroll(0)
+    UI.selectButton(f.pair, f.pairOnly) UI.selectButton(f.all, not f.pairOnly)
+    f.otherSource:SetText(f.source == "live" and L("Voir les derniers coups reçus") or L("Voir les actions observées"))
+    f.section:SetText(rows and (f.source == "recap" and L("Derniers coups reçus") or L("Actions observées")) or L("Pourquoi cet événement ?"))
+end
+
 inspectEvent = function(record, e)
     if not e or not record and e.kind ~= "honor" then return end
     if not correctionWindow then
@@ -1484,7 +1539,17 @@ inspectEvent = function(record, e)
         f.classIcon = f:CreateTexture(nil, "ARTWORK") f.classIcon:SetPoint("TOPLEFT", 70, -171) f.classIcon:SetSize(17, 17)
         f.who = field(98, -122, 463, 28, 16)
         f.where = field(98, -156, 463, 45, 13)
-        field(26, -209, 515, 26, 17):SetText(L("Pourquoi cet événement ?"))
+        f.section = field(26, -209, 301, 26, 17)
+        f.otherSource = button(f, "", 329, -207, 229, function()
+            f.source = f.source == "live" and "recap" or "live"
+            renderCombatReport(f)
+        end, nil, true)
+        f.all = button(f, L("Tous les intervenants"), 26, -241, 205, function()
+            f.pairOnly = false renderCombatReport(f)
+        end, true, true)
+        f.pair = button(f, L("Nos échanges"), 239, -241, 166, function()
+            f.pairOnly = true renderCombatReport(f)
+        end, true, true)
         f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
         f.scroll:SetPoint("TOPLEFT", 26, -242) f.scroll:SetSize(510, 77)
         local body = CreateFrame("Frame", nil, f.scroll) body:SetSize(500, 77)
@@ -1494,10 +1559,22 @@ inspectEvent = function(record, e)
         f.keep = button(f, L("Fermer"), 24, -396, 105, function() f:Hide() end, true, true)
         UI.selectButton(f.keep, true)
         f.confirm = button(f, L("Annuler cet événement"), 351, -396, 211, nil, nil, true)
+        f.keep:ClearAllPoints() f.keep:SetPoint("BOTTOMLEFT", 24, 25)
+        f.confirm:ClearAllPoints() f.confirm:SetPoint("BOTTOMRIGHT", -24, 25)
+        f.effect:ClearAllPoints() f.effect:SetPoint("BOTTOMLEFT", 26, 64)
     end
     local f = correctionWindow
     f.identity, f.event = record and { key=record.key, guid=record.guid, alias=record.alias }, e
-    f.title:SetText(pvpNames[e.kind] and L("Vérifier cet événement") or L("Détails de la rencontre"))
+    local isCombat = e.kind == "kill" or e.kind == "death"
+    local report = isCombat and e.report
+    f.source, f.pairOnly = report and report.live and "live" or "recap", false
+    f:SetHeight(report and 575 or 447)
+    f.scroll:ClearAllPoints()
+    f.scroll:SetPoint("TOPLEFT", 26, report and -280 or -242)
+    f.scroll:SetHeight(report and 166 or 77)
+    showIf(f.otherSource, report and report.live and report.recap)
+    showIf(f.all, report) showIf(f.pair, report)
+    f.title:SetText(isCombat and L("Détail du combat") or pvpNames[e.kind] and L("Vérifier cet événement") or L("Détails de la rencontre"))
     f.action:SetText(eventAction(e))
     if record then identityIcons(f, record) else portraitRows[f] = nil end
     showIf(f.raceIcon, record ~= nil) showIf(f.classIcon, record ~= nil)
@@ -1513,8 +1590,8 @@ inspectEvent = function(record, e)
     if combat then evidence[#evidence+1] = combat end
     if e.questTitle then evidence[#evidence+1] = L("Quête suivie : ") .. plain(e.questTitle) end
     if e.guildSource and e.guild then evidence[#evidence+1] = L("Guilde mémorisée : ") .. plain(e.guild) .. (e.guildRealm and " (" .. realmLabel(e.guildRealm) .. ")" or "") .. (e.guildSource == "last-known" and L(" — observée auparavant") or "") end
-    f.proof:SetText(#evidence > 0 and table.concat(evidence, "\n") or L("Aucune précision enregistrée."))
-    f.body:SetHeight(math.max(77, f.proof:GetStringHeight() + 8)) f.scroll:SetVerticalScroll(0)
+    f.evidenceText = #evidence > 0 and table.concat(evidence, "\n") or L("Aucune précision enregistrée.")
+    renderCombatReport(f)
     local identity = f.identity
     f.confirm:SetScript("OnClick", function()
         if f.event ~= e or not f:IsShown() then return end
@@ -1656,7 +1733,7 @@ local function renderHistory(p, record)
             row.hint:SetText(hint or "")
             local icon = ({death="Ability_Rogue_FeignDeath", kill="Ability_DualWield", aggression="Ability_Warrior_Charge"})[e.kind]
             row.icon:SetTexture(icon and ("Interface\\Icons\\" .. icon) or GL.icon)
-            row.details:SetText(L("Détails"))
+            row.details:SetText((e.kind == "kill" or e.kind == "death") and L("Voir le combat") or L("Détails"))
             row:Show()
         else row:Hide() end
     end

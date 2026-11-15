@@ -382,11 +382,20 @@ function QA.capture(name)
         return f
     elseif name == "alert-preview" then GL.Display.PreviewAlert("enemy") return GrudgeLedgerAlertPreview
     elseif name == "guide" then GL.ShowGuide() return GrudgeLedgerGuide
-    elseif name == "corrections" or name == "correction-voided" or name == "kill-details" then
-        GL.ShowLedger(name == "kill-details" and records[7].key or record.key)
+    elseif name == "corrections" or name == "correction-voided" or name == "kill-details" or name == "combat-report" then
+        GL.ShowLedger((name == "kill-details" or name == "combat-report") and records[7].key or record.key)
         click("Corriger le PvP")
-        local details = GrudgeLedgerWindow.historyPage.rows[1].details
+        local row = GrudgeLedgerWindow.historyPage.rows[1]
+        if name == "combat-report" then
+            row.event.report = {live = {
+                {kind="SPELL_DAMAGE", at=100, src=row.event.actorGUID, dst=records[7].guid, spell="Éclair", amount=247},
+                {kind="SWING_DAMAGE", at=102, src=records[7].guid, dst=row.event.actorGUID, amount=132},
+                {kind="SWING_DAMAGE", at=103, src="Creature-1-wolf", from="Loup gris", dst=row.event.actorGUID, amount=58},
+            }}
+        end
+        local details = row.details
         details:Click()
+        if name == "combat-report" then row.event.report = nil end
         if name == "kill-details" then assert(GrudgeLedgerCorrections.event.kind == "kill") end
         if name == "correction-voided" then GrudgeLedgerCorrections.confirm:Click() details:Click() end
         return GrudgeLedgerCorrections

@@ -341,6 +341,25 @@ do
     assert(row.event == revenge)
     click(row.details)
     assert(GrudgeLedgerCorrections.proof:GetText():find("Revanche", 1, true))
+    local report = GrudgeLedgerCorrections
+    assert(report.proof:GetText():find("Aucun relevé de dégâts", 1, true))
+    click(report.keep)
+    revenge.report = {live = {
+        {kind="SPELL_DAMAGE", at=10, src=revenge.actorGUID, dst=opponent.guid, spell="Éclair", amount=81},
+        {kind="SWING_DAMAGE", at=11, src=opponent.guid, dst=revenge.actorGUID, amount=32},
+        {kind="SWING_DAMAGE", at=12, src="Creature-1-wolf", from="Loup gris", dst=revenge.actorGUID, amount=12},
+    }, recap={{kind="SWING_DAMAGE", at=12, src=opponent.guid, dst=revenge.actorGUID, amount=32}}}
+    click(row.details)
+    local function shows(s) return report.proof:GetText():find(s, 1, true) end
+    assert(shows("Infligés à l’adversaire  81") and shows("Reçus de l’adversaire  32") and shows("Reçus d’autres sources  12"))
+    assert(shows("+2 s   Loup gris") and shows("Éclair") and report.otherSource:IsShown())
+    click(report.pair)
+    assert(not shows("Loup gris") and shows("Éclair"))
+    click(report.otherSource)
+    assert(report.section:GetText() == "Derniers coups reçus" and shows("Reçus de l’adversaire  32"))
+    assert(shows("Infligés à l’adversaire  —") and not shows("Éclair"))
+    click(report.otherSource) click(report.all)
+    assert(shows("Loup gris"))
 end
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS journal UI: scoped evidence, legacy/alt labels, bounded submitted search, correction audit, paging, configurable index, opt-in warning, stable note editing/deletion/drafts")

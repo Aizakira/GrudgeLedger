@@ -436,7 +436,7 @@ def main():
               "honor-races", "honor-classes", "honor-zones", "honor-subzones", "honor-initiative",
               "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
               "guild-exceptions", "guild-rankings-largeprint-small",
-              "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details"]
+              "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details", "combat-report"]
     views += ["bounty-target", "bounty-contract", "dossier-gear", "dossier-talents", "dossier-pvp", "dossier-reputation"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
