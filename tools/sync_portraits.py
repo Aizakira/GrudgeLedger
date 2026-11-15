@@ -71,13 +71,14 @@ def character_profile(region, name, guid, locale="en-us"):
 
 
 def portrait(data):
+    from native_portraits_windows import usable_face
     media = data["avatar"]["url"]
     with Image.open(io.BytesIO(fetch(media, 512_000))) as img:
         if img.format != "JPEG" or img.width != img.height or not 32 <= img.width <= 512:
             raise ValueError("unexpected avatar format")
         buf = io.BytesIO()
         thumb = img.convert("RGB").resize((64, 64), Image.Resampling.LANCZOS)
-        if max(hi - lo for lo, hi in thumb.getextrema()) < 12:
+        if not usable_face(thumb):
             raise ValueError("empty avatar")
         thumb.save(buf, format="TGA")
         return buf.getvalue()
