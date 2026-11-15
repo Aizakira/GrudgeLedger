@@ -484,6 +484,28 @@ function GL.Author()
     return guid, actor and actor.fullName or guid, GL.db.authorAccount
 end
 
+local function indexAlias(alias, key)
+    if not alias then return end
+    local previous = GL.db.aliases[alias]
+    if previous == nil or previous == alias then
+        GL.db.aliases[alias] = key
+    elseif previous ~= key and key ~= alias then
+        GL.db.aliases[alias] = false -- two GUIDs, same display name: do not guess
+        local name = alias:sub(6)
+        GL.RequestArmory(key, name, key:match("^guid:(Player%-%d+%-%x+)$"))
+        if type(previous) == "string" then GL.RequestArmory(previous, name, previous:match("^guid:(Player%-%d+%-%x+)$")) end
+    end
+end
+
+function GL.RequestArmory(key, name, guid)
+    local identity = GL.IdentityFromName(name, nil, guid)
+    if not GL.db or not identity or not identity.surname or identity.key ~= key
+        or (not guid and GL.db.aliases[key] == false) then return end
+    local requests = GL.db.armoryRequests
+    if type(requests) ~= "table" then requests = {}; GL.db.armoryRequests = requests end
+    requests[key .. "|" .. identity.fullName:lower()] = GL.Now()
+end
+
 function GL.Remember(identity, inspect)
     if not GL.db or type(identity) ~= "table" then return nil end
     local clean = GL.IdentityFromName(identity.name, identity.surname, identity.guid)
@@ -541,14 +563,7 @@ function GL.Remember(identity, inspect)
     end
     if record.guild ~= previousGuild or record.realm ~= previousRealm then guildStatistics = nil end
     record.lastSeen, record.lastZone = GL.Now(), GL.Where()
-    if clean.alias then
-        local previous = GL.db.aliases[clean.alias]
-        if previous == nil or previous == record.key or previous == clean.alias then
-            GL.db.aliases[clean.alias] = record.key
-        elseif previous and previous ~= record.key then
-            GL.db.aliases[clean.alias] = false -- two GUIDs, same display name: do not guess
-        end
-    end
+    indexAlias(clean.alias, record.key)
     if GrudgeLedgerArmory and (newIdentity or inspect) then GL.ArmoryProfile(record, true) end
     if newIdentity and clean.guid and GL.GuildProfiles then GL.GuildProfiles.Observe(record) end
     if inspect and record.guid and GL.InspectDossierUnit then
@@ -1636,6 +1651,10 @@ function GL.InitDB()
         GL.db.quarantine.unassignedHonor, GL.db.unassignedHonor = GL.db.unassignedHonor, nil
     end
     GL.db.aliases = type(GL.db.aliases) == "table" and GL.db.aliases or {}
+    local now = GL.Now()
+    for key, stamp in pairs(type(GL.db.armoryRequests) == "table" and GL.db.armoryRequests or {}) do
+        if type(stamp) ~= "number" or now - stamp > 7 * 86400 then GL.db.armoryRequests[key] = nil end
+    end
     GL.db.guilds = type(GL.db.guilds) == "table" and GL.db.guilds or {}
     GL.db.settings = type(GL.db.settings) == "table" and GL.db.settings or {}
     -- Start the new reading style once per account, including older journals.
@@ -1678,6 +1697,13 @@ function GL.InitDB()
                 end
             end
             normalize(record)
+            local guid = record.guid or key:match("^guid:(Player%-%d+%-%x+)$")
+            local identity = GL.IdentityFromName(record.name, record.surname, guid)
+            if not identity or not identity.alias then identity = GL.IdentityFromName(record.fullName, nil, guid) end
+            if identity and identity.key == key then
+                record.guid, record.fullName = record.guid or identity.guid, record.fullName or identity.fullName
+                indexAlias(identity.alias, key)
+            end
             if GrudgeLedgerArmory then GL.ArmoryProfile(record, true) end
         else
             GL.db.quarantine = GL.db.quarantine or {}

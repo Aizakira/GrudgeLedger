@@ -233,11 +233,20 @@ local dressedDisplays={
     Human={2080,3977}, Orc={3851,1378}, Dwarf={8709,4112}, NightElf={2595,1937},
     Scourge={1574,15952}, Tauren={3813,2118}, Gnome={15265,3124}, Troll={2588,6430},
 }
+-- Forever uses one file token for two Skyborne races with distinct baked HD skins.
+local skyborneDisplays={[95]={136836,136837},[96]={136966,137633}}
 function GL.MannequinDisplay(record,identity)
     local race=record.race or raceByID[record.raceID]
     local catalogRace=type(identity)=="table" and raceByID[identity.raceID]
     local sex=record.sex or (catalogRace and (not race or catalogRace==race) and identity.sex)
     local displays=dressedDisplays[race or catalogRace]
+    if race=="Skyborne" or not race then
+        local raceID=record.raceID or (type(identity)=="table" and identity.raceID)
+        if skyborneDisplays[raceID] then
+            displays=skyborneDisplays[raceID]
+            if sex~=2 and sex~=3 and type(identity)=="table" and identity.raceID==raceID then sex=identity.sex end
+        end
+    end
     return displays and (sex==2 or sex==3) and displays[sex-1]
 end
 local function dressPreview(view,identity)

@@ -174,9 +174,13 @@ end
 
 -- Reconstruct only from the selected record's in-game items. The viewer uses
 -- this same textured mannequin, whose facial features are approximate.
-local function reconstructedHead(row, record, profile)
+local function animatedHead(row, record, unit, refreshUnit)
+    local profile = GL.ArmoryProfile(record)
     local display = GL.MannequinDisplay and GL.MannequinDisplay(record, profile and profile.identity)
-    if not display then return end
+    if not unit and not display then
+        if row.headshot then row.headshot:Hide() end
+        return
+    end
     local inspection = GL.DossierInspection and GL.DossierInspection(record) or record.inspection
     local updated = tonumber(profile and profile.updated) or 0
     if updated >= 100000000000 then updated = updated / 1000 end
@@ -188,21 +192,20 @@ local function reconstructedHead(row, record, profile)
         return type(item) == "table" and (item.ref or (item.id and ("item:" .. item.id))) or nil
     end
     local head, shoulders = piece("head", 1), piece("shoulder", 3)
-    if not head and not shoulders then return end
     local model = row.headshot
     if not model then
         model = CreateFrame("DressUpModel", nil, row)
         row.headshot = model
-        model:SetAllPoints(row.raceIcon)
+        model:SetAllPoints(row.faceAnchor or row.raceIcon)
         model:EnableMouse(false)
         GL.Safe(model.SetKeepModelOnHide, model, true)
         if model.SetMouseMotionEnabled and model.SetMouseClickEnabled then
             model:SetMouseMotionEnabled(true)
             model:SetMouseClickEnabled(false)
             model:SetScript("OnEnter", function(self)
-                if row.reconstructedPortrait and GameTooltip then
+                if (row.liveModelPortrait or row.reconstructedPortrait) and GameTooltip then
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText(L("Aperçu reconstitué en jeu"))
+                    GameTooltip:SetText(row.liveModelPortrait and L("Portrait actuel du joueur") or L("Aperçu reconstitué en jeu"))
                     GameTooltip:Show()
                 end
             end)
@@ -211,7 +214,21 @@ local function reconstructedHead(row, record, profile)
             end)
         end
         local function finish()
-            if not model.active or model:GetDisplayInfo() ~= model.display or (model:GetModelFileID() or 0) == 0 then return end
+            if not model.active or (model:GetModelFileID() or 0) == 0 then return end
+            if model.unit then
+                if not visibleGUID(model.unit, model.guid) then
+                    model:SetAlpha(0)
+                    row.raceIcon:SetAlpha(1)
+                    row.liveModelPortrait = nil
+                    return
+                end
+                model:SetPortraitZoom(1)
+                model:SetAlpha(1)
+                row.raceIcon:SetAlpha(0)
+                row.liveModelPortrait = true
+                return
+            end
+            if model:GetDisplayInfo() ~= model.display then return end
             if not model.dressed then
                 model:Undress()
                 model.dressed = true
@@ -227,12 +244,6 @@ local function reconstructedHead(row, record, profile)
                     end
                 end
                 model:SetPortraitZoom(1)
-            end
-            if next(model.pending) then
-                model:SetAlpha(0)
-                row.raceIcon:SetAlpha(1)
-                row.reconstructedPortrait = nil
-                return
             end
             model:SetAlpha(1)
             row.raceIcon:SetAlpha(0)
@@ -260,12 +271,31 @@ local function reconstructedHead(row, record, profile)
         GL.Safe(model.RegisterEvent, model, "GET_ITEM_INFO_RECEIVED")
         GL.Safe(model.RegisterEvent, model, "ITEM_DATA_LOAD_RESULT")
     end
-    if not (model.ClearModel and model.SetDisplayInfo and model.GetDisplayInfo and model.GetModelFileID
-        and model.TryOn and model.Undress and model.SetPortraitZoom) then return end
+    if not (model.ClearModel and model.GetModelFileID and model.SetPortraitZoom) then return end
+    model:Show()
+    if unit and visibleGUID(unit, record.guid) and model.SetUnit
+        and (not IsUnitModelReadyForUI or GL.Safe(IsUnitModelReadyForUI, unit)) then
+        if refreshUnit or model.unit ~= unit or model.guid ~= record.guid then
+            model.active, model.display, model.unit, model.guid, model.pending = nil, nil, nil, nil, nil
+            model:SetAlpha(0)
+            model:ClearModel()
+            local ok, loaded = pcall(model.SetUnit, model, unit, false)
+            if ok and loaded ~= false then model.unit, model.guid = unit, record.guid end
+        end
+        if model.unit then
+            model.active = true
+            model.finish()
+            return
+        end
+    end
+    model.unit, model.guid = nil, nil
+    if not display or not (model.SetDisplayInfo and model.GetDisplayInfo and model.TryOn and model.Undress) then
+        model:Hide()
+        return
+    end
     if model.display ~= display or not model.outfit or model.outfit[1] ~= head or model.outfit[3] ~= shoulders then
         model.outfit, model.pending, model.dressed = {[1]=head, [3]=shoulders}, {}, nil
     end
-    model:Show()
     if model.display ~= display then
         model:SetAlpha(0)
         model:ClearModel()
@@ -277,11 +307,11 @@ local function reconstructedHead(row, record, profile)
     model.finish()
 end
 
-local function paintPortrait(row, record, unit)
+local function paintStaticPortrait(row, record, unit)
     local guid = GL.Clean(record.guid, "string")
     row.raceIcon:SetAlpha(1)
-    row.reconstructedPortrait = nil
-    if row.headshot then row.headshot.active = nil; row.headshot:Hide() end
+    row.reconstructedPortrait, row.liveModelPortrait = nil, nil
+    if row.headshot then row.headshot.active = nil end
     local known = guid and row.livePortraitGUID == guid
     if guid and not known and not unit then
         for _, saved in ipairs(spareFaces) do
@@ -300,6 +330,7 @@ local function paintPortrait(row, record, unit)
     end
     local face = usePortrait(row, (unit or known) and guid or nil)
     row.portraitUnit, row.archivedPortrait = nil, nil
+    face:SetAlpha(1)
     face:SetTexCoord(0, 1, 0, 1)
     row.classIcon:SetTexCoord(0, 1, 0, 1)
     row.classIcon:SetTexture(nil)
@@ -340,7 +371,12 @@ local function paintPortrait(row, record, unit)
         if classIcon(face, record) then row.classIcon:SetAlpha(0)
         else face:SetTexture(factionPortrait[record.faction] or GL.icon) end
     end
-    reconstructedHead(row, record, profile)
+end
+
+local function paintPortrait(row, record, unit, refreshUnit)
+    row.modelWantedUnit = unit
+    paintStaticPortrait(row, record, unit)
+    animatedHead(row, record, unit, refreshUnit)
 end
 
 local function identityIcons(row, record)
@@ -357,7 +393,7 @@ local function refreshPortraits(frame)
     for row, record in pairs(portraitRows) do
         if row.raceIcon:IsVisible() then
             local unit = portraitUnit(record)
-            if unit ~= row.portraitUnit or (unit and redrawPortraits) then paintPortrait(row, record, unit) end
+            if unit ~= row.modelWantedUnit or unit ~= row.portraitUnit or (unit and redrawPortraits) then paintPortrait(row, record, unit, redrawPortraits) end
         end
     end
     redrawPortraits = nil
@@ -2588,7 +2624,7 @@ local function buildLedger()
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(plain(record.fullName or record.name))
             GameTooltip:AddLine(plain(faction .. " · " .. race .. " · " .. class) .. (GL.ValidLevel(record.level) and " · " .. L("Niveau %d"):format(record.level) or ""))
-            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.reconstructedPortrait and L("Aperçu reconstitué en jeu") or (self.livePortraitGUID or self.archivedPortrait)
+            GameTooltip:AddLine(self.reconstructedPortrait and L("Aperçu reconstitué en jeu") or (self.liveModelPortrait or self.portraitUnit) and L("Portrait actuel du joueur") or (self.livePortraitGUID or self.archivedPortrait)
                 and L("Portrait vu en jeu") or L("Icône générique"), 0.82, 0.78, 0.69)
             if record.guild then GameTooltip:AddLine(plain(record.guild)) end
             local tags = GL.TagText and GL.TagText(record)

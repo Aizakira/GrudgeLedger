@@ -273,6 +273,9 @@ local function remember(orders,me)
     local history=all[me] or {}
     all[me]=history
     for id,o in pairs(orders) do
+        if o.state=="open" or o.state=="claimed" then
+            GL.RequestArmory("guid:"..o.target,o.name,o.target)
+        end
         local w=o.winner
         local completed=w or o.priorWinner
         local mine=o.owner==me or o.pot[me]~=nil or (o.progress and (o.progress[me] or 0)>0) or history[id]~=nil

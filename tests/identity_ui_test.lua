@@ -323,6 +323,7 @@ CreateFrame=function(kind,...)
     if kind=="DressUpModel" then
         function frame:ClearModel() self.loadedDisplay=nil end
         function frame:SetDisplayInfo(id) self.requested=id end
+        function frame:SetUnit(unit) self.unitSet=unit; self.loadedDisplay=110; return true end
         function frame:GetDisplayInfo() return self.loadedDisplay end
         function frame:GetModelFileID() return self.loadedDisplay and 400 end
         function frame:SetPortraitZoom(zoom) self.zoom=zoom end
@@ -346,21 +347,29 @@ headshot.scripts.OnModelLoaded(headshot)
 assert(not dossier.reconstructedPortrait,"an old orc load must never draw over a human record")
 headshot.loadedDisplay=headshot.requested
 headshot.scripts.OnModelLoaded(headshot)
-assert(not dossier.reconstructedPortrait and headshot.zoom==1 and dressed["item:11"] and not dressed["item:9"])
+assert(dossier.reconstructedPortrait and headshot.zoom==1 and dressed["item:11"] and not dressed["item:9"], "animate while a helmet streams")
 cached=true
 headshot.scripts.OnEvent(headshot,"ITEM_DATA_LOAD_RESULT",9,true)
 assert(dossier.reconstructedPortrait and dressed["item:9"] and dressed["item:11"])
 GrudgeLedgerNativePortraits={[contact.guid]=true}
 GL.PaintBookPortrait(dossier,contact)
 headshot.scripts.OnModelLoaded(headshot)
-assert(dossier.archivedPortrait=="native" and not dossier.reconstructedPortrait and not headshot:IsShown())
+assert(dossier.archivedPortrait=="native" and dossier.reconstructedPortrait and headshot:IsShown(), "the saved native face remains behind the animated offline preview")
 units.target={guid=contact.guid}
 GL.PaintBookPortrait(dossier,contact)
-assert(dossier.portraitUnit=="target" and not dossier.archivedPortrait and not headshot:IsShown())
+assert(dossier.portraitUnit=="target" and dossier.liveModelPortrait and headshot.unitSet=="target" and not dossier.reconstructedPortrait)
+units.target={guid="Player-42-FFFF"}
+headshot.scripts.OnModelLoaded(headshot)
+assert(not dossier.liveModelPortrait, "a recycled token cannot complete a live portrait for the previous character")
 units.target=nil
 profile.alias="name:donor sample"
 GrudgeLedgerArmory.profiles={["eu:"..profile.alias]=profile}
 contact.guid=nil
 GL.PaintBookPortrait(dossier,contact)
+headshot.loadedDisplay=headshot.requested
+headshot.scripts.OnModelLoaded(headshot)
 assert(dossier.reconstructedPortrait and not dossier.archivedPortrait,"name-only contacts use the same in-game preview")
+profile.gear={}
+GL.PaintBookPortrait(dossier,contact)
+assert(dossier.reconstructedPortrait and not next(dressed), "a new contact needs no helmet or shoulders to animate")
 print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

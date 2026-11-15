@@ -8,6 +8,7 @@ local function client(i)
     local env=setmetatable({}, {__index=_G})
     local ev={}
     env.GrudgeLedger={db=c.db,Safe=function(f,...) return f(...) end,Clean=function(v,k) if type(v)==k then return v end end,Now=function() return now end,
+        RequestArmory=function(key,name,guid) c.request={key,name,guid} end,
         ContainsControlOrMarkup=function(v) return v:find("[|%c]") end,
         On=function(k,v) ev[k]=v end}
     env.GetGuildInfo=function() return c.guild,nil,nil,"Realm" end
@@ -49,9 +50,10 @@ local function flush()
     error("message loop")
 end
 local a,b=client(1),client(2)
-local order=assert(a.b.Post(target,"Target",100000))
+local order=assert(a.b.Post(target,"Target Player",100000))
 assert(not a.b.Post(target,"Target",0))
 flush()
+assert(b.request[1]=="guid:"..target and b.request[2]=="Target Player" and b.request[3]==target)
 assert(b.b.Pledge(order,50000));flush()
 now=now+100
 assert(not b.b.Update(order,"not mine",true))

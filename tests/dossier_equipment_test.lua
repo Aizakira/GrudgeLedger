@@ -4,6 +4,14 @@ for _,file in ipairs({"Core","UITheme","UI","DossierEquipment"}) do
 end
 local GL=GrudgeLedger
 GL.InitDB()
+for raceID,ids in pairs({[5]={1574,15952},[95]={136836,136837},[96]={136966,137633}}) do
+    for i,id in ipairs(ids) do
+        assert(GL.MannequinDisplay({}, {raceID=raceID,sex=i+1})==id)
+        assert(GL.MannequinDisplay({raceID=raceID,sex=i+1})==id)
+    end
+end
+assert(GL.MannequinDisplay({race="Skyborne"}, {raceID=96,sex=3})==137633)
+assert(not GL.MannequinDisplay({race="Skyborne"}, {raceID=5,sex=2}))
 local parent=CreateFrame("Frame",nil,UIParent)
 parent:SetSize(515,398)
 local slots,order={},{}
@@ -27,11 +35,10 @@ local function draw(guid)
     return parent.equipment
 end
 local create=CreateFrame
-local dressed,model={},nil
+local dressed={}
 function CreateFrame(kind,...)
     local widget=create(kind,...)
     if kind=="DressUpModel" then
-        model=widget
         function widget:ClearModel() self.display=nil; self.file=nil end
         function widget:SetDisplayInfo(id) self.requested=id; self.requests=(self.requests or 0)+1 end
         function widget:GetDisplayInfo() return self.display end
@@ -48,6 +55,7 @@ C_Timer={After=function(delay,cb) timers[#timers+1]=cb end}
 local cachedForPreview=false
 C_Item={IsItemDataCachedByID=function() return cachedForPreview end,RequestLoadItemDataByID=function(id) assert(id==9890) end}
 local view=draw(archived)
+local model=view.preview
 assert(#view.buttons==19 and view.stage:GetWidth()>=150)
 assert(view.buttons[17].slotName=="weapon" and view.buttons[19].slotName=="ranged")
 assert(view.stage:IsShown() and view.face:IsShown() and model.requested==1574,"offline male undead loads without a matching visible donor or scene")
