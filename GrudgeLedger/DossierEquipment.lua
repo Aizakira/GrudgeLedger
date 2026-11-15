@@ -80,6 +80,7 @@ local positionButton
 local function paintBody(view)
     local record=view.record
     if not record then return end
+    view.image:Hide()
     local unit=GL.VisiblePortraitUnit(record)
     if unit and record.guid and GL.Safe(UnitGUID,unit)==record.guid and view.model.SetUnit
         and (not IsUnitModelReadyForUI or GL.Safe(IsUnitModelReadyForUI,unit)) then
@@ -95,7 +96,12 @@ local function paintBody(view)
     else
         clearModel(view)
     end
-    local hasBody=view.modelGUID
+    if not view.modelGUID and view.bodyPath then
+        view.image:SetTexture(view.bodyPath)
+        view.image:Show()
+        view.caption:SetText(L("Armurerie"))
+    end
+    local hasBody=view.modelGUID or view.bodyPath
     if hasBody then view.stage:Show() else view.stage:Hide() end
     local rail=hasBody and math.floor(view.w*.32) or math.floor((view.w-8)/2)
     if rail~=view.rail then
@@ -107,6 +113,8 @@ local function build(parent,slots)
     local view=CreateFrame("Frame",nil,parent)
     view:SetAllPoints()
     view.stage=CreateFrame("Frame",nil,view)
+    view.image=view.stage:CreateTexture(nil,"ARTWORK")
+    view.image:SetPoint("CENTER",view.stage,"CENTER",0,8)
     view.model=CreateFrame("PlayerModel",nil,view.stage)
     view.model:SetPoint("TOPLEFT",view.stage,"TOPLEFT",2,-2)
     view.model:SetPoint("BOTTOMRIGHT",view.stage,"BOTTOMRIGHT",-2,24)
@@ -166,6 +174,10 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
     local view=parent.equipment or build(parent,slots)
     parent.equipment=view
     view.record=record
+    local mediaKey=profile.mediaKey or record.guid
+    view.bodyPath=GrudgeLedgerArmory and profile.body==true and type(mediaKey)=="string"
+        and (mediaKey:match("^Player%-%d+%-%x+$") or mediaKey:match("^Name%-%x+$"))
+        and ("Interface\\AddOns\\GrudgeLedgerPortraits\\"..mediaKey.."-body.tga") or nil
     local w,h=parent:GetWidth(),parent:GetHeight()
     local rowHeight=math.min(45,math.floor((h-6)/9))
     view.w,view.h,view.rowHeight,view.rail=w,h,rowHeight,nil
@@ -174,6 +186,8 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
     view.stage:ClearAllPoints()
     view.stage:SetPoint("TOP",view,"TOP",0,0)
     view.stage:SetSize(stageWidth,stageHeight)
+    local imageWidth=math.min(stageWidth-4,(stageHeight-32)/2)
+    view.image:SetSize(imageWidth,imageWidth*2)
     view.caption:SetWidth(stageWidth-4)
     paintBody(view)
     local variantKeys={}

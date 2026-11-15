@@ -29,7 +29,7 @@ end
 local view=draw(archived)
 assert(#view.buttons==19 and view.stage:GetWidth()>=150)
 assert(view.buttons[17].slotName=="weapon" and view.buttons[19].slotName=="ranged")
-assert(not view.stage:IsShown(), "a web body flagged as individual is still unverified")
+assert(view.stage:IsShown() and view.image:IsShown() and view.bodyPath:find(archived.."-body.tga",1,true))
 local back=view.buttons[4]
 assert(back.item==cape and back.scripts.OnClick)
 function strsplit(delim,s)
@@ -81,5 +81,5 @@ view:Hide()
 assert(not GameTooltip.shown)
 GrudgeLedgerNativePortraits={[archived]=true}
 draw(archived)
-assert(view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
+assert(not view.image:IsShown() and view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
 print("PASS equipment: body or expanded gear, model GUID, native variant tooltip, cold cache and chat draft")

@@ -414,9 +414,9 @@ def main():
     parser.add_argument("--locale", choices=("en-us", "fr-fr", "es-es"), default="en-us", help="language of equipment, enchantments and talents")
     parser.add_argument("--name", help="only synchronize this full character name")
     parser.add_argument("--force", action="store_true", help="refresh even within seven days")
-    parser.add_argument("--profiles-only", action="store_true", default=True, help="import character data only (default)")
+    parser.add_argument("--profiles-only", action="store_true", default=False, help="import character data only, without artwork")
     parser.add_argument("--archive-web-images", dest="profiles_only", action="store_false",
-                        help="also archive website artwork on disk for reference")
+                        help="archive individual Armory artwork (default)")
     parser.add_argument("--pvp-achievements", action="store_true", help="also fetch completed PvP achievements")
     parser.add_argument("--watch", action="store_true", help="watch locally saved journals; stop with Ctrl+C")
     parser.add_argument("--native-portraits", action="store_true", help="archive observed portrait tiles on Windows while watching")
