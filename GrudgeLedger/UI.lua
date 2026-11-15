@@ -172,8 +172,106 @@ local function usePortrait(row, guid)
     return face
 end
 
+-- Reconstruct only from the selected record's in-game items. The viewer uses
+-- this same textured mannequin, whose facial features are approximate.
+local function reconstructedHead(row, record, profile)
+    local display = GL.MannequinDisplay and GL.MannequinDisplay(record, profile and profile.identity)
+    if not display then return end
+    local inspection = GL.DossierInspection and GL.DossierInspection(record) or record.inspection
+    local updated = tonumber(profile and profile.updated) or 0
+    if updated >= 100000000000 then updated = updated / 1000 end
+    local gear = inspection and (tonumber(inspection.gearAt) or 0) >= updated and inspection.gear
+    local function piece(slot, index)
+        if gear and (gear[index] or not inspection.partialGear) then return gear[index] end
+        local item = GL.ArmoryItem(record, slot)
+        if not item and slot == "shoulder" then item = GL.ArmoryItem(record, "shoulders") end
+        return type(item) == "table" and (item.ref or (item.id and ("item:" .. item.id))) or nil
+    end
+    local head, shoulders = piece("head", 1), piece("shoulder", 3)
+    if not head and not shoulders then return end
+    local model = row.headshot
+    if not model then
+        model = CreateFrame("DressUpModel", nil, row)
+        row.headshot = model
+        model:SetAllPoints(row.raceIcon)
+        model:EnableMouse(false)
+        GL.Safe(model.SetKeepModelOnHide, model, true)
+        if model.SetMouseMotionEnabled and model.SetMouseClickEnabled then
+            model:SetMouseMotionEnabled(true)
+            model:SetMouseClickEnabled(false)
+            model:SetScript("OnEnter", function(self)
+                if row.reconstructedPortrait and GameTooltip then
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText(L("Aperçu reconstitué en jeu"))
+                    GameTooltip:Show()
+                end
+            end)
+            model:SetScript("OnLeave", function(self)
+                if GameTooltip and GameTooltip:GetOwner()==self then GameTooltip:Hide() end
+            end)
+        end
+        local function finish()
+            if not model.active or model:GetDisplayInfo() ~= model.display or (model:GetModelFileID() or 0) == 0 then return end
+            if not model.dressed then
+                model:Undress()
+                model.dressed = true
+                for _, link in pairs(model.outfit) do
+                    local itemID = type(link) == "string" and tonumber(link:match("item:(%d+)"))
+                    if itemID and C_Item and C_Item.IsItemDataCachedByID and not C_Item.IsItemDataCachedByID(itemID) then
+                        if not model.pending[itemID] then
+                            model.pending[itemID] = true
+                            GL.Safe(C_Item.RequestLoadItemDataByID, itemID)
+                        end
+                    elseif itemID then
+                        GL.Safe(model.TryOn, model, link)
+                    end
+                end
+                model:SetPortraitZoom(1)
+            end
+            if next(model.pending) then
+                model:SetAlpha(0)
+                row.raceIcon:SetAlpha(1)
+                row.reconstructedPortrait = nil
+                return
+            end
+            model:SetAlpha(1)
+            row.raceIcon:SetAlpha(0)
+            row.reconstructedPortrait = true
+        end
+        model.finish = finish
+        model:SetScript("OnModelLoaded", finish)
+        model:SetScript("OnEvent", function(_, _, id, success)
+            if model.pending and model.pending[id] then
+                model.pending[id] = nil
+                model.dressed = nil
+                if success then finish() end
+            end
+        end)
+        GL.Safe(model.RegisterEvent, model, "GET_ITEM_INFO_RECEIVED")
+        GL.Safe(model.RegisterEvent, model, "ITEM_DATA_LOAD_RESULT")
+    end
+    if not (model.ClearModel and model.SetDisplayInfo and model.GetDisplayInfo and model.GetModelFileID
+        and model.TryOn and model.Undress and model.SetPortraitZoom) then return end
+    if model.display ~= display or not model.outfit or model.outfit[1] ~= head or model.outfit[3] ~= shoulders then
+        model.outfit, model.pending, model.dressed = {[1]=head, [3]=shoulders}, {}, nil
+    end
+    model:Show()
+    if model.display ~= display then
+        model:SetAlpha(0)
+        model:ClearModel()
+        model.display = display
+        model.active = true
+        model:SetDisplayInfo(display)
+    end
+    model.active = true
+    model.finish()
+end
+
 local function paintPortrait(row, record, unit)
     local guid = GL.Clean(record.guid, "string")
+    row.raceIcon:SetAlpha(1)
+    row.reconstructedPortrait = nil
+    if row.headshot then row.headshot.active = nil; row.headshot:Hide() end
     local known = guid and row.livePortraitGUID == guid
     if guid and not known and not unit then
         for _, saved in ipairs(spareFaces) do
@@ -211,30 +309,11 @@ local function paintPortrait(row, record, unit)
         row.archivedPortrait = "native"
         return
     end
-    -- Only the current companion manifest can attest to the TGA on disk.
-    local profile = GL.ArmoryProfile(record, false, true)
-    local key = profile and profile.avatarKey
-    local hex = profile and profile.avatarHex
-    local public = profile and profile.identity
-    local guidHex = guid and guid:match("^Player%-%d+%-0*(%x+)$")
-    if type(key) == "string" and type(hex) == "string" and hex:match("^%x+$")
-        and profile.characterHex == hex and profile.region and profile.region == GL.ArmoryRegion()
-        and type(public) == "table" and type(public.name) == "string"
-        and (not record.fullName or public.name:lower() == record.fullName:lower())
-        and (not record.raceID or not public.raceID or record.raceID == public.raceID)
-        and (not record.sex or not public.sex or record.sex == public.sex)
-        and ((guidHex and key == guid and guidHex:lower() == hex)
-            or (profile.alias and profile.mediaKey == key and #key == 69 and key:match("^Name%-%x+$")))
-        and type(GrudgeLedgerPortraitIndex) == "table" and GrudgeLedgerPortraitIndex[key] == "armory:" .. hex then
-        face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. key)
-        row.archivedPortrait = "armory"
-        return
-    end
     face:SetTexture(nil)
     local race = GL.Clean(record.race, "string")
     local sexID = record.sex
+    local profile = GL.ArmoryProfile(record)
     if not race or not sexID then
-        local profile = GL.ArmoryProfile(record)
         local public = profile and profile.identity
         if public and public.raceID then
             for token, id in pairs(baseRaceIDs) do
@@ -247,9 +326,11 @@ local function paintPortrait(row, record, unit)
     end
     local sex = sexID == 2 and "male" or sexID == 3 and "female"
     local suffix = race and sex and (race:lower() .. "-" .. sex)
-    if suffix and (identityAtlas(face, "raceicon128-" .. suffix) or identityAtlas(face, "raceicon-" .. suffix)) then return end
-    if classIcon(face, record) then row.classIcon:SetAlpha(0) return end
-    face:SetTexture(factionPortrait[record.faction] or GL.icon)
+    if not (suffix and (identityAtlas(face, "raceicon128-" .. suffix) or identityAtlas(face, "raceicon-" .. suffix))) then
+        if classIcon(face, record) then row.classIcon:SetAlpha(0)
+        else face:SetTexture(factionPortrait[record.faction] or GL.icon) end
+    end
+    reconstructedHead(row, record, profile)
 end
 
 local function identityIcons(row, record)
@@ -1927,6 +2008,7 @@ local function renderDetail()
         ledger.detailStatus:SetTextColor(unpack(theme.inkMuted))
         ledger.detailIdentity:SetText("")
         ledger.detailSource:SetText("") ledger.detailGuild:SetText("")
+        if ledger.headshot then ledger.headshot.active = nil; ledger.headshot:Hide() end
         ledger.raceIcon:Hide() ledger.classIcon:Hide() ledger.detailFaction:Hide()
     else
         ledger.detailIcon:Show()
@@ -2496,7 +2578,7 @@ local function buildLedger()
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(plain(record.fullName or record.name))
             GameTooltip:AddLine(plain(faction .. " · " .. race .. " · " .. class) .. (GL.ValidLevel(record.level) and " · " .. L("Niveau %d"):format(record.level) or ""))
-            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.archivedPortrait == "armory" and L("Portrait de l’Armurerie") or (self.livePortraitGUID or self.archivedPortrait)
+            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.reconstructedPortrait and L("Aperçu reconstitué en jeu") or (self.livePortraitGUID or self.archivedPortrait)
                 and L("Portrait vu en jeu") or L("Icône générique"), 0.82, 0.78, 0.69)
             if record.guild then GameTooltip:AddLine(plain(record.guild)) end
             local tags = GL.TagText and GL.TagText(record)
