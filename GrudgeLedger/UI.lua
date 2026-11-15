@@ -244,6 +244,7 @@ for _, event in ipairs({ "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "PORTRAIT
 end
 local function subdued(text) return "|cff5c4029" .. text .. "|r" end
 GL.PaintBookPortrait = identityIcons
+GL.VisiblePortraitUnit = portraitUnit
 local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
 local frenchNumbers = not GetLocale or GetLocale() == "frFR"
 local function counted(n, singular, plural)

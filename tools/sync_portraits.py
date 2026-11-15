@@ -169,7 +169,8 @@ def compact(data):
 
     gear = {}
     for slot, item in data.get("gear", {}).items():
-        gear[slot] = details({k: item[k] for k in ("id", "name", "quality", "level", "armor", "weapon",
+        gear[slot] = details({k: item[k] for k in ("id", "name", "quality", "level", "armor", "weapon", "context",
+            "modifiers", "random_suffix", "random_property",
             "stats", "bonus_list", "enchantments", "sockets", "spells", "set", "requirements") if k in item})
         assets = item.get("media", {}).get("content", {}).get("assets", [])
         texture = next((icon_id(a.get("value")) for a in assets if a.get("key") == "icon"), None)
@@ -193,7 +194,7 @@ def compact(data):
                 if isinstance(data.get(key), dict) and isinstance(data[key].get("name"), str)}
     identity["name"] = " ".join(n for n in (data.get("name"), data.get("surname")) if isinstance(n, str) and n)
     identity["classFile"] = data.get("class", {}).get("enum")
-    return {"armorySchema": 2, "identity": identity, "stats": stats, "honorableKills": pvp.get("honorableKills", {}).get("value"),
+    return {"armorySchema": 3, "identity": identity, "stats": stats, "honorableKills": pvp.get("honorableKills", {}).get("value"),
             "pvpRank": pvp.get("rank", {}).get("value"),
             "gear": gear, "updated": data.get("lastUpdatedTimestamp", {}).get("epoch"),
             "level": data.get("level"), "averageItemLevel": data.get("averageItemLevel"),
@@ -217,6 +218,35 @@ def lua(v):
     return "{" + ",".join("[" + lua(k) + "]=" + lua(val) for k,val in sorted(v.items())) + "}"
 
 
+def game_item(item, schema):
+    """Export the Forever item payload. Keep the Armory fallback for unrepresentable effects."""
+    def valid_id(value):
+        return type(value) is int and 0 < value < 2**31
+
+    item_id = item.get("id")
+    bonuses = item.get("bonus_list", [])
+    context = item.get("context", 0)
+    if (schema != 3 or not valid_id(item_id) or not isinstance(bonuses, list) or len(bonuses) > 64
+            or not all(map(valid_id, bonuses)) or type(context) is not int or not 0 <= context < 256
+            or any(item.get(k) for k in ("modifiers", "random_suffix", "random_property", "sockets"))):
+        return item
+    enchantments = item.get("enchantments", [])
+    enchant = ""
+    if enchantments:
+        if not isinstance(enchantments, list) or len(enchantments) != 1 or not isinstance(enchantments[0], dict):
+            return item
+        effect = enchantments[0]
+        slot = effect.get("enchantment_slot")
+        if not isinstance(slot, dict) or slot.get("id") != 0 or not valid_id(effect.get("enchantment_id")):
+            return item
+        enchant = effect["enchantment_id"]
+    fields = [item_id, enchant, "", "", "", "", "", "", "", "", "", context or "", len(bonuses) or "", *bonuses]
+    ref = "item:" + ":".join(map(str, fields)).rstrip(":")
+    if bonuses or enchant:
+        return dict(item, ref=ref)
+    return {**{k: item[k] for k in ("id", "name", "quality", "level", "icon") if k in item}, "ref": ref}
+
+
 def publish_profiles(folder):
     profiles, variants, indices = {}, [], {}
     for file in sorted(folder.glob("Player-*.json")):
@@ -226,6 +256,7 @@ def publish_profiles(folder):
         if (folder / (file.stem + "-body.tga")).is_file():
             profile["body"] = True
         for slot, item in profile["gear"].items():
+            item = game_item(item, profile.get("armorySchema"))
             key = lua(item)
             if key not in indices:
                 variants.append(item)
@@ -253,7 +284,7 @@ def sync(root, region, contacts, force=False, profiles_only=False, achievements=
         fresh_achievements = 0 <= time.time() - (previous.get("achievementsAt") or 0) < 7 * 86400
         same_locale = previous.get("locale", "en-us") == locale
         media_current = profiles_only or previous.get("bodyChecked")
-        if not force and same_locale and previous.get("armorySchema") == 2 and media_current and (not achievements or fresh_achievements) and all(
+        if not force and same_locale and previous.get("armorySchema") == 3 and media_current and (not achievements or fresh_achievements) and all(
                 f.is_file() and 0 <= time.time() - f.stat().st_mtime < 7 * 86400 for f in required):
             fresh += 1
             continue

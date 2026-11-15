@@ -26,6 +26,19 @@ def fetch(address, _limit):
     return ("var characterProfileInitialState = " + json.dumps({"character": character})).encode()
 
 
+plain = {"id": 8176, "name": "Headband", "armor": {"value": 91}, "stats": [{"value": 12}]}
+assert portraits.game_item(plain, 3) == {"id": 8176, "name": "Headband", "ref": "item:8176"}
+assert portraits.game_item(plain, 2) is plain  # legacy snapshots can omit context
+variant = dict(plain, id=9890, context=1, bonus_list=[12733],
+               enchantments=[{"enchantment_id": 8488, "enchantment_slot": {"id": 0}}])
+assert portraits.game_item(variant, 3)["ref"] == "item:9890:8488::::::::::1:1:12733"
+assert portraits.game_item(variant, 3)["stats"] == plain["stats"]
+for extra in ({"enchantments": [{"enchantment_id": 8, "enchantment_slot": {"id": 8}}]},
+              {"sockets": [{"item": {"id": 9}}]}, {"bonus_list": ["12733|h"]}, {"modifiers": [1]}):
+    unknown = dict(plain, **extra)
+    assert portraits.game_item(unknown, 3) is unknown
+
+
 with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=fetch) as requests:
     root = Path(tmp)
     addon = root / "Interface/AddOns/GrudgeLedger"

@@ -13,7 +13,7 @@ for i,key in ipairs({"head","neck","shoulder","back","chest","shirt","tabard","w
     order[key]=i
 end
 local archived,live="Player-1-00AA","Player-1-00BB"
-local cape={id=7,name="Cape | bleue",icon=134,quality={type="RARE"},variant="Endurance +7"}
+local cape={id=9890,ref="item:9890::::::::::::1:12733",name="Cape | bleue",icon=134,quality={type="RARE"},variant="Endurance +7"}
 GrudgeLedgerArmory={profiles={[archived]={body=true,gear={back=2,leftFinger=99}},[live]={gear={}}},items={{id=7,variant="Wrong"},cape}}
 GameTooltip={
     GetOwner=function(self) return self.owner end, SetOwner=function(self,o) self.owner=o end,
@@ -29,11 +29,33 @@ end
 local view=draw(archived)
 assert(#view.buttons==19 and view.stage:GetWidth()>=150)
 assert(view.buttons[17].slotName=="weapon" and view.buttons[19].slotName=="ranged")
-assert(view.bodyPath:find(archived.."-body.tga",1,true) and view.image:IsShown() and not view.face:IsShown())
+assert(view.bodyPath:find(archived.."-body.tga",1,true) and view.image:IsShown() and view.stage:IsShown())
 local back=view.buttons[4]
-assert(back.item==cape and not back.scripts.OnClick)
+assert(back.item==cape and back.scripts.OnClick)
+function strsplit(delim,s)
+    local parts={}
+    for part in (s..delim):gmatch("([^"..delim.."]*)"..delim) do parts[#parts+1]=part end
+    return unpack(parts)
+end
+function back:GetParent() return view end
+local cached,shift,draft=nil,true,"Avant "
+C_Item={GetItemInfo=function(ref) assert(ref==cape.ref); return cape.name,cached end}
+function IsModifiedClick(which) return which=="CHATLINK" and shift end
+ChatFrameUtil={InsertLink=function(link) draft=draft..link end}
+function GameTooltip:SetHyperlink(link) self.link=link; self.lines={} end
 back.scripts.OnEnter(back)
 assert(GameTooltip.shown and GameTooltip.title=="Cape || bleue" and GameTooltip.lines[2]=="Endurance +7")
+back.scripts.OnClick(back,"LeftButton")
+assert(draft=="Avant ")
+cached="|cff1eff00|Hitem:9890::::::::41:1484:::1:12733:::::::|h[Cape de puissance]|h|r"
+view.scripts.OnEvent(view,"GET_ITEM_INFO_RECEIVED",9890,true)
+assert(GameTooltip.link==cached and draft=="Avant ")
+shift=false; back.scripts.OnClick(back,"LeftButton"); assert(draft=="Avant ")
+shift=true; back.scripts.OnClick(back,"LeftButton"); assert(draft=="Avant "..cached)
+local original=draft
+cached=cached:gsub("12733","12734")
+back.scripts.OnClick(back,"LeftButton")
+assert(draft==original and not GL.ArmoryItemLink(cape),"never share a different variant of the same base item")
 view.buttons[3].scripts.OnLeave(view.buttons[3])
 assert(GameTooltip.shown,"leaving an old icon cannot close another item's tooltip")
 back.scripts.OnLeave(back)
@@ -52,8 +74,12 @@ assert(view.model:IsShown() and view.model.loaded==live and not view.image:IsSho
 assert(not GameTooltip.shown and not back.item and not view.bodyPath)
 mock.units.target.guid=archived
 view.scripts.OnEvent(view,"PLAYER_TARGET_CHANGED")
-assert(not view.model:IsShown() and view.model.loaded==nil and view.face:IsShown(),"true observed portrait after losing live unit")
+assert(not view.model:IsShown() and view.model.loaded==nil and not view.stage:IsShown()
+    and back:GetWidth()>parent:GetWidth()*.45,"without a body the two gear columns reclaim the space")
 missing.scripts.OnEnter(missing)
 view:Hide()
 assert(not GameTooltip.shown)
-print("PASS equipment paper doll: 19 slots, official body, exact variant on hover only, GUID-checked live model and stale state cleanup")
+GrudgeLedgerNativePortraits={[archived]=true}
+draw(archived)
+assert(view.image:IsShown() and view.stage:IsShown() and not view.model:IsShown(),"the individual Armory body has priority on the equipment page")
+print("PASS equipment: body or expanded gear, model GUID, native variant tooltip, cold cache and chat draft")

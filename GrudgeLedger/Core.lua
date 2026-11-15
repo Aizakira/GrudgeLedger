@@ -1658,6 +1658,23 @@ function GL.ArmoryItem(record,slot)
     local profile=GL.ArmoryProfile(record)
     return type(profile)=="table" and type(profile.gear)=="table" and type(GrudgeLedgerArmory.items)=="table" and GrudgeLedgerArmory.items[profile.gear[slot]] or nil
 end
+
+function GL.ArmoryItemLink(item)
+    local ref=item and item.ref
+    if type(ref)~="string" or #ref>768 or not ref:match("^item:%d+[%d:]*$") then return end
+    local expected={strsplit(":",ref:sub(6))}
+    local bonuses=tonumber(expected[13]) or 0
+    if bonuses>64 or tonumber(expected[1])~=item.id then return end
+    local _,link=GL.Safe(C_Item and C_Item.GetItemInfo or GetItemInfo,ref)
+    local payload=type(link)=="string" and link:match("|Hitem:([%d:%-]+)|h")
+    if not payload then return end
+    -- GetItemInfo may fill viewer level/spec. Verify the fields that identify the archived variant.
+    local actual={strsplit(":",payload)}
+    for i=1,13+bonuses do
+        if (i<=7 or i>=12) and (tonumber(expected[i]) or 0)~=(tonumber(actual[i]) or 0) then return end
+    end
+    return link
+end
 -- Shared presentation for the compact PvP summary. Armory item/talent icon
 -- numbers are Blizzard texture IDs and can also be passed to SetTexture.
 GL.ArmoryStatInfo = {
@@ -1718,11 +1735,17 @@ if SlashCmdList then
         for _,slot in ipairs(slots) do
             local item=GL.ArmoryItem(record,slot)
             local values={}
+            local link=GL.ArmoryItemLink(item)
+            if link and not item.stats then
+                local stats=GL.Safe(C_Item and C_Item.GetItemStats or GetItemStats,link) or {}
+                for key,amount in pairs(stats) do values[#values+1]=tostring(amount).." "..(_G[key] or key) end
+                table.sort(values)
+            end
             if item.armor then values[#values+1]=tostring(item.armor.value).." armure" end
             for _,stat in ipairs(item.stats or {}) do
                 values[#values+1]=stat.display and stat.display.display_string or tostring(stat.value).." "..stat.type.name
             end
-            GL.Print((item.name or tostring(item.id)).." "..table.concat(values,", "))
+            GL.Print((link or item.name or tostring(item.id)).." "..table.concat(values,", "))
         end
     end
 end
