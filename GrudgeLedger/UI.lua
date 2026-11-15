@@ -51,8 +51,11 @@ local function raceLabel(token, fallback, id)
     return fallback or token or L("Race inconnue")
 end
 local function identityLabels(record)
-    return factionNames[record.faction] or L("Faction inconnue"), raceLabel(record.race, record.raceName, record.raceID),
-        classLabel(record.class, record.className, record.sex)
+    local profile = GL.ArmoryProfile(record)
+    local public = profile and profile.identity
+    return factionNames[record.faction] or (public and public.faction) or L("Faction inconnue"),
+        raceLabel(record.race, record.raceName or (public and public.race), record.raceID),
+        classLabel(record.class or (public and public.classFile), record.className or (public and public.class), record.sex)
 end
 GL.IdentityLabels = identityLabels
 local function identityAtlas(texture, atlas)
@@ -64,6 +67,10 @@ end
 
 local function classIcon(texture, record)
     local class = GL.Clean(record.class, "string")
+    if not class then
+        local profile = GL.ArmoryProfile(record)
+        class = profile and profile.identity and profile.identity.classFile
+    end
     local atlas = class and GL.Safe(GetClassAtlas, (class:gsub("[A-Z]", string.lower)))
     if identityAtlas(texture, atlas) then return true end
     local coords = class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
@@ -195,6 +202,12 @@ local function paintPortrait(row, record, unit)
     end
     if guid and row.livePortraitGUID == guid then return end
     face = usePortrait(row, nil)
+    local profile = GL.ArmoryProfile(record)
+    if GrudgeLedgerArmory and profile and profile.portrait and profile.mediaKey and profile.mediaKey:match("^Name%-%x+$") then
+        face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. profile.mediaKey)
+        row.archivedPortrait = true
+        return
+    end
     if guid and type(GrudgeLedgerPortraitIndex) == "table" and GrudgeLedgerPortraitIndex[guid] == true
         and guid:match("^Player%-%d+%-%x+$") then
         face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. guid)
@@ -1868,7 +1881,9 @@ local function renderDetail()
     ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -450 or matchup and -380 or -283)
     ledger.detailScroll:SetHeight(summary and 126 or matchup and 220 or 293)
     ledger.detailTitle:SetTextColor(unpack(theme.ink))
-    local level = record and GL.ValidLevel(record.level)
+    local profile = GL.ArmoryProfile(record)
+    local public = profile and profile.identity
+    local level = record and (GL.ValidLevel(record.level) or GL.ValidLevel(profile and profile.level))
     showIf(ledger.portraitRim, record ~= nil)
     showIf(ledger.levelBadge, level ~= nil)
     if level then ledger.levelBadge.caption:SetText(tostring(level)) end
@@ -1891,11 +1906,11 @@ local function renderDetail()
         ledger.detailSource:SetText(({ manual = L("Avis personnel"), emote = L("Avis issu de vos gestes"), pvp = L("Avis issu du PvP"), guild = L("Avis hérité de la guilde"), automatic = L("Avis automatique"), neutral = L("Aucun avis") })[source] or L("Avis automatique"))
         ledger.detailStatus:SetTextColor(unpack(inkColors[relation]))
         local faction, race, class = identityLabels(record)
-        local banner = factionPortrait[record.faction]
+        local banner = factionPortrait[record.faction or (public and public.faction)]
         if banner then ledger.detailFaction:SetTexture(banner) end
         showIf(ledger.detailFaction, banner)
         ledger.detailIdentity:SetText(plain(faction .. " · " .. race .. " · " .. class))
-        ledger.detailGuild:SetText(record.guild and plain(record.guild) or L("Guilde non renseignée"))
+        ledger.detailGuild:SetText(plain(record.guild or (public and public.guild) or L("Guilde non renseignée")))
         ledger.raceIcon:Show() ledger.classIcon:Show() identityIcons(ledger, record)
         local duels = matchup and GL.ContactMatchup(record)
         if summary or matchup then
@@ -2492,7 +2507,7 @@ local function buildLedger()
     f.detailTitle:SetHeight(37)
     local function dossier()
         local r = currentRecord()
-        if r and r.guid and GL.OpenPlayerDossier then GL.OpenPlayerDossier(r.guid, function() GL.ShowLedger() end, r.fullName or r.name) end
+        if r and GL.OpenPlayerDossier then GL.OpenPlayerDossier(r.guid or r.key, function() GL.ShowLedger() end, r.fullName or r.name) end
     end
     local nameLink = CreateFrame("Button", nil, f)
     nameLink:SetAllPoints(f.detailTitle)

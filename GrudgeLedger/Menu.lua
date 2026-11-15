@@ -28,7 +28,11 @@ local function fromContext(data)
     data = GL.Clean(data, "table")
     if not data then return nil end
     local unit = GL.Clean(data.unit, "string")
-    if unit and unit ~= "" then return GL.Identity(unit) end
+    if unit and unit ~= "" then
+        local identity = GL.Identity(unit)
+        if identity then return identity end
+        if GL.Safe(UnitExists, unit) then return end
+    end
     local lineID = GL.Clean(data.lineID, "number")
     if lineID and C_ChatInfo then
         local sender = GL.Safe(C_ChatInfo.GetChatLineSenderName, lineID)

@@ -391,6 +391,7 @@ local function merge(provisional, record)
         end
     end
     record.level = GL.ValidLevel(record.level) or GL.ValidLevel(provisional.level)
+    if not record.armorySnapshot then record.armorySnapshot = provisional.armorySnapshot end
     if provisional.guild and (not record.guild or (provisional.guildSeenAt or 0) > (record.guildSeenAt or 0)) then
         record.guild, record.realm, record.guildSeenAt = provisional.guild, provisional.realm, provisional.guildSeenAt
     end
@@ -1693,14 +1694,62 @@ boot:SetScript("OnEvent", function(_, _, name)
     if name == ADDON then GL.InitDB() boot:UnregisterEvent("ADDON_LOADED") end
 end)
 
--- Imported equipment is shared between profiles by exact variant.
-function GL.ArmoryProfile(record)
-    local archive=GrudgeLedgerArmory
-    return type(archive)=="table" and type(archive.profiles)=="table" and record and record.guid and archive.profiles[record.guid] or nil
+local armoryRegions = {"us", "kr", "eu", "tw"}
+function GL.ArmoryRegion()
+    return armoryRegions[GL.Safe(GetCurrentRegion)]
+end
+local function matchesContact(record, profile, region, alias)
+    if type(profile) ~= "table" then return false end
+    if not profile.alias then return true end
+    if not region or profile.region ~= region or profile.alias ~= alias or (GL.db and GL.db.aliases[alias] == false) then return false end
+    if not record.guid then return true end
+    local hex = record.guid:match("^Player%-%d+%-0*(%x+)$")
+    return hex and hex:lower() == profile.characterHex
+end
+
+-- Only dossiers opened from the personal journal need an offline copy. Resolve
+-- catalog indices here because the next import can renumber every item.
+local rememberedProfiles = setmetatable({}, {__mode="k"})
+local brokenCatalogs = setmetatable({}, {__mode="k"})
+function GL.ArmoryProfile(record, remember)
+    if not record then return end
+    local archive = GrudgeLedgerArmory
+    local profiles = type(archive) == "table" and archive.profiles
+    local imported = profiles and profiles[record.guid]
+    local saved = record.armorySnapshot
+    local alias, region
+    if (not imported and profiles) or (saved and saved.alias) then
+        alias = record.fullName and ("name:" .. record.fullName:lower())
+        region = GL.ArmoryRegion()
+        if region and alias and not imported then imported = profiles and profiles[region .. ":" .. alias] end
+    end
+    if not matchesContact(record, imported, region, alias) then imported = nil end
+    if not matchesContact(record, saved, region, alias) then saved = nil end
+    if not imported or (saved and (brokenCatalogs[imported] or (saved.updated or 0) > (imported.updated or 0)
+        or (next(saved.gear or {}) and not next(imported.gear or {}))
+        or (next(saved.stats or {}) and not next(imported.stats or {}))
+        or (next(saved.trees or {}) and not next(imported.trees or {})))) then return saved end
+    if remember and rememberedProfiles[record] ~= imported then
+        local snapshot = {}
+        for key, value in pairs(imported) do snapshot[key] = value end
+        snapshot.body, snapshot.portrait = nil, nil
+        snapshot.gear = {}
+        for slot, index in pairs(imported.gear or {}) do
+            snapshot.gear[slot] = archive.items and archive.items[index]
+            if not snapshot.gear[slot] then
+                brokenCatalogs[imported] = true
+                return saved or imported
+            end
+        end
+        record.armorySnapshot, rememberedProfiles[record] = snapshot, imported
+    end
+    return imported
 end
 function GL.ArmoryItem(record,slot)
     local profile=GL.ArmoryProfile(record)
-    return type(profile)=="table" and type(profile.gear)=="table" and type(GrudgeLedgerArmory.items)=="table" and GrudgeLedgerArmory.items[profile.gear[slot]] or nil
+    local item=profile and profile.gear and profile.gear[slot]
+    if type(item)=="table" then return item end
+    return item and GrudgeLedgerArmory and GrudgeLedgerArmory.items and GrudgeLedgerArmory.items[item]
 end
 
 function GL.ArmoryItemLink(item)

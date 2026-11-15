@@ -42,6 +42,8 @@ The index opens with the most recent interaction first. A new encounter, fight, 
 
 ### Keeping portraits when players leave view
 
+The companion also accepts full-name contacts added from chat. It verifies their full name, region and individual Armory identity. Opened personal dossiers retain their latest usable equipment, talents and character stats across sessions. In watch mode, save the new contact with `/reload` or logout. Once the import finishes, reload the interface to display it. A recent valid profile is reused for seven days.
+
 The journal prefers the live portrait, then the saved Armory avatar for that exact character. Hover over a journal row to see the source. The optional desktop importer needs Python 3 and Pillow. Run it on demand and choose your own game folder and region.
 
 ```powershell

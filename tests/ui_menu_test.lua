@@ -60,7 +60,7 @@ r.buttons["Avis positif (+1)"]()
 assert(GL.Relation(aqua) == "warning" and aqua.reputation == -9, "positive step can leave red tier")
 r.buttons.Automatique()
 
-open({ lineID = 10 }, "MENU_UNIT_CHAT_ROSTER").buttons.Ami()
+open({ unit = "gone", lineID = 10 }, "MENU_UNIT_CHAT_ROSTER").buttons.Ami()
 assert(GL.Get("guid:Player-1-darkness").surname == "FordDustiness", "chat surname preserved")
 open({ name = "Same", server = "SurnameOne" }).buttons.Ami()
 open({ name = "Same", server = "SurnameTwo" }).buttons.Ennemi()

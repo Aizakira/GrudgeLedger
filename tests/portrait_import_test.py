@@ -146,8 +146,20 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
         assert not texture.exists() and guid in (folder/"Profiles.lua").read_text("utf8")
         assert json.loads((folder/(guid+".json")).read_bytes())["gear"]["back"]["name"] == "Cape de test"
     save=root/"WTF/Account/example/SavedVariables/GrudgeLedger.lua"
+    alias = "name:test keeper"
+    with patch.object(portraits, "fetch", side_effect=full_response):
+        assert portraits.sync(root, "eu", {alias: {"test keeper"}}, profiles_only=True) == 0
+    named_file = folder / (portraits.media_stem("eu", alias) + ".json")
+    last_good = named_file.read_bytes()
+    assert json.loads(last_good)["characterHex"] == "2a" and '"eu:name:test keeper"' in (folder/"Profiles.lua").read_text("utf8")
+    with patch.dict(character, {"gear": {}}), patch.object(portraits, "fetch", side_effect=full_response):
+        assert portraits.sync(root, "eu", {alias: {"test keeper"}}, force=True, profiles_only=True) == 1
+    assert named_file.read_bytes() == last_good
+    with patch.dict(character, {"avatar":{"url":url.replace("42-avatar", "43-avatar")}}):
+        assert portraits.sync(root, "eu", {alias: {"test keeper"}}, force=True, profiles_only=True) == 1
+    assert named_file.read_bytes() == last_good
     save.parent.mkdir(parents=True)
-    save.write_text('["name:Test Keeper"] = "guid:'+guid+'",\n')
+    save.write_text('["name:Test Keeper"] = "guid:'+guid+'",\n["name:chat visitor"] = "name:chat visitor",\n')
     def polling_ticks():
         yield  # next pass: identical file, no second sync
         save.write_text(save.read_text()+'["name:Second Keeper"] = "guid:Player-42-0000002B",\n')
@@ -159,5 +171,6 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
             portraits.main()
         except KeyboardInterrupt:
             pass
-        assert [len(call.args[2]) for call in watcher.call_args_list]==[1,2]
+        assert [len(call.args[2]) for call in watcher.call_args_list]==[2,3]
+        assert watcher.call_args_list[0].args[2]["name:chat visitor"] == {"chat visitor"}
 print("PASS verified portraits and body renders, cached gear, talents, PvP and reputation imports")

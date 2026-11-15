@@ -112,9 +112,8 @@ local function latestCombat(record)
 end
 
 local frame
-local regions={"us","kr","eu","tw"}
 local function armoryURL(fullName)
-    local region=regions[GL.Safe(GetCurrentRegion)]
+    local region=GL.ArmoryRegion()
     if not region or type(fullName)~="string" or not fullName:find(" ",1,true) then return end
     local slug=(strlower or string.lower)(fullName):gsub(" +","-"):gsub("[^a-z0-9%-]",function(c)
         return ("%%%02X"):format(c:byte())
@@ -133,9 +132,10 @@ local function statValue(key,v)
     return valueOf(v)
 end
 local function draw(f)
-    local localRecord=GL.Get("guid:"..f.guid)
+    local localRecord=GL.Get(f.key)
     local record=localRecord or {guid=f.guid}
-    local archive=object(GL.ArmoryProfile(record))
+    f.guid=record.guid
+    local archive=object(GL.ArmoryProfile(record,localRecord~=nil))
     local profile=setmetatable({}, {__index=archive})
     local inspection,pending
     if GL.DossierInspection then inspection,pending=GL.DossierInspection(record) end
@@ -153,7 +153,7 @@ local function draw(f)
         f.bounty:Show()
     else f.bounty:Hide() end
     local name=text(record.fullName) or text(public.name) or text(f.knownName)
-    if not name and GL.Bounties and GL.Bounties.MemberName then name=text(GL.Bounties.MemberName(f.guid)) end
+    if not name and f.guid and GL.Bounties and GL.Bounties.MemberName then name=text(GL.Bounties.MemberName(f.guid)) end
     f.nameLabel:SetText(name or unknown)
     GL.PaintBookPortrait(f.portrait,record)
     local faction,race,class=GL.IdentityLabels(record)
@@ -192,6 +192,9 @@ local function draw(f)
     y=math.ceil(used/2)*47
     local info={}
     if used==0 then info[1]=L("Aucun relevé de caractéristiques.\n") end
+    if not next(archive) then
+        info[#info+1]=L("Le compagnon lit le Journal à la déconnexion ou au /reload. Après l’import, /reload affiche le relevé.")
+    end
     if liveStats then
         info[#info+1]=field(L("Caractéristiques vues en jeu"),timestamp(inspection.statsAt))
     end
@@ -222,10 +225,10 @@ local function draw(f)
         else source=L("Aucun relevé disponible en jeu") end
     else source=L("Aucun relevé Armurerie chargé") end
     f.source:SetText(source)
-    f.armoryURL=not snap and armoryURL(record.fullName or public.name or f.knownName)
+    f.armoryURL=armoryURL(record.fullName or public.name or f.knownName)
     if f.armoryURL then f.armoryButton:Show() else f.armoryButton:Hide(); f.armoryLink:Hide() end
     local itemLevel=profile.averageItemLevel
-    if profile.inspectedGear then itemLevel=inspection.averageItemLevel end
+    if profile.inspectedGear then itemLevel=inspection.averageItemLevel or itemLevel end
     f.ilvl:SetText(f.page=="gear" and field(L("Niv. d’objet moyen"),valueOf(itemLevel)) or "")
     for key,b in pairs(f.tabs) do UI.selectButton(b,f.page==key) end
     local gear,talents=f.page=="gear",f.page=="talents"
@@ -283,7 +286,7 @@ local function draw(f)
             row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
         else row(L("Aucune rencontre personnelle enregistrée.")) end
         row(L("Face-à-face de la guilde"),nil,true)
-        if GL.Bounties and GL.Safe(GetGuildInfo,"player") then
+        if f.guid and GL.Bounties and GL.Safe(GetGuildInfo,"player") then
             local wins,losses=GL.Bounties.GuildFights(f.guid)
             if wins==0 and losses==0 then row(L("Aucun résultat partagé pour cette cible."))
             else row(L("Victoires / morts"),wins.." / "..losses) end
@@ -310,7 +313,7 @@ local function build()
     GL.SetupBookNavigation(f,"ledger")
     f.back=UI.button(f,L("Retour"),39,-154,116,function()
         f:Hide()
-        if f.onReturn then f.onReturn() else GL.ShowLedger("guid:"..f.guid) end
+        if f.onReturn then f.onReturn() else GL.ShowLedger(f.key) end
     end)
     f.portrait=CreateFrame("Frame",nil,f); f.portrait:SetPoint("TOPLEFT",40,-193); f.portrait:SetSize(64,64)
     f.portrait.raceIcon=f.portrait:CreateTexture(nil,"ARTWORK"); f.portrait.raceIcon:SetAllPoints()
@@ -347,11 +350,18 @@ local function build()
     f.talentScroll.scrollBarHideable=true
     return f
 end
-function GL.OpenPlayerDossier(guid,onReturn,knownName)
-    if type(guid)~="string" or #guid>32 or not guid:match("^Player%-%w+%-%w+$") then return false end
+function GL.OpenPlayerDossier(id,onReturn,knownName)
+    if type(id)~="string" then return false end
+    local key,guid
+    if #id<=32 and id:match("^Player%-%w+%-%w+$") then
+        key,guid="guid:"..id,id
+    elseif id:match("^name:") and GL.Get(id) then
+        local contact=GL.Get(id)
+        key,guid=contact.key,contact.guid
+    else return false end
     frame=frame or build()
     frame.armoryLink:Hide()
-    frame.guid,frame.onReturn,frame.knownName,frame.page=guid,onReturn,knownName,"gear"
+    frame.key,frame.guid,frame.onReturn,frame.knownName,frame.page=key,guid,onReturn,knownName,"gear"
     frame.scroll:SetVerticalScroll(0); frame.identityScroll:SetVerticalScroll(0)
     if GL.InspectDossierUnit then GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=guid}),guid) end
     GL.ShowBookPage(frame)

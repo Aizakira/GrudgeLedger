@@ -74,4 +74,34 @@ click(f.bounty); assert(known==1)
 click(f.tabs.pvp)
 assert(all():find("Aucune rencontre personnelle enregistrée",1,true))
 assert(not GL.OpenPlayerDossier("|Tbad"))
+-- A same-faction chat contact has no unit token or GUID. Exercise the Journal
+-- button, then remove the import module as would happen on the next login.
+GetCurrentRegion=function() return 3 end
+local named=GL.SetReaction(GL.IdentityFromName("Named","Friend"),"enemy")
+local imported={alias=named.key,region="eu",characterHex="2a",level=32,updated=100,
+    identity={race="Gnome",class="Mage",faction="Alliance"},stats={HEALTH=123},gear={back=3},
+    trees={{name="Frost",points=2,talents={}}}}
+GrudgeLedgerArmory.profiles["eu:"..named.key]=imported
+GL.Settings().guideSeen=true
+GL.ShowLedger(named.key)
+assert(GrudgeLedgerWindow.detailIdentity:GetText():find("Gnome",1,true))
+click(GrudgeLedgerWindow.detailTabs.dossier)
+assert(f:IsShown() and f.nameLabel:GetText()=="Named Friend" and eq.buttons[4].itemName=="Woven mantle")
+assert(GL.Relation(named)=="enemy" and named.armorySnapshot.gear.back.name=="Woven mantle")
+local broken={}
+for key,value in pairs(imported) do broken[key]=value end
+broken.gear={back=999}
+GrudgeLedgerArmory.profiles["eu:"..named.key]=broken
+assert(GL.ArmoryProfile(named,true)==named.armorySnapshot and GL.ArmoryItem(named,"back").name=="Woven mantle")
+GrudgeLedgerArmory.profiles["eu:"..named.key]={alias=named.key,region="eu",characterHex="2a",updated=101,gear={}}
+assert(GL.ArmoryProfile(named)==named.armorySnapshot)
+GrudgeLedgerArmory=nil
+assert(GL.OpenPlayerDossier(named.key) and f.statCells[1].value:GetText()=="123" and eq.buttons[4].itemName=="Woven mantle")
+assert(GL.ArmoryProfile(named).trees[1].points==2)
+GetCurrentRegion=function() return 1 end
+assert(not GL.ArmoryProfile(named))
+GetCurrentRegion=function() return 3 end
+assert(GL.ArmoryProfile({fullName=named.fullName,guid="Player-9-00002A",armorySnapshot=named.armorySnapshot}))
+local promoted=GL.Remember(GL.IdentityFromName("Named","Friend","Player-9-00002B"))
+assert(GL.Relation(promoted)=="enemy" and not GL.ArmoryProfile(promoted))
 print("PASS dossier: exact item variants, canonical slots, long effects, talents, provenance, private vs guild scores, guild-only identity and return")

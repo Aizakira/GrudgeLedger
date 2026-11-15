@@ -62,7 +62,11 @@ function GL.InspectDossierUnit(unit, guid)
     if not state.statsRead or now - state.statsRead >= 60 then
         state.statsRead = now
         local stats = captureStats(unit)
-        if stats then snapshot.stats, snapshot.statsAt = stats, now end
+        if stats then
+            snapshot.stats = snapshot.stats or {}
+            for key, value in pairs(stats) do snapshot.stats[key] = value end
+            snapshot.statsAt = now
+        end
         -- Some units already expose cached item links even when a new inspect is unavailable.
         local gear = not snapshot.gear and readGear(unit)
         if gear then snapshot.gear, snapshot.gearAt, snapshot.partialGear = gear, now, true end
@@ -136,9 +140,12 @@ events:SetScript("OnEvent", function(_, _, guid)
     local snapshot, now = state.snapshot, GL.Now()
     local gear, unresolved = readGear(unit)
     if gear and (not unresolved or not snapshot.gear or snapshot.partialGear) then
+        if unresolved and snapshot.gear then
+            for slot, link in pairs(snapshot.gear) do gear[slot] = gear[slot] or link end
+        end
         snapshot.gear, snapshot.gearAt, snapshot.partialGear = gear, now, unresolved or nil
         local level = GL.Safe(C_PaperDollInfo and C_PaperDollInfo.GetInspectItemLevel, unit)
-        snapshot.averageItemLevel = type(level) == "number" and level > 0 and math.floor(level + .5) or nil
+        if type(level) == "number" and level > 0 then snapshot.averageItemLevel = math.floor(level + .5) end
     end
     local _, class = GL.Safe(UnitClass, unit)
     local trees = GL.ReadInspectedTalents(class)

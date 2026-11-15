@@ -176,8 +176,10 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
     local view=parent.equipment or build(parent,slots)
     parent.equipment=view
     view.record=record
-    view.bodyPath=profile.body==true and type(record.guid)=="string" and record.guid:match("^Player%-%d+%-%x+$")
-        and ("Interface\\AddOns\\GrudgeLedgerPortraits\\"..record.guid.."-body.tga") or nil
+    local mediaKey=profile.mediaKey or record.guid
+    view.bodyPath=GrudgeLedgerArmory and profile.body==true and type(mediaKey)=="string"
+        and (mediaKey:match("^Player%-%d+%-%x+$") or mediaKey:match("^Name%-%x+$"))
+        and ("Interface\\AddOns\\GrudgeLedgerPortraits\\"..mediaKey.."-body.tga") or nil
     local w,h=parent:GetWidth(),parent:GetHeight()
     local rowHeight=math.min(45,math.floor((h-6)/9))
     view.w,view.h,view.rowHeight,view.rail=w,h,rowHeight,nil
@@ -199,8 +201,7 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
     for i,b in ipairs(view.buttons) do
         closeTip(b)
         local key=variantKeys[i]
-        local archive=GrudgeLedgerArmory
-        local item=key and archive and type(archive.items)=="table" and GL.ArmoryItem(record,key)
+        local item=key and GL.ArmoryItem(record,key)
         local link=profile.inspectedGear and profile.inspectedGear[b.slotID]
         b.inspectedLink=link
         if profile.inspectedGear and (link or not profile.partialGear) then item=nil end
