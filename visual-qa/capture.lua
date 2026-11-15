@@ -279,6 +279,18 @@ function QA.capture(name)
         local guid=dossierExample()
         mock.units.player.guild="Les Veilleurs de l'Aube"
         if name=="bounty-target" then return GL.OpenBounties(nil,"create") end
+        if name=="bounty-history" then
+            local target=records[3]
+            if not QA.completedContract then
+                QA.completedContract=assert(GL.Bounties.Post(target.guid,target.fullName,0))
+                local player=mock.units.player.guid
+                mock.units.player.guid=records[4].guid
+                assert(GL.Bounties.Pledge(QA.completedContract,120000))
+                mock.units.player.guid=player
+                GL.Bounties.Kill(target.guid)
+            end
+            return GL.OpenBounties(target.guid,"view")
+        end
         if name=="bounty-contract" then
             if not QA.contract then
                 QA.contract=assert(GL.Bounties.Post(guid,"Isabeau Clairfeuille",1200000,{quota=3,

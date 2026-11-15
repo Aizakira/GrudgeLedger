@@ -67,6 +67,7 @@ assert(c.b.List()[order].pot[b.id]==50000)
 c.group=true
 c.hook.BOUNTY_KILL(target);flush()
 assert(c.b.List()[order].state=="claimed")
+assert(c.b.History()[order].state=="claimed")
 now=now+12; a.online=true;a.event(nil,"PLAYER_LOGIN");flush()
 for _,p in ipairs(clients) do
  local o=p.b.List()[order];assert(o.state=="fulfilled" and o.winner.actor==c.id)
@@ -127,6 +128,7 @@ b.event(nil,"MAIL_SHOW")
 assert(button and clicks==0 and button.text:find("Target",1,true) and not button.text:find(a.name,1,true))
 button:click();button:click()
 assert(clicks==0 and env.SendMailNameEditBox.v==a.name and env.SendMailMoney.n==25000)
+local firstSubject=env.SendMailSubjectEditBox.v
 env.SendMailMailButton:Click()
 b.event(nil,"MAIL_FAILED") -- retain the user's prepared draft; retry only by native click
 assert(b.b.Due(b.b.List()[order],b.id,a.id)==25000 and clicks==1)
@@ -134,6 +136,7 @@ env.SendMailMailButton:Click()
 env.SendMailNameEditBox.v="";env.SendMailSubjectEditBox.v="";env.SendMailMoney.n=0
 b.event(nil,"MAIL_SEND_SUCCESS")
 assert(clicks==2 and env.SendMailNameEditBox.v==c.name and env.SendMailMoney.n==21000)
+local secondSubject=env.SendMailSubjectEditBox.v
 assert(b.b.Due(b.b.List()[order],b.id,a.id)==0 and b.b.Due(b.b.List()[order],b.id,c.id)==21000)
 b.event(nil,"MAIL_SEND_SUCCESS") -- second draft was only prepared; repeated event cannot pay it
 assert(b.b.Due(b.b.List()[order],b.id,c.id)==21000)
@@ -142,7 +145,27 @@ b.event(nil,"MAIL_SEND_SUCCESS");b.event(nil,"MAIL_SEND_SUCCESS");flush()
 assert(a.b.Due(a.b.List()[order],b.id,c.id)==0)
 assert(clicks==3 and not b.b.ConfirmPayment(order,a.id,25000))
 assert(a.b.ConfirmPayment(order,c.id,50000));flush()
-assert(c.b.List()[order].state=="paid")
+assert(c.b.List()[order].state=="sent")
+local function inbox(p,sender,subject,amount,cod,returned)
+    p.env.GetInboxNumItems=function() return 1 end
+    p.env.GetInboxHeaderInfo=function() return nil,nil,sender,subject,amount,cod or 0,30,0,false,returned end
+    p.event(nil,"MAIL_INBOX_UPDATE")
+end
+inbox(a,"Stranger",firstSubject,25000)
+inbox(a,b.name,"Prime : Target",25000)
+inbox(a,b.name,firstSubject,25000,100)
+inbox(a,b.name,firstSubject,25000,0,true)
+assert(select(2,a.b.Payment(a.b.List()[order],b.id,a.id))==25000)
+inbox(a,"Member2",firstSubject,25000)
+inbox(a,b.name,firstSubject,25000); flush()
+assert(select(2,a.b.Payment(a.b.History()[order],b.id,a.id))==0)
+assert(select(2,c.b.Payment(c.b.History()[order],b.id,c.id))==25000)
+inbox(c,b.name,secondSubject,21000)
+inbox(c,b.name,secondSubject,21000); flush()
+assert(select(2,b.b.Payment(b.b.History()[order],b.id,c.id))==4000 and b.b.History()[order].state=="sent")
+inbox(c,b.name,firstSubject,4000); flush()
+inbox(c,a.name,firstSubject,50000); flush()
+assert(c.b.History()[order].state=="paid" and a.b.History()[order].state=="paid" and b.b.History()[order].state=="paid")
 local other=assert(a.b.Post("Player-3-b","Other",0));assert(a.b.Withdraw(other));flush()
 assert(c.b.List()[other].state=="withdrawn")
 local expired=assert(a.b.Post("Player-3-c","Old",0));flush();now=now+7*86400+1
@@ -166,7 +189,26 @@ a.b.Kill(target);b.b.Death(target,"Target");flush()
 local wins,losses=c.b.GuildFights(target)
 assert(wins==1 and losses==1)
 local late=client(4);flush()
+assert(not late.b.History()[order])
 wins,losses=late.b.GuildFights(target)
 assert(wins==1 and losses==1)
 c.guild="Other";c.event(nil,"PLAYER_GUILD_UPDATE");assert(not next(c.b.List()))
+-- The hunter can collect mail before their local guild history has synchronized.
+local soloTarget="Player-8-solo"
+local delayed=assert(b.b.Post(soloTarget,"Target",120000,{group="solo"}))
+inbox(a,b.name,"[GL:"..delayed.."/0] Target",120000)
+a.env.GetInboxNumItems=function() return 0 end
+flush(); a.b.Kill(soloTarget); flush()
+assert(a.b.History()[delayed].state=="paid" and b.b.History()[delayed].state=="paid")
+
+-- A returning issuer still learns about delivery after the guild log rotates.
+local archived=assert(b.b.Post(soloTarget,"Target",120000,{group="solo"}))
+flush(); a.b.Kill(soloTarget); flush()
+assert(b.b.ConfirmPayment(archived,a.id,120000)); flush()
+b.online=false
+inbox(a,b.name,"[GL:"..archived.."/0] Target",120000); flush()
+now=now+39*86400
+a.event(nil,"PLAYER_LOGIN"); flush()
+b.online=true; b.event(nil,"PLAYER_LOGIN"); flush()
+assert(a.b.History()[archived].state=="paid" and b.b.History()[archived].state=="paid")
 print("PASS guild bounties: offline relay, duplicate messages, owner resolution, split, partial payments, expiration, withdrawal, automatic order, guild isolation.")

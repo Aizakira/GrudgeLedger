@@ -80,11 +80,35 @@ GL.Bounties.Kill(b.guid)
 GL.OpenBounties(b.guid,"view")
 assert(f.order.state=="fulfilled" and f.tab=="history" and f.detail.kicker:GetText():find("Prime faite",1,true))
 assert(f.detail.people[2].guid=="Player-77-Helper" and f.detail.payment:GetText():find("50 pa",1,true))
+local completed=f.order.id
+assert(f.detail.stars:IsVisible() and f.rows[1].gold:IsShown())
+click(f.roles.hunted); assert(f.count==1)
+click(f.roles.issued); assert(f.count==2)
 click(f.filter); click(f.filterChoices[4]); assert(f.count==1)
 assert(GL.Bounties.ConfirmPayment(f.order.id,"Player-77-Helper",5000))
 f:GetScript("OnUpdate")(f,0.016)
 assert(f.count==0 and not f.detail:IsShown())
-click(f.filter); click(f.filterChoices[5]); assert(f.order.state=="paid" and f.count==1)
+click(f.filter); click(f.filterChoices[3]); assert(f.order.state=="sent" and f.count==1 and f.detail.stars:IsVisible())
+click(f.filter); click(f.filterChoices[5]); assert(f.count==0)
+local publisher,helper=mock.units.player.guid,"Player-77-Helper"
+C_ChatInfo={RegisterAddonMessagePrefix=function() end,SendAddonMessage=function() end}
+C_Timer=C_Timer or {}; C_Timer.NewTicker=function() end
+GetNumGuildMembers=function() return 2 end
+GetGuildRosterInfo=function(i)
+    return unpack({[1]=i==1 and "Testeur-Realm" or "Helper-Realm",[17]=i==1 and publisher or helper},1,17)
+end
+mock.units.player.guid=helper
+mock.Fire("GUILD_ROSTER_UPDATE")
+GL.OpenBounties(b.guid,"view"); click(f.roles.hunted)
+assert(f.order.id==completed and f.detail.kicker:GetText():find("À recevoir",1,true) and f.detail.stars:IsVisible())
+click(f.roles.issued); assert(f.count==0); click(f.roles.hunted)
+GetInboxNumItems=function() return 1 end
+GetInboxHeaderInfo=function() return nil,nil,"Testeur","[GL:"..completed.."/0] Beta",5000,0 end
+mock.Fire("MAIL_INBOX_UPDATE"); f:GetScript("OnUpdate")(f,0.016)
+assert(f.detail.kicker:GetText():find("Payée",1,true) and not f.detail.stars:IsShown() and not f.rows[1].gold:IsShown())
+mock.units.player.guid=publisher
+GL.OpenBounties(b.guid,"view"); click(f.roles.issued); click(f.filter); click(f.filterChoices[5])
+assert(f.count==1 and f.order.id==completed and not f.detail.stars:IsShown())
 for i=1,8 do
     local person=add("Test"..i); assert(GL.Bounties.Post(person.guid,person.fullName,0))
 end

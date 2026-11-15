@@ -8,6 +8,7 @@ CACHE = Path(__file__).resolve().parent / "renders" / "native"
 # Git mirror of the extracted Blizzard UI, Classic 1.13.5 (34911).
 SOURCE = "https://raw.githubusercontent.com/Gethe/wow-ui-textures/312a6e61bab69370c65ccc0a08f1075d62196294/"
 TEXTURES = {
+    "TARGETINGFRAME/UI-RaidTargetingIcon_1.PNG": "94ce28b48e47d0aeffb0b3e753b819e8362f75b43cba4c66bc5d9243b702d0cc",
     "ACHIEVEMENTFRAME/UI-Achievement-IconFrame.PNG": "78a47130332791b276b1b6474a191cebfd16a56770850f3d1e6dcd4006fd657e",
     "ICONS/Ability_DualWield.PNG": "2af79363ad391968679b5b92a001cff742a4d6b1cb823b60fc02d87c5b4b0149",
     "ICONS/Ability_Rogue_FeignDeath.PNG": "7cfd14b389e89fd21da4dd8c854ba23d34bb080d79af89807b6589f78dd41e18",

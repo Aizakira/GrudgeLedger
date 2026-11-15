@@ -53,7 +53,13 @@ assert(not b.OpenFor(enemy) and b.History()[id].winner.time==now and notices==1 
 receive("H",partner,6,id,"0","")
 assert(b.List()[id].winner.actor==hunter and notices==1)
 assert(b.ConfirmPayment(id,hunter,60001) and b.ConfirmPayment(id,partner,60000))
-assert(b.History()[id].state=="paid" and notices==1)
+assert(b.History()[id].state=="sent" and notices==1)
+receive("V",partner,11,id,"0,60001",owner) -- exceeds this hunter's exact share
+receive("V",hunter,12,id,"0,40000",owner)
+receive("V",hunter,13,id,"20000,40001",owner)
+assert(select(3,b.Payment(b.List()[id],owner,hunter))==60001 and b.History()[id].state=="sent")
+receive("V",partner,14,id,"0,60000",owner)
+assert(b.History()[id].state=="paid")
 
 local another="Player-2-e"
 local solo=assert(b.Post(another,"Solo",120000,{group="solo",split="winner"}))
@@ -85,5 +91,7 @@ assert(b.ConfirmPayment(grouped,hunter,10000))
 assert(b.Due(b.List()[grouped],owner,hunter)==50000)
 assert(b.Share(b.List()[grouped],owner,hunter)==60000)
 assert(b.Due(b.List()[grouped],owner,hunter)==50000 and b.ConfirmPayment(grouped,hunter,50000))
-assert(b.History()[grouped].state=="paid" and not b.ConfirmPayment(grouped,hunter,1))
+assert(b.History()[grouped].state=="sent" and not b.ConfirmPayment(grouped,hunter,1))
+receive("V",hunter,15,grouped,"0,60000",owner)
+assert(b.History()[grouped].state=="paid")
 print("PASS guild alpha rules: personal quota, replay, legacy claims, solo/group, split, notification and durable history")

@@ -47,20 +47,47 @@ end
 local states = {
     open=L("En cours","Open"), claimed=L("En attente de synchronisation","Awaiting sync"),
     fulfilled=L("Prime faite · règlement en attente","Bounty complete · payment pending"),
-    paid=L("Prime réglée","Paid"), withdrawn=L("Retirée","Withdrawn"), expired=L("Expirée","Expired")
+    sent=L("Courrier en transit","Mail in transit"), paid=L("Payée","Paid"),
+    withdrawn=L("Retirée","Withdrawn"), expired=L("Expirée","Expired")
 }
 local souvenirs = { none=L("Aucun","None"), screenshot=L("Capture d’écran","Screenshot"), video=L("Vidéo","Video") }
 local filterLists = {
     active={{"all",L("Toutes les primes","All bounties")},{"pinned",L("Épinglées","Pinned")},
         {"issued",L("Mes contrats","Issued by me")},{"solo",L("Hors groupe","Solo only")},{"party",L("Groupe autorisé","Groups allowed")}},
-    history={{"all",L("Tout mon historique","All my history")},{"hunted",L("Réalisées","Completed by me")},
-        {"issued",L("Commanditées","Issued by me")},{"due",L("À régler","I owe gold")},{"paid",L("Réglées","Paid")}}
+    history={{"all",L("Tous les états","All statuses")},{"incoming",L("Or à recevoir","Gold to receive")},
+        {"transit",L("Courrier en transit","Mail in transit")},{"due",L("Or à envoyer","Gold to send")},{"paid",L("Payées","Paid")}}
 }
 local function members(o)
-    if not o.winner then return {} end
-    local result = {o.winner.actor}
-    for id in (o.winner.detail or ""):gmatch("[^,]+") do result[#result+1] = id end
+    local w=o.winner or o.first
+    if not w then return {} end
+    local result = {w.actor}
+    for id in (w.detail or ""):gmatch("[^,]+") do result[#result+1] = id end
     return result
+end
+local function account(o,me)
+    local a={due=0,incoming=0,received=0,transit=0,amount=0,remaining=0}
+    for _,h in ipairs(members(o)) do
+        if h==me then a.hunted=true end
+        for payer in pairs(o.pot) do
+            local send,waiting,received=B.Payment(o,payer,h)
+            if payer==me then a.due=a.due+send end
+            if h==me then a.incoming=a.incoming+waiting; a.received=a.received+received end
+            if payer==me or h==me or o.owner==me then
+                a.transit=a.transit+waiting-send
+                a.amount=a.amount+waiting+received
+                a.remaining=a.remaining+waiting
+            end
+        end
+    end
+    a.role=o.owner==me and (a.hunted and L("Chasse et contrat","Hunted and issued") or L("Commanditaire","Issuer"))
+        or a.hunted and L("Chasseur","Hunter") or (o.pot[me] and L("Contributeur","Contributor") or L("Participant","Participant"))
+    a.status=states[o.state]
+    if o.winner then
+        a.status=a.amount==0 and L("Terminée","Completed") or a.remaining==0 and states.paid
+            or a.due>0 and L("À envoyer","To send") or a.incoming>0 and L("À recevoir","To receive")
+            or a.transit==a.remaining and states.sent or L("Paiement en attente","Payment pending")
+    end
+    return a
 end
 local function pins(create)
     local me = mine()
@@ -72,20 +99,26 @@ local function pins(create)
     return GL.db.bountyPins and GL.db.bountyPins[me] or {}
 end
 local function isOpen(o) return o.state == "open" or o.state == "claimed" end
-local function passFilter(o, filter, me, pinned)
+local function passFilter(o, filter, me, pinned, a)
     if filter == "issued" then return o.owner == me end
     if filter == "pinned" then return pinned[o.id] end
     if filter == "party" or filter == "solo" then return o.group == filter end
-    if filter == "paid" then return o.state == "paid" end
-    if filter == "due" or filter == "hunted" then
-        for _, h in ipairs(members(o)) do
-            if (filter == "hunted" and h == me) or (filter == "due" and B.Due(o, me, h) > 0) then return true end
-        end
-        return false
-    end
+    if filter=="paid" then return a.amount>0 and a.remaining==0 end
+    if filter=="due" or filter=="incoming" or filter=="transit" then return a[filter]>0 end
     return true
 end
 local function visible(region, yes) if yes then region:Show() else region:Hide() end end
+local function goldStars(parent,x,y,size)
+    local mark=CreateFrame("Frame",nil,parent)
+    mark:SetPoint("TOPLEFT",x,-y); mark:SetSize(size*2,size+3)
+    for i=0,1 do
+        local star=mark:CreateTexture(nil,"OVERLAY")
+        star:SetPoint("TOPLEFT",i*size,-i*3); star:SetSize(size-i*3,size-i*3)
+        star:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_1")
+    end
+    mark:Hide()
+    return mark
+end
 local function tip(button, text)
     button:SetScript("OnEnter", function(self)
         if GameTooltip then GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetText(text); GameTooltip:Show() end
@@ -119,7 +152,7 @@ local function resetList()
     f.search:SetText("")
 end
 local function chooseTab(tab)
-    f.tab, f.filterKey, f.selected, f.editing, f.origin = tab,"all",nil,nil,nil
+    f.tab, f.filterKey, f.role, f.selected, f.editing, f.origin = tab,"all","all",nil,nil,nil
     f.form:Hide(); f.filters:Hide(); resetList(); message(); refresh()
 end
 local function actionResult(id,err)
@@ -247,7 +280,8 @@ end
 
 local function makeDetail()
     local p=CreateFrame("Frame",nil,f); f.detail=p; p:SetAllPoints(f)
-    p.kicker=text(p,358,161,535,31,22,t.red)
+    p.kicker=text(p,358,161,493,31,21,t.red)
+    p.stars=goldStars(p,855,169,16)
     local face=CreateFrame("Button",nil,p); p.face=face; face:SetPoint("TOPLEFT",358,-200); face:SetSize(100,100)
     UI.surface(face,t.gold); face.raceIcon=face:CreateTexture(nil,"ARTWORK")
     face.raceIcon:SetPoint("TOPLEFT",3,-3); face.raceIcon:SetPoint("BOTTOMRIGHT",-3,3)
@@ -326,34 +360,43 @@ local function renderDetail(o)
     visible(p.level,lvl~=nil); if lvl then p.level.caption:SetText(tostring(lvl)) end
     p.identity:SetText(UI.plain(table.concat({race,class,faction}," · ")))
     p.price:SetText(money(total(o)))
-    local due,winner=0,o.winner and o.winner.actor
+    local winner=o.winner and o.winner.actor
+    local me=mine()
+    local a=account(o,me)
+    visible(p.stars,a.remaining>0)
+    if a.remaining>0 then p.kicker:SetTextColor(.43,.23,.025) else p.kicker:SetTextColor(unpack(t.red)) end
     for i,c in ipairs(p.people) do c.guid=nil; c:Hide() end
     if winner then
-        p.kicker:SetText(states[o.state])
-        local me,myShare=mine(),0
+        p.kicker:SetText(L("Prime faite · ","Bounty complete · ")..a.status)
         local hunters=members(o)
         for i,h in ipairs(hunters) do
             local c=p.people[i]
-            local outstanding=B.Due(o,me,h)
-            due=due+outstanding
             if c then
                 c.guid=h
-                local share=0
+                local share,waiting,toSend=0,0,0
+                local _,retained=B.Share(o,h,h)
                 for payer in pairs(o.pot) do
-                    local transferred,retained=B.Share(o,payer,h)
-                    share=share+transferred+retained
+                    local send,unreceived,received=B.Payment(o,payer,h)
+                    share,waiting,toSend=share+unreceived+received,waiting+unreceived,toSend+send
                 end
-                if h==me then myShare=share end
-                local label=UI.plain(who(h)).." · "..money(share)
-                if o.pot[me] and o.pot[me]>0 then label=UI.plain(who(h)).." · "..L("dû ","owed ")..money(outstanding) end
-                c:SetText(label); c:Show()
+                local status=share==0 and L("Sans courrier","No mail due") or waiting==0 and L("Reçu","Received")
+                    or toSend==0 and L("En transit","In transit") or L("En attente","Pending")
+                c:SetText(UI.plain(who(h)).." · "..status)
+                local breakdown=UI.plain(who(h)).."\n"..status
+                if share>0 then breakdown=breakdown.." · "..money(share-waiting).." / "..money(share) end
+                if retained>0 then breakdown=breakdown.."\n"..L("Part conservée : ","Retained share: ")..money(retained) end
+                tip(c,breakdown); c:Show()
             end
         end
-        p.payment:SetText(due>0 and (L("À envoyer à la boîte aux lettres : ","Send at a mailbox: ")..money(due))
-            or myShare>0 and (L("Votre part : ","Your share: ")..money(myShare)) or L("Bénéficiaires","Beneficiaries"))
-        p.progress:SetText(L("Prime faite · ","Bounty complete · ")..(o.quota or 1).."/"..(o.quota or 1)..L(" victoires"," wins"))
+        local detail={a.role}
+        if a.due>0 then detail[#detail+1]=L("À envoyer : ","To send: ")..money(a.due) end
+        if a.incoming>0 then detail[#detail+1]=L("À recevoir : ","To receive: ")..money(a.incoming) end
+        if a.received>0 then detail[#detail+1]=L("Reçu : ","Received: ")..money(a.received) end
+        if a.due+a.incoming==0 and a.transit>0 then detail[#detail+1]=L("En transit : ","In transit: ")..money(a.transit) end
+        p.payment:SetText(table.concat(detail,"  ·  "))
+        p.progress:SetText(L("Victoires : ","Wins: ")..(o.quota or 1).."/"..(o.quota or 1))
     else
-        p.kicker:SetText(isOpen(o) and L("MISE À PRIX","WANTED") or states[o.state])
+        p.kicker:SetText(o.state=="open" and L("MISE À PRIX","WANTED") or states[o.state])
         p.progress:SetText(L("Vos victoires : ","Your wins: ")..B.Progress(o).."/"..(o.quota or 1).."   ·   "..(states[o.state] or ""))
         p.payment:SetText("")
     end
@@ -417,7 +460,9 @@ refresh=function()
     else
         local me,pinned=mine(),pins()
         for _,o in pairs(currentOrders()) do
-            if (f.tab=="history" or isOpen(o)) and passFilter(o,f.filterKey,me,pinned)
+            local a=f.tab=="history" and account(o,me)
+            if (a or isOpen(o)) and (not a or f.role=="all" or f.role=="hunted" and a.hunted or f.role=="issued" and o.owner==me)
+                and passFilter(o,f.filterKey,me,pinned,a)
                 and o.name:lower():find(query,1,true) then
                 list[#list+1]=o
             end
@@ -441,6 +486,10 @@ refresh=function()
     end
     f.order=selected; f.offset=math.max(0,math.min(f.offset,#list-pageSize)); f.count=#list
     f.heading:SetText(creating and L("Choisir la cible","Choose a target") or f.tab=="history" and L("Mon historique","My history") or L("Primes en cours","Open bounties"))
+    visible(f.heading,creating or f.tab~="history")
+    for key,b in pairs(f.roles) do
+        visible(b,not creating and f.tab=="history"); UI.selectButton(b,key==f.role)
+    end
     UI.selectButton(f.activeTab,not creating and f.tab=="active"); UI.selectButton(f.historyTab,not creating and f.tab=="history")
     visible(f.filter,not creating); visible(f.new,not creating)
     if not creating then
@@ -449,13 +498,16 @@ refresh=function()
     for i,row in ipairs(f.rows) do
         local e=list[i+f.offset]; row.entry=e; visible(row,e~=nil)
         if e then
+            local a=not creating and f.tab=="history" and account(e,mine())
+            local gold=a and a.remaining>0
+            visible(row.stars,gold); visible(row.gold,gold)
             local id=creating and e.guid or e.target
             local r=creating and e or contact(id) or {guid=id,fullName=e.name}
             GL.PaintBookPortrait(row,r)
             row.title:SetText(UI.plain(e.fullName or e.name))
             local _,class,_,level=targetInfo(r)
             row.meta:SetText(creating and ((level and (L("Niv. ","Lvl ")..level.." · ") or "")..UI.plain(class))
-                or (money(total(e)).." · "..(states[e.state] or "")))
+                or a and (a.role.." · "..a.status) or (money(total(e)).." · "..(states[e.state] or "")))
             visible(row.selected,creating and f.target and f.target.guid==id or not creating and f.selected==e.id)
         end
     end
@@ -475,6 +527,15 @@ local function build()
     f.activeTab=button(f,L("En cours","Open"),35,162,122,function() chooseTab("active") end)
     f.historyTab=button(f,L("Mon historique","My history"),160,162,145,function() chooseTab("history") end)
     f.heading=text(f,36,203,268,26,18,t.paper)
+    f.roles={}
+    local function role(key,title,x,width)
+        f.roles[key]=button(f,title,x,202,width,function()
+            f.role=key; f.offset=0; f.selected=nil; f.filters:Hide(); refresh()
+        end)
+    end
+    role("all",L("Tout","All"),35,54)
+    role("hunted",L("Mes chasses","My hunts"),92,102)
+    role("issued",L("Mes contrats","My contracts"),197,110)
     f.search=input(f,36,236,269,64,false)
     f.placeholder=text(f.search,9,5,250,19,12,t.muted,L("Rechercher un joueur…","Search players…"))
     f.filter=button(f,"",36,270,269,function()
@@ -492,13 +553,15 @@ local function build()
         local row=CreateFrame("Button",nil,f); row:SetPoint("TOPLEFT",35,-(309+(i-1)*40)); row:SetSize(272,39)
         row.selected=row:CreateTexture(nil,"BACKGROUND"); row.selected:SetAllPoints()
         row.selected:SetTexture(media.."JournalButtons"); row.selected:SetTexCoord(36/1254,1218/1254,514/1254,768/1254)
+        row.gold=row:CreateTexture(nil,"BORDER"); row.gold:SetAllPoints(); row.gold:SetColorTexture(.91,.61,.08,.24)
+        row.stars=goldStars(row,242,5,13)
         local line=row:CreateTexture(nil,"BORDER"); line:SetPoint("BOTTOMLEFT"); line:SetPoint("BOTTOMRIGHT")
         line:SetHeight(1); line:SetColorTexture(unpack(t.gold))
         local hover=row:CreateTexture(nil,"HIGHLIGHT"); hover:SetAllPoints(); hover:SetColorTexture(.57,.39,.18,.20)
         row:SetHighlightTexture(hover)
         row.raceIcon=row:CreateTexture(nil,"ARTWORK"); row.raceIcon:SetPoint("TOPLEFT",3,-1); row.raceIcon:SetSize(36,36)
         row.classIcon=row:CreateTexture(nil,"OVERLAY"); row.classIcon:SetPoint("TOPLEFT",28,-25); row.classIcon:SetSize(13,13)
-        row.title=text(row,47,1,215,20,15,t.paper); GL.Safe(row.title.SetWordWrap,row.title,false)
+        row.title=text(row,47,1,192,20,15,t.paper); GL.Safe(row.title.SetWordWrap,row.title,false)
         row.meta=text(row,47,21,215,16,11,t.brass); GL.Safe(row.meta.SetWordWrap,row.meta,false)
         row:SetScript("OnClick",function(self)
             if not self.entry then return end

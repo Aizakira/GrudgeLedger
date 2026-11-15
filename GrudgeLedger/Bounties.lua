@@ -47,7 +47,8 @@ local function unpackEvent(raw,archiving)
     local kind,actor,id,stamp,order,value,detail=unpack(f)
     if not id:match("^%d+$") then return end
     stamp=number(stamp,1,GL.Now()+60)
-    if not guid(actor) or not stamp or (not archiving and stamp < GL.Now()-38*DAY) or not number(id,1,9999999999999) then return end
+    if not guid(actor) or not stamp or (not archiving and kind~="V" and stamp < GL.Now()-38*DAY)
+        or not number(id,1,9999999999999) then return end
     local key=actor..":"..id
     local quota,group,split,souvenir,playerLevel,opponentLevel
     if kind=="N" then
@@ -95,6 +96,10 @@ local function unpackEvent(raw,archiving)
             if kind=="X" and value~="" or kind=="F" and not value:match("^Player%-%w+%-%w+:%d+$") then return end
         elseif kind=="Y" then
             if not guid(detail) or not number(value,1,1000*GOLD) then return end
+        elseif kind=="V" then
+            local offset,amount=value:match("^(%d+),(%d+)$")
+            if not guid(detail) or actor==detail or not number(offset,0,1000*GOLD)
+                or not number(amount,1,1000*GOLD-tonumber(offset)) then return end
         else return end
     end
     return {kind=kind,actor=actor,key=key,time=stamp,order=order,value=value,detail=detail,
@@ -113,21 +118,26 @@ local function view(s,archiving)
                     custom=e.kind=="N",quota=e.quota or 1,group=e.group or "party",
                     split=e.split or "equal",souvenir=e.souvenir or "none",progress={},
                     guildKey=s.guildKey,expires=e.time+(e.kind=="A" and 3 or 7)*DAY,auto=e.kind=="A",
-                    pot={[e.actor]=tonumber(e.value)},paid={},receipts={}}
+                    pot={[e.actor]=tonumber(e.value)},paid={},receipts={},arrivals={}}
             else events[#events+1]=e end
         end
     end
     -- A payer can settle an old debt after its guild event log has rotated away.
     local history=GL.db.bountyHistory and GL.db.bountyHistory[GL.Safe(UnitGUID,"player")]
     for id,item in pairs(history or {}) do
-        if not orders[id] and item.guildKey==s.guildKey and item.state=="fulfilled" and item.winner
+        if not orders[id] and item.guildKey==s.guildKey and item.winner
+            and (item.state=="fulfilled" or item.state=="sent" or item.state=="paid" and not item.arrivals)
             and item.at<GL.Now()-38*DAY then
             local o={}
             for k,v in pairs(item) do o[k]=v end
             o.closed,o.archived="fulfilled",true
-            o.paid,o.receipts={},{}
+            o.paid,o.receipts,o.arrivals={},{},{}
             for k,v in pairs(item.paid) do o.paid[k]=v end
             for k in pairs(item.receipts or {}) do o.receipts[k]=true end
+            for pair,amounts in pairs(item.arrivals or {}) do
+                o.arrivals[pair]={}
+                for start,amount in pairs(amounts) do o.arrivals[pair][start]=amount end
+            end
             orders[id]=o
         end
     end
@@ -170,16 +180,31 @@ local function view(s,archiving)
             o.receipts[e.key]=true
         end
     end
+    -- A mailbox receipt can reach the guild before the pledge or the sender's
+    -- acknowledgement. Resolve against the final shares, independent of wire order.
+    for _,e in ipairs(events) do
+        local o=orders[e.order]
+        if e.kind=="V" and o and o.winner and e.time>=o.winner.time then
+            local start,amount=e.value:match("^(%d+),(%d+)$")
+            start,amount=tonumber(start),tonumber(amount)
+            if start+amount<=B.Share(o,e.detail,e.actor) then
+                local pair=e.detail.."/"..e.actor
+                local ranges=o.arrivals[pair] or {}
+                ranges[start]=math.max(ranges[start] or 0,amount)
+                o.arrivals[pair]=ranges
+            end
+        end
+    end
     for _,o in pairs(orders) do
         if o.winner then
-            local outstanding=false
+            local due,awaiting=0,0
             for payer in pairs(o.pot) do
-                if B.Due(o,payer,o.winner.actor)>0 then outstanding=true end
-                for h in o.winner.detail:gmatch("[^,]+") do
-                    if B.Due(o,payer,h)>0 then outstanding=true end
+                for hunter in (o.winner.actor..","..o.winner.detail):gmatch("[^,]+") do
+                    local toSend,toReceive=B.Payment(o,payer,hunter)
+                    due,awaiting=due+toSend,awaiting+toReceive
                 end
             end
-            if not outstanding then o.closed="paid" end
+            o.closed=awaiting==0 and "paid" or due==0 and "sent" or "fulfilled"
         end
         o.state=o.closed or (o.first and "claimed") or (GL.Now()>o.expires and "expired") or "open"
     end
@@ -189,6 +214,7 @@ function B.Progress(o,hunter)
     hunter=hunter or GL.Safe(UnitGUID,"player")
     return o and o.progress and o.progress[hunter] or 0
 end
+local roster,addresses={},{}
 local function remember(orders,me)
     if not guid(me) then return end
     local all=GL.db.bountyHistory or {}
@@ -204,10 +230,14 @@ local function remember(orders,me)
         if mine and (w or o.state=="withdrawn" or o.state=="expired") then
             local previous=history[id]
             local progress=B.Progress(o,me)
+            local payerNames=previous and previous.payerNames or {}
+            for payer in pairs(o.pot) do
+                if addresses[payer] then payerNames[payer]=addresses[payer] end
+            end
             local copy={id=id,owner=o.owner,target=o.target,name=o.name,at=o.at,expires=o.expires,auto=o.auto,
                 quota=o.quota,group=o.group,split=o.split,souvenir=o.souvenir,note=o.note,state=o.state,
                 winner=w,pot=o.pot,paid=o.paid,progress={[me]=progress},guildKey=o.guildKey,
-                receipts=o.state=="fulfilled" and o.receipts or nil}
+                arrivals=o.arrivals,payerNames=payerNames,receipts=o.state~="paid" and o.receipts or nil}
             history[id]=copy
             if w and (not previous or not previous.winner) and GL.Print then
                 if me==o.owner then
@@ -225,7 +255,14 @@ function B.History()
         for _,o in pairs(orders) do
             if o.state=="open" and (not expires or o.expires<expires) then expires=o.expires end
         end
-        return remember(orders,me) or {},expires
+        local saved=remember(orders,me) or {}
+        local result={}
+        for id,o in pairs(saved) do result[id]=o end
+        for id,o in pairs(orders) do
+            if o.state=="claimed" and (o.owner==me or o.pot[me] or o.first.actor==me
+                or (","..o.first.detail..","):find(","..me..",",1,true)) then result[id]=o end
+        end
+        return result,expires
     end
     return GL.db and GL.db.bountyHistory and GL.db.bountyHistory[GL.Safe(UnitGUID,"player")] or {}
 end
@@ -245,21 +282,52 @@ function B.Share(o,payer,hunter)
     if payer==hunter then return 0,share end
     return share,0
 end
-function B.Due(o,payer,hunter)
+function B.Payment(o,payer,hunter)
     local share=B.Share(o,payer,hunter)
-    if share==0 then return 0 end
-    return math.max(0,share-(o.paid[payer.."/"..hunter] or 0))
+    if share==0 then return 0,0,0 end
+    local pair=payer.."/"..hunter
+    local sent=(o.paid or {})[pair] or 0
+    local arrived,covered,dispatched=0,0,sent
+    local ranges=o.arrivals and o.arrivals[pair]
+    if ranges then
+        local starts={}
+        for start in pairs(ranges) do starts[#starts+1]=start end
+        table.sort(starts)
+        for _,start in ipairs(starts) do
+            local last=math.min(share,start+ranges[start])
+            arrived=arrived+math.max(0,last-math.max(start,covered))
+            dispatched=dispatched+math.max(0,last-math.max(start,covered,sent))
+            covered=math.max(covered,last)
+        end
+    end
+    return math.max(0,share-dispatched), math.max(0,share-arrived), arrived
+end
+function B.Due(o,payer,hunter)
+    local due=B.Payment(o,payer,hunter)
+    return due
 end
 local queue,queued,active={}, {},nil
 local joined, openTargets, lastAlert, indexedScope
-local roster,addresses={},{}
+local reconcileInbox
+local draft,pending,hooked,selectedOrder
 local pendingRefresh={}
 local function changed(s,me)
     if pendingRefresh[s] then return end
     local function refresh()
         pendingRefresh[s]=nil
         if scope()~=s then return end
-        remember(view(s),me)
+        local orders=view(s)
+        remember(orders,me)
+        local uncertain=s.mailUncertain and s.mailUncertain[me]
+        if uncertain and uncertain.offset then
+            local o=orders[uncertain.id] or GL.db.bountyHistory[me][uncertain.id]
+            local ranges=o and o.arrivals and o.arrivals[me.."/"..uncertain.hunter]
+            if ranges and (ranges[uncertain.offset] or 0)>=uncertain.amount then
+                s.mailUncertain[me]=nil
+                if pending and pending.closed then pending=nil end
+            end
+        end
+        reconcileInbox(s,me,orders)
         if GL.Emit then GL.Emit("BOUNTIES_CHANGED") end
     end
     if C_Timer and C_Timer.After then
@@ -303,17 +371,26 @@ function B.GuildFights(target)
     end
     return wins,losses
 end
-local function declare(kind,order,value,detail)
-    local s,me=scope()
+local function record(s,me,kind,order,value,detail)
     if not s then return nil,"guild" end
     local seq=math.max(s.seq+1,GL.Now()*1000)
     local raw=table.concat({kind,me,seq,GL.Now(),order,value,detail},";")
     local e=unpackEvent(raw)
     if not e then return nil,"invalid" end
     openTargets=nil
-    s.seq=seq; s.events[e.key]=raw; schedule(s,raw)
-    if kind~="D" then changed(s,me) end
+    s.seq=seq; s.events[e.key]=raw
+    if s==scope() then
+        schedule(s,raw)
+        if kind~="D" then changed(s,me) end
+    else
+        remember(view(s,true),me)
+        if GL.Emit then GL.Emit("BOUNTIES_CHANGED") end
+    end
     return e.key
+end
+local function declare(kind,order,value,detail)
+    local s,me=scope()
+    return record(s,me,kind,order,value,detail)
 end
 function B.Post(target,name,copper,opts)
     local s,me=scope()
@@ -473,7 +550,10 @@ local function receive(msg,sender)
         for target,scores in pairs(s.scores or {}) do
             for actor,n in pairs(scores) do schedule(s,"R;"..scoreMessage(actor,target,n[1],n[2])) end
         end
-        for _,raw in pairs(s.events) do if unpackEvent(raw) then schedule(s,"R;"..raw) end end
+        for _,raw in pairs(s.events) do
+            local e=unpackEvent(raw)
+            if e and (e.time>=now-38*DAY or e.actor==me) then schedule(s,"R;"..raw) end
+        end
         return
     end
     local relay=msg:sub(1,2)=="R;"
@@ -491,6 +571,11 @@ local function receive(msg,sender)
     if not relay and e.actor~=sender then return end
     -- Relays are guild testimony, never an instruction to send gold or alter personal records.
     if e.actor==me then return end
+    if e.kind=="V" and e.time<now-38*DAY then
+        local archive=GL.db.bountyHistory and GL.db.bountyHistory[me]
+        local o=archive and archive[e.order]
+        if not o or o.guildKey~=s.guildKey or (o.state=="paid" and o.arrivals) then return end
+    end
     openTargets=nil
     s.events[e.key]=raw
     if (e.kind=="K" or e.kind=="H") and e.order:match("^([^:]+)")==me then finalize(s,me) end
@@ -514,7 +599,79 @@ function B.MemberName(id)
     local r=guid(id) and GL.Get and GL.Get("guid:"..id)
     return addresses[id] or (r and (r.fullName or r.name))
 end
-local draft,pending,hooked,selectedOrder
+local function mailAddress(name)
+    if name:find("-",1,true) then return name end
+    return name.."-"..GetNormalizedRealmName()
+end
+local checkingInbox=false
+reconcileInbox=function(current,me,orders)
+    local inbox=GL.db.bountyInbox and GL.db.bountyInbox[me]
+    if checkingInbox or not inbox or not next(inbox) then return end
+    checkingInbox=true
+    local history=GL.db.bountyHistory and GL.db.bountyHistory[me] or {}
+    if current and not orders then orders=view(current) end
+    for key,mail in pairs(inbox) do
+        local archived=history[mail.id]
+        local o=orders and orders[mail.id] or archived
+        if o and o.winner then
+            local guild=GL.db.bountyGuilds[o.guildKey]
+            local payer
+            for id in pairs(o.pot) do
+                local name=guild==current and addresses[id] or nil
+                name=name or (archived and archived.payerNames and archived.payerNames[id])
+                if name and mailAddress(name)==mail.sender then payer=id; break end
+            end
+            if payer and guild and mail.offset+mail.amount<=B.Share(o,payer,me) then
+                local seen=o.arrivals and o.arrivals[payer.."/"..me]
+                inbox[key]=nil
+                if not seen or (seen[mail.offset] or 0)<mail.amount then
+                    if not record(guild,me,"V",mail.id,mail.offset..","..mail.amount,payer) then inbox[key]=mail end
+                end
+            end
+        end
+        if mail.at and mail.at<GL.Now()-38*DAY then inbox[key]=nil end
+    end
+    checkingInbox=false
+end
+local function scanInbox()
+    if not GL.db or not GetInboxNumItems or not GetInboxHeaderInfo then return end
+    local me=GL.Safe(UnitGUID,"player")
+    if not guid(me) then return end
+    local count=GL.Safe(GetInboxNumItems) or 0
+    local current=scope()
+    local saved=GL.db.bountyHistory and GL.db.bountyHistory[me] or {}
+    local buffered=GL.db.bountyInbox and GL.db.bountyInbox[me] or {}
+    local queuedHeaders=0
+    for _ in pairs(buffered) do queuedHeaders=queuedHeaders+1 end
+    local orders
+    for index=1,count do
+        local _,_,sender,subject,money,cod,_,_,_,returned=GetInboxHeaderInfo(index)
+        sender,subject=GL.Clean(sender,"string"),GL.Clean(subject,"string")
+        money,cod=GL.Clean(money,"number"),GL.Clean(cod,"number")
+        if sender and plain(sender,100) and subject and cod==0 and number(money,1,1000*GOLD)
+            and not GL.Clean(returned,"boolean") then
+            local owner,seq,start=subject:match("^%[GL:(Player%-%w+%-%w+):(%d+)/(%d+)%]")
+            local offset=number(start,0,1000*GOLD-money)
+            if guid(owner) and number(seq,1,9999999999999) and offset then
+                local id,address=owner..":"..seq,mailAddress(sender)
+                local key=id.."/"..address.."/"..start
+                if not orders then orders=current and view(current) or {} end
+                local o=orders[id] or saved[id]
+                local payer=roster[address] or roster[sender]
+                local validShare=o and o.winner and payer and offset+money<=B.Share(o,payer,me)
+                -- Hold a bounded number of unverified headers while guild records catch up.
+                if validShare or buffered[key] or queuedHeaders<128 then
+                    if not buffered[key] then queuedHeaders=queuedHeaders+1 end
+                    buffered[key]={id=id,sender=address,offset=offset,at=GL.Now(),
+                        amount=math.max(money,buffered[key] and buffered[key].amount or 0)}
+                    GL.db.bountyInbox=GL.db.bountyInbox or {}
+                    GL.db.bountyInbox[me]=buffered
+                end
+            end
+        end
+    end
+    reconcileInbox(current,me,orders)
+end
 local function noItems()
     for i=1,ATTACHMENTS_MAX_SEND or 12 do
         if (HasSendMailItem and HasSendMailItem(i)) or GetSendMailItem(i) then return false end
@@ -531,7 +688,7 @@ local function onSend(to,subject)
         local s,me=scope()
         if s==draft.guild then
             s.mailUncertain=s.mailUncertain or {}
-            s.mailUncertain[me]={id=draft.id,hunter=draft.hunter,amount=draft.amount}
+            s.mailUncertain[me]={id=draft.id,hunter=draft.hunter,amount=draft.amount,offset=draft.offset}
         end
     end
     draft=nil
@@ -569,9 +726,10 @@ function B.PrepareMail(id,hunter,expectedAmount)
     if not hooked then hooksecurefunc("SendMail",onSend); hooked=true end
     SendMailRadioButton_OnClick(1)
     SendMailNameEditBox:SetText(addresses[to])
-    SendMailSubjectEditBox:SetText("Prime : "..o.name)
+    local offset=B.Share(o,me,to)-due
+    SendMailSubjectEditBox:SetText(("[GL:%s/%d] %s"):format(picked,offset,o.name))
     MoneyInputFrame_SetCopper(SendMailMoney,due)
-    draft={guild=s,id=picked,hunter=to,amount=due,to=addresses[to],subject=SendMailSubjectEditBox:GetText()}
+    draft={guild=s,id=picked,hunter=to,amount=due,offset=offset,to=addresses[to],subject=SendMailSubjectEditBox:GetText()}
     return picked,to,due
 end
 -- A reload can lose the acknowledgement after the gold has left. Never retry
@@ -688,7 +846,11 @@ local function join()
     local s,me=scope()
     if s and (not lastPrune or GL.Now()-lastPrune>=3600) then
         remember(view(s,true),me)
-        for k,raw in pairs(s.events) do if not unpackEvent(raw) then s.events[k]=nil end end
+        for k,raw in pairs(s.events) do
+            local e=unpackEvent(raw)
+            -- Keep the recipient's own receipts available to payers who return after rotation.
+            if not e or (e.kind=="V" and e.time<GL.Now()-38*DAY and not GL.db.bountyHistory[e.actor]) then s.events[k]=nil end
+        end
         lastPrune=GL.Now()
     end
     if s and not next(roster) then joined,openTargets,lastAlert=nil,nil,{}; return end
@@ -705,13 +867,15 @@ local function join()
         end
     end
 end
-for _,event in ipairs({"MAIL_SHOW","MAIL_SEND_SUCCESS","MAIL_FAILED","MAIL_CLOSED"}) do frame:RegisterEvent(event) end
+for _,event in ipairs({"MAIL_SHOW","MAIL_INBOX_UPDATE","MAIL_SEND_SUCCESS","MAIL_FAILED","MAIL_CLOSED"}) do frame:RegisterEvent(event) end
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
+    if event=="MAIL_INBOX_UPDATE" then scanInbox(); return end
     if event=="MAIL_SHOW" then
+        scanInbox()
         local s,me=scope()
         if s and s.mailUncertain and s.mailUncertain[me] then
             GL.Print(ML("Courrier incertain : vérifiez l’envoi puis /glprime courrier envoye ou /glprime courrier nonenvoye."))
@@ -722,7 +886,8 @@ frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
         local sent=pending
         pending=nil
         local s,me=scope()
-        if sent and s==sent.guild and B.ConfirmPayment(sent.id,sent.hunter,sent.amount) then
+        local remaining=sent and s==sent.guild and B.Due(view(s)[sent.id],me,sent.hunter)
+        if remaining and (remaining==0 or B.ConfirmPayment(sent.id,sent.hunter,math.min(remaining,sent.amount))) then
             if s.mailUncertain then s.mailUncertain[me]=nil end
             local function advance()
                 if not MailFrame or not MailFrame:IsShown() or scope()~=s then return end
@@ -772,6 +937,7 @@ frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
     end
     refreshRoster()
     join()
+    if GL.db then reconcileInbox(scope(),GL.Safe(UnitGUID,"player")) end
 end)
 GL.On("BOUNTY_KILL",B.Kill)
 GL.On("BOUNTY_DEATH",B.Death)

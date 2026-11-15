@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.11.0-alpha.2
+GRUDGE LEDGER — 0.11.0-alpha.3
 
 Classements → Guildes regroupe les relations, les combats, les membres connus et les avis de guilde. La commande /gl guildes ouvre cette rubrique.
 
