@@ -21,7 +21,11 @@ local function fromName(full, suffix, guid)
     if first then full, suffix = first, last end
     local mine = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
     if guid and mine and guid == mine then return nil end
-    return GL.IdentityFromName(full, suffix, guid)
+    local identity = GL.IdentityFromName(full, suffix, guid)
+    if identity and identity.guid then
+        identity.className, identity.class, identity.raceName, identity.race = GL.Safe(GetPlayerInfoByGUID, identity.guid)
+    end
+    return identity
 end
 
 local function fromContext(data)

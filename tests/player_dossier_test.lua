@@ -21,6 +21,14 @@ GrudgeLedgerArmory={items={{name="Helm",icon=123},{name="Same ID, other variant"
     honorableKills=396,pvpRank=0,stats={HEALTH=1721,AGILITY=99,CRITICALSTRIKE=5.629,DAMAGE={11,22}},
     battlegrounds={{name="Arathi",games=3,wins=2,losses=1}},
     reputations={{group="Alliance",name="Forge",standing="Amical",value=1200,max=6000}},achievements={{name="Account champion",accountWide=true,icon=777}}}}}
+GL.InitDB()
+assert(record.armorySnapshot.gear.back.name=="Woven mantle", "existing contacts keep their gear before first open")
+local good = GrudgeLedgerArmory.profiles[guid]
+record.class = "DRUID"
+GrudgeLedgerArmory.profiles[guid] = {identity={classFile="WARRIOR"}, updated=good.updated+1}
+assert(GL.ArmoryProfile(record,true)==record.armorySnapshot, "a conflicting class cannot replace the last known gear")
+GrudgeLedgerArmory.profiles[guid] = good
+record.class = nil
 GrudgeLedgerPortraitIndex={[guid]=true}
 mock.units.player.guild="Fixture Guild"
 GL.Bounties.GuildFights=function(target) assert(target==guid) return 3,5 end
@@ -82,6 +90,8 @@ local imported={alias=named.key,region="eu",characterHex="2a",level=32,updated=1
     identity={race="Gnome",class="Mage",faction="Alliance"},stats={HEALTH=123},gear={back=3},
     trees={{name="Frost",points=2,talents={}}}}
 GrudgeLedgerArmory.profiles["eu:"..named.key]=imported
+GL.SetReaction(named, "enemy")
+assert(named.armorySnapshot and named.armorySnapshot.stats.HEALTH==123, "manual opinion saves the loaded profile even with the book closed")
 GL.Settings().guideSeen=true
 GL.ShowLedger(named.key)
 assert(GrudgeLedgerWindow.detailIdentity:GetText():find("Gnome",1,true))

@@ -50,7 +50,7 @@ local function readGear(unit)
     return next(gear) and gear, unresolved
 end
 
-function GL.InspectDossierUnit(unit, guid)
+function GL.InspectDossierUnit(unit, guid, retrySample)
     if type(guid) ~= "string" or not guid:match("^Player%-") or not unit
         or GL.Safe(UnitGUID, unit) ~= guid or GL.Safe(UnitIsVisible, unit) ~= true or GL.IsPvPInstance() then return end
     local now = GL.Now()
@@ -59,7 +59,7 @@ function GL.InspectDossierUnit(unit, guid)
     state.snapshot = state.snapshot or (record and record.inspection) or {}
     local snapshot = state.snapshot
     if record and next(snapshot) then record.inspection = snapshot end
-    if not state.statsRead or now - state.statsRead >= 60 then
+    if retrySample or not state.statsRead or now - state.statsRead >= 60 then
         state.statsRead = now
         local stats = captureStats(unit)
         if stats then
@@ -68,8 +68,18 @@ function GL.InspectDossierUnit(unit, guid)
             snapshot.statsAt = now
         end
         -- Some units already expose cached item links even when a new inspect is unavailable.
-        local gear = not snapshot.gear and readGear(unit)
-        if gear then snapshot.gear, snapshot.gearAt, snapshot.partialGear = gear, now, true end
+        local gear = (not snapshot.gear or snapshot.partialGear) and readGear(unit)
+        if gear then
+            for slot, link in pairs(snapshot.gear or {}) do gear[slot] = gear[slot] or link end
+            snapshot.gear, snapshot.gearAt, snapshot.partialGear = gear, now, true
+        end
+        if C_Timer and C_Timer.After and not retrySample and (not snapshot.gear or snapshot.partialGear or not snapshot.trees) then
+            C_Timer.After(1, function()
+                if recent[guid] ~= state or (snapshot.gear and not snapshot.partialGear and snapshot.trees) then return end
+                local token = GL.Safe(UnitGUID, unit) == guid and unit or GL.VisiblePortraitUnit({guid=guid})
+                GL.InspectDossierUnit(token, guid, true)
+            end)
+        end
         if stats or gear then publish(guid, state) end
     end
     if not NotifyInspect or now < (state.retryAt or 0)

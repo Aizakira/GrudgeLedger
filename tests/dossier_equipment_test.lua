@@ -29,7 +29,7 @@ end
 local view=draw(archived)
 assert(#view.buttons==19 and view.stage:GetWidth()>=150)
 assert(view.buttons[17].slotName=="weapon" and view.buttons[19].slotName=="ranged")
-assert(view.bodyPath:find(archived.."-body.tga",1,true) and view.image:IsShown() and view.stage:IsShown())
+assert(not view.stage:IsShown(), "a web body flagged as individual is still unverified")
 local back=view.buttons[4]
 assert(back.item==cape and back.scripts.OnClick)
 function strsplit(delim,s)
@@ -70,8 +70,8 @@ function SetPortraitTexture() end
 view.model.SetUnit=function(self,unit) self.loaded=UnitGUID(unit) end
 view.model.ClearModel=function(self) self.loaded=nil end
 draw(live)
-assert(view.model:IsShown() and view.model.loaded==live and not view.image:IsShown())
-assert(not GameTooltip.shown and not back.item and not view.bodyPath)
+assert(view.model:IsShown() and view.model.loaded==live)
+assert(not GameTooltip.shown and not back.item)
 mock.units.target.guid=archived
 view.scripts.OnEvent(view,"PLAYER_TARGET_CHANGED")
 assert(not view.model:IsShown() and view.model.loaded==nil and not view.stage:IsShown()
@@ -81,5 +81,5 @@ view:Hide()
 assert(not GameTooltip.shown)
 GrudgeLedgerNativePortraits={[archived]=true}
 draw(archived)
-assert(view.image:IsShown() and view.stage:IsShown() and not view.model:IsShown(),"the individual Armory body has priority on the equipment page")
+assert(view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
 print("PASS equipment: body or expanded gear, model GUID, native variant tooltip, cold cache and chat draft")

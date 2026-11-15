@@ -148,3 +148,15 @@ ready = true
 mock.Fire("INSPECT_READY", far.guid)
 assert(far.inspection.gear[1] == link and far.reputation == -1)
 print("PASS dossier interactions: manual add, kiss, named spit, fresh cache, unavailable inspection")
+
+-- An initially inaccessible unit exposes its gear one second later, without another click.
+advance(6)
+ready=false
+CanInspect=function() return false end
+mock.units.target={guid="Player-9-00D5", name="Delayed", surname="Gear"}
+add:GetScript("OnClick")(add,"LeftButton")
+local delayed=assert(GL.Get(GL.Identity("target")))
+assert(not delayed.inspection.gear)
+ready=true
+advance(1)
+assert(delayed.inspection.gear[1]==link and delayed.inspection.partialGear)

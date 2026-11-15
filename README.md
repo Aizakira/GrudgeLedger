@@ -42,16 +42,16 @@ The index opens with the most recent interaction first. A new encounter, fight, 
 
 ### Keeping portraits when players leave view
 
-The companion also accepts full-name contacts added from chat. It verifies their full name, region and individual Armory identity. Opened personal dossiers retain their latest usable equipment, talents and character stats across sessions. In watch mode, save the new contact with `/reload` or logout. Once the import finishes, reload the interface to display it. A recent valid profile is reused for seven days.
+The companion also accepts full-name contacts added from chat. It verifies their full name, region and individual Armory identity. Journal contacts retain their latest usable equipment, talents and character stats across sessions. In watch mode, save the new contact with `/reload` or logout. Once the import finishes, reload the interface to display it. A recent valid profile is reused for seven days.
 
-The journal prefers the live portrait, then the saved Armory avatar for that exact character. Hover over a journal row to see the source. The optional desktop importer needs Python 3 and Pillow. Run it on demand and choose your own game folder and region.
+The Journal uses faces observed in game. The equipment page shows a full-body model while the client can identify and display that character. Outside visual range, the equipment columns expand. The optional desktop importer needs Python 3 and Pillow. Run it on demand and choose your own game folder and region.
 
 ```powershell
 python -m pip install Pillow
 python tools/sync_portraits.py "F:/game/World of Warcraft/_forever_" --region eu
 ```
 
-Add `--name "First Surname"` for one contact. WoW writes journal records at logout or on `/reload`. The importer looks up saved names on Blizzard's public Armory, checks each avatar's character ID and saves a 64 × 64 texture. Notes, opinions and events stay on your computer. Restart the game after importing and enable **Grudge Ledger - Private portraits**. A subsequent run refreshes images after seven days, or immediately with `--force`. Images live in the separate `Interface/AddOns/GrudgeLedgerPortraits` folder. Share only `GrudgeLedger`. To clear the image cache, remove the private folder while the game is closed.
+Add `--name "First Surname"` for one contact. WoW writes journal records at logout or on `/reload`. The importer looks up saved names on Blizzard's public Armory, verifies the character’s identity and loads structured profile data. Notes, opinions and events stay on your computer. Enable **Grudge Ledger - Private portraits** after installing the companion module. Watch mode (--watch) checks new saved contacts. Forward only the GrudgeLedger folder to other players.
 
 ### New in 0.10.0
 

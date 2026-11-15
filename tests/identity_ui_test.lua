@@ -267,12 +267,15 @@ GrudgeLedgerPortraitIndex = { [saved.guid] = true }
 GL.InitDB()
 GL.ShowLedger(saved.key)
 local path = "Interface\\AddOns\\GrudgeLedgerPortraits\\" .. saved.guid
-assert(f.raceIcon.texture == path and rowFor(saved.key).archivedPortrait)
+assert(f.raceIcon.texture ~= path and not rowFor(saved.key).archivedPortrait, "an Armory URL can depict another race")
+GrudgeLedgerPortraitIndex[saved.guid] = "native"
+GL.ShowLedger(saved.key)
+assert(f.raceIcon.texture == path .. "-native" and rowFor(saved.key).archivedPortrait == "native")
 units.target = {guid=saved.guid}
 SetPortraitTexture = function(texture) texture:SetTexture("current-face") end
 IsUnitModelReadyForUI = function() return false end
 portraitEvent("PLAYER_TARGET_CHANGED")
-assert(f.raceIcon.texture == path and not f.portraitUnit)
+assert(f.raceIcon.texture == path .. "-native" and not f.portraitUnit)
 IsUnitModelReadyForUI = function() return true end
 portraitEvent("UNIT_PORTRAIT_UPDATE", "target")
 assert(f.raceIcon.texture == "current-face" and not f.archivedPortrait)

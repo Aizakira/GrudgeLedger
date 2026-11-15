@@ -549,6 +549,7 @@ function GL.Remember(identity, inspect)
             GL.db.aliases[clean.alias] = false -- two GUIDs, same display name: do not guess
         end
     end
+    if GrudgeLedgerArmory and (newIdentity or inspect) then GL.ArmoryProfile(record, true) end
     if newIdentity and clean.guid and GL.GuildProfiles then GL.GuildProfiles.Observe(record) end
     if inspect and record.guid and GL.InspectDossierUnit then
         local unit = identity.unit
@@ -1677,6 +1678,7 @@ function GL.InitDB()
                 end
             end
             normalize(record)
+            if GrudgeLedgerArmory then GL.ArmoryProfile(record, true) end
         else
             GL.db.quarantine = GL.db.quarantine or {}
             GL.db.quarantine[key] = record
@@ -1700,6 +1702,8 @@ function GL.ArmoryRegion()
 end
 local function matchesContact(record, profile, region, alias)
     if type(profile) ~= "table" then return false end
+    local class = type(profile.identity) == "table" and profile.identity.classFile
+    if record.class and type(class) == "string" and record.class ~= class:gsub("_", "") then return false end
     if not profile.alias then return true end
     if not region or profile.region ~= region or profile.alias ~= alias or (GL.db and GL.db.aliases[alias] == false) then return false end
     if not record.guid then return true end
@@ -1707,8 +1711,7 @@ local function matchesContact(record, profile, region, alias)
     return hex and hex:lower() == profile.characterHex
 end
 
--- Only dossiers opened from the personal journal need an offline copy. Resolve
--- catalog indices here because the next import can renumber every item.
+-- Resolve catalog indices before saving a journal snapshot. Each import can renumber items.
 local rememberedProfiles = setmetatable({}, {__mode="k"})
 local brokenCatalogs = setmetatable({}, {__mode="k"})
 function GL.ArmoryProfile(record, remember)
@@ -1718,7 +1721,7 @@ function GL.ArmoryProfile(record, remember)
     local imported = profiles and profiles[record.guid]
     local saved = record.armorySnapshot
     local alias, region
-    if (not imported and profiles) or (saved and saved.alias) then
+    if (not imported and profiles) or (type(imported) == "table" and imported.alias) or (type(saved) == "table" and saved.alias) then
         alias = record.fullName and ("name:" .. record.fullName:lower())
         region = GL.ArmoryRegion()
         if region and alias and not imported then imported = profiles and profiles[region .. ":" .. alias] end

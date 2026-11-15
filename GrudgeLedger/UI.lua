@@ -100,7 +100,7 @@ local function portraitUnit(record)
 end
 
 -- ponytail: retain 64 spare native portraits plus the visible slots this session.
--- The Armory archive covers reloads and evicted faces.
+-- Only a capture from the game identifies the face when the unit is gone.
 local spareFaces = {}
 -- The list and detail pane can show the same person at once. Native portrait
 -- textures cannot be copied after the unit disappears, so paint two while visible.
@@ -202,17 +202,11 @@ local function paintPortrait(row, record, unit)
     end
     if guid and row.livePortraitGUID == guid then return end
     face = usePortrait(row, nil)
-    local profile = GL.ArmoryProfile(record)
-    if GrudgeLedgerArmory and profile and profile.portrait and profile.mediaKey and profile.mediaKey:match("^Name%-%x+$") then
-        face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. profile.mediaKey)
-        row.archivedPortrait = true
-        return
-    end
-    if guid and type(GrudgeLedgerPortraitIndex) == "table" and GrudgeLedgerPortraitIndex[guid] == true
-        and guid:match("^Player%-%d+%-%x+$") then
-        face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. guid)
-        row.livePortraitGUID = nil
-        row.archivedPortrait = true
+    if guid and guid:match("^Player%-%d+%-%x+$") and
+        ((type(GrudgeLedgerNativePortraits) == "table" and GrudgeLedgerNativePortraits[guid] == true)
+        or (type(GrudgeLedgerPortraitIndex) == "table" and GrudgeLedgerPortraitIndex[guid] == "native")) then
+        face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. guid .. "-native")
+        row.archivedPortrait = "native"
         return
     end
     face:SetTexture(nil)
@@ -2464,8 +2458,8 @@ local function buildLedger()
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(plain(record.fullName or record.name))
             GameTooltip:AddLine(plain(faction .. " · " .. race .. " · " .. class) .. (GL.ValidLevel(record.level) and " · " .. L("Niveau %d"):format(record.level) or ""))
-            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.livePortraitGUID and L("Portrait vu en jeu") or self.archivedPortrait
-                and L("Portrait enregistré de l’Armurerie") or L("Icône générique"), 0.82, 0.78, 0.69)
+            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or (self.livePortraitGUID or self.archivedPortrait)
+                and L("Portrait vu en jeu") or L("Icône générique"), 0.82, 0.78, 0.69)
             if record.guild then GameTooltip:AddLine(plain(record.guild)) end
             local tags = GL.TagText and GL.TagText(record)
             if tags then GameTooltip:AddLine(L("Étiquettes : %s"):format(tags), 1, 0.88, 0.55, true) end

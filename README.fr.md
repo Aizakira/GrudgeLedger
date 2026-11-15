@@ -46,16 +46,16 @@ La colonne de gauche présente les contacts du plus récemment au plus anciennem
 
 ### Conserver les portraits hors de portée
 
-Le Journal affiche le portrait en direct, puis l’avatar individuel enregistré de l’Armurerie si le joueur s’éloigne. À défaut, il affiche l’emblème de race, de classe ou de faction disponible. Survolez la ligne pour connaître la source de l’image.
+Le Journal affiche le visage du personnage vu en jeu. Hors de vue, il réutilise le portrait observé tant qu’il est disponible, puis l’emblème de race, de classe ou de faction. La fiche Équipement affiche le modèle en pied lorsque le jeu identifie le personnage visible.
 
-L’importateur facultatif se lance sur votre ordinateur avec Python 3 et Pillow. Il lit les noms et identifiants enregistrés dans les sauvegardes du journal. Il interroge l’Armurerie officielle de la région choisie et vérifie le nom et l’identifiant de chaque avatar avant de l’enregistrer. Les notes, avis et événements restent locaux.
+L’importateur facultatif complète les caractéristiques, les objets et les talents à partir des fiches publiques. Le Journal garde le dernier relevé exploitable de ses contacts même si leur fiche n’a jamais été ouverte. Les notes, avis et événements restent locaux.
 
 ```powershell
 python -m pip install Pillow
 python tools/sync_portraits.py "F:/game/World of Warcraft/_forever_" --region eu
 ```
 
-Adaptez le chemin à votre installation et ajoutez `--name "Prénom Nom"` pour un seul joueur. WoW écrit les fiches sur disque à la déconnexion ou avec `/reload`. Après un import, relancez le jeu et activez **Grudge Ledger - Private portraits** dans les addons. Une prochaine exécution actualise les avatars âgés d’au moins sept jours. L’option `--force` actualise immédiatement. Les images 64 × 64 sont dans le dossier privé `Interface/AddOns/GrudgeLedgerPortraits`. Partagez uniquement le dossier `GrudgeLedger`. Supprimer le dossier privé, jeu fermé, efface le cache d’images.
+Adaptez le chemin à votre installation et ajoutez `--name "Prénom Nom"` pour un seul joueur. WoW écrit les fiches sur disque à la déconnexion ou avec `/reload`. Après un import, relancez le jeu et activez **Grudge Ledger - Private portraits** dans les addons. Le compagnon en mode --watch surveille les sauvegardes et réutilise les relevés récents pendant sept jours. L’option --force lance une nouvelle vérification.
 
 ### Depuis la 0.10.0
 
