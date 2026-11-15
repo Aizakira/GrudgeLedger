@@ -26,18 +26,64 @@ local function draw(guid)
         function(key) return order[key:lower()] or 20 end,function(item) return item.variant end)
     return parent.equipment
 end
+local create=CreateFrame
+local actor,dressed={},{}
+function actor:ClearModel() self.file=nil end
+function actor:SetModelByUnit(unit,sheathe,autoDress,hide,native,bow,race)
+    assert((unit=="player" or unit=="target") and not autoDress and native and race==5)
+    self.seed=unit
+    self.race=race
+    return true
+end
+function actor:IsLoaded() return self.file~=nil end
+function actor:GetModelFileID() return self.file end
+function actor:SetOnModelLoadedCallback(callback) self.loaded=callback end
+function actor:Undress() dressed={} end
+function actor:TryOn(link) dressed[link]=true end
+ModelSceneMixin={}
+C_ModelInfo={}
+C_UIFileAsset={GetFileID=function(path)
+    if path=="Character\\Scourge\\Male\\ScourgeMale.m2" then return 42 end
+end}
+function CreateFrame(kind,...)
+    local widget=create(kind,...)
+    if kind=="ModelScene" then
+        function widget:SetFromModelSceneID(id) assert(id==596) end
+        function widget:GetPlayerActor() return actor end
+    end
+    return widget
+end
+local donorSex,targetSex=3,nil
+function UnitSex(unit) return unit=="player" and donorSex or unit=="target" and targetSex end
+function UnitRace(unit) if unit=="target" then return "Mort-vivant","Scourge",5 end end
+function UnitIsVisible(unit) return UnitGUID(unit)~=nil end
+local timers={}
+C_Timer={After=function(delay,cb) timers[#timers+1]=cb end}
+local cachedForPreview=false
+C_Item={IsItemDataCachedByID=function() return cachedForPreview end,RequestLoadItemDataByID=function(id) assert(id==9890) end}
 local view=draw(archived)
 assert(#view.buttons==19 and view.stage:GetWidth()>=150)
 assert(view.buttons[17].slotName=="weapon" and view.buttons[19].slotName=="ranged")
-assert(not view.stage:IsShown(), "a GUID-named web image is insufficient")
-local dressed={}
-view.preview.ClearModel=function(self) self.display=nil end
-view.preview.SetDisplayInfo=function(self,id) self.display=id end
-view.preview.Undress=function() dressed={} end
-view.preview.TryOn=function(self,link) dressed[link]=true end
-draw(archived)
-assert(view.preview.display==57 and view.preview:IsShown() and dressed[cape.ref] and view.stage:IsShown(),
-    "the archived undead wears the recorded cape even when the web body is wrong")
+assert(view.stage:IsShown() and view.face:IsShown() and not actor.race,"no compatible unit, show portrait")
+donorSex=2
+view.scripts.OnEvent(view,"PLAYER_TARGET_CHANGED")
+assert(actor.race==5 and view.face:IsShown(),"keep portrait until the actual mesh has loaded")
+actor.file=777
+actor.loaded(actor)
+assert(view.face:IsShown() and not view.previewReady,"reject seed geometry of another race")
+targetSex=2
+timers[1]()
+assert(actor.seed=="target" and view.face:IsShown(),"wrong or stalled seed retries with an available compatible player")
+actor.file=42
+actor.loaded(actor)
+assert(view.previewReady and view.face:IsShown() and not dressed[cape.ref] and view.pendingItems[9890])
+view.scripts.OnEvent(view,"ITEM_DATA_LOAD_RESULT",9890,false)
+assert(view.face:IsShown() and view.itemRetries[9890])
+timers[#timers]()
+cachedForPreview=true
+view.scripts.OnEvent(view,"ITEM_DATA_LOAD_RESULT",9890,true)
+assert(not view.face:IsShown())
+assert(dressed[cape.ref] and not view.pendingItems[9890],"cold item is worn when the cache supplies it")
 local back=view.buttons[4]
 assert(back.item==cape and back.scripts.OnClick)
 function strsplit(delim,s)
@@ -82,12 +128,12 @@ assert(view.model:IsShown() and view.model.loaded==live)
 assert(not GameTooltip.shown and not back.item)
 mock.units.target.guid=archived
 view.scripts.OnEvent(view,"PLAYER_TARGET_CHANGED")
-assert(not view.model:IsShown() and view.model.loaded==nil and not view.stage:IsShown()
-    and back:GetWidth()>parent:GetWidth()*.45,"without a body the two gear columns reclaim the space")
+assert(not view.model:IsShown() and view.model.loaded==nil and view.stage:IsShown() and view.face:IsShown(),
+    "without a matching model the contact portrait stays on the equipment page")
 missing.scripts.OnEnter(missing)
 view:Hide()
 assert(not GameTooltip.shown)
 GrudgeLedgerNativePortraits={[archived]=true}
 draw(archived)
-assert(not view.preview:IsShown() and view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
+assert(not view.face:IsShown() and view.model.loaded==archived and view.model:IsShown() and view.stage:IsShown(),"live GUID wins even with an archived web body")
 print("PASS equipment: body or expanded gear, model GUID, native variant tooltip, cold cache and chat draft")

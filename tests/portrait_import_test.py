@@ -14,9 +14,12 @@ import sync_portraits as portraits
 
 guid = "Player-42-0000002A"
 url = "https://render.worldofwarcraft.com/forever-eu/character/42/42-avatar.jpg"
-character = {"region": "eu", "name": "Test", "surname": "Keeper", "avatar": {"url": url}}
+character = {"region": "eu", "name": "Test", "surname": "Keeper", "avatar": {"url": url},
+             "race": {"id": 5, "name": "Undead"}, "gender": {"enum": "MALE"},
+             "stats": {"basic": {"primary": [{"enum": "HEALTH", "value": {"value": 1900}}]}}}
 photo = io.BytesIO()
-Image.new("RGB", (84, 84), "#663311").save(photo, format="JPEG")
+gradient = Image.linear_gradient("L").resize((84, 84)).convert("RGB")
+gradient.save(photo, format="JPEG")
 
 
 def fetch(address, _limit):
@@ -156,16 +159,44 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
     with patch.object(portraits, "fetch", side_effect=full_response):
         assert portraits.sync(root, "eu", {alias: {"test keeper"}}, profiles_only=True) == 0
     named_file = folder / (portraits.media_stem("eu", alias) + ".json")
+    # Older schema-3 name-only records have fresh gear but no model identity.
+    legacy = json.loads(named_file.read_bytes())
+    del legacy["identity"]["raceID"], legacy["identity"]["sex"]
+    named_file.write_text(json.dumps(legacy), encoding="utf8")
+    with patch.object(portraits, "fetch", side_effect=full_response):
+        assert portraits.sync(root, "eu", {alias: {"test keeper"}}, profiles_only=True) == 0
+    restored = json.loads(named_file.read_bytes())["identity"]
+    assert (restored["raceID"],restored["sex"]) == (5,2)
     last_good = named_file.read_bytes()
     assert json.loads(last_good)["characterHex"] == "2a" and '"eu:name:test keeper"' in (folder/"Profiles.lua").read_text("utf8")
     with patch.dict(character, {"gear": {}}), patch.object(portraits, "fetch", side_effect=full_response):
         assert portraits.sync(root, "eu", {alias: {"test keeper"}}, force=True, profiles_only=True) == 1
     assert named_file.read_bytes() == last_good
+    # A broken JSON must not remove the profile from the last usable catalog.
+    named_file.write_bytes(b'{"gear":')
+    with patch.object(portraits, "character_profile", side_effect=OSError("offline")):
+        retries = {}
+        assert portraits.sync(root, "eu", {alias: {"test keeper"}}, profiles_only=True, retry_after=retries) == 1
+        assert alias in retries and '"eu:name:test keeper"' in (folder/"Profiles.lua").read_text("utf8")
+    with patch.object(portraits, "fetch", side_effect=full_response):
+        assert portraits.sync(root, "eu", {alias: {"test keeper"}}, profiles_only=True) == 0
+    assert portraits.usable_identity(json.loads(named_file.read_bytes()))
     with patch.dict(character, {"avatar":{"url":url.replace("42-avatar", "43-avatar")}}):
         assert portraits.sync(root, "eu", {alias: {"test keeper"}}, force=True, profiles_only=True) == 1
     assert named_file.read_bytes() == last_good
     save.parent.mkdir(parents=True)
-    save.write_text('["name:Test Keeper"] = "guid:'+guid+'",\n["name:chat visitor"] = "name:chat visitor",\n')
+    # An unrelated broken historical file cannot stall repair of other contacts.
+    original_catalog = (folder/"Profiles.lua").read_bytes()
+    duplicate.write_text('{"identity":{},"gear":{},"updated":NaN}', encoding="utf8")
+    with patch.object(portraits, "fetch", side_effect=full_response):
+        character["gear"]["back"]["name"] = "Updated while an orphan is unreadable"
+        assert portraits.sync(root,"eu",{alias: {"test keeper"}},force=True,profiles_only=True) == 0
+    assert (folder/"Profiles.last-good.lua.bak").read_bytes() == original_catalog
+    assert "Updated while an orphan is unreadable" in (folder/"Profiles.lua").read_text("utf8")
+    stamp = int(portraits.time.time())
+    save.write_text('["name:Test Keeper"] = "guid:'+guid+'",\n["name:chat visitor"] = "name:chat visitor",\n'
+                    + f'["guid:Player-42-0000002C|Bounty Only"] = {stamp},\n'
+                    + f'["name:wrong contact|Other Contact"] = {stamp},\n')
     def polling_ticks():
         yield  # next pass: identical file, no second sync
         save.write_text(save.read_text()+'["name:Second Keeper"] = "guid:Player-42-0000002B",\n')
@@ -177,6 +208,7 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
             portraits.main()
         except KeyboardInterrupt:
             pass
-        assert [len(call.args[2]) for call in watcher.call_args_list]==[2,3]
+        assert [len(call.args[2]) for call in watcher.call_args_list]==[3,4]
         assert watcher.call_args_list[0].args[2]["name:chat visitor"] == {"chat visitor"}
+        assert watcher.call_args_list[0].args[2]["Player-42-0000002C"] == {"Bounty Only"}
 print("PASS verified portraits and body renders, cached gear, talents, PvP and reputation imports")

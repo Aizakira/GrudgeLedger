@@ -95,6 +95,12 @@ def window_tile(game):
         yield image if user.GetForegroundWindow() == hwnd.value else None
 
 
+def usable_face(image):
+    # Reject flat loading tiles on disk with the same check used during acquisition.
+    colors = image.convert("RGB").resize((16, 16)).getcolors(256)
+    return len(colors or []) >= 16
+
+
 def native_guids(folder):
     saved = {}
     for path in folder.glob("Player-*-native.tga"):
@@ -102,8 +108,7 @@ def native_guids(folder):
         if re.fullmatch(r"Player-[0-9]{1,10}-[0-9A-Fa-f]{1,16}", guid):
             try:
                 with Image.open(path) as image:
-                    if image.format == "TGA" and image.size == (64,64):
-                        image.load()
+                    if image.format == "TGA" and image.size == (64,64) and usable_face(image):
                         saved[guid] = True
             except (ValueError, OSError):
                 continue
@@ -112,28 +117,35 @@ def native_guids(folder):
 
 def watch(game, folder, write_atomic, lua):
     saved = native_guids(folder)
-    def publish():
-        write_atomic(folder/"NativePortraits.lua", ("GrudgeLedgerNativePortraits = "+lua(saved)+"\n").encode())
-    publish()
+    def publish(index):
+        write_atomic(folder/"NativePortraits.lua", ("GrudgeLedgerNativePortraits = "+lua(index)+"\n").encode())
+    publish(saved)
+    next_check = time.monotonic() + 60
     previous = None
     for image in window_tile(game):
         try:
+            if time.monotonic() >= next_check:
+                next_check = time.monotonic() + 60
+                on_disk = native_guids(folder)
+                if saved != on_disk:
+                    publish(on_disk)
+                    saved = on_disk
             guid = decode(image) if image is not None else None
-            if guid and previous == guid:
-                dest = folder/(guid+"-native.tga")
-                if guid not in saved:
-                    face = image.crop((0,16,64,80))
-                    if len(face.resize((16,16)).getcolors(256) or []) >= 16:
-                        data = io.BytesIO()
-                        face.save(data,format="TGA")
-                        write_atomic(dest,data.getvalue())
-                        saved[guid] = True
-                        try:
-                            publish()
-                        except OSError:
-                            del saved[guid]
-                            raise
-            previous = guid
+            candidate = None
+            if guid and guid not in saved:
+                face = image.crop((0,16,64,80))
+                candidate = (guid, face.tobytes())
+                if previous == candidate and usable_face(face):
+                    data = io.BytesIO()
+                    face.save(data,format="TGA")
+                    write_atomic(folder/(guid+"-native.tga"),data.getvalue())
+                    saved[guid] = True
+                    try:
+                        publish(saved)
+                    except OSError:
+                        del saved[guid]
+                        raise
+            previous = candidate
         except OSError:
             previous = None
         time.sleep(.25)

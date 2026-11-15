@@ -304,4 +304,13 @@ dossier:Hide()
 GL.ShowLedger(saved.key)
 assert(f.raceIcon.texture == original and rowFor(saved.key).raceIcon.texture == original,
     "both journal portraits are restored after leaving the dossier")
+-- A name-only archive carries numeric race and sex even before a native encounter.
+local realProfile = GL.ArmoryProfile
+GL.ArmoryProfile = function() return {identity={raceID=1,sex=3,classFile="WARLOCK"}} end
+C_Texture = {GetAtlasInfo=function(atlas) return knownAtlas[atlas] and {} end}
+knownAtlas["raceicon128-human-female"] = true
+GL.PaintBookPortrait(dossier,{fullName="Unknown Dealer"})
+assert(dossier.raceIcon.atlas=="raceicon128-human-female" and not dossier.archivedPortrait,
+    "a verified name-only identity gets a race portrait while awaiting a live face")
+GL.ArmoryProfile = realProfile
 print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

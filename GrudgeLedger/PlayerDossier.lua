@@ -359,6 +359,17 @@ function GL.OpenPlayerDossier(id,onReturn,knownName)
         local contact=GL.Get(id)
         key,guid=contact.key,contact.guid
     else return false end
+    local contact=GL.Get(key)
+    local identity=GL.IdentityFromName((contact and contact.fullName) or knownName,nil,guid)
+    if GL.db and identity and identity.surname and (guid or identity.key==key) then
+        local requests=object(GL.db.armoryRequests)
+        GL.db.armoryRequests=requests
+        local now=GL.Now()
+        for request,stamp in pairs(requests) do
+            if type(stamp)~="number" or now-stamp>7*86400 then requests[request]=nil end
+        end
+        requests[key.."|"..identity.fullName:lower()]=now
+    end
     frame=frame or build()
     frame.armoryLink:Hide()
     frame.key,frame.guid,frame.onReturn,frame.knownName,frame.page=key,guid,onReturn,knownName,"gear"

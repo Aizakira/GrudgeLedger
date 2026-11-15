@@ -213,7 +213,20 @@ local function paintPortrait(row, record, unit)
     end
     face:SetTexture(nil)
     local race = GL.Clean(record.race, "string")
-    local sex = record.sex == 2 and "male" or record.sex == 3 and "female"
+    local sexID = record.sex
+    if not race or not sexID then
+        local profile = GL.ArmoryProfile(record)
+        local public = profile and profile.identity
+        if public and public.raceID then
+            for token, id in pairs(baseRaceIDs) do
+                if id == public.raceID and (not race or race == token) then
+                    race, sexID = token, sexID or public.sex
+                    break
+                end
+            end
+        end
+    end
+    local sex = sexID == 2 and "male" or sexID == 3 and "female"
     local suffix = race and sex and (race:lower() .. "-" .. sex)
     if suffix and (identityAtlas(face, "raceicon128-" .. suffix) or identityAtlas(face, "raceicon-" .. suffix)) then return end
     if classIcon(face, record) then row.classIcon:SetAlpha(0) return end
@@ -240,7 +253,11 @@ local function refreshPortraits(frame)
     redrawPortraits = nil
 end
 portraitFrames:SetScript("OnEvent", function(self, event, unit)
-    if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then observeFace(unit, true) end
+    if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
+        observeFace(unit, true)
+    elseif event == "PLAYER_FOCUS_CHANGED" then
+        observeFace("focus")
+    end
     if not ((ledger and ledger:IsShown()) or (statisticsWindow and statisticsWindow:IsShown())
         or (journalWindow and journalWindow:IsShown()) or (correctionWindow and correctionWindow:IsShown())
         or (GrudgeLedgerPlayerDossier and GrudgeLedgerPlayerDossier:IsShown()) or (GrudgeLedgerBounties and GrudgeLedgerBounties:IsShown())) then return end
