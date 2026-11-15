@@ -1,4 +1,4 @@
-GRUDGE LEDGER — 0.11.0-alpha.9
+GRUDGE LEDGER — 0.11.0
 
 Armurerie : les contacts ajoutés par nom complet depuis le chat peuvent recevoir une fiche du compagnon. Le Journal conserve le dernier relevé chargé dès que le contact est connu. L’onglet Équipement affiche le modèle du personnage identifié en jeu tant qu’il est visible. Hors de vue, les emplacements occupent toute la largeur. Le compagnon lit le Journal après /reload ou à la déconnexion. Après l’import, un nouveau /reload charge les données. La première installation du module privé peut nécessiter un redémarrage du jeu.
 

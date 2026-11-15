@@ -69,6 +69,12 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
     requests.reset_mock()
     portraits.sync(root, "eu", contacts)
     assert requests.call_count == 0
+    native = folder / (guid + "-native.tga")
+    native.write_bytes(before)
+    portraits.sync(root, "eu", contacts)
+    assert portraits.lua(guid) + ']="native"' in (folder / "Portraits.lua").read_text()
+    assert native.read_bytes() == before
+
     for field, invalid in (("region", "us"), ("surname", "Other"), ("avatar", {"url": url.replace("42-avatar", "43-avatar")}),
                            ("avatar", {"url": "https://render.worldofwarcraft.com/raceicon.png"})):
         with patch.dict(character, {field: invalid}):

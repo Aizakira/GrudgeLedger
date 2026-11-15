@@ -109,6 +109,7 @@ local function observeFace(unit, refresh)
     local guid = GL.Clean(GL.Safe(UnitGUID, unit), "string")
     if not guid or not guid:match("^Player%-") or not visibleGUID(unit, guid)
         or not GL.Get("guid:" .. guid) or (IsUnitModelReadyForUI and not GL.Safe(IsUnitModelReadyForUI, unit)) then return end
+    if GL.QueueNativePortrait then GL.QueueNativePortrait(unit,guid) end
     if refresh then
         for row in pairs(portraitRows) do
             if row.livePortraitGUID == guid then pcall(SetPortraitTexture, row.raceIcon, unit, true) end
@@ -196,6 +197,7 @@ local function paintPortrait(row, record, unit)
     row.classIcon:SetTexture(nil)
     row.classIcon:SetAlpha(classIcon(row.classIcon, record) and 1 or 0)
     if unit and (not IsUnitModelReadyForUI or GL.Safe(IsUnitModelReadyForUI, unit)) and pcall(SetPortraitTexture, face, unit, true) then
+        if GL.QueueNativePortrait and GL.Get(record) then GL.QueueNativePortrait(unit,guid) end
         row.livePortraitGUID = record.guid
         row.portraitUnit = unit
         return

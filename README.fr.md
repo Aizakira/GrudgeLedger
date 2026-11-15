@@ -11,9 +11,9 @@ La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde
 
 Un petit addon pour **World of Warcraft Forever**, qui rassemble amis, ennemis, notes personnelles, avis sur les guildes et souvenirs de PvP.
 
-[English](README.md) · [Télécharger](https://github.com/Aizakira/GrudgeLedger/releases/latest) · [Signaler un problème ou proposer une idée](https://github.com/Aizakira/GrudgeLedger/issues)
+[English](README.md) · [Télécharger](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0) · [Signaler un problème ou proposer une idée](https://github.com/Aizakira/GrudgeLedger/issues)
 
-**[Essayer les primes de guilde (0.11.0-alpha.7)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0-alpha.7)** pour publier un contrat, suivre la chasse, répartir l’or par courrier et comparer les avis datés des membres. Le ZIP installable et les consignes de test figurent sur la page de la version.
+**[Essayer les primes de guilde (0.11.0)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0)** pour publier un contrat, suivre la chasse, répartir l’or par courrier et comparer les avis datés des membres. Le ZIP installable et les consignes de test figurent sur la page de la version.
 
 ## Pourquoi cet addon ?
 
@@ -340,7 +340,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger le paquet de l'addon **`GrudgeLedger-<version>.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Télécharger le paquet de l'addon **`GrudgeLedger-<version>.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 
@@ -432,7 +432,7 @@ python tests/run_tests.py
 Les mêmes tests sont exécutés sur Linux et Windows par GitHub Actions. Voir [DEVELOPMENT.txt](DEVELOPMENT.txt) pour le rendu d'interface facultatif hors jeu. Depuis la racine du dépôt, cette commande crée une archive installable :
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.12.zip GrudgeLedger
+python tools/package_addon.py
 ```
 
 ## Licence et crédits

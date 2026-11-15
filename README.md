@@ -9,9 +9,9 @@
 
 A small personal player journal for **World of Warcraft Forever**: friends, enemies, notes, guild opinions and PvP encounters, brought together in one addon.
 
-[Français](README.fr.md) · [Download](https://github.com/Aizakira/GrudgeLedger/releases/latest) · [Report a bug or suggest an idea](https://github.com/Aizakira/GrudgeLedger/issues)
+[Français](README.fr.md) · [Download](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0) · [Report a bug or suggest an idea](https://github.com/Aizakira/GrudgeLedger/issues)
 
-**[Try the guild bounties alpha (0.11.0-alpha.7)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0-alpha.7)** to post contracts, track a hunt, split the gold by mail and compare dated guild opinions. The release includes the installable ZIP and playtest notes.
+**[Try the guild bounties alpha (0.11.0)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0)** to post contracts, track a hunt, split the gold by mail and compare dated guild opinions. The release includes the installable ZIP and playtest notes.
 
 ## Why this exists
 
@@ -343,7 +343,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 ## Install
 
-1. Download the **`GrudgeLedger-<version>.zip`** addon package from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/latest).
+1. Download the **`GrudgeLedger-<version>.zip`** addon package from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.0).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 
@@ -402,7 +402,7 @@ python tests/run_tests.py
 GitHub Actions runs the same suite on Linux and Windows. See [DEVELOPMENT.txt](DEVELOPMENT.txt) for the optional offline UI renderer. To build an installable archive from the repository root:
 
 ```sh
-python -m zipfile -c GrudgeLedger-0.5.12.zip GrudgeLedger
+python tools/package_addon.py
 ```
 
 Issues and pull requests in French or English are welcome. For bugs, include the addon/client versions, steps to reproduce, expected and actual behavior, and a screenshot with personal information hidden if useful. Keep fixes focused and run the existing tests. Please do not submit anyone's personal journal.

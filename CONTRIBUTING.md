@@ -39,6 +39,10 @@ contribution externe sans son accord explicite.
 
 Les règles actives sont consultables dans [Repository rules](https://github.com/Aizakira/GrudgeLedger/rules).
 
+## Versions
+
+Utiliser une seule branche de référence, `main`, et un dossier installable, `GrudgeLedger/`. Incrémenter le numéro majeur.mineur.correctif dans le TOC à chaque diffusion. Le tag Git est `v<version>`. Le canal Alpha se règle sur GitHub (préversion) et CurseForge (Alpha). Après validation du commit, `python tools/package_addon.py` produit le ZIP commun aux deux plateformes à partir des fichiers suivis.
+
 ## English
 
 Forks, issues and pull requests in French or English are welcome. The code remains

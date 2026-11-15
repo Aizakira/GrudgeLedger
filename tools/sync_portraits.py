@@ -391,15 +391,18 @@ def sync(root, region, contacts, force=False, profiles_only=False, achievements=
                 retry_after[guid] = time.monotonic() + 1800
     # Publish only complete textures. A later run can recover a fully written
     # portrait even if a previous import stopped before publishing the index.
-    keys = sorted(p.stem for p in folder.glob("Player-*.tga") if re.fullmatch(GUID, p.stem))
-    index = "GrudgeLedgerPortraitIndex = {\n" + "".join(f'    ["{k}"] = true,\n' for k in keys) + "}\n"
+    keys = {p.stem: True for p in folder.glob("Player-*.tga") if re.fullmatch(GUID, p.stem)}
+    from native_portraits_windows import native_guids
+    keys.update(dict.fromkeys(native_guids(folder), "native"))
+    index = "GrudgeLedgerPortraitIndex = " + lua(keys) + "\n"
     write_atomic(folder / "Portraits.lua", index.encode("ascii"))
     manifest = folder / "Profiles.lua"
     published_at = manifest.stat().st_mtime_ns if manifest.is_file() else 0
     if updated or not published_at or any(f.stat().st_mtime_ns > published_at for f in folder.glob("*.json")):
         publish_profiles(folder)
         manifest.touch()
-    write_atomic(folder / "GrudgeLedgerPortraits.toc", TOC + b"Profiles.lua\n")
+    native_file = b"NativePortraits.lua\n" if (folder/"NativePortraits.lua").is_file() else b""
+    write_atomic(folder / "GrudgeLedgerPortraits.toc", TOC + b"Profiles.lua\n" + native_file)
     print(f"{updated} updated, {fresh} recent, {unavailable} unavailable. {len(keys)} portraits in {folder}", flush=True)
     return unavailable
 
@@ -416,9 +419,18 @@ def main():
                         help="also archive website artwork on disk for reference")
     parser.add_argument("--pvp-achievements", action="store_true", help="also fetch completed PvP achievements")
     parser.add_argument("--watch", action="store_true", help="watch locally saved journals; stop with Ctrl+C")
+    parser.add_argument("--native-portraits", action="store_true", help="archive observed portrait tiles on Windows while watching")
     args = parser.parse_args()
     if not (args.game / "Interface/AddOns/GrudgeLedger/GrudgeLedger.toc").is_file():
         parser.error("select the _forever_ folder containing GrudgeLedger")
+    if args.native_portraits:
+        if os.name != "nt" or not args.watch:
+            parser.error("--native-portraits requires --watch on Windows")
+        from threading import Thread
+        from native_portraits_windows import watch
+        folder = args.game / "Interface/AddOns/GrudgeLedgerPortraits"
+        folder.mkdir(exist_ok=True)
+        Thread(target=watch,args=(args.game.resolve(), folder, write_atomic, lua),daemon=True).start()
     last, check_at, retry_after = None, 0, {}
     while True:
         try:
