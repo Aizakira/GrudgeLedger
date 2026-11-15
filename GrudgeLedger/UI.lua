@@ -1948,6 +1948,20 @@ local function renderDetail()
                 lines[#lines + 1] = plain(preview) .. (count > 80 and L("… (suite dans Notes)") or "")
             else lines[#lines + 1] = "\n" .. L("Aucune note personnelle.") end
             lines[#lines + 1] = "\n" .. L("Rencontres mémorisées : %d"):format(record.encounters and record.encounters.count or 0)
+            if record.creatorName then
+                lines[#lines + 1] = L("Créée par %s · %s"):format(plain(record.creatorName),eventDate({time=record.firstSeen}))
+            end
+            if record.tagHistory and #record.tagHistory>0 then
+                lines[#lines+1] = "\n"..L("Étiquettes personnelles")
+                local names={}
+                for _,choice in ipairs(GL.TagChoices) do names[choice[1]]=L(choice[2]) end
+                local changes={}
+                for i,e in ipairs(record.tagHistory) do changes[i]=e end
+                table.sort(changes,function(a,b) return a.time>b.time end)
+                for _,e in ipairs(changes) do
+                    lines[#lines+1]=eventDate(e).." · "..plain(e.actorName or e.actorGUID).."   "..(e.enabled and "+" or "−").." "..(names[e.id] or "")
+                end
+            end
             lines[#lines + 1] = counted(pvp.aggressions or 0, "agression")
             local awards = GL.ContactMatchup(record)
             lines[#lines + 1] = honorTotal(awards)
@@ -2355,7 +2369,11 @@ local function buildLedger()
     if GL.TagChoices then
         local options = { { L("Toutes les étiquettes"), "all" } }
         for _, entry in ipairs(GL.TagChoices) do options[#options + 1] = { L(entry[2]), entry[1] } end
-        f.tagFilter, f.tagFilters = filterMenu(36, options, function(value) tagFilter = value end, 293, 271)
+        f.tagFilter, f.tagFilters = filterMenu(36, options, function(value) tagFilter = value end, 293, 147)
+        f.sharedProfiles = button(f, L("Fiches de guilde"), 187, -293, 120, function()
+            closeMenu()
+            GL.OpenGuildProfiles(currentRecord())
+        end)
     end
     f.rows = {}
     f.sort = button(f, L("Dernière interaction"), 149, -229, 158, function()
@@ -2548,7 +2566,7 @@ local function buildLedger()
     end)
     local deleteDialog = "GRUDGE_LEDGER_DELETE_PROFILE"
     StaticPopupDialogs[deleteDialog] = {
-        text = L("Supprimer définitivement la fiche de %s ? Ses notes et son historique seront effacés et ses événements retirés des statistiques du compte."),
+        text = L("Supprimer votre fiche personnelle de %s ? Ses notes et son historique seront effacés sur ce compte. Pour retirer une publication dans toute la guilde, utilisez « Fiches de guilde »."),
         button1 = L("Supprimer"), button2 = L("Annuler"), timeout = 0, whileDead = true, hideOnEscape = true,
         OnAccept = function(_, record)
             if currentRecord() ~= record or not GL.DeleteProfile(record) then

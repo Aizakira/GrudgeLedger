@@ -376,7 +376,9 @@ The existing offline suite covers fifteen test scripts, including 71 tracking sc
 
 ## Your journal stays yours
 
-Every new account starts with an **empty journal**. The addon contains no preset players, guilds or blacklists. Its account-wide database is saved by WoW in `WTF/Account/<account>/SavedVariables/GrudgeLedger.lua`, separately from the addon code. Sharing the addon folder or release ZIP does **not** share your notes. There is no automatic player-to-player database exchange or telemetry.
+Every new account starts with an **empty journal**. WoW saves it in `WTF/Account/<account>/SavedVariables/GrudgeLedger.lua`. Personal notes stay on your account.
+
+Open **Journal → Guild profiles** to publish a contact or add an opinion. Automatic sharing is off by default and applies to new contacts and future tag changes in the current guild. The summary counts accounts per label. The history shows who added or removed each tag and when, including conflicting opinions. Hide a target to keep it off your own list across logins. The publishing account can also withdraw its edition for the guild. Returning members can recover the withdrawal from any guildmate who received it. To receive a publication or an opinion for the first time, its originating character must be online.
 
 Never upload your `WTF` folder or SavedVariables when reporting an issue. The optional `/gl debug` report excludes player identities, guild names, notes and raw errors; you choose whether to copy and share it.
 

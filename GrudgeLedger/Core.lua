@@ -461,10 +461,26 @@ local function merge(provisional, record)
     end
     record.reputation = record.reputation or provisional.reputation
     record.groupCount = record.groupCount + (provisional.groupCount or 0)
+    if (provisional.firstSeen or math.huge) <= (record.firstSeen or math.huge) then
+        record.creatorGUID, record.creatorName, record.creatorAccount = provisional.creatorGUID, provisional.creatorName, provisional.creatorAccount
+    end
     record.firstSeen = math.min(record.firstSeen or GL.Now(), provisional.firstSeen or GL.Now())
     table.sort(record.notes, function(a, b) return (a.time or 0) < (b.time or 0) end)
     table.sort(record.history, function(a, b) return (a.time or 0) < (b.time or 0) end)
     refreshReputation(record)
+end
+
+function GL.Author()
+    if not GL.db then return end
+    if not GL.db.authorAccount then
+        GL.db.authorAccount = ("%04x%04x%04x%04x"):format(math.random(0,65535), math.random(0,65535),
+            math.random(0,65535), math.random(0,65535))
+    end
+    local guid = playerGUID(GL.Safe(UnitGUID, "player"))
+    if not guid then return nil,nil,GL.db.authorAccount end
+    local name, surname = GL.Safe(UnitName, "player")
+    local actor = GL.IdentityFromName(name, surname, guid)
+    return guid, actor and actor.fullName or guid, GL.db.authorAccount
 end
 
 function GL.Remember(identity, inspect)
@@ -473,13 +489,15 @@ function GL.Remember(identity, inspect)
     if not clean then return nil end
     if not clean.guid and clean.alias and GL.db.aliases[clean.alias] == false then return nil end
     local record = GL.Get(clean)
+    local newIdentity = not record or not record.guid
     if record and clean.guid and record.key ~= clean.key and not record.guid then
         GL.db.players[record.key] = nil
         record.key = clean.key
         GL.db.players[clean.key] = record
     end
     if not record then
-        record = normalize({ key = clean.key, firstSeen = GL.Now() })
+        local actor, name, account = GL.Author()
+        record = normalize({key=clean.key, firstSeen=GL.Now(), creatorGUID=actor, creatorName=name, creatorAccount=account})
         GL.db.players[clean.key] = record
         guildStatistics = nil
     end
@@ -530,6 +548,7 @@ function GL.Remember(identity, inspect)
             GL.db.aliases[clean.alias] = false -- two GUIDs, same display name: do not guess
         end
     end
+    if newIdentity and clean.guid and GL.GuildProfiles then GL.GuildProfiles.Observe(record) end
     if inspect and record.guid and GL.InspectDossierUnit then
         local unit = identity.unit
         if not unit or GL.Safe(UnitGUID, unit) ~= record.guid then unit = GL.VisiblePortraitUnit(record) end
@@ -610,11 +629,7 @@ function GL.RelationConfidence(record)
     if source ~= "pvp" then return nil end
     return "confirmed"
 end
-local function currentActor()
-    local name, surname = GL.Safe(UnitName, "player")
-    local actor = GL.IdentityFromName(name, surname, GL.Safe(UnitGUID, "player"))
-    return actor and actor.guid, actor and actor.fullName
-end
+local currentActor = GL.Author
 local function indexOpeningEvidence(proof, entry)
     if type(entry) ~= "table" or entry.voided or entry.voidReason == "battleground"
         or (entry.kind ~= "opening" and (entry.kind ~= "death" or entry.confidence ~= "confirmed"))
@@ -637,7 +652,7 @@ local function history(record, kind, extra)
     local entry = extra or {}
     local now, zone = GL.Now(), GL.Where()
     entry.time, entry.kind, entry.zone = entry.time or now, kind, entry.zone or zone
-    if not entry.actorGUID then entry.actorGUID, entry.actorName = currentActor() end
+    if not entry.actorGUID then entry.actorGUID, entry.actorName, entry.actorAccount = currentActor() end
     entry.opponentName = record and record.fullName
     -- Snapshot the explicitly tracked quest, never guess which quest the player is doing.
     -- ponytail: absent/protected quest APIs simply omit context; old events are not enriched.
@@ -862,8 +877,8 @@ function GL.AddNote(identity, text)
     if not text then return false, err end
     local record = GL.Remember(identity)
     if not record then return false, L("Identité du joueur indisponible.") end
-    local actorGUID, actorName = currentActor()
-    table.insert(record.notes, { time = GL.Now(), text = text, actorGUID = actorGUID, actorName = actorName })
+    local actorGUID, actorName, actorAccount = currentActor()
+    table.insert(record.notes, { time = GL.Now(), text = text, actorGUID = actorGUID, actorName = actorName, actorAccount = actorAccount })
     lastInteraction[record] = math.max(lastInteraction[record] or 0, record.notes[#record.notes].time)
     guildStatistics = nil -- a note makes a formerly group-only record personal
     GL.Emit("CHANGED", record)
@@ -882,6 +897,7 @@ function GL.UpdateNote(identity, note, text)
     if not value then return false, err end
     if note.text ~= value then
         note.text, note.updatedAt = value, GL.Now()
+        note.editorGUID, note.editorName, note.editorAccount = currentActor()
         lastInteraction[record] = math.max(lastInteraction[record] or 0, note.updatedAt)
         GL.Emit("CHANGED", record)
     end
@@ -898,6 +914,7 @@ function GL.DeleteNote(identity, note)
 end
 function GL.DeleteProfile(record)
     if not GL.db or type(record) ~= "table" or GL.db.players[record.key] ~= record then return false end
+    if GL.GuildProfiles then GL.GuildProfiles.HideTarget(record.guid) end
     local key = record.key
     GL.db.players[key] = nil
     local rule = GL.GetGuildRule(record)

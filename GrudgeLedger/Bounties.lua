@@ -396,6 +396,10 @@ local function schedule(s,msg)
     if active~=s then active,queue,queued=s,{},{} end
     if not queued[msg] then queue[#queue+1]=msg; queued[msg]=true end
 end
+B.GuildScope = scope
+function B.SendJournal(s, message)
+    schedule(s, "J;" .. message)
+end
 -- Per-member cumulative totals survive replay and offline catch-up.
 local function mergeScore(s,actor,target,wins,losses)
     s.scores=s.scores or {}
@@ -630,9 +634,14 @@ local function receive(msg,sender)
     if not budget or now-budget.at>=10 then budget={at=now,n=0,lastQ=budget and budget.lastQ}; budgets[sender]=budget end
     budget.n=budget.n+1
     if budget.n>45 then return end
+    if msg:sub(1,2)=="J;" then
+        if sender~=me and GL.GuildProfiles then GL.GuildProfiles.Receive(s,me,sender,msg:sub(3)) end
+        return
+    end
     if msg=="Q" then
         if budget.lastQ and now-budget.lastQ<10 then return end
         budget.lastQ=now
+        if sender~=me and GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me) end
         for target,scores in pairs(s.scores or {}) do
             for actor,n in pairs(scores) do schedule(s,"R;"..scoreMessage(actor,target,n[1],n[2])) end
         end
@@ -965,6 +974,7 @@ local function join()
         if s then
             finalize(s,me)
             schedule(s,"Q")
+            if GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me,true) end
             for _,raw in pairs(s.events) do
                 local e=unpackEvent(raw)
                 if e and e.actor==UnitGUID("player") then schedule(s,raw) end

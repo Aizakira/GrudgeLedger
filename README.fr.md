@@ -405,7 +405,11 @@ Vingt scripts de tests automatisés, dont 77 scénarios de suivi et 135 cas du d
 
 Le journal est **vierge au départ** : aucun joueur, aucune guilde, aucune liste noire préremplie. Il est commun aux personnages d'un même compte et enregistré séparément par WoW dans `WTF/Account/<compte>/SavedVariables/GrudgeLedger.lua`.
 
-Partager le dossier de l'addon ou son ZIP ne partage pas vos notes. Il n'y a ni échange automatique de listes entre joueurs ni télémétrie. Pour un signalement de bug, ne publiez pas votre dossier `WTF` ou vos SavedVariables. Le diagnostic facultatif `/gl debug` exclut les identités des joueurs, les noms des guildes, les notes et les erreurs brutes ; vous décidez de le copier et de le transmettre.
+Dans **Journal → Fiches de guilde**, choisissez un contact puis **Publier cette fiche**. Le partage automatique est désactivé au départ. L’activer publie les nouveaux contacts et les prochaines modifications d’étiquettes dans la guilde actuelle. Les notes personnelles, les combats et les données d’Armurerie du Journal restent sur votre compte.
+
+Chaque avis de guilde porte le nom du personnage, la date et un identifiant de compte créé par l’addon. La synthèse compte les comptes par étiquette. L’historique conserve les avis divergents et les retraits d’étiquettes. Une fiche masquée pour vous reste masquée après reconnexion. Le compte qui l’a publiée peut aussi la retirer pour toute la guilde. Les membres reconnectés récupèrent le retrait auprès d’un membre qui l’a déjà reçu. Une première copie de la fiche ou d’un avis nécessite la présence du personnage qui en est l’auteur.
+
+Partager le ZIP de l’addon laisse vos notes sur votre poste. Pour un signalement de bug, gardez votre dossier `WTF` et vos SavedVariables privés. Le diagnostic facultatif `/gl debug` exclut les noms des joueurs et des guildes, les notes et les erreurs brutes.
 
 ## Participer ou modifier
 

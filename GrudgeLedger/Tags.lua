@@ -25,6 +25,10 @@ function GL.TagText(record)
 end
 
 function GL.MergeTags(provisional, record)
+    for _, change in ipairs(provisional.tagHistory or {}) do
+        record.tagHistory = record.tagHistory or {}
+        record.tagHistory[#record.tagHistory+1] = change
+    end
     for id in pairs(labels) do
         if GL.HasTag(provisional, id) then
             record.tags = type(record.tags) == "table" and record.tags or {}
@@ -43,10 +47,16 @@ end
 
 function GL.ToggleTag(identity, id)
     if not labels[id] then return false end
+    local actor, name, account = GL.Author()
+    if not actor then return false end
     local record = GL.Remember(identity)
     if not record then return false end
     record.tags = type(record.tags) == "table" and record.tags or {}
     record.tags[id] = record.tags[id] ~= true or nil
+    local enabled = record.tags[id] == true
+    record.tagHistory = record.tagHistory or {}
+    record.tagHistory[#record.tagHistory+1] = { id=id, enabled=enabled, actorGUID=actor, actorName=name, account=account, time=GL.Now() }
+    if GL.GuildProfiles then GL.GuildProfiles.PersonalTag(record,id,enabled) end
     if not next(record.tags) then record.tags, record.tagRemindedAt = nil, nil end
     GL.Emit("CHANGED", record, "tags")
     return true

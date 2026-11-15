@@ -227,6 +227,7 @@ for i, r in ipairs(records) do
     if GL.Relation(r) == "friend" then r.groupCount = 15 - i end
 end
 local function hideWindows()
+    if GrudgeLedgerGuildProfiles then GrudgeLedgerGuildProfiles:Hide() end
     for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert", "GrudgeLedgerAlertPreview", "GrudgeLedgerGuide", "GrudgeLedgerBounties", "GrudgeLedgerPlayerDossier" }) do
         if _G[name] then _G[name]:Hide() end
     end
@@ -276,6 +277,16 @@ function QA.capture(name)
     name = name:gsub("%-readable", "")
     name = name:gsub("%-largeprint", "")
     UIParent:SetSize(1920, 1080)
+    if name=="guild-profiles" then
+        mock.units.player.guild="Les Veilleurs de l'Aube"
+        local g=GL.GuildProfiles
+        local card=assert(g.Publish(records[10]))
+        g.SetTag(card,"reliable",true)
+        local scope,me=GL.Bounties.GuildScope()
+        g.Receive(scope,me,records[4].guid,table.concat({"T",card.owner,card.target,card.digest,1,GL.Now(),"0123456789abcdef","unreliable","1"},";"))
+        GL.OpenGuildProfiles(records[10])
+        return GrudgeLedgerGuildProfiles
+    end
     if name:find("^journal%-tags") then
         local contact = records[10]
         contact.tags = {reliable=true}

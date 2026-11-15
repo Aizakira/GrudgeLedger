@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.11.0-alpha.5
+GRUDGE LEDGER — 0.11.0-alpha.6
+
+Journal → Fiches de guilde. Sélectionnez un contact et publiez sa fiche pour ouvrir les avis de guilde. Chaque membre peut donner ou retirer ses étiquettes. La synthèse compte les avis actifs et l’historique indique le personnage et la date. « Masquer pour moi » est personnel. Le compte qui a publié dispose aussi de « Retirer pour la guilde ». Le partage automatique des nouvelles fiches et des prochaines étiquettes se règle par guilde.
 
 Les insignes des étiquettes sont visibles dans la liste du Journal et en haut de la fiche. Le bouclier vert à coche signifie « Fiable ». Survolez les insignes de la fiche pour lire leurs noms.
 
