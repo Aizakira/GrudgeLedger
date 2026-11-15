@@ -3,7 +3,7 @@ local mock=assert(loadfile(TEST_WORK.."/tests/wow_mock.lua"))()
 assert(loadfile(TEST_ROOT.."/Core.lua"))("GrudgeLedger")
 assert(loadfile(TEST_ROOT.."/UITheme.lua"))()
 assert(loadfile(TEST_ROOT.."/UI.lua"))()
-assert(loadfile(TEST_ROOT.."/PlayerDossier.lua"))()
+for _,n in ipairs({"DossierEquipment","DossierTalentData","DossierTalents","PlayerDossier"}) do assert(loadfile(TEST_ROOT.."/"..n..".lua"))() end
 local GL=GrudgeLedger
 GL.InitDB()
 local guid="Player-1-00AB"
@@ -18,7 +18,9 @@ GrudgeLedgerArmory={items={{name="Helm",icon=123},{name="Same ID, other variant"
     spells={{description=string.rep("Second long effect\n",50)}}},cape},
     profiles={[guid]={gear={back=3,head=1,rightFinger=2},level=29,averageItemLevel=24,updated=1794455000000,
     trees={{name="Restoration",points=4,talents={{334,"Rejuvenation",2,160012}}},{name="Feral",points=0,talents={}}},
-    honorableKills=396,stats={DAMAGE={11,22}},achievements={{name="Account champion",accountWide=true,icon=777}}}}}
+    honorableKills=396,pvpRank=0,stats={HEALTH=1721,AGILITY=99,CRITICALSTRIKE=5.629,DAMAGE={11,22}},
+    battlegrounds={{name="Arathi",games=3,wins=2,losses=1}},
+    reputations={{group="Alliance",name="Forge",standing="Amical",value=1200,max=6000}},achievements={{name="Account champion",accountWide=true,icon=777}}}}}
 GrudgeLedgerPortraitIndex={[guid]=true}
 mock.units.player.guild="Fixture Guild"
 GL.Bounties={GuildFights=function(target) assert(target==guid) return 3,5 end}
@@ -28,38 +30,32 @@ local f=GrudgeLedgerPlayerDossier
 local function click(b) b.scripts.OnClick(b,"LeftButton") end
 local function all()
     local visible={}
-    for _,r in ipairs(f.rows) do if r:IsShown() then visible[#visible+1]=r.caption:GetText() end end
+    for _,r in ipairs(f.rows) do if r:IsVisible() then visible[#visible+1]=r.caption:GetText().." "..r.amount:GetText() end end
     return table.concat(visible,"\n")
 end
 assert(f:IsShown() and f.navigation.ledger.active and f.nameLabel:GetText()==record.fullName)
-local summary=f.identity:GetText()
-assert(summary:find("Portrait de l’Armurerie",1,true) and summary:find("Niveau Armurerie : 29",1,true))
-assert(summary:find("Niveau adverse au combat : 21",1,true) and summary:find("Niveau de votre personnage au combat : 20",1,true))
-assert(record.level==19 and record.history[1].combat.opponentLevel==21,"a later Armory snapshot cannot rewrite combat")
-local ordered=all()
-assert(ordered:find("Helm",1,true)<ordered:find("Woven mantle",1,true))
-assert(ordered:find("Woven mantle",1,true)<ordered:find("Same ID",1,true))
-local button
-for _,r in ipairs(f.rows) do if r.slot=="back" then button=r end end
-assert(button)
-local paint={}
-for _,r in ipairs(f.rows) do r.icon.SetTexture=function(self,v) paint[self]=v end end
-click(button)
-assert(f.slot=="back")
-for _,r in ipairs(f.rows) do if r.slot=="back" then assert(paint[r.icon]==130004) end end
-for _,s in ipairs({"31","Endurance","Enchanted: +2 Nature","Wind dance","Long description","42","50000"}) do
-    assert(all():find(s,1,true),s)
-end
-for _,r in ipairs(f.rows) do if r.slot=="rightFinger" then button=r end end
-f.scroll:SetVerticalScroll(math.max(0,f.body:GetHeight()-f.scroll:GetHeight()))
-click(button)
-assert(f.slot=="rightFinger" and f.scroll:GetVerticalScroll()==0,"a long collapsed piece must not hide the newly selected slot")
-assert(f.body:GetHeight()>f.scroll:GetHeight(),"the new document must still scroll")
+local summary=f.observed:GetText()
+assert(summary:find("Niveau Armurerie : 29",1,true))
+assert(summary:find("Niveau adverse au combat : 21",1,true) and summary:find("Votre niveau au combat : 20",1,true))
+assert(record.level==19 and record.history[1].combat.opponentLevel==21)
+local cells={}
+for _,c in ipairs(f.statCells) do if c:IsVisible() then cells[c.label:GetText()]=c.value:GetText() end end
+assert(cells.Vie=="1721" and cells["Agilité"]=="99" and cells["Coup critique"]=="5,6 %" and cells["Dégâts"]=="11 – 22")
+local eq=f.equipment.equipment
+assert(f.equipment:IsVisible() and not f.scroll:IsVisible() and #eq.buttons==19)
+local b=eq.buttons[4]
+assert(b.itemName=="Woven mantle" and b.item==cape and not b:GetScript("OnClick"))
+local details=b.itemDetails(b.item)
+for _,s in ipairs({"31","Endurance","Enchanted: +2 Nature","Wind dance","Long description","42","50000"}) do assert(details:find(s,1,true),s) end
+assert(eq.buttons[14].itemName=="Same ID, other variant")
 click(f.tabs.talents)
-assert(all():find("Restoration · 4 points",1,true) and all():find("Rejuvenation · rang 2",1,true) and all():find("Feral · 0 points",1,true))
+assert(not f.equipment:IsVisible() and f.talents:IsVisible() and not f.scroll:IsVisible())
 click(f.tabs.pvp)
-assert(all():find("396",1,true) and all():find("11 – 22",1,true) and all():find("Account champion (compte)",1,true))
-assert(all():find("Victoires : 1 · Morts : 0",1,true) and all():find("Victoires : 3 · Morts : 5",1,true))
+assert(all():find("396",1,true) and all():find("Rang JcJ 0",1,true) and all():find("Account champion (compte)",1,true))
+assert(all():find("Arathi 3 parties · 2 V / 1 D",1,true))
+assert(all():find("1 / 0",1,true) and all():find("3 / 5",1,true))
+click(f.tabs.reputation)
+assert(all():find("Forge Amical · 1200 / 6000",1,true) and not all():find("Arathi",1,true))
 click(f.back)
 assert(returned and not f:IsShown())
 -- Guild-only targets and missing archive rows must never create a personal journal entry.
@@ -67,12 +63,11 @@ GL.Bounties=nil
 local other="Player-42-000B"
 assert(GL.OpenPlayerDossier(other,nil,"Other | captain"))
 assert(f.nameLabel:GetText()=="Other || captain" and not GL.Get("guid:"..other))
-assert(all():find("Équipement non renseigné.",1,true))
-assert(f.identity:GetText():find("Portrait individuel indisponible",1,true) and not f.identity:GetText():find("21",1,true))
+assert(not eq.buttons[4].item and not f.statCells[1]:IsShown() and not f.observed:GetText():find("21",1,true))
 GrudgeLedgerArmory.profiles[other]={identity={name="Public name",class="Hunter",race="Orc",faction="Horde",guild="Archive guild"},gear={back=999}}
 assert(GL.OpenPlayerDossier(other))
 assert(f.nameLabel:GetText()=="Public name" and f.identity:GetText():find("Orc · Hunter · Horde",1,true))
-assert(all():find("Dos : Non renseigné",1,true) and not all():find("Woven mantle",1,true))
+assert(eq.buttons[4].hasVariant and not eq.buttons[4].item)
 local known=0
 GL.OpenContactBounty=function(g) assert(g==other); known=known+1 end
 click(f.bounty); assert(known==1)

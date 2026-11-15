@@ -289,4 +289,16 @@ units.target, GrudgeLedgerPortraitIndex = nil, nil
 GL.ShowLedger(saved.key)
 assert(f.raceIcon.texture == "closed-book:" .. saved.guid and rowFor(saved.key).raceIcon.texture == f.raceIcon.texture,
     "both the detail pane and the list can reuse a portrait last seen while the book was closed")
+local original = f.raceIcon.texture
+f:Hide()
+local dossier = CreateFrame("Frame", nil, UIParent)
+dossier.raceIcon = dossier:CreateTexture(nil, "ARTWORK")
+dossier.classIcon = dossier:CreateTexture(nil, "OVERLAY")
+GL.PaintBookPortrait(dossier, saved)
+assert(dossier.livePortraitGUID == saved.guid and dossier.raceIcon.texture == original,
+    "a different page borrows the off-screen Journal's exact face after the target leaves")
+dossier:Hide()
+GL.ShowLedger(saved.key)
+assert(f.raceIcon.texture == original and rowFor(saved.key).raceIcon.texture == original,
+    "both journal portraits are restored after leaving the dossier")
 print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

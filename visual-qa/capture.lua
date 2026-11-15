@@ -73,6 +73,7 @@ function methods:GetNumLines()
 end
 function methods:SetColorTexture(...) self.qaFill = { ... } end
 function methods:SetTexture(value) self.texture = value end
+function methods:SetDesaturated(value) self.qaDesaturated=value end
 -- Classic reference sheet: Ketho/BlizzardInterfaceResources a7142e9e,
 -- Resources/AtlasInfo.lua. Only supply entries supported by this exact sheet.
 local raceArt = "Interface\\Glues\\CharacterCreate\\CharacterCreateIcons"
@@ -134,6 +135,7 @@ Minimap:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -30, -30)
 GameTooltip = CreateFrame("Frame", "GameTooltip", UIParent)
 GameTooltip:Hide()
 GetNumGroupMembers = function() return 0 end
+GetNormalizedRealmName = GetRealmName
 IsInRaid = function() return false end
 GetTimePreciseSec = function() return 123.456 end
 UnitIsDeadOrGhost = function() return false end
@@ -225,7 +227,7 @@ for i, r in ipairs(records) do
     if GL.Relation(r) == "friend" then r.groupCount = 15 - i end
 end
 local function hideWindows()
-    for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert", "GrudgeLedgerAlertPreview", "GrudgeLedgerGuide" }) do
+    for _, name in ipairs({ "GrudgeLedgerWindow", "GrudgeLedgerJournal", "GrudgeLedgerStatistics", "GrudgeLedgerGuilds", "GrudgeLedgerNote", "GrudgeLedgerSettings", "GrudgeLedgerCorrections", "GrudgeLedgerDiagnostic", "GrudgeLedgerNearbyAlert", "GrudgeLedgerAlertPreview", "GrudgeLedgerGuide", "GrudgeLedgerBounties", "GrudgeLedgerPlayerDossier" }) do
         if _G[name] then _G[name]:Hide() end
     end
 end
@@ -236,6 +238,35 @@ local function click(label)
     error("Missing UI action: " .. label)
 end
 QA = { mock = mock, records = records, selected = record }
+local function dossierExample()
+    local guid="Player-999-00DAABBA"
+    if GL.Get("guid:"..guid) then return guid end
+    local id=GL.IdentityFromName("Isabeau","Clairfeuille",guid)
+    id.class,id.className,id.race,id.raceName,id.faction,id.level="DRUID","Druide","NightElf","Elfe de la nuit","Alliance",41
+    GL.Remember(id)
+    local p={level=41,updated=qaClock,averageItemLevel=37,identity={classFile="DRUID"},gear={},
+        stats={HEALTH=1933,MANA=1894,STRENGTH=70,AGILITY=108,STAMINA=143,INTELLECT=84,CRITICALSTRIKE="6 %"},
+        trees={{id="feral-combat",name="Combat farouche",points=8,
+            talents={{134399,"Férocité",3,132190},{134400,"Fureur",5,135881}}}},
+        honorableKills=385,pvpRank=0,
+        battlegrounds={{name="Bassin d’Arathi",games=3,wins=2,losses=1},{name="Goulet des Chanteguerres",games=7,wins=4,losses=3}},
+        reputations={{group="Alliance",name="Darnassus",standing="Honoré",value=1200,max=12000},
+            {group="Alliance",name="Hurlevent",standing="Amical",value=2800,max=6000},
+            {group="Forces de l’Alliance",name="Sentinelles d’Aile-argent",standing="Neutre",value=675,max=3000}}}
+    local items={}
+    for i,v in ipairs({
+        {"head","Casque de forestier du tigre",133111},{"neck","Pendentif de Skibi",133282},
+        {"shoulder","Épaulières barbares",135039},{"back","Cape de chasseur de fauves",133762},
+        {"chest","Tunique totémique en cuir",132717},{"shirt","Chemise élégante",135006},
+        {"wrist","Garde-bras de la secte",132611},{"hand","Gants de dressage de chien",132941},
+        {"waist","Ceinture d’escarmouche en cuir",236895},{"leg","Jambières barbares",134592},
+        {"foot","Bottes d’Excelsior",132541},{"leftFinger","Anneau du tigre",133355},{"rightFinger","Anneau du sous-bois",133354},
+        {"leftTrinket","Sacoche de potions",133633},{"weapon","Maillet de cérémonie",133043}}) do
+        p.gear[v[1]]=i; items[i]={name=v[2],icon=v[3]}
+    end
+    GrudgeLedgerArmory={profiles={[guid]=p},items=items}
+    return guid
+end
 function QA.capture(name)
     hideWindows()
     GL.SetSetting("readableFont", name:find("%-readable") ~= nil)
@@ -244,7 +275,22 @@ function QA.capture(name)
     name = name:gsub("%-readable", "")
     name = name:gsub("%-largeprint", "")
     UIParent:SetSize(1920, 1080)
-    if name == "journal" or name == "journal-compact" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" or name:find("^journal%-history") or name:find("^journal%-notes") or name == "journal-matchup" then
+    if name:find("^dossier%-") or name:find("^bounty%-") then
+        local guid=dossierExample()
+        mock.units.player.guild="Les Veilleurs de l'Aube"
+        if name=="bounty-target" then return GL.OpenBounties(nil,"create") end
+        if name=="bounty-contract" then
+            if not QA.contract then
+                QA.contract=assert(GL.Bounties.Post(guid,"Isabeau Clairfeuille",1200000,{quota=3,
+                    group="party",split="equal",souvenir="screenshot",note="Prendre une capture de la dernière victoire pour la guilde."}))
+            end
+            return GL.OpenBounties(guid,"view")
+        end
+        assert(GL.OpenPlayerDossier(guid))
+        local f=GrudgeLedgerPlayerDossier
+        f.tabs[name:sub(9)]:Click()
+        return f
+    elseif name == "journal" or name == "journal-compact" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" or name:find("^journal%-history") or name:find("^journal%-notes") or name == "journal-matchup" then
         if name:find("^journal%-small") then UIParent:SetSize(1024, 600) end
         if name:find("%-small$") then UIParent:SetSize(1024, 600) end
         GL.ShowLedger(record.key)
@@ -388,7 +434,8 @@ function QA.snapshot(root)
             shadow = f.qaShadow, shadowOffset = f.qaShadowOffset,
             color = f.qaFill, textColor = f.qaTextColor, tint = f.qaTint, alpha = f.qaAlpha,
             ignoreParentAlpha = f.qaIgnoreAlpha, texCoord = f.texCoord,
-            texture = type(f.texture) == "string" and f.texture or nil, mask = f.mask and f.mask.texture,
+            texture = type(f.texture) == "number" and ("FileDataID/"..f.texture) or type(f.texture) == "string" and f.texture or nil,
+            desaturated = f.qaDesaturated, mask = f.mask and f.mask.texture,
             justifyH = f.qaJustifyH, justifyV = f.qaJustifyV, spacing = f.qaSpacing,
             maxLines = f.qaMaxLines, wordWrap = f.qaWordWrap, insets = f.qaInsets,
             scrollChild = f.scrollChild and f.scrollChild.qaID, vertical = f.vertical or 0 }

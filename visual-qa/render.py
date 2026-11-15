@@ -5,6 +5,7 @@ calls. Run native_art.py once for matching Classic texture references. Optional
 extracted FRIZQT__.TTF, ARIALN.TTF and MORPHEUS.TTF can be placed in
 renders/native/Fonts or supplied with GRUDGE_LEDGER_QA_FONTS. All rendering is
 offline, with no desktop, client or SavedVariables access.
+Optional generic Forever item/spell icons use renders/native/FileDataID/<id>.jpg.
 """
 from __future__ import annotations
 
@@ -68,6 +69,8 @@ def font_path(face):
 
 def plaintext(value):
     text = str(value or "").replace("||", "\x01")
+    # A WoW inline texture occupies one icon, even when its path is 40 characters.
+    text = re.sub(r"\|T[^|\n]+\|t", "◆", text)
     return re.sub(r"\|c[0-9a-fA-F]{8}|\|r", "", text).replace("\x01", "|")
 
 
@@ -200,6 +203,9 @@ def color(value, alpha=1, fallback=(1, 1, 1, 1)):
 @lru_cache(maxsize=96)
 def actual_texture(path):
     if not path: return None
+    if re.fullmatch(r"FileDataID/\d+", path):
+        icon=CACHE / (path+".jpg")
+        return Image.open(icon).convert("RGBA") if icon.is_file() else None
     parts = path.replace("\\", "/").split("/")
     if "GrudgeLedger" in parts:
         p = ADDON.joinpath(*parts[parts.index("GrudgeLedger") + 1:])
@@ -270,6 +276,9 @@ def render(name, frames, root):
                 left, right, top, bottom = coords
                 tex = tex.crop((round(left*tex.width), round(top*tex.height), round(right*tex.width), round(bottom*tex.height)))
             tex = tex.resize((max(1,round(w)),max(1,round(h))), Image.Resampling.LANCZOS)
+            if r.get("desaturated"):
+                gray=tex.convert("L")
+                tex=Image.merge("RGBA",(gray,gray,gray,tex.getchannel("A")))
             tex = ImageChops.multiply(tex, Image.new("RGBA", tex.size, color(r.get("tint"), alpha)))
             if r.get("mask"):
                 native_mask = actual_texture(r["mask"])
@@ -428,6 +437,7 @@ def main():
               "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
               "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details"]
+    views += ["bounty-target", "bounty-contract", "dossier-gear", "dossier-talents", "dossier-pvp", "dossier-reputation"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
     if sys.argv[1:]: views = sys.argv[1:]

@@ -64,7 +64,8 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
     assert requests.call_count == 4
     icon = "https://render.worldofwarcraft.com/forever-eu/icons/56/133761.jpg"
     character.update(pvp={"honorableKills":{"value":0}},
-                     stats={"groups":[{"stats":[{"enum":"MANA","value":{"value":1879}},
+                     stats={"basic":{"primary":[{"enum":"HEALTH","value":{"value":1900}}]},
+                            "groups":[{"stats":[{"enum":"MANA","value":{"value":1879}},
                             {"enum":"DAMAGE","value":{"type":"RANGE","min":{"value":12},"max":{"value":18}}}]}]},
                      specs=[{"name":"Feral","spentPoints":3,"talents":[{"id":11,"name":"Ferocity","rank":3,"icon":{"url":icon}}]}])
     character["gear"]["back"]["media"]={"content":{"assets":[{"key":"icon","value":icon}]}}
@@ -75,7 +76,7 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
             {"character":character,"achievementCategory":category}]):
         portraits.sync(root,"eu",contacts,force=True,profiles_only=True,achievements=True)
     result=json.loads((folder/(guid+".json")).read_text())
-    assert result["stats"]=={"MANA":1879,"DAMAGE":[12,18]} and result["honorableKills"]==0 and result["pvpRank"] is None
+    assert result["stats"]=={"HEALTH":1900,"MANA":1879,"DAMAGE":[12,18]} and result["honorableKills"]==0 and result["pvpRank"] is None
     assert result["gear"]["back"]["icon"]==result["trees"][0]["talents"][0][3]==133761
     assert [a["id"] for a in result["achievements"]]==[2] and result["achievements"][0]["accountWide"]
     with patch.object(portraits,"pvp_achievements",side_effect=ValueError("missing category")):
@@ -87,6 +88,50 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
     translated=json.loads((folder/(guid+".json")).read_text())
     assert requests.call_args.args[0].startswith("https://worldofwarcraft.blizzard.com/fr-fr/")
     assert translated["gear"]["back"]["name"]=="Cape de test" and translated["locale"]=="fr-fr"
+    # The body must match this exact avatar. Crop the Armory's transparent padding and
+    # keep the figure's aspect; a race fallback or another character must never be indexed.
+    body_url = url.replace("-avatar.jpg", "-main-sd-raw.png")
+    png = io.BytesIO()
+    figure = Image.new("RGBA", (600, 400))
+    figure.paste("green", (250, 60, 350, 360))
+    figure.save(png, "PNG")
+    character["media"] = {"main-sd-raw": {"url": body_url}}
+    def full_response(address, limit):
+        if address == body_url:
+            return png.getvalue()
+        if address == url:
+            return photo.getvalue()
+        state = {"character":character, "supportedArmoryTabs":["pvp", "reputation"]}
+        if address.endswith("/pvp"):
+            state["pvp"] = {"battlegrounds":[{"name":"Goulet", "games":3,"winCount":0,"lossCount":3}]}
+        if address.endswith("/reputation"):
+            state["reputations"] = {"reputations":[{"name":"Alliance", "reputations":[
+                {"name":"Aube","standing":"Amical","value":0,"maxValue":6000}]}]}
+        return ("var characterProfileInitialState = " + json.dumps(state)).encode()
+    with patch.object(portraits,"fetch",side_effect=full_response):
+        portraits.sync(root,"eu",contacts,force=True,locale="fr-fr")
+    result = json.loads((folder/(guid+".json")).read_text())
+    assert result["battlegrounds"] == [{"name":"Goulet","games":3,"wins":0,"losses":3}]
+    assert result["reputations"] == [{"name":"Aube","group":"Alliance","standing":"Amical","value":0,"max":6000}]
+    with Image.open(folder/(guid+"-body.tga")) as body:
+        assert body.size==(256,512) and body.mode=="RGBA"
+        x,y,right,bottom=body.getbbox()
+        assert (right-x)*3==bottom-y and x>0 and y>0
+    assert '["body"]=true' in (folder/"Profiles.lua").read_text("utf8")
+    with patch.object(portraits,"fetch") as unexpected:
+        assert portraits.body_texture(dict(character,media={"main-sd-raw":{"url":body_url.replace("/42/","/41/")}})) is None
+        unexpected.assert_not_called()
+    with patch.object(portraits,"armory_state",return_value={"character":character,"pvp":{"rank":{"value":0}}}):
+        assert portraits.armory_section(character,"Test Keeper","pvp","fr-fr") is None
+    with patch.object(portraits,"fetch",side_effect=full_response), patch.object(portraits,"armory_section",side_effect=ValueError("unavailable")):
+        portraits.sync(root,"eu",contacts,force=True,profiles_only=True,locale="fr-fr")
+    stale=json.loads((folder/(guid+".json")).read_text())
+    assert stale["reputations"]==result["reputations"] and stale["reputationsAt"]==result["reputationsAt"]
+    with patch.object(portraits, "portrait", side_effect=OSError("image service offline")), patch.object(portraits, "fetch", side_effect=full_response):
+        texture.unlink()
+        portraits.sync(root, "eu", contacts, force=True, locale="fr-fr")
+        assert not texture.exists() and guid in (folder/"Profiles.lua").read_text("utf8")
+        assert json.loads((folder/(guid+".json")).read_bytes())["gear"]["back"]["name"] == "Cape de test"
     save=root/"WTF/Account/example/SavedVariables/GrudgeLedger.lua"
     save.parent.mkdir(parents=True)
     save.write_text('["name:Test Keeper"] = "guid:'+guid+'",\n')
@@ -102,4 +147,4 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
         except KeyboardInterrupt:
             pass
         assert [len(call.args[2]) for call in watcher.call_args_list]==[1,2]
-print("PASS exact offline GUID match, 64px TGA, cache reuse and preserving a good avatar on failure")
+print("PASS verified portraits and body renders, cached gear, talents, PvP and reputation imports")

@@ -170,6 +170,16 @@ local function paintPortrait(row, record, unit)
         for _, saved in ipairs(spareFaces) do
             if saved.guid == guid then known = true break end
         end
+        if not known then
+            -- A hidden page can lend its native texture once the unit has disappeared.
+            for owner in pairs(portraitRows) do
+                if owner.livePortraitGUID == guid and not owner.raceIcon:IsVisible() then
+                    usePortrait(owner, nil)
+                    known = true
+                    break
+                end
+            end
+        end
     end
     local face = usePortrait(row, (unit or known) and guid or nil)
     row.portraitUnit, row.archivedPortrait = nil, nil
@@ -222,7 +232,8 @@ end
 portraitFrames:SetScript("OnEvent", function(self, event, unit)
     if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then observeFace(unit, true) end
     if not ((ledger and ledger:IsShown()) or (statisticsWindow and statisticsWindow:IsShown())
-        or (journalWindow and journalWindow:IsShown()) or (correctionWindow and correctionWindow:IsShown())) then return end
+        or (journalWindow and journalWindow:IsShown()) or (correctionWindow and correctionWindow:IsShown())
+        or (GrudgeLedgerPlayerDossier and GrudgeLedgerPlayerDossier:IsShown()) or (GrudgeLedgerBounties and GrudgeLedgerBounties:IsShown())) then return end
     if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" or event == "PORTRAITS_UPDATED" then redrawPortraits = true end
     self:SetScript("OnUpdate", refreshPortraits)
 end)

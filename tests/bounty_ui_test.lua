@@ -4,7 +4,7 @@ local now=1800000000
 GetServerTime=function() return now end
 GetNormalizedRealmName=function() return "Realm" end
 mock.units.player.guild="Test Guild"
-for _,name in ipairs({"Core","UITheme","UI","Bounties","PlayerDossier","BountyUI"}) do
+for _,name in ipairs({"Core","UITheme","UI","Bounties","DossierEquipment","PlayerDossier","BountyUI"}) do
     assert(loadfile(TEST_ROOT.."/"..name..".lua"))("GrudgeLedger")
 end
 local GL=GrudgeLedger
@@ -21,25 +21,31 @@ local function add(n)
 end
 local a,b=add("Alpha"),add("Beta")
 assert(GL.Bounties.Post(b.guid,b.fullName,10000))
-local f=GL.OpenBounties(a.guid,"create")
+local f=GL.OpenBounties()
+click(f.new); f.search:SetText("Alpha")
+assert(f.count==1 and f.rows[1].raceIcon and not f.target)
+click(f.rows[1])
+assert(not GrudgeLedgerPlayerDossier and f.rows[1].selected:IsShown() and f.form:IsVisible())
 assert(f.form:IsShown() and f.target.guid==a.guid and f.form.quota:GetText()=="1")
 assert(not f.form.equal:IsEnabled())
-f.form.gold:SetText("12,0001"); f.form.quota:SetText("3"); f.form.note:SetText("Screenshot for the guild.")
+f.form.gold:SetText("120"); f.form.quota:SetText("3"); f.form.note:SetText("Screenshot for the guild.")
 for _,pair in ipairs(f.form.options) do
     if pair.value=="party" or pair.value=="equal" or pair.value=="screenshot" then click(pair.control) end
 end
 click(f.form.publish)
 local o=f.order
 assert(o and o.target==a.guid and o.quota==3 and o.group=="party" and o.split=="equal" and o.souvenir=="screenshot")
-assert(o.pot[o.owner]==120001 and o.note=="Screenshot for the guild.")
+assert(o.pot[o.owner]==1200000 and o.note=="Screenshot for the guild.")
 assert(f.detail.progress:GetText():find("0/3",1,true) and not f.form:IsShown())
 click(f.tools.pledge); f.editor.field:SetText("3"); click(f.editor.ok)
-assert(f.order.pot[o.owner]==150001)
+assert(f.order.pot[o.owner]==1230000)
 click(f.tools.note); f.editor.field:SetText("New instructions"); click(f.editor.ok)
 assert(f.detail.note:GetText()=="New instructions")
 now=now+60; click(f.tools.renew); assert(f.order.expires>o.expires)
 f.search:SetText("BeTa"); assert(f.count==1 and f.order.target==b.guid)
-click(f.rows[1].player)
+click(f.rows[1])
+assert(f:IsShown() and f.order.target==b.guid and not f.detail.dossier)
+click(f.detail.face)
 assert(not f:IsShown() and GrudgeLedgerPlayerDossier:IsShown())
 local dossier=GrudgeLedgerPlayerDossier
 dossier.onReturn()
@@ -50,7 +56,7 @@ assert(f.count==1 and f.order.target==b.guid)
 click(f.new)
 f.search:SetText("Alpha")
 assert(f.count==1)
-click(f.rows[1].select); assert(f.target.guid==a.guid)
+click(f.rows[1]); assert(f.target.guid==a.guid)
 f.form.gold:SetText("1"); f.form.quota:SetText("100"); click(f.form.publish)
 assert(f.form:IsShown() and f.feedback:GetText():find("99",1,true))
 f.form.quota:SetText("1"); click(f.form.publish)
@@ -86,4 +92,33 @@ GL.OpenBounties()
 assert(f.count==8 and f.next:IsEnabled() and not f.prev:IsEnabled()); click(f.next)
 assert(f.offset==2 and not f.next:IsEnabled())
 click(f.prev); assert(f.offset==0)
+-- Expiry moves an issued order to history. Repost keeps rules and the issuer's own pledge only.
+local fresh=f.order
+assert(fresh and fresh.state=="open"); GL.OpenBounties(a.guid,"create")
+f.form.gold:SetText("120"); f.form.quota:SetText("3"); f.form.note:SetText("Keep a screenshot")
+for _,pair in ipairs(f.form.options) do
+    if pair.value=="party" or pair.value=="equal" or pair.value=="screenshot" then click(pair.control) end
+end
+click(f.form.publish)
+local old=f.order
+local issuer=mock.units.player.guid
+mock.units.player.guid="Player-77-Partner"; assert(GL.Bounties.Pledge(old.id,50000))
+mock.units.player.guid=issuer
+click(f.historyTab); f.search:SetText("Alpha")
+assert(f.count==1 and f.order.id~=old.id)
+now=old.expires+1
+f:GetScript("OnUpdate")(f,1.1)
+assert(f.count==2,"history must gain expired contracts while it stays open")
+click(f.activeTab); f.search:SetText("Alpha"); assert(f.count==0)
+click(f.historyTab); f.search:SetText("Alpha")
+for _,r in ipairs(f.rows) do if r.entry and r.entry.id==old.id then click(r); break end end
+assert(f.order.id==old.id and f.order.state=="expired" and f.detail.repost:IsVisible())
+click(f.detail.repost); click(f.form.cancel)
+assert(f.tab=="history" and f.order.id==old.id)
+click(f.detail.repost)
+assert(f.form:IsVisible() and f.target.guid==a.guid and f.form.gold:GetText()=="120" and f.form.quota:GetText()=="3")
+assert(f.draft.group=="party" and f.draft.split=="equal" and f.draft.souvenir=="screenshot" and f.form.note:GetText()=="Keep a screenshot")
+click(f.form.publish)
+assert(f.order.id~=old.id and f.order.state=="open" and f.order.pot[issuer]==1200000 and not f.order.pot["Player-77-Partner"])
+assert(GL.Bounties.History()[old.id].state=="expired" and GL.Bounties.Progress(f.order)==0)
 print("PASS bounty UI: create, target and dossier return, rules, contribution, search, paging, update, hunt finished, history, payout states and guild change")

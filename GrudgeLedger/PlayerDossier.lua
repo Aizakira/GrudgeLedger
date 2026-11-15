@@ -18,9 +18,6 @@ local function timestamp(value)
     if value >= 100000000000 then value = value / 1000 end -- Armory uses milliseconds; game clocks use seconds.
     return GL.Safe(date, "%d/%m/%Y %H:%M", math.floor(value)) or unknown
 end
-local function iconID(v)
-    if type(v) == "number" and v > 0 and v == math.floor(v) then return v end
-end
 local function field(label, value) return label .. " : " .. (value or unknown) end
 local slots = {
     {"head","Tête","Head"}, {"neck","Cou","Neck"}, {"shoulder","Épaules","Shoulders"},
@@ -58,6 +55,8 @@ local statNames = {
     VERSATILITY=tr("Polyvalence","Versatility"), AVOIDANCE=tr("Évitement","Avoidance"),
     DAMAGE=tr("Dégâts","Damage"), ATTACKSPEED=tr("Vitesse d’attaque","Attack speed"),
     ATTACKDPS=tr("Dégâts par seconde","Attack DPS"), MANAREGEN=tr("Régénération de mana","Mana regeneration"),
+    ENERGY=tr("Énergie","Energy"), RAGE=tr("Rage","Rage"), FOCUS=tr("Focalisation","Focus"),
+    SPIRIT=tr("Esprit","Spirit"), RUNICPOWER=tr("Puissance runique","Runic power"),
     DODGE=tr("Esquive","Dodge"), PARRY=tr("Parade","Parry"), BLOCK=tr("Blocage","Block"),
 }
 local function itemDetails(item)
@@ -112,138 +111,134 @@ local function latestCombat(record)
 end
 
 local frame
+local percentages={CRITICALSTRIKE=true,DODGE=true,PARRY=true,BLOCK=true,HASTE=true,VERSATILITY=true,AVOIDANCE=true}
+local function statValue(key,v)
+    local function number(n)
+        local s=("%.1f"):format(n):gsub("[.,]0$","")
+        return french and s:gsub("%.",",") or s
+    end
+    if type(v)=="number" then return number(v)..(percentages[key] and " %" or "") end
+    if type(v)=="table" and tonumber(v[1]) and tonumber(v[2]) then return number(v[1]).." – "..number(v[2]) end
+    return valueOf(v)
+end
 local function draw(f)
     local localRecord=GL.Get("guid:"..f.guid)
     local record=localRecord or {guid=f.guid}
-    local archive=object(GrudgeLedgerArmory)
-    local profile=object(type(archive.profiles)=="table" and GL.ArmoryProfile(record))
+    local profile=object(GL.ArmoryProfile(record))
     local public=object(profile.identity)
     local name=text(record.fullName) or text(public.name) or text(f.knownName)
     if not name and GL.Bounties and GL.Bounties.MemberName then name=text(GL.Bounties.MemberName(f.guid)) end
     f.nameLabel:SetText(name or unknown)
     GL.PaintBookPortrait(f.portrait,record)
-    local source=f.portrait.portraitUnit and tr("Portrait en jeu","Live portrait")
-        or f.portrait.livePortraitGUID and tr("Portrait vu en jeu","Observed portrait")
-        or f.portrait.archivedPortrait and tr("Portrait de l’Armurerie","Armory portrait")
-        or tr("Portrait individuel indisponible","Individual portrait unavailable")
     local faction,race,class=GL.IdentityLabels(record)
-    local identity = {
-        localRecord and (record.race or record.raceName) and text(race) or text(public.race) or unknown,
-        localRecord and (record.class or record.className) and text(class) or text(public.class) or unknown,
-        record.faction and text(faction) or text(public.faction) or unknown,
-    }
+    f.identity:SetText(table.concat({
+        (record.race or record.raceName) and text(race) or text(public.race) or unknown,
+        (record.class or record.className) and text(class) or text(public.class) or unknown,
+        record.faction and text(faction) or text(public.faction) or unknown}," · "))
     local event=latestCombat(record)
     local combat=object(event and event.combat)
-    local info={table.concat(identity," · "), field(tr("Guilde","Guild"),text(record.guild) or text(public.guild)),source,"",
-        field(tr("Niveau Armurerie","Armory level"),valueOf(profile.level)),
-        field(tr("Relevé Armurerie","Armory snapshot"),timestamp(profile.updated)),"",
-        field(tr("Niveau vu en jeu","Last observed level"),text(GL.ValidLevel(record.level))),
-        field(tr("Dernière rencontre","Last encounter"),timestamp(record.lastEncounterAt or record.lastDirectEncounterAt)),"",
-        field(tr("Dernier combat","Last combat"),timestamp(event and event.time)),
-        field(tr("Niveau adverse au combat","Opponent level in combat"),text(GL.ValidLevel(combat.opponentLevel))),
-        field(tr("Niveau de votre personnage au combat","Your character’s combat level"),text(GL.ValidLevel(combat.playerLevel)))}
-    f.identity:SetText(table.concat(info,"\n"))
-    f.identityBody:SetHeight(math.max(f.identityScroll:GetHeight(),f.identity:GetStringHeight()+8))
-    f.source:SetText(tr("Armurerie · ","Armory · ")..timestamp(profile.updated))
-    for key,b in pairs(f.tabs) do UI.selectButton(b, f.page==key) end
+    local stats=object(profile.stats)
+    -- Reuse the two-column stat rows as the selected character changes.
+    local used,seen,y=0,{},0
+    local function addStat(key)
+        local val=statValue(key,stats[key])
+        if not val then return end
+        local c=f.statCells[used+1]
+        if not c then
+            c=CreateFrame("Frame",nil,f.identityBody); c:SetSize(117,44)
+            c.value=UI.label(c,"","large",0,0,116); c.value:SetTextColor(unpack(UI.theme.paper))
+            c.label=UI.label(c,"",nil,0,-23,117); UI.journalFont(c.label,"GameFontHighlight",11)
+            c.label:SetTextColor(unpack(UI.theme.brass)); f.statCells[used+1]=c
+        end
+        c:ClearAllPoints(); c:SetPoint("TOPLEFT",(used%2)*122,-math.floor(used/2)*47); used=used+1
+        c.value:SetText(val); c.label:SetText(statNames[key] or text(prettyKey(key))); c:Show(); seen[key]=true
+    end
+    for _,key in ipairs({"HEALTH","MANA","ENERGY","RAGE","FOCUS","RUNICPOWER","STRENGTH","AGILITY","STAMINA","INTELLECT","SPIRIT","ARMOR","CRITICALSTRIKE"}) do addStat(key) end
+    for _,key in ipairs(sortedKeys(stats)) do if not seen[key] and key~="ITEMLEVEL" then addStat(key) end end
+    for i=used+1,#f.statCells do f.statCells[i]:Hide() end
+    y=math.ceil(used/2)*47
+    local info={}
+    if used==0 then info[1]=tr("Caractéristiques non publiées.\n","No attributes published.\n") end
+    info[#info+1]=field(tr("Guilde","Guild"),text(record.guild) or text(public.guild))
+    info[#info+1]=field(tr("Niveau Armurerie","Armory level"),valueOf(profile.level))
+    info[#info+1]=field(tr("Niveau vu en jeu","Last observed level"),text(GL.ValidLevel(record.level)))
+    info[#info+1]=field(tr("Dernière rencontre","Last encounter"),timestamp(record.lastEncounterAt or record.lastDirectEncounterAt))
+    if event then
+        info[#info+1]=field(tr("Dernier combat","Last combat"),timestamp(event.time))
+        info[#info+1]=field(tr("Niveau adverse au combat","Opponent level in combat"),text(GL.ValidLevel(combat.opponentLevel)))
+        info[#info+1]=field(tr("Votre niveau au combat","Your level in combat"),text(GL.ValidLevel(combat.playerLevel)))
+    end
+    f.observed:ClearAllPoints(); f.observed:SetPoint("TOPLEFT",0,-y-5); f.observed:SetText(table.concat(info,"\n"))
+    f.identityBody:SetHeight(math.max(f.identityScroll:GetHeight(),y+f.observed:GetStringHeight()+12))
+    local snap=f.page=="reputation" and profile.reputationsAt or profile.updated
+    f.source:SetText(tr("Relevé Armurerie : ","Armory snapshot: ")..timestamp(snap))
+    f.ilvl:SetText(f.page=="gear" and field(tr("Niv. d’objet moyen","Average item level"),valueOf(profile.averageItemLevel)) or "")
+    for key,b in pairs(f.tabs) do UI.selectButton(b,f.page==key) end
+    local gear,talents=f.page=="gear",f.page=="talents"
+    if gear then f.equipment:Show(); GL.DrawDossierEquipment(f.equipment,record,profile,slots,slotOrder,itemDetails) else f.equipment:Hide() end
+    if talents then
+        f.talentScroll:Show()
+        local h=GL.DrawDossierTalents(f.talents,record,profile)
+        f.talents:SetHeight(math.max(f.talentScroll:GetHeight(),h))
+        f.talentScroll:SetVerticalScroll(0)
+    else f.talentScroll:Hide() end
+    if gear or talents then f.scroll:Hide(); return end
+    f.scroll:Show()
     local count,height=0,0
-    -- ponytail: reuse visible dossier rows, up to the largest profile opened this session.
-    local function row(caption,texture,slot,heading)
+    local function row(label,amount,heading)
         count=count+1
         local r=f.rows[count]
         if not r then
-            r=CreateFrame("Button",nil,f.body)
-            f.rows[count]=r
-            r.selected=UI.surface(r,{0.60,0.38,0.14,0.19},0,0)
-            r.icon=r:CreateTexture(nil,"ARTWORK"); r.icon:SetSize(25,25); r.icon:SetPoint("TOPLEFT",4,-2)
-            r.caption=UI.label(r,"",nil,0,0,468)
-            r:SetScript("OnClick",function(self)
-                if self.slot then
-                    local slot=self.slot
-                    local anchor=self.offset-f.scroll:GetVerticalScroll()
-                    f.slot=slot
-                    draw(f)
-                    -- Expanding the new piece can collapse hundreds of pixels above it.
-                    for _,entry in ipairs(f.rows) do
-                        if entry:IsShown() and entry.slot==slot then
-                            f.scroll:SetVerticalScroll(math.max(0,math.min(entry.offset-anchor,f.body:GetHeight()-f.scroll:GetHeight())))
-                            break
-                        end
-                    end
-                end
-            end)
+            r=CreateFrame("Frame",nil,f.body); f.rows[count]=r
+            r.caption=UI.label(r,"",nil,7,-4,510)
+            r.amount=UI.label(r,"",nil,308,-4,198); r.amount:SetJustifyH("RIGHT")
+            r.rule=r:CreateTexture(nil,"BACKGROUND"); r.rule:SetPoint("BOTTOMLEFT"); r.rule:SetPoint("BOTTOMRIGHT")
+            r.rule:SetHeight(1); r.rule:SetColorTexture(.45,.28,.11,.21)
         end
-        r.slot,r.offset=slot,height
-        local id=iconID(texture)
-        r.icon:SetTexture(id)
-        if id then r.icon:Show() else r.icon:Hide() end
-        local left=(id and 36 or 8)
-        r.caption:ClearAllPoints(); r.caption:SetPoint("TOPLEFT",left,-4); r.caption:SetWidth(514-left)
-        r.caption:SetText(caption); r.caption:SetTextColor(unpack(heading and UI.theme.ink or UI.theme.inkMuted))
-        if heading then UI.journalFont(r.caption,"GameFontNormalLarge",16) else UI.journalFont(r.caption,"GameFontHighlight",13) end
-        local h=math.max(id and 31 or 23,r.caption:GetStringHeight()+10)
-        r:ClearAllPoints(); r:SetPoint("TOPLEFT",0,-height); r:SetSize(518,h)
-        if slot and f.slot==slot then r.selected:Show() else r.selected:Hide() end
-        r:EnableMouse(slot~=nil); r:Show(); height=height+h
+        r.caption:SetWidth(amount and 292 or 500)
+        UI.journalFont(r.caption,heading and "GameFontNormalLarge" or "GameFontHighlight",heading and 17 or 13)
+        r.caption:SetTextColor(unpack(heading and UI.theme.red or UI.theme.ink)); r.amount:SetTextColor(unpack(UI.theme.ink))
+        r.caption:SetText(label); r.amount:SetText(amount or "")
+        local h=math.max(heading and 35 or 26,r.caption:GetStringHeight()+10,r.amount:GetStringHeight()+10)
+        r:ClearAllPoints(); r:SetPoint("TOPLEFT",0,-height); r:SetSize(514,h); r:Show(); height=height+h
     end
-    if f.page=="gear" then
-        row(field(tr("Niveau d’objet moyen","Average item level"),valueOf(profile.averageItemLevel)),nil,nil,true)
-        local gear=object(profile.gear)
-        local keys=sortedKeys(gear)
-        table.sort(keys,function(a,b)
-            local i,j=slotOrder(a),slotOrder(b)
-            return i<j or (i==j and a<b)
-        end)
-        if not gear[f.slot] then f.slot=keys[1] end
-        for _,slot in ipairs(keys) do
-            local item=object(type(archive.items)=="table" and GL.ArmoryItem(record,slot))
-            local s=slots[slotOrder(slot)]
-            local title=s and tr(s[2],s[3]) or text(prettyKey(slot))
-            row(field(title,text(item.name)),item.icon,slot,true)
-            if f.slot==slot then row(itemDetails(item)) end
-        end
-        if #keys==0 then row(tr("Équipement non renseigné.","Equipment unavailable.")) end
-    elseif f.page=="talents" then
-        local trees=object(profile.trees)
-        if #trees==0 then row(tr("Aucun arbre de talents publié.","No talent trees published.")) end
-        for _,rawTree in ipairs(trees) do
-            local tree=object(rawTree)
-            row((text(tree.name) or unknown).." · "..(text(tree.points) or "?").." points",nil,nil,true)
-            if #object(tree.talents)==0 then row(tr("Aucun talent détaillé.","No talents listed.")) end
-            for _,rawTalent in ipairs(object(tree.talents)) do
-                local t=object(rawTalent)
-                row((text(t[2]) or unknown).." · "..tr("rang ","rank ")..(text(t[3]) or "?"),t[4])
-            end
+    if f.page=="reputation" then
+        row(tr("Réputations auprès des factions","Faction reputations"),nil,true)
+        local reps=object(profile.reputations)
+        if #reps==0 then row(profile.reputations and tr("Aucune faction publiée.","No factions published.") or tr("Réputations non disponibles dans ce relevé.","Reputations are unavailable in this snapshot.")) end
+        local group
+        for _,v in ipairs(reps) do
+            if v.group and v.group~=group then group=v.group; row(text(group) or unknown,nil,true) end
+            local points=valueOf(v.value)
+            if points and valueOf(v.max) then points=points.." / "..valueOf(v.max) end
+            row(text(v.name) or unknown,(valueOf(v.standing) or unknown)..(points and (" · "..points) or ""))
         end
     else
-        row(tr("JcJ public · Armurerie","Public PvP · Armory"),nil,nil,true)
-        row(field(tr("Victoires honorables","Honorable kills"),valueOf(profile.honorableKills))
-            .."\n"..field(tr("Rang JcJ","PvP rank"),valueOf(profile.pvpRank)))
-        local stats=object(profile.stats)
-        for _,key in ipairs(sortedKeys(stats)) do
-            local v=stats[key]
-            local val=valueOf(v)
-            if type(v)=="table" and text(v[1]) and text(v[2]) then val=text(v[1]).." – "..text(v[2]) end
-            row(field(statNames[key] or text(prettyKey(key)),val))
+        row(tr("Palmarès JcJ · Armurerie","PvP record · Armory"),nil,true)
+        row(tr("Victoires honorables","Honorable kills"),valueOf(profile.honorableKills) or unknown)
+        row(tr("Rang JcJ","PvP rank"),valueOf(profile.pvpRank) or unknown)
+        row(tr("Champs de bataille","Battlegrounds"),profile.battlegroundsAt and timestamp(profile.battlegroundsAt),true)
+        if #object(profile.battlegrounds)==0 then row(profile.battlegrounds and tr("Aucun champ de bataille publié.","No battlegrounds published.") or tr("Champs de bataille non renseignés.","Battlegrounds unavailable.")) end
+        for _,v in ipairs(object(profile.battlegrounds)) do
+            row(text(v.name) or unknown,(valueOf(v.games) or "—")..tr(" parties"," games").." · "..(valueOf(v.wins) or "—")..tr(" V"," W").." / "..(valueOf(v.losses) or "—")..tr(" D"," L"))
         end
-        row(field(tr("Hauts faits JcJ","PvP achievements"),type(profile.achievements)=="table" and tostring(#profile.achievements)),nil,nil,true)
-        if profile.achievementsAt then row(field(tr("Relevé","Snapshot"),timestamp(profile.achievementsAt))) end
-        for _,achievement in ipairs(object(profile.achievements)) do
-            local a=object(achievement)
-            row((text(a.name) or unknown)..(a.accountWide and tr(" (compte)"," (account)") or ""),a.icon)
-        end
-        row(tr("Vos combats contre cette cible · Journal personnel","Your fights against this target · Personal journal"),nil,nil,true)
+        row(tr("Votre face-à-face · Journal","Your encounters · Journal"),nil,true)
         if localRecord then
             local p=GL.ContactMatchup(record)
-            row(field(tr("Victoires","Wins"),text(p.kills)).." · "..field(tr("Morts","Deaths"),text(p.deaths))
-                .."\n"..field(tr("Honneur attribué","Attributed honor"),p.honorAwards>0 and text(p.honor)))
+            row(tr("Victoires / morts","Wins / deaths"),p.kills.." / "..p.deaths)
+            row(tr("Honneur attribué","Attributed honor"),p.honorAwards>0 and text(p.honor) or unknown)
         else row(tr("Aucune rencontre personnelle enregistrée.","No personal encounters recorded.")) end
-        row(tr("Combats transmis par la guilde","Fights shared by guild members"),nil,nil,true)
+        row(tr("Face-à-face de la guilde","Guild encounters"),nil,true)
         if GL.Bounties and GL.Safe(GetGuildInfo,"player") then
             local wins,losses=GL.Bounties.GuildFights(f.guid)
             if wins==0 and losses==0 then row(tr("Aucun résultat partagé pour cette cible.","No shared results for this target."))
-            else row(field(tr("Victoires","Wins"),text(wins)).." · "..field(tr("Morts","Deaths"),text(losses))) end
+            else row(tr("Victoires / morts","Wins / deaths"),wins.." / "..losses) end
         else row(unknown) end
+        row(tr("Hauts faits JcJ","PvP achievements"),type(profile.achievements)=="table" and tostring(#profile.achievements) or unknown,true)
+        if profile.achievementsAt then row(field(tr("Relevé","Snapshot"),timestamp(profile.achievementsAt))) end
+        for _,a in ipairs(object(profile.achievements)) do
+            row((text(a.name) or unknown)..(a.accountWide and tr(" (compte)"," (account)") or ""))
+        end
     end
     for i=count+1,#f.rows do f.rows[i]:Hide() end
     f.body:SetHeight(math.max(f.scroll:GetHeight(),height))
@@ -267,27 +262,35 @@ local function build()
     f.portrait.raceIcon=f.portrait:CreateTexture(nil,"ARTWORK"); f.portrait.raceIcon:SetAllPoints()
     f.portrait.classIcon=f.portrait:CreateTexture(nil,"OVERLAY"); f.portrait.classIcon:SetSize(16,16)
     f.portrait.classIcon:SetPoint("BOTTOMRIGHT")
-    f.nameLabel=UI.label(f,"","large",111,-198,183)
-    f.identityScroll,f.identityBody=scrollArea(f,40,-271,241,315)
-    f.identity=UI.label(f.identityBody,"",nil,0,0,237)
+    f.nameLabel=UI.label(f,"","large",111,-192,193)
+    GL.Safe(f.nameLabel.SetMaxLines,f.nameLabel,2)
+    f.identity=UI.label(f,"",nil,111,-237,193)
+    UI.journalFont(f.identity,"GameFontHighlight",11)
+    f.statHeading=UI.label(f,tr("Caractéristiques","Attributes"),"large",40,-266,255); f.statHeading:SetTextColor(unpack(UI.theme.brass))
+    f.identityScroll,f.identityBody=scrollArea(f,40,-297,243,296)
+    f.observed=UI.label(f.identityBody,"",nil,0,0,239); f.observed:SetTextColor(unpack(UI.theme.muted))
     f.bounty=UI.button(f,tr("Prime de ce joueur","Player bounty"),40,-612,247,function() GL.OpenContactBounty(f.guid) end)
-    f.tabs={}; f.rows={}
-    for i,s in ipairs({{"gear","Équipement","Equipment"},{"talents","Talents","Talents"},{"pvp","Statistiques JcJ","PvP statistics"}}) do
+    f.tabs={}; f.rows={}; f.statCells={}
+    for i,s in ipairs({{"gear","Équipement","Equipment"},{"talents","Talents","Talents"},{"pvp","JcJ","PvP"},{"reputation","Réputations","Reputations"}}) do
         local key=s[1]
-        f.tabs[key]=UI.button(f,tr(s[2],s[3]),351+(i-1)*174,-156,167,function()
+        f.tabs[key]=UI.button(f,tr(s[2],s[3]),352+(i-1)*137,-156,132,function()
             f.page=key; f.scroll:SetVerticalScroll(0); draw(f)
         end,true,true)
     end
-    f.source=UI.label(f,"",nil,355,-191,535); f.source:SetTextColor(unpack(UI.theme.inkMuted))
-    f.scroll,f.body=scrollArea(f,352,-218,523,420)
+    f.source=UI.label(f,"",nil,355,-196,312); f.source:SetTextColor(unpack(UI.theme.inkMuted))
+    f.ilvl=UI.label(f,"",nil,669,-196,222); f.ilvl:SetJustifyH("RIGHT"); f.ilvl:SetTextColor(unpack(UI.theme.ink))
+    f.scroll,f.body=scrollArea(f,352,-225,520,408)
+    f.equipment=CreateFrame("Frame",nil,f); f.equipment:SetPoint("TOPLEFT",359,-229); f.equipment:SetSize(515,398)
+    f.talentScroll,f.talents=scrollArea(f,352,-225,529,403)
+    f.talentScroll.scrollBarHideable=true
     return f
 end
 function GL.OpenPlayerDossier(guid,onReturn,knownName)
     if type(guid)~="string" or #guid>32 or not guid:match("^Player%-%w+%-%w+$") then return false end
     frame=frame or build()
-    frame.guid,frame.onReturn,frame.knownName,frame.page,frame.slot=guid,onReturn,knownName,"gear",nil
+    frame.guid,frame.onReturn,frame.knownName,frame.page=guid,onReturn,knownName,"gear"
     frame.scroll:SetVerticalScroll(0); frame.identityScroll:SetVerticalScroll(0)
-    draw(frame)
     GL.ShowBookPage(frame)
+    draw(frame)
     return true
 end

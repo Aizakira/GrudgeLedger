@@ -220,7 +220,13 @@ local function remember(orders,me)
 end
 function B.History()
     local s,me=scope()
-    if s then return remember(view(s),me) or {} end
+    if s then
+        local orders,expires=view(s),nil
+        for _,o in pairs(orders) do
+            if o.state=="open" and (not expires or o.expires<expires) then expires=o.expires end
+        end
+        return remember(orders,me) or {},expires
+    end
     return GL.db and GL.db.bountyHistory and GL.db.bountyHistory[GL.Safe(UnitGUID,"player")] or {}
 end
 function B.List()
@@ -344,6 +350,11 @@ function B.Update(id,note,renew)
     if renew and o.expires>=o.at+31*DAY then return nil,"limit" end
     if note~=nil and not plain(note,100) then return nil,"invalid" end
     return declare("U",id,renew and "1" or "0",note==nil and (o.note or "") or note)
+end
+-- Reposting creates a fresh contract; other members' pledges stay with the old one.
+function B.CanRepost(o)
+    local s,me=scope()
+    return s and o and o.state=="expired" and o.owner==me and o.guildKey==s.guildKey
 end
 function B.OpenFor(target)
     if not guid(target) then return end

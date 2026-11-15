@@ -1652,11 +1652,11 @@ end)
 -- Imported equipment is shared between profiles by exact variant.
 function GL.ArmoryProfile(record)
     local archive=GrudgeLedgerArmory
-    return archive and record and record.guid and archive.profiles[record.guid]
+    return type(archive)=="table" and type(archive.profiles)=="table" and record and record.guid and archive.profiles[record.guid] or nil
 end
 function GL.ArmoryItem(record,slot)
     local profile=GL.ArmoryProfile(record)
-    return profile and GrudgeLedgerArmory.items[profile.gear[slot]]
+    return type(profile)=="table" and type(profile.gear)=="table" and type(GrudgeLedgerArmory.items)=="table" and GrudgeLedgerArmory.items[profile.gear[slot]] or nil
 end
 -- Shared presentation for the compact PvP summary. Armory item/talent icon
 -- numbers are Blizzard texture IDs and can also be passed to SetTexture.
