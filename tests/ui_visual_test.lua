@@ -46,36 +46,47 @@ local function near(a, expected) assert(math.abs(a - expected) < 0.001, tostring
 local function xy() return b.anchor[4], b.anchor[5] end
 GL.SetSetting("minimapAngle", 0)
 local x, y = xy()
-near(x, 98) near(y, 0)
-assert(x - b:GetWidth() / 2 > Minimap:GetWidth() / 2, "icon edge must stay outside map")
+near(x, 85) near(y, 0)
+-- The center follows the same orbit in every quadrant, also when LibDBIcon loads after READY.
+local shared = {radius=0}
+LibStub = {GetLibrary=function(_, name, silent)
+    assert(name=="LibDBIcon-1.0" and silent)
+    return shared
+end}
+for _,offset in ipairs({0, 9, -3}) do
+    shared.radius=offset
+    for angle=0,315,45 do
+        GL.SetSetting("minimapAngle",angle)
+        x,y=xy()
+        near(x,(80+offset)*math.cos(math.rad(angle)))
+        near(y,(80+offset)*math.sin(math.rad(angle)))
+    end
+end
+LibStub=nil
+GL.SetSetting("minimapAngle",0)
 Minimap:SetSize(320, 320)
 Minimap.scripts.OnSizeChanged(Minimap, 320, 320)
-x, y = xy() near(x, 178)
+x, y = xy() near(x, 165)
 shape = "SQUARE"
 GL.SetSetting("minimapAngle", 45)
-x, y = xy() near(x, 178) near(y, 178)
+x, y = xy() near(x, 165) near(y, 165)
 shape = "SIDE-LEFT"
 GL.SetSetting("minimapAngle", 135)
-x, y = xy() near(math.sqrt(x*x+y*y), 178)
+x, y = xy() near(math.sqrt(x*x+y*y), 165)
 GL.SetSetting("minimapAngle", 45)
-x, y = xy() near(x, 178) near(y, 178)
+x, y = xy() near(x, 165) near(y, 165)
 shape = "UNKNOWN-CUSTOM-MASK"
 GL.SetSetting("minimapAngle", 45)
-x, y = xy() near(x, 178) near(y, 178)
+x, y = xy() near(x, 165) near(y, 165)
 shape = "ROUND"
 Minimap:SetSize(240, 120)
 GL.SetSetting("minimapAngle", 45)
 x, y = xy()
-local clearance = math.huge
-for i = 0, 7200 do
-    local theta = i * math.pi * 2 / 7200
-    clearance = math.min(clearance, math.sqrt((x - 120 * math.cos(theta))^2 + (y - 60 * math.sin(theta))^2))
-end
-assert(clearance >= 17.99, "elliptical minimap must preserve the full medallion gap along the true edge")
+near((x/125)^2 + (y/65)^2, 1)
 Minimap:SetSize(200, 120)
 Minimap.effectiveScale, UIParent.effectiveScale = 1.5, 0.75
 GL.SetSetting("minimapAngle", 90)
-x, y = xy() near(x, 0) near(y, 78) near(b.scale, 2)
+x, y = xy() near(x, 0) near(y, 65) near(b.scale, 2)
 
 local settingsChanges = 0
 GL.On("SETTINGS", function() settingsChanges = settingsChanges + 1 end)
@@ -83,7 +94,7 @@ local oldAngle = GL.Settings().minimapAngle
 cursorX, cursorY = 900, 450 -- map center is (750,450) pixels with 1.5 scale.
 b.scripts.OnDragStart(b)
 for i = 1, 20 do b.scripts.OnUpdate(b, 0.01) end
-x, y = xy() near(x, 118) near(y, 0)
+x, y = xy() near(x, 105) near(y, 0)
 assert(GL.Settings().minimapAngle == oldAngle and settingsChanges == 0, "drag moves visually without SETTINGS spam")
 b.scripts.OnDragStop(b)
 near(GL.Settings().minimapAngle, 0)

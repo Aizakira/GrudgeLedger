@@ -3024,14 +3024,16 @@ local function positionMinimap()
     local shape = GL.Clean(GL.Safe(GetMinimapShape), "string") or "ROUND"
     local halfWidth = positive(GL.Safe(Minimap.GetWidth, Minimap), 140) / 2
     local halfHeight = positive(GL.Safe(Minimap.GetHeight, Minimap), 140) / 2
-    local padding = 18 -- Keep the native 31px button outside the map's rim.
+    -- Center the medallion on the other launchers' orbit, including a custom LibDBIcon offset.
+    local dbIcon = LibStub and LibStub:GetLibrary("LibDBIcon-1.0", true)
+    local padding = GL.Clean(dbIcon and dbIcon.radius, "number") or 5
+    if not (padding > -math.min(halfWidth, halfHeight) and padding < math.huge) then padding = 5 end
+    local rimX, rimY = halfWidth + padding, halfHeight + padding
     local radius
     if roundQuadrants[shape] and roundQuadrants[shape][quadrant] then
-        local ellipse = (x / halfWidth)^2 + (y / halfHeight)^2
-        local normalDot = ellipse / math.sqrt((x / halfWidth^2)^2 + (y / halfHeight^2)^2)
-        radius = 1 / math.sqrt(ellipse) + padding / normalDot
+        radius = 1 / math.sqrt((x / rimX)^2 + (y / rimY)^2)
     else
-        radius = math.min((halfWidth + padding) / math.max(math.abs(x), 0.0001), (halfHeight + padding) / math.max(math.abs(y), 0.0001))
+        radius = math.min(rimX / math.max(math.abs(x), 0.0001), rimY / math.max(math.abs(y), 0.0001))
     end
     local mapScale = positive(GL.Safe(Minimap.GetEffectiveScale, Minimap), 1)
     local rootScale = positive(GL.Safe(UIParent.GetEffectiveScale, UIParent), 1)
