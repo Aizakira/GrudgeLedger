@@ -6,6 +6,7 @@ local names={[owner]="Issuer",[hunter]="Hunter",[partner]="Friend"}
 local ids={owner,hunter,partner}
 local env=setmetatable({}, {__index=_G})
 local gl={db={},Safe=function(f,...) return f(...) end,Now=function() return now end,
+    RequestArmory=function() end,
     Clean=function(v,k) if type(v)==k then return v end end,ContainsControlOrMarkup=function(s) return s:find("[|%c]") end,
     On=function() end,Emit=function(k) if k=="BOUNTIES_CHANGED" then changed=(changed or 0)+1 end end,
     Print=function() notices=(notices or 0)+1 end}
