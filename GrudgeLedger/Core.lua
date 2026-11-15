@@ -1714,7 +1714,7 @@ end
 -- Resolve catalog indices before saving a journal snapshot. Each import can renumber items.
 local rememberedProfiles = setmetatable({}, {__mode="k"})
 local brokenCatalogs = setmetatable({}, {__mode="k"})
-function GL.ArmoryProfile(record, remember)
+function GL.ArmoryProfile(record, remember, catalogOnly)
     if not record then return end
     local archive = GrudgeLedgerArmory
     local profiles = type(archive) == "table" and archive.profiles
@@ -1727,6 +1727,7 @@ function GL.ArmoryProfile(record, remember)
         if region and alias and not imported then imported = profiles and profiles[region .. ":" .. alias] end
     end
     if not matchesContact(record, imported, region, alias) then imported = nil end
+    if catalogOnly then return imported end
     if not matchesContact(record, saved, region, alias) then saved = nil end
     if not imported or (saved and (brokenCatalogs[imported] or (saved.updated or 0) > (imported.updated or 0)
         or (next(saved.gear or {}) and not next(imported.gear or {}))

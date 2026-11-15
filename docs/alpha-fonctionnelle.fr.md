@@ -12,7 +12,7 @@ Ouvrir le livre avec `/gl`. Dans **Relations**, choisir **Menaces**, **Amis**, *
 python tools/sync_portraits.py "CHEMIN_DU_JEU/_forever_" --region eu --locale fr-fr
 ```
 
-L’importeur vérifie l’identité, partage les variantes d’objets identiques entre les fiches et conserve la dernière copie valable si un personnage n’est plus disponible. Les portraits, données d’Armurerie et données de compte restent privés. Redémarrer le client pour charger de nouveaux fichiers ou un nouveau module ; activer le module privé dans la liste des addons. Ensuite, un rechargement suffit pour relire un module déjà connu.
+La miniature privilégie le portrait vu en jeu, puis l’avatar individuel publié par l’Armurerie. Le survol indique sa provenance. L’importeur vérifie l’identité, partage les variantes d’objets identiques entre les fiches et conserve la dernière copie valable si un personnage n’est plus disponible. Les portraits, données d’Armurerie et données de compte restent privés. Redémarrer le client pour charger de nouveaux fichiers ou un nouveau module ; activer le module privé dans la liste des addons. Ensuite, un rechargement suffit pour relire un module déjà connu.
 
 Pour automatiser les prochains imports sur ce poste, ajouter `--watch` à la même commande et la laisser ouverte. L’outil observe les sauvegardes écrites par WoW ; les profils récents restent en cache. Arrêt avec Ctrl+C. Il n’y a pas d’actualisation web instantanée pendant un combat.
 

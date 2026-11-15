@@ -313,4 +313,31 @@ GL.PaintBookPortrait(dossier,{fullName="Unknown Dealer"})
 assert(dossier.raceIcon.atlas=="raceicon128-human-female" and not dossier.archivedPortrait,
     "a verified name-only identity gets a race portrait while awaiting a live face")
 GL.ArmoryProfile = realProfile
+-- The image receipt and current companion index must agree for this identity.
+GetCurrentRegion = function() return 3 end
+local contact={fullName="Donor Sample", guid="Player-42-00001ABC", raceID=1, sex=3}
+local alias="name:donor sample"
+local key="Name-"..string.rep("a",64)
+local profile={identity={name=contact.fullName,raceID=1,sex=3},region="eu",characterHex="1abc",avatarHex="1abc",avatarKey=contact.guid}
+GrudgeLedgerArmory={profiles={[contact.guid]=profile}}
+GrudgeLedgerPortraitIndex={[contact.guid]="armory:1abc"}
+GL.PaintBookPortrait(dossier,contact)
+assert(dossier.archivedPortrait=="armory" and dossier.raceIcon.texture:match("Player%-42%-00001ABC$"))
+GrudgeLedgerNativePortraits={[contact.guid]=true}
+GL.PaintBookPortrait(dossier,contact)
+assert(dossier.archivedPortrait=="native" and dossier.raceIcon.texture:match("%-native$"))
+GrudgeLedgerNativePortraits=nil
+GrudgeLedgerPortraitIndex[contact.guid]="armory:2fff"
+GL.PaintBookPortrait(dossier,contact)
+assert(not dossier.archivedPortrait,"a different character receipt is rejected")
+profile.alias,profile.avatarKey,profile.mediaKey=alias,key,key
+GrudgeLedgerArmory.profiles={["eu:"..alias]=profile}
+GrudgeLedgerPortraitIndex={[key]="armory:1abc"}
+contact.guid=nil
+GL.PaintBookPortrait(dossier,contact)
+assert(dossier.archivedPortrait=="armory" and dossier.raceIcon.texture:sub(-#key)==key)
+contact.armorySnapshot=profile
+GrudgeLedgerArmory.profiles={}
+GL.PaintBookPortrait(dossier,contact)
+assert(not dossier.archivedPortrait,"a saved Armory snapshot cannot revive an obsolete media receipt")
 print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

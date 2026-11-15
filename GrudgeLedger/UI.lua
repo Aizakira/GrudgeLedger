@@ -211,6 +211,25 @@ local function paintPortrait(row, record, unit)
         row.archivedPortrait = "native"
         return
     end
+    -- Only the current companion manifest can attest to the TGA on disk.
+    local profile = GL.ArmoryProfile(record, false, true)
+    local key = profile and profile.avatarKey
+    local hex = profile and profile.avatarHex
+    local public = profile and profile.identity
+    local guidHex = guid and guid:match("^Player%-%d+%-0*(%x+)$")
+    if type(key) == "string" and type(hex) == "string" and hex:match("^%x+$")
+        and profile.characterHex == hex and profile.region and profile.region == GL.ArmoryRegion()
+        and type(public) == "table" and type(public.name) == "string"
+        and (not record.fullName or public.name:lower() == record.fullName:lower())
+        and (not record.raceID or not public.raceID or record.raceID == public.raceID)
+        and (not record.sex or not public.sex or record.sex == public.sex)
+        and ((guidHex and key == guid and guidHex:lower() == hex)
+            or (profile.alias and profile.mediaKey == key and #key == 69 and key:match("^Name%-%x+$")))
+        and type(GrudgeLedgerPortraitIndex) == "table" and GrudgeLedgerPortraitIndex[key] == "armory:" .. hex then
+        face:SetTexture("Interface\\AddOns\\GrudgeLedgerPortraits\\" .. key)
+        row.archivedPortrait = "armory"
+        return
+    end
     face:SetTexture(nil)
     local race = GL.Clean(record.race, "string")
     local sexID = record.sex
@@ -2477,7 +2496,7 @@ local function buildLedger()
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(plain(record.fullName or record.name))
             GameTooltip:AddLine(plain(faction .. " · " .. race .. " · " .. class) .. (GL.ValidLevel(record.level) and " · " .. L("Niveau %d"):format(record.level) or ""))
-            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or (self.livePortraitGUID or self.archivedPortrait)
+            GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.archivedPortrait == "armory" and L("Portrait de l’Armurerie") or (self.livePortraitGUID or self.archivedPortrait)
                 and L("Portrait vu en jeu") or L("Icône générique"), 0.82, 0.78, 0.69)
             if record.guild then GameTooltip:AddLine(plain(record.guild)) end
             local tags = GL.TagText and GL.TagText(record)
