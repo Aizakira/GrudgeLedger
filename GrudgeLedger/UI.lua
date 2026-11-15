@@ -242,9 +242,19 @@ local function reconstructedHead(row, record, profile)
         model:SetScript("OnModelLoaded", finish)
         model:SetScript("OnEvent", function(_, _, id, success)
             if model.pending and model.pending[id] then
-                model.pending[id] = nil
-                model.dressed = nil
-                if success then finish() end
+                if success then
+                    model.pending[id] = nil
+                    model.dressed = nil
+                    finish()
+                elseif model.pending[id] == true and C_Timer and C_Timer.After then
+                    local pending = model.pending
+                    pending[id] = "retry"
+                    C_Timer.After(1, function()
+                        if model.active and model.pending == pending and pending[id] then
+                            GL.Safe(C_Item.RequestLoadItemDataByID, id)
+                        end
+                    end)
+                end
             end
         end)
         GL.Safe(model.RegisterEvent, model, "GET_ITEM_INFO_RECEIVED")
