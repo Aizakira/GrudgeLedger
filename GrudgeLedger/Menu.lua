@@ -1,6 +1,7 @@
 -- Menu API integration adapted from Worth Remembering by Kyle (GPL-3.0).
 -- Direct relations and one-step reputation changes share the same player record.
 local GL = GrudgeLedger
+local L = GL.L
 if not (Menu and Menu.ModifyMenu) then return end
 
 local tags = {
@@ -20,14 +21,22 @@ local function fromName(full, suffix, guid)
     if first then full, suffix = first, last end
     local mine = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
     if guid and mine and guid == mine then return nil end
-    return GL.IdentityFromName(full, suffix, guid)
+    local identity = GL.IdentityFromName(full, suffix, guid)
+    if identity and identity.guid then
+        identity.className, identity.class, identity.raceName, identity.race = GL.Safe(GetPlayerInfoByGUID, identity.guid)
+    end
+    return identity
 end
 
 local function fromContext(data)
     data = GL.Clean(data, "table")
     if not data then return nil end
     local unit = GL.Clean(data.unit, "string")
-    if unit and unit ~= "" then return GL.Identity(unit) end
+    if unit and unit ~= "" then
+        local identity = GL.Identity(unit)
+        if identity then return identity end
+        if GL.Safe(UnitExists, unit) then return end
+    end
     local lineID = GL.Clean(data.lineID, "number")
     if lineID and C_ChatInfo then
         local sender = GL.Safe(C_ChatInfo.GetChatLineSenderName, lineID)
@@ -52,27 +61,47 @@ local function onMenu(_, root, data)
     root = root:CreateButton("Grudge Ledger")
     for _, choice in ipairs({ { "Ami", "friend" }, { "Méfiance", "warning" }, { "Ennemi", "enemy" }, { "Automatique", "neutral" } }) do
         local relation = choice[2]
-        root:CreateButton(choice[1], function() GL.SetReaction(captured, relation) end)
+        local entry = root:CreateButton(L(choice[1]), function() GL.SetReaction(captured, relation) end)
+        if entry.AddInitializer then
+            entry:AddInitializer(function(b)
+                if not b.AttachTexture or not b.fontString then return end
+                local icon = b:AttachTexture()
+                icon:SetTexture("Interface\\AddOns\\GrudgeLedger\\Media\\Relation" .. relation:gsub("^%l", string.upper))
+                icon:SetSize(16, 16)
+                icon:SetPoint("RIGHT", -3, 0)
+                return b.fontString:GetUnboundedStringWidth() + 42, 22
+            end)
+        end
     end
-    root:CreateButton("Avis positif (+1)", function() GL.AdjustReputation(captured, 1, "Avis personnel", "manual") end)
-    root:CreateButton("Avis négatif (-1)", function() GL.AdjustReputation(captured, -1, "Avis personnel", "manual") end)
-    root:CreateButton("Ajouter une note", function() GL.EditNote(captured) end)
-    root:CreateButton("Ouvrir la fiche", function()
-        local record = GL.Remember(captured)
+    root:CreateButton(L("Avis positif (+1)"), function() GL.AdjustReputation(captured, 1, "Avis personnel", "manual") end)
+    root:CreateButton(L("Avis négatif (-1)"), function() GL.AdjustReputation(captured, -1, "Avis personnel", "manual") end)
+    root:CreateButton(L("Ajouter une note"), function() GL.EditNote(captured) end)
+    if GL.TagChoices then
+        local submenu = root:CreateButton(L("Étiquettes personnelles"))
+        for _, choice in ipairs(GL.TagChoices) do
+            local id, caption = choice[1], L(choice[2])
+            local function checked() return GL.HasTag(GL.Get(captured), id) end
+            local function toggle() GL.ToggleTag(captured, id) end
+            if submenu.CreateCheckbox then submenu:CreateCheckbox(caption, checked, toggle)
+            else submenu:CreateButton((checked() and "✓ " or "") .. caption, toggle) end
+        end
+    end
+    root:CreateButton(L("Ouvrir la fiche"), function()
+        local record = GL.Remember(captured, true)
         if record then GL.ShowLedger(record.key) end
     end)
     if captured.guild then
         root:CreateDivider()
-        root = root:CreateButton("Guilde")
+        root = root:CreateButton(L("Guilde"))
         for _, choice in ipairs({ { "Guilde : amie", "friend" }, { "Guilde : méfiance", "warning" }, { "Guilde : ennemie", "enemy" }, { "Guilde : neutre", "neutral" } }) do
             local reaction = choice[2]
-            root:CreateButton(choice[1], function() GL.SetGuildReaction(captured, reaction) end)
+            root:CreateButton(L(choice[1]), function() GL.SetGuildReaction(captured, reaction) end)
         end
-        root:CreateButton("Guilde : gérer / ajouter une note", function() GL.ShowGuilds(captured) end)
+        root:CreateButton(L("Guilde : gérer / ajouter une note"), function() GL.ShowGuilds(captured) end)
     end
 end
 
 for _, tag in ipairs(tags) do
     local ok, err = pcall(Menu.ModifyMenu, tag, onMenu)
-    if not ok then GL.Debug("Menu " .. tag .. ": " .. tostring(err)) end
+    if not ok then GL.Debug(L("Menu %s : %s"):format(tag, tostring(err))) end
 end

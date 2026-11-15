@@ -1,0 +1,33 @@
+# Armurerie Forever : portraits, équipement et talents
+
+Étude du 14 novembre 2026 pour Grudge Ledger.
+
+## Ce que Blizzard publie
+
+La [fiche officielle de Ganjha Meuuh](https://worldofwarcraft.blizzard.com/en-us/forever/eu/armory/character/ganjha-meuuh) a répondu à une lecture publique. Son état de profil contenait un avatar, 16 entrées dans le champ d’équipement, des arbres avec des talents et une date de mise à jour. Il s’agit d’une observation du site, pas d’un contrat sur son format ni d’un historique des combats. [L’Armurerie officielle](https://worldofwarcraft.blizzard.com/en-us/forever/eu/armory) indique un niveau minimal de 10. L’absence d’un profil ou d’un objet ne prouve pas que le personnage ne porte rien.
+
+## Ce que peut faire le journal seul
+
+Le client [dessine le portrait à partir d’une unité](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua). Le GUID sert à vérifier l’identité ; il ne contient pas le visage. La 0.10.5 retient les textures vues pendant la session même si le journal est fermé. La mémoire est bornée : après éviction ou rechargement, il faut revoir le personnage ou disposer d’un avatar déjà importé. Nous n’avons identifié aucune API Lua Forever fournissant une requête HTTP générale vers l’Armurerie ni un export du portrait natif sous forme d’image persistante.
+
+## Faisabilité d’un onglet Équipement et talents
+
+- **Observation en jeu :** tester sur deux clients de factions opposées si le jeu autorise l’inspection dans le contexte précis de la rencontre. [Les événements d’inspection du client](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/PaperDollInfoDocumentation.lua) ne garantissent pas que les informations d’un adversaire sont accessibles après sa mort, hors de portée ou en combat. Ne conserver que les champs réellement obtenus pour le GUID attendu, avec l’heure d’observation. Les talents ennemis en combat restent à valider.
+- **Fiche web :** un outil externe peut récupérer avatar, équipement et talents, vérifier l’identité et préparer des données locales pour le prochain chargement de l’addon. L’importeur de portraits existant couvre déjà la validation des avatars, mais il est facultatif et n’est pas lancé par le jeu. Pour automatiser ce mode, il faudrait distribuer un compagnon séparé, gérer les profils absents et les erreurs de réseau, et afficher la date de mise à jour Blizzard.
+- **Présentation recommandée :** distinguer « Observé en jeu à … » et « Dernière fiche Armurerie du … ». Une nouvelle consultation ne doit jamais réécrire le souvenir d’un combat. Prévoir aussi une fiche indisponible, une inspection partielle et un changement d’équipement après le combat dans la validation.
+
+Conclusion : un onglet autonome peut présenter ce que le jeu a permis d’observer. Un onglet alimenté automatiquement par le site pour n’importe quel ennemi exige un composant extérieur au jeu ; même alors, la fiche web ne prouve pas l’équipement porté à l’instant du combat.
+
+## Import privé et commandes de la branche de développement
+
+Depuis le dépôt, lancer `python tools/sync_portraits.py "chemin/vers/_forever_" --region eu` après une sauvegarde des contacts du journal. Le module privé GrudgeLedgerPortraits charge les profils lors du prochain chargement du jeu. À sa première création, redémarrer le client et vérifier son activation. L’import des données suffit pour le Journal. Le compagnon conserve par défaut les images individuelles. L’option `--profiles-only` importe uniquement les données. Hors de vue, le personnage apparaît sur le parchemin grâce à son image enregistrée. La fiche affiche le modèle de l’unité visible dont le GUID correspond au contact. Le compagnon recadre les marges transparentes du PNG et enregistre une texture de 256 × 512 pixels par personnage. Le cache local évite une nouvelle requête pendant sept jours. --force permet une actualisation anticipée.
+
+La clé du catalogue est le contenu complet de la variante portée. Deux capes de même identifiant avec des statistiques, bonus ou enchantements différents restent distinctes. Les emplacements des personnages référencent ces variantes. Chaque profil conserve le dernier relevé disponible. Le journal conserve séparément les rencontres. L’option `--locale fr-fr` choisit les noms, effets et descriptions publiés en français. Les absences de profil ou d’identité vérifiable conservent le relevé précédent.
+
+- /glfiche sur une cible connue affiche l’équipement, les statistiques de base de chaque pièce, les talents et le bilan de guilde. /glfiche voir GUID consulte un contact hors de portée. Les détails des variantes sont disponibles par GrudgeLedger.ArmoryItem(fiche, emplacement).
+- /glfiche suivre et /glfiche arreter activent et retirent le suivi privé de la cible. Une réapparition après une absence de 90 secondes et le passage observé de mort à vivant produisent un message si les alertes ennemies sont activées.
+- /glfiche partager oui ou non règle le partage des futurs résultats JcJ pour ce personnage et cette guilde. Les membres échangent les totaux cumulés par auteur et adversaire pour que la réception répétée d’un message ne multiplie pas les morts. Le réseau repose sur la confiance entre membres. Le partage des fiches Armurerie entre clients et leur téléchargement en jeu ne sont pas implémentés.
+
+Le relevé inclut aussi les victoires honorables, le rang JcJ et les valeurs publiées dans les groupes de statistiques de Blizzard. La commande affiche les indicateurs disponibles de vie, mana, armure et puissance. Une valeur absente reste inconnue. Pour importer les hauts faits JcJ obtenus, ajouter `--pvp-achievements`. Cette option consulte une page supplémentaire et conserve le dernier résultat daté en cas d’échec. Les distinctions de compte sont signalées. Quand la fiche propose les onglets JcJ et Réputation, le compagnon consulte chacun une fois par rafraîchissement. Il mémorise parties, victoires et défaites par champ de bataille, ainsi que le palier et les points par faction. Si la lecture d’un de ces onglets échoue, le dernier relevé disponible dans la même langue garde sa propre date de collecte.
+
+Les pièces équipées et les talents référencent les textures du client par identifiant numérique. L’addon utilise les portraits observés en jeu. Les caractéristiques utilisent une petite table de textures commune. Un ancien relevé reste lisible jusqu’à sa mise à jour. Les fichiers JSON de travail de l’importeur, les portraits et la mémoire Lua en jeu sont à mesurer séparément du poids du catalogue mutualisé.

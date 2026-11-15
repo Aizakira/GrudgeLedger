@@ -13,6 +13,8 @@ function SetCVar(k, v) cvars[k] = v end
 function GetCVar(k) return cvars[k] and tostring(cvars[k]) or nil end
 function GetCursorPosition() return 200, 200 end
 UISpecialFrames, SlashCmdList = {}, {}
+StaticPopupDialogs = {}
+function StaticPopup_Hide() end
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, message) messages[#messages + 1] = message end }
 local units = {
     player = { name = "Testeur", surname = "Exemple", guid = "Player-1-self" },
@@ -60,17 +62,30 @@ function methods:Show()
 end
 function methods:Hide() self.shown = false if self.scripts.OnHide then self.scripts.OnHide(self) end end
 function methods:IsShown() return self.shown end
+function methods:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
 function methods:SetEnabled(v)
     local changed = self.enabled ~= v
     self.enabled = v
     local callback = self.scripts[v and "OnEnable" or "OnDisable"]
     if changed and callback then callback(self) end
 end
+function methods:IsEnabled() return self.enabled end
 function methods:SetToplevel(v) self.topLevel = v end
 function methods:Raise() self.raised = (self.raised or 0) + 1 end
 function methods:SetChecked(v) self.checked = v end
+function methods:SetMinMaxValues(low, high) self.minValue, self.maxValue = low, high end
+function methods:SetValueStep(step) self.step = step end
+function methods:SetValue(value)
+    value = math.max(self.minValue, math.min(self.maxValue, value))
+    if self.value ~= value then
+        self.value = value
+        if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, value) end
+    end
+end
+function methods:GetValue() return self.value end
 function methods:GetChecked() return self.checked end
 function methods:SetFocus() self.focus = true end
+function methods:HighlightText() self.highlighted = self:GetText() end
 function methods:ClearFocus() self.focus = false end
 function methods:SetVerticalScroll(v) self.vertical = v end
 function methods:GetVerticalScroll() return self.vertical or 0 end
@@ -80,6 +95,7 @@ function methods:GetCenter() return 100, 100 end
 function methods:GetEffectiveScale() return 1 end
 function methods:SetTextColor(r, g, b) self.color = { r, g, b } end
 function methods:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
+function methods:SetVertexColor(r, g, b, a) self.vertexColor = { r, g, b, a } end
 function methods:SetNormalFontObject(value) self.normalFont = value end
 function methods:SetHighlightFontObject(value) self.highlightFont = value end
 function methods:SetDisabledFontObject(value) self.disabledFont = value end
@@ -91,6 +107,7 @@ function methods:SetHitRectInsets(...) self.hitRectInsets = { ... } end
 function methods:SetNormalTexture(value) self.normalTexture = value end
 function methods:GetNormalTexture() return type(self.normalTexture) == "table" and self.normalTexture or nil end
 function methods:SetHighlightTexture(value) self.highlightTexture = value end
+function methods:LockHighlight() self.highlightLocked = true end
 function methods:SetPushedTexture(value) self.pushedTexture = value end
 function methods:SetDisabledTexture(value) self.disabledTexture = value end
 function methods:SetFontString(value) self.fontString = value end
@@ -102,7 +119,7 @@ function methods:HookScript(event, fn)
 end
 function methods:RegisterEvent(event) self.events[event] = true end
 function methods:UnregisterEvent(event) self.events[event] = nil end
-for _, name in ipairs({ "SetFrameStrata", "SetClampedToScreen", "EnableMouse", "SetMovable", "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetAllPoints", "SetJustifyH", "SetSpacing", "SetAutoFocus", "SetMaxLetters", "SetMultiLine", "SetFontObject", "SetTextInsets", "ClearAllPoints", "RegisterForClicks", "SetTexture", "SetAlpha" }) do
+for _, name in ipairs({ "SetFrameStrata", "SetClampedToScreen", "EnableMouse", "SetMovable", "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetAllPoints", "SetJustifyH", "SetSpacing", "SetAutoFocus", "SetMaxLetters", "SetMultiLine", "SetFontObject", "SetTextInsets", "ClearAllPoints", "RegisterForClicks", "SetTexture", "SetAlpha", "SetDrawLayer" }) do
     methods[name] = function() end
 end
 local function newRegion(parent, name)
@@ -141,6 +158,7 @@ GL_TEST_MOCK = {
 -- Native Menu descriptions become hover submenus when children are added.
 function GL_TEST_MOCK.NewMenu()
     local menu = { buttons = {}, children = {}, entries = {} }
+    function menu:AddInitializer(callback) self.initializer = callback end
     function menu:CreateDivider() self.entries[#self.entries + 1] = { kind = "divider" } end
     function menu:CreateTitle(text) self.entries[#self.entries + 1] = { kind = "title", text = text } end
     function menu:CreateButton(text, callback)

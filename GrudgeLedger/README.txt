@@ -1,4 +1,27 @@
-GRUDGE LEDGER — 0.5.7
+GRUDGE LEDGER — 0.11.0
+
+Armurerie : les contacts ajoutés par nom complet depuis le chat peuvent recevoir une fiche du compagnon. Le Journal conserve le dernier relevé chargé dès que le contact est connu. L’onglet Équipement affiche le modèle du personnage identifié en jeu tant qu’il est visible. Hors de vue, la fiche affiche son image d’Armurerie enregistrée sur le parchemin. Sans image, les emplacements occupent toute la largeur. Le compagnon lit le Journal après /reload ou à la déconnexion. Après l’import, un nouveau /reload charge les données. La première installation du module privé peut nécessiter un redémarrage du jeu.
+
+Journal → Fiches de guilde. Sélectionnez un contact et publiez sa fiche pour ouvrir les avis de guilde. Chaque membre peut donner ou retirer ses étiquettes. La synthèse compte les avis actifs et l’historique indique le personnage et la date. « Masquer pour moi » est personnel. Le compte qui a publié dispose aussi de « Retirer pour la guilde ». Le partage automatique des nouvelles fiches et des prochaines étiquettes se règle par guilde.
+
+Les insignes des étiquettes sont visibles dans la liste du Journal et en haut de la fiche. Le bouclier vert à coche signifie « Fiable ». Survolez les insignes de la fiche pour lire leurs noms.
+
+Journal → Notes → Étiquettes : ajoutez ou retirez vos repères privés (butin ninja, joueur boosté, départ anticipé, comportement toxique, sabotage, fiable). Retrouvez-les à l’invitation, en groupe, au survol et avec le filtre du Journal.
+
+Relations → Guildes regroupe les relations, les combats, les membres connus et les avis de guilde. La commande /gl guildes ouvre cette rubrique.
+
+Alpha : ouvrir /gl, puis Primes. Un clic sur une ligne sélectionne la cible ou le contrat ; le portrait du contrat ouvre la fiche du joueur (équipement, arbres de talents, JcJ et réputations). À la boîte aux lettres, sélectionner la prime ; le jeu prépare une part à la fois. Cliquer manuellement sur Envoyer pour chaque destinataire.
+
+Nouveau : médaillon de niveau sur le coin inférieur gauche du portrait et niveaux côte à côte dans l’histoire. Un portrait visible peut être retenu pendant la session même si le journal est fermé.
+
+Le Bilan affiche les victoires et les morts. Les royaumes Forever sont explicités. Chaque nouveau combat conserve les niveaux disponibles à ce moment-là.
+
+La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde ouvert, même si une créature porte le dernier coup. Les anciens compteurs sont réunis à la mise à jour. La résurrection réactive les alertes. Le journal conserve les portraits récemment vus pendant la session et affiche votre honneur enregistré dans la synthèse. Le gain adverse est inconnu.
+
+
+Interface en français, anglais ou espagnol selon la langue du jeu. Anglais par défaut pour les autres langues.
+The interface follows your WoW text language: English, French or Spanish.
+La interfaz utiliza el idioma del juego: español, francés o inglés.
 Journal des amis et des rancunes pour WoW Forever (interface 16001).
 
 INSTALLATION
@@ -7,6 +30,156 @@ Utiliser Grudge Ledger seul pour cette fonction : désactiver Grudgebook et Wort
 Remembering pour éviter plusieurs menus et marqueurs concurrents.
 Aucune dépendance à ces deux addons n'est nécessaire.
 
+0.10.2 — Portraits hors de portée
+
+Le portrait en direct a priorité. Le livre affiche ensuite le portrait enregistré
+de l’Armurerie si le module local GrudgeLedgerPortraits contient ce personnage.
+Les portraits personnels sont séparés du dossier GrudgeLedger à partager.
+
+0.10.1 — Depuis la synthèse, Autres actions > Supprimer la fiche… demande
+confirmation pour le joueur nommé. Les bilans sont recalculés après suppression.
+Le badge de classe s’affiche au premier plan lorsqu’il chevauche un portrait.
+
+0.10.0 — Initiative et honneur en PvP sauvage
+
+Dans Bilan > Vue d’ensemble > Initiative, « Revanche » compte une victoire
+confirmée quand votre personnage engage un adversaire qui l’avait déjà tué.
+Si le début du combat manque, la victoire compte avec « Initiative inconnue ».
+Cliquez sur « Honneur reçu » pour retrouver les gains annoncés par le jeu dans
+la période choisie. La fiche Face-à-face réunit les gains liés à cet adversaire.
+L’honneur partagé peut être reçu sans avoir porté le coup fatal.
+
+0.9.2 — Relire et vérifier un combat
+
+Journal > Face-à-face réunit les résultats de ce personnage. « Voir les combats dans l’histoire » ouvre les événements comptés.
+Si le jeu attribue le coup fatal à un autre joueur, une victoire déduite du gain
+d’honneur pour ce même combat est écartée. Les classements des amis et menaces les plus
+recroisés commencent à la deuxième rencontre enregistrée sur le compte.
+
+0.9.1 — Journal et victoires PvP
+
+Le Journal et les Guildes ouvrent une fiche quand la liste contient des résultats.
+Un coup fatal attribué à votre personnage ou à son familier peut confirmer une
+victoire déjà détectée.
+
+0.8.2 — Police du journal
+
+Au premier chargement de cette version, le journal adopte « Grimoire · PT Serif ».
+Vous pouvez ensuite choisir la police du jeu dans Réglages > Apparence > Classique.
+Votre choix est mémorisé pour le compte.
+
+0.8.1 — Lecture du journal
+
+En ouvrant le Journal, la personne avec qui vous avez interagi en dernier figure en tête.
+Une recherche validée avec Entrée ou la loupe retrouve votre tri préféré. Effacer la recherche
+rétablit la chronologie. Dans Réglages > Apparence, choisissez Grimoire pour la nouvelle
+typographie. Le titre doré du livre apparaît dans les deux modes de lecture.
+
+0.8.0 — Rencontres et monde ouvert
+
+Journal > Face-à-face présente les résultats confirmés de votre personnage avec ce contact.
+Histoire précise les circonstances de combat que le jeu a permis d'observer.
+Bilan > Par zone ouvre les sous-zones et propose de mesurer le temps passé en monde ouvert.
+Mon année prépare un résumé chiffré à copier. Classements > Amis permet de trier par temps en groupe.
+Dans Réglages, activez à votre convenance les signaux indirects (Alertes), l'historique privé
+des échanges terminés (Relations et PvP), les badges du chat ou les infobulles compactes (Apparence).
+
+0.7.2 — Portraits et PvP sauvage
+
+Le livre affiche le portrait d’un joueur si le client le rend disponible.
+Une fois le joueur hors de vue, sa fiche utilise ses emblèmes connus.
+Les dégâts et les morts causés par un familier peuvent être attribués à son
+maître lorsque son identité est établie. La fiche précise la preuve.
+Dans Bilan, « Par zone » regroupe les victoires et les morts au lieu du combat.
+Dans Réglages > Apparence, « Grimoire · PT Serif » utilise des titres gras et des annotations en italique. « Classique » conserve la police du jeu.
+
+0.7.1 — Registre de campagne
+
+Ouvrez le livre avec /gl. L’onglet Journal présente les rencontres et les notes.
+Classements, Guildes et Bilan sont accessibles depuis le même bandeau.
+La roue dentée ouvre les réglages de lecture, les alertes et le guide.
+Les fiches restent dans les SavedVariables de votre compte.
+La commande /gl version indique la version chargée par le jeu.
+Histoire permet de vérifier un fait PvP. Notes conserve les brouillons pendant
+la session. Le Bilan comprend une carte annuelle et un classement des adversaires.
+
+0.6.0 : bilan personnel et chronique
+
+/gl bilan : tableau d'honneur, morts, victoires, agressions, némésis et adversaire
+le plus vaincu.
+Choisir personnage actuel, compte ou archives sans auteur ; toutes les dates,
+sept jours, trente jours ou une année civile. Ce sont les événements observés,
+pas une carrière complète. Les anciennes données sans auteur ne sont jamais
+attribuées au personnage actuel. Les rencontres non datées restent un souvenir
+du compte, pas un chiffre annuel. La carte annuelle est consultable dans l'addon.
+
+/gl chronique : historique global, avec filtres et recherche validée par Entrée
+ou OK. Une même mort partagée entre plusieurs agresseurs compte une fois si
+l'identifiant de l'événement est disponible. Les événements corrigés et ceux des
+champs de bataille sont exclus des totaux. Les archives sans identifiant ne
+permettent pas toujours de reconnaître une même mort.
+
+L'index recherche plusieurs mots dans les noms, guildes, notes, zones, races et
+classes. Le tri, les filtres et la seconde ligne sont configurables. Les notes
+peuvent être modifiées ou supprimées, avec confirmation avant suppression.
+
+Réglages : avertissement de groupe facultatif, désactivé par défaut. Seul un
+ancien agresseur avec un événement PvP est annoncé dans un petit groupe, hors
+champs de bataille/arènes/raids. Aucun envoi de note personnelle. Limites : une
+annonce par minute pour le groupe, trente minutes par personne, et plus de dix
+minutes sans présence observée avant une nouvelle annonce. Pas de file d'attente.
+
+Le solde automatique conserve -10 par mort et +1 par victoire : deux morts
+demandent vingt victoires, sans annuler d'autres dettes ou les choix personnels.
+Les boutons de gestes rapides restent disponibles. Le partage de guilde et les
+primes sont réservés à une future version ; le radar druide reste en pause.
+
+Validation hors jeu : 25 scripts de tests et 39 vues contrôlées. Un /reload charge
+les changements Lua ; le rendu, les sons et les API restent à vérifier en jeu.
+
+0.5.12 : calculs et affichage plus légers
+
+Les vérifications périodiques partagent brièvement les informations d'identité ;
+les actions lisent toujours les informations à nouveau. Les icônes stables ne
+sont plus repositionnées et rechargées à chaque passage. Les statistiques de
+guilde sont recalculées après un changement utile, pas à chaque rafraîchissement.
+Le calcul des gestes amicaux ou hostiles relit seulement les nouveaux événements.
+Les historiques et choix personnels sont conservés ; aucune dépendance ajoutée.
+Le détecteur druide reste expérimental, manuel et inchangé dans cette version.
+
+
+0.5.9 : validation complète et notifications de zoom
+
+Une notification de zoom ne suffit plus à interrompre l'essai : le zoom et la
+portée réels sont vérifiés à la mise à jour suivante. Un changement indique les
+valeurs reçues et attendues ; une portée initiale illisible impose encore l'arrêt
+sur notification, avec un motif précis. Le rapport compte ces notifications.
+La détection fiable en jeu reste à valider.
+
+Un essai réel 0.5.7 sur le client 70888 a relu deux fois un joueur témoin,
+sans survol manuel, avec des contrôles vides réussis : 69 positions, 53 lectures,
+12 textes distincts en 2,1 secondes. Ce n'est pas une preuve de douze joueurs
+identifiés ni de détection continue fiable. Le radar reste manuel et expérimental.
+
+Après /reload : en félin, Pistage des humanoïdes actif, hors combat et instance,
+cibler un joueur humanoïde immobile visible comme point sur la minimap.
+Ouvrir /gl debug, cliquer Préparer la minimap, puis Validation druide.
+Placer la souris sur le décor vide dans les trois secondes, puis rester immobile.
+La minimap disparaît pendant au maximum 12 secondes ; /glradar stop annule.
+Le témoin peut être inconnu du livre. /glradar rapport retrouve le résultat anonyme.
+
+/glradar validation tente toute la grille (225 positions) au lieu de s'arrêter
+au premier témoin trouvé comme /glradar test. Le rapport compte les positions
+lues/ignorées et mesure le travail synchrone cumulé et l'appel le plus coûteux,
+si le chronomètre natif est disponible. Le rendu natif entre appels n'est pas
+mesuré : il faut aussi comparer FPS et mémoire en jeu sur plusieurs machines.
+La grille espacée peut manquer des points ; un résultat vide ne garantit pas la sécurité.
+
+144 cas simulés vérifient protocole, interruptions, restauration et limites :
+229 lectures natives maximum, au plus une par image rendue, 12 secondes,
+dix rapports sans noms. Aucun balayage ne tourne au repos. Avant toute activation
+automatique facultative, il reste à vérifier les identités, les configurations
+de minimap et les performances réelles. Voir DEVELOPMENT.txt dans les sources.
 
 Correctif 0.5.7 : boutons de minimap pendant le balayage
 
@@ -15,8 +188,8 @@ le balayage. Ces points sont désormais ignorés et comptés, sans lire leur
 infobulle ni désactiver leurs boutons. Une fenêtre extérieure arrête l'essai ;
 un point de contrôle masqué empêche de valider le résultat. 113 cas simulés
 vérifient le protocole, dont cet arrêt au deuxième point et la restauration.
-Cela ne prouve pas encore la lecture des noms sur Forever : test manuel seulement.
-Après /reload : /gl debug, Préparer la minimap, Test druide avec un joueur ciblé.
+Un essai ultérieur a validé un témoin, sans valider un radar continu.
+Après /reload : /gl debug, Préparer la minimap, Validation druide avec un joueur ciblé.
 
 Correctif 0.5.6 : arrêts du test druide expliqués
 
@@ -40,7 +213,7 @@ Ce bouton réapplique l'apparence native avec la rotation actuelle, sans modifie
 les réglages sauvegardés ni un habillage personnalisé déjà observé. Aucun scan
 ne démarre automatiquement ; la préparation est refusée en combat ou pendant un test.
 Une fois prête : cibler un joueur immobile visible sur la minimap et cliquer
-« Test druide ». Placer la souris sur une zone vide du monde dans les trois
+« Validation druide ». Placer la souris sur une zone vide du monde dans les trois
 secondes, puis rester immobile en félin avec le pistage des humanoïdes actif.
 Vérifications : 20 suites, dont 90 cas du détecteur. La lecture réelle des joueurs
 par le moteur du jeu reste à démontrer ; ceci corrige seulement la préparation.
@@ -81,7 +254,7 @@ Pour le seul essai nécessitant le vrai client :
    Un ami convient ; choisir un joueur sous forme humanoïde.
 4. Placer la souris sur le décor, hors fenêtres et minimap, puis taper
    /glradar test et rester immobile, sans clic, pendant au maximum 12 secondes.
-   Le bouton « Test druide » dans Diagnostic laisse trois secondes pour replacer
+   Le bouton « Validation druide » dans Diagnostic laisse trois secondes pour replacer
    la souris. La minimap est masquée temporairement pendant le balayage.
 5. Copier le résultat avec /glradar rapport, ou via /gl debug.
    /glradar stop interrompt l'essai ; bouger ou entrer en combat l'arrête aussi.
@@ -98,7 +271,7 @@ Si elle échoue, le test demande /reload et refuse un nouvel essai jusque-là.
 Désactiver NodeSight pendant ce test : deux scanners ne doivent pas déplacer
 la même minimap. Les autres contrôles de minimap ne sont pas forcés/désactivés.
 
-Il reste à démontrer la lecture sur Forever avant d'envisager le radar continu,
+Il reste à valider la fiabilité dans plusieurs situations avant le radar continu,
 ses alertes lointaines et l'option de pistage en félin. Aucun succès simulé ne
 déverrouille ces fonctions. Aucune approbation spécifique de Blizzard n'a été
 obtenue ; l'accès à une API ou l'existence d'un autre addon n'en constitue pas une.
@@ -110,8 +283,8 @@ texture. Le fonctionnement des gestes reste identique.
 
 Nouveautés 0.5.0 : chroniques, guildes et diagnostic
 
-- Statistiques dans le livre (/gl stats) : bourreaux, victoires, antagonistes par solde négatif, amis par score, amis et menaces recroisés. Morts/victoires probables ont leurs propres classements. Un clic ouvre la fiche.
-- Guildes (/gl guildes) : nombre de rancunes personnelles et d'amis parmi les membres connus, morts confirmées/probables et agressions confirmées. Cliquer une guilde permet de la marquer à surveiller, amie, ou d'ouvrir ses avis et notes. Les choix personnels restent prioritaires. Les avis hérités d'une guilde ne créent pas artificiellement de rancunes personnelles dans le classement. Les faits sans guilde connue restent non attribués ; une ancienne guilde enregistrée au moment des faits conserve ces événements.
+- Statistiques dans le livre (/gl stats) : bourreaux, victoires, antagonistes par solde négatif, amis par score, amis et menaces recroisés. Un clic ouvre la fiche.
+- Guildes (/gl guildes) : nombre de rancunes personnelles et d'amis parmi les membres connus, morts et agressions. Cliquer une guilde permet de la marquer à surveiller, amie, ou d'ouvrir ses avis et notes. Les choix personnels restent prioritaires. Les avis hérités d'une guilde ne créent pas artificiellement de rancunes personnelles dans le classement. Les faits sans guilde connue restent non attribués ; une ancienne guilde enregistrée au moment des faits conserve ces événements.
 - Bisou / crachat : deux boutons avec les cadres natifs de WoW, au-dessus du chat, sous les alertes. Clic sur un joueur ciblé : /kiss (+1) ou /spit (−1), avec le même délai de 30 secondes par sentiment que les macros. Un geste positif n'efface pas une dette PvP. Ctrl + glisser déplace les deux boutons ; position mémorisée et bouton de remise en place dans les réglages. Aucun geste n'est envoyé automatiquement. Désactivables dans les réglages.
 - Rencontres distinctes : compteur démarré à cette version, pour les joueurs déjà suivis ou couverts par un avis de guilde. Une nouvelle rencontre demande plus de dix minutes sans observation ; chaque présence renouvelle le délai. Le rechargement ne compte pas deux fois. Horloges séparées par personnage, statistiques réunies dans ce livre de compte. Ce n'est ni une mesure de distance ni du temps passé ensemble, et aucun ancien passage n'est inventé.
 - Diagnostic local (/gl traces) : les 200 dernières décisions de détection/alerte, avec la raison (identité absente, délai, ami du groupe, alerte désactivée, affichée, etc.). Répétitions limitées à une fois par 30 secondes ; effaçable et désactivable. Les noms de ce journal local sont privés. /gl debug produit la version anonymisée pour un signalement. Les données sont dans WTF/SavedVariables, jamais dans le code distribué. WoW écrit la sauvegarde lors d'un /reload ou d'une déconnexion normale.
@@ -155,9 +328,6 @@ Cœur vert : ami. Œil orange : méfiance/agression.
 Cœur brisé rouge : ennemi/rancune forte, notamment après une mort PvP.
 Médaillon gris : personne connue devenue neutre. Aucun popup ni son pour les
 neutres ; les inconnus et les anciennes fiches de groupe seules ne sont pas marqués.
-Un petit « ? » accompagne les marqueurs fondés uniquement sur une déduction
-PvP. Une mort probable reste signalée comme telle, même si une agression était
-confirmée. Le « ? » disparaît après correction ou confirmation pertinente.
 Les icônes nécessitent les barres de noms du jeu. Le bouton des Réglages permet
 d'activer le repérage (icônes + couleurs), hors combat, également avec /gl reperage.
 Il active les barres des joueurs alliés, les barres ennemies et leur affichage
@@ -194,10 +364,9 @@ Chaque nouvelle mort, victoire ou agression mémorise séparément la guilde, so
 serveur et la date de son observation. L'historique indique quand il s'agit d'une
 dernière information connue. Les événements anciens ou de guilde inconnue ne sont
 jamais réattribués après coup, même si le joueur rejoint une autre guilde.
-Les statistiques de guilde séparent les déductions des faits confirmés et excluent
+Les statistiques de guilde excluent
 les événements annulés. Une même mort identifiée ne compte qu'une fois par guilde,
-même avec plusieurs attaquants ; une preuve confirmée prime sur les participations
-probables. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne
+même avec plusieurs attaquants. Plusieurs guildes peuvent participer à la même mort : leurs totaux ne
 s'additionnent pas pour calculer vos morts. Sans identifiant commun, aucun regroupement
 des anciens événements n'est deviné.
 Les classements de guildes sont disponibles depuis la version 0.5.0.
@@ -225,8 +394,7 @@ restent distinctes. « Automatique » n'impose donc jamais une couleur neutre.
 
 SOLDE DE RANCUNE 0.4.2
 Le classement automatique utilise les événements actifs : mort -10, agression -1,
-victoire +1. Les événements probables restent explicitement signalés ; une victoire
-confirmée ne confirme pas une ancienne mort probable. Les gestes négatifs s'ajoutent
+victoire +1. Les gestes négatifs s'ajoutent
 au solde. Exemple : une mort, un geste négatif et deux victoires donnent -9.
 À -10 ou moins après une mort, le classement est Ennemi (rouge). De -9 à -1,
 il reste Méfiance (orange), avec l'alerte de proximité. À 0, il devient Neutre.
@@ -258,15 +426,7 @@ restent séparés de la camaraderie personnelle.
 Forever peut masquer le journal de combat. Après un décès, l'addon consulte aussi
 le récapitulatif natif de mort et attend au plus deux secondes s'il arrive en
 retard. Les sources de dégâts accessibles sont enregistrées par GUID, même sans
-avoir ciblé ces adversaires. Un coup fatal explicite est confirmé. Les autres
-participants à l'attaque mortelle sont marqués ennemis avec une participation
-PROBABLE, pas comme auteurs de plusieurs coups fatals. Chaque fiche compte une
-participation maximum au même décès. Un PNJ identifié comme source fatale ne
-transforme pas les agresseurs joueurs en tueurs.
-Sans récapitulatif exploitable, les adversaires PvP en combat qui vous ciblaient
-réellement juste avant le décès peuvent être enregistrés comme participants
-probables, y compris à plusieurs. Une baisse de santé peut également produire
-des agressions probables. Les simples passants sont exclus ; les situations
+avoir ciblé ces adversaires. Chaque adversaire identifié qui contribue à une mort reçoit une seule attribution, même si une créature porte le coup fatal. Les simples passants sont exclus ; les situations
 ambiguës ou les données indisponibles peuvent toujours empêcher une attribution.
 Une agression n'est comptée qu'une fois par adversaire et par combat. Les preuves
 restent consultables et corrigeables. Les anciens décès manqués ne sont pas

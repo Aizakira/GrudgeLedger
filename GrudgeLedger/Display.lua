@@ -2,6 +2,7 @@
 -- Nameplate lifecycle/tooltip approach adapted from Worth Remembering by Kyle
 -- (GPL-3.0); https://github.com/kk-on-gh/WorthRemembering. No runtime dependency.
 local GL = GrudgeLedger
+local L = GL.L
 local D = {}
 GL.Display = D
 
@@ -13,7 +14,8 @@ local styles = {
 }
 local visible, markers, lastAlert, pendingNames = {}, {}, {}, {}
 local guildBursts = {}
-local toast, elapsed = nil, 0
+local signals, latestSignal = {}, nil
+local toast, previewToast, elapsed = nil, nil, 0
 local alert
 local lastSound
 local function alertSetting(relation) return relation == "friend" and "friendAlerts" or "enemyAlerts" end
@@ -44,12 +46,57 @@ local function newFriendEncounter(record, unit)
     return not previous or now - previous > 600
 end
 
+local function partyWarning(record, unit)
+    if not record or not GL.db or GL.Settings().partyWarnings ~= true then return end
+    local _, instanceType = GL.Safe(IsInInstance)
+    local count = GL.Clean(GL.Safe(GetNumGroupMembers), "number")
+    if (instanceType ~= "none" and instanceType ~= "party") or GL.Safe(IsInRaid) ~= false
+        or not count or count < 2 or count > 5 or count % 1 ~= 0 then return end
+    if not unit or (not unit:match("^nameplate%d+$") and GL.Safe(UnitIsVisible, unit) ~= true) then return end
+    local me = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    if not me or record.guid == me or GL.Safe(UnitIsUnit, unit, "player") == true or isGroupmate(record, unit) then return end
+    local relation, pvp = GL.Relation(record), record.pvp or {}
+    if relation ~= "warning" and relation ~= "enemy" then return end
+    local confirmed = (pvp.deaths or 0) + (pvp.aggressions or 0) > 0
+    if not confirmed then return end
+    local name = GL.Clean(record.fullName or record.name, "string")
+    -- Only the name and a fixed summary leave the personal journal, never notes.
+    if not name or name == "" or #name > 120 or name:find("[%z\1-\31\127|{}]") then return end
+    local now = GL.Clean(GL.Now(), "number")
+    if not now or now ~= now or now <= 0 or now == math.huge then return end
+    record.partyPresence = type(record.partyPresence) == "table" and record.partyPresence or {}
+    local presence = record.partyPresence[me]
+    if type(presence) ~= "table" then presence = {} record.partyPresence[me] = presence end
+    GL.db.partyWarningLastAttempt = type(GL.db.partyWarningLastAttempt) == "table" and GL.db.partyWarningLastAttempt or {}
+    -- Rebase future timestamps after a clock rollback rather than releasing
+    -- every cooldown. Each opponent/character stores only two timestamps.
+    local function timestamp(value)
+        value = GL.Clean(value, "number")
+        if value and value >= 0 and value < math.huge then return math.min(value, now) end
+    end
+    local previous = timestamp(presence.seenAt)
+    local attempt = timestamp(presence.attemptAt)
+    local globalAttempt = timestamp(GL.db.partyWarningLastAttempt[me])
+    presence.seenAt, presence.attemptAt = now, attempt
+    GL.db.partyWarningLastAttempt[me] = globalAttempt
+    if (previous and now - previous <= 600) or (attempt and now - attempt < 1800)
+        or (globalAttempt and now - globalAttempt < 60) then return end
+    -- ponytail: no message queue. A crowded encounter never drains a backlog;
+    -- failed/unavailable sends can retry only after a genuine new encounter.
+    local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
+    if type(send) ~= "function" then return end
+    presence.attemptAt, GL.db.partyWarningLastAttempt[me] = now, now
+    local message = L("[Grudge Ledger] Attention, %s : agression PvP enregistrée dans mon journal."):format(name)
+    local ok = pcall(send, message, "PARTY")
+    if not ok then GL.Debug(L("Avertissement de groupe refusé par le jeu ; aucun nouvel essai pendant cette rencontre.")) end
+end
+
 local function guildLabel(record, relation)
     if not record.guild then return nil end
     if GL.RelationSource(record) == "guild" and relation ~= "neutral" then
-        return (relation == "friend" and "Amitié de guilde : " or "Rancune de guilde : ") .. record.guild
+        return (relation == "friend" and L("Amitié de guilde : %s") or L("Rancune de guilde : %s")):format(record.guild)
     end
-    return "Guilde : " .. record.guild
+    return L("Guilde : %s"):format(record.guild)
 end
 
 local function recordNote(record)
@@ -66,26 +113,36 @@ end
 
 local function alertTitle(record, relation)
     if GL.RelationSource(record) == "guild" then return guildLabel(record, relation) end
-    return styles[relation].label .. (GL.RelationConfidence(record) == "probable" and " (probable)" or "") .. " à proximité"
+    return L("%s à proximité"):format(L(styles[relation].label))
 end
 
 local function refreshToastText(frame, record)
+    if frame.signal then
+        local age = math.max(0, GL.Now() - frame.signalAt)
+        local title = L("Signal indirect · %s")
+        frame.title:SetText(title:format(L(styles[frame.relation].label)))
+        frame.name:SetText(record.fullName or record.name)
+        frame.note:SetText(age == 0 and L("%s · à l’instant\nDistance inconnue"):format(L(frame.signal))
+            or L("%s · il y a %d s\nDistance inconnue"):format(L(frame.signal), age))
+        return
+    end
     frame.title:SetText(alertTitle(record, frame.relation))
-    local name = record.fullName or record.name or "Joueur connu"
+    local name = record.fullName or record.name or L("Joueur connu")
     if record.guild and GL.RelationSource(record) ~= "guild" then name = name .. " <" .. record.guild .. ">" end
     frame.name:SetText(name)
-    local hint = "Déjà rencontré : " .. (record.lastZone or "lieu inconnu")
-    if GL.RelationConfidence(record) == "probable" then hint = "Identification déduite d'un combat — à confirmer" end
+    local hint = L("Déjà rencontré : %s"):format(record.lastZone or L("lieu inconnu"))
     frame.note:SetText(recordNote(record) or hint)
 end
 
 local function validateToast()
     if not toast or not toast:IsShown() then return end
+    if GL.IsPvPInstance() then toast:Hide() return end
     local record = GL.Get(toast.key)
     if not record or GL.Relation(record) ~= toast.relation or GL.RelationSource(record) ~= toast.source
         or inheritedGuildKey(record) ~= toast.guildKey
         or GL.Now() >= toast.expires or not GL.Settings()[alertSetting(toast.relation)]
-        or (toast.relation == "friend" and isGroupmate(record)) then toast:Hide()
+        or (toast.signal and not GL.Settings().indirectAlerts)
+        or ((toast.signal or toast.relation == "friend") and isGroupmate(record)) then toast:Hide()
     else refreshToastText(toast, record) end
 end
 
@@ -122,7 +179,6 @@ local function hideMarker(marker)
     if not marker then return end
     restoreName(marker)
     GL.Safe(marker.frame.Hide, marker.frame)
-    marker.probable:Hide()
     marker.key, marker.owner = nil, nil
 end
 
@@ -147,19 +203,37 @@ local function ensureMarker(plate)
     bg:SetAllPoints()
     bg:SetColorTexture(0.025, 0.025, 0.025, 0.95)
     local icon = frame:CreateTexture(nil, "OVERLAY")
+    icon:SetVertexColor(1, 1, 1)
     icon:SetPoint("TOPLEFT", 2, -2)
     icon:SetPoint("BOTTOMRIGHT", -2, 2)
-    local probable = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    probable:SetPoint("RIGHT", frame, "LEFT", -1, 0)
-    probable:SetText("?")
-    probable:SetTextColor(1, 0.85, 0.3)
-    probable:Hide()
-    local marker = { frame = frame, icon = icon, probable = probable }
+    local marker = { frame = frame, icon = icon }
     markers[plate] = marker
     return marker
 end
 
-local function updateMarker(entry)
+local nearbyDead,followAlerts={},{}
+local function encounterState(record,unit)
+    if not record or not record.guid or not GL.Settings().enemyAlerts then return end
+    local watched=record.followEncounter
+    if not watched and GL.Relation(record)~="enemy" then return end
+    local now=GL.Now()
+    local dead=GL.Safe(UnitIsDeadOrGhost,unit)
+    if dead==true then
+        nearbyDead[record.guid]=now
+    elseif dead==false then
+        local seen=nearbyDead[record.guid]
+        nearbyDead[record.guid]=nil
+        if seen and now>=seen and now-seen<=120 then
+            GL.Print(record.fullName.." vient de ressusciter à proximité.")
+            followAlerts[record.guid]=now
+        elseif watched and (not followAlerts[record.guid] or now-followAlerts[record.guid]>=90) then
+            GL.Print(record.fullName.." est à proximité.")
+        end
+        if watched then followAlerts[record.guid]=now end
+    end
+end
+
+local function updateMarker(entry, reuseObservation)
     local plate = C_NamePlate and GL.Safe(C_NamePlate.GetNamePlateForUnit, entry.unit)
     if entry.plate ~= plate then
         local previous = entry.plate and markers[entry.plate]
@@ -168,11 +242,13 @@ local function updateMarker(entry)
     end
     if not plate then entry.identity = nil; return end
     local marker = markers[plate]
-    local identity = GL.Identity(entry.unit)
+    local identity = GL.Identity(entry.unit, reuseObservation)
     entry.identity = identity
     -- Refresh membership as well as identity: guild rules can change while the
     -- same player stays visible, and leaving a guild must remove its marker.
     local record = identity and GL.RecordSeen(identity, true)
+    encounterState(record,entry.unit)
+    partyWarning(record, entry.unit)
     local relation = record and GL.Relation(record)
     local guildKey = record and inheritedGuildKey(record)
     if record and (relation == "friend" or entry.recordKey ~= record.key or entry.relation ~= relation or entry.guildKey ~= guildKey) and alert then
@@ -191,19 +267,26 @@ local function updateMarker(entry)
     local font = findName(plate)
     -- ThreatPlates ignores Blizzard's faded/hidden plate alpha and scale itself.
     -- Our overlay must do the same when its visible name is supplied by TP.
-    local usesTP = plate.TPFrame and GL.Safe(plate.TPFrame.IsShown, plate.TPFrame) ~= false
-    GL.Safe(marker.frame.SetIgnoreParentAlpha, marker.frame, usesTP and true or false)
-    GL.Safe(marker.frame.SetIgnoreParentScale, marker.frame, usesTP and true or false)
+    local usesTP = plate.TPFrame ~= nil and GL.Safe(plate.TPFrame.IsShown, plate.TPFrame) ~= false
+    if marker.usesTP ~= usesTP then
+        GL.Safe(marker.frame.SetIgnoreParentAlpha, marker.frame, usesTP)
+        GL.Safe(marker.frame.SetIgnoreParentScale, marker.frame, usesTP)
+        marker.usesTP = usesTP
+    end
     local level = GL.Safe(plate.GetFrameLevel, plate) or 0
     local tpLevel = usesTP and GL.Safe(plate.TPFrame.GetFrameLevel, plate.TPFrame) or 0
-    marker.frame:SetFrameLevel(math.max(level, tpLevel or 0) + 20)
-    marker.frame:SetSize(GL.Settings().iconSize or 20, GL.Settings().iconSize or 20)
-    marker.frame:ClearAllPoints()
-    if font then marker.frame:SetPoint("RIGHT", font, "LEFT", -5, 0)
-    else marker.frame:SetPoint("BOTTOM", plate, "TOP", 0, 5) end
-    marker.icon:SetTexture(style.icon)
-    marker.icon:SetVertexColor(1, 1, 1)
-    if GL.RelationConfidence(record) == "probable" then marker.probable:Show() else marker.probable:Hide() end
+    level = math.max(level, tpLevel or 0) + 20
+    if marker.level ~= level then marker.frame:SetFrameLevel(level) marker.level = level end
+    local size = GL.Settings().iconSize or 20
+    if marker.size ~= size then marker.frame:SetSize(size, size) marker.size = size end
+    local anchor = font or plate
+    if marker.anchor ~= anchor then
+        marker.frame:ClearAllPoints()
+        if font then marker.frame:SetPoint("RIGHT", font, "LEFT", -5, 0)
+        else marker.frame:SetPoint("BOTTOM", plate, "TOP", 0, 5) end
+        marker.anchor = anchor
+    end
+    if marker.texture ~= style.icon then marker.icon:SetTexture(style.icon) marker.texture = style.icon end
     marker.frame:Show()
     if relation ~= "neutral" and GL.Settings().nameColor and font and canChange(font) then
         if marker.font ~= font then restoreName(marker) end
@@ -211,13 +294,16 @@ local function updateMarker(entry)
         if current and not sameColor(current, marker.appliedColor) then marker.baseColor = current end
         marker.font = font
         marker.appliedColor = style.color
-        GL.Safe(font.SetTextColor, font, style.color[1], style.color[2], style.color[3], 1)
+        if not sameColor(current, style.color) then
+            GL.Safe(font.SetTextColor, font, style.color[1], style.color[2], style.color[3], 1)
+        end
     else restoreName(marker) end
 end
 
-local function makeToast()
-    if toast then return toast end
-    local frame = CreateFrame("Button", "GrudgeLedgerNearbyAlert", UIParent)
+local function makeToast(preview)
+    if preview and previewToast then return previewToast end
+    if not preview and toast then return toast end
+    local frame = CreateFrame("Button", preview and "GrudgeLedgerAlertPreview" or "GrudgeLedgerNearbyAlert", UIParent)
     frame:SetSize(416, 112)
     if ChatFrame1 then
         -- Follow the chat layout, leaving room for tabs and small panels above it.
@@ -238,11 +324,9 @@ local function makeToast()
     frame.bg:SetPoint("TOPLEFT", 1, -1)
     frame.bg:SetPoint("BOTTOMRIGHT", -1, 1)
     frame.bg:SetColorTexture(0.055, 0.043, 0.042, 0.98)
-    frame.header = frame:CreateTexture(nil, "BORDER")
-    frame.header:SetPoint("TOPLEFT", 1, -1)
-    frame.header:SetPoint("TOPRIGHT", -1, -1)
-    frame.header:SetHeight(29)
-    frame.header:SetColorTexture(0.22, 0.055, 0.065, 1)
+    local leather = frame:CreateTexture(nil, "BORDER")
+    leather:SetAllPoints()
+    leather:SetTexture("Interface\\AddOns\\GrudgeLedger\\Media\\JournalDialog")
     frame.stripe = frame:CreateTexture(nil, "ARTWORK")
     frame.stripe:SetPoint("TOPLEFT", 1, -1)
     frame.stripe:SetPoint("BOTTOMLEFT", 1, 1)
@@ -276,7 +360,7 @@ local function makeToast()
     frame.divider:SetSize(384, 1)
     frame.divider:SetColorTexture(0.48, 0.35, 0.18, 0.6)
     frame.hint = textLine("GameFontHighlightSmall", 16, 95, 384, 14, 1, 0.65, 0.59, 0.48)
-    frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
+    frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     frame:SetScript("OnEnter", function(self) self.border:SetColorTexture(0.68, 0.51, 0.28, 1) end)
     frame:SetScript("OnLeave", function(self) self.border:SetColorTexture(0.48, 0.35, 0.18, 1) end)
     frame:SetScript("OnClick", function(self, button)
@@ -287,12 +371,41 @@ local function makeToast()
     -- ponytail: clicking opens the captured record, avoiding protected targeting
     -- and recycled unit-token hazards. A future targeting control needs secure UI.
     frame:Hide()
-    toast = frame
+    if preview then previewToast = frame else toast = frame end
     return frame
 end
 
+local function styleToast(frame, style)
+    frame.icon:SetTexture(style.icon)
+    frame.icon:SetVertexColor(1, 1, 1)
+    frame.stripe:SetColorTexture(style.color[1], style.color[2], style.color[3], 1)
+    frame.title:SetTextColor(unpack(style.color))
+end
+
+local function alertSound(relation)
+    local sounds = SOUNDKIT or {}
+    if relation == "friend" then return sounds.IG_QUEST_LOG_OPEN end
+    return sounds.RAID_WARNING
+end
+
+function D.PreviewAlert(relation)
+    if relation ~= "friend" and relation ~= "enemy" then return false end
+    if toast and toast:IsShown() then return false end
+    local frame = makeToast(true)
+    styleToast(frame, styles[relation])
+    frame.title:SetText(L("Aperçu · %s"):format(L("%s à proximité"):format(L(styles[relation].label))))
+    frame.name:SetText(relation == "friend" and "Célestine Longuebrise" or "Bastian Griseforge")
+    frame.note:SetText(L("Exemple affiché depuis les réglages."))
+    frame.hint:SetText(L("Cliquer pour fermer"))
+    frame.expires = GL.Now() + 6
+    frame:Show()
+    local sound = alertSound(relation)
+    if sound and GL.Settings().sounds then GL.Safe(PlaySound, sound, "Master") end
+    return true
+end
+
 alert = function(identity, unit)
-    if not GL.db or not identity then return end
+    if not GL.db or not identity or GL.IsPvPInstance() then return end
     local record = GL.Get(identity)
     if not record then GL.Trace("unknown", identity, unit) return end
     local relation = GL.Relation(record)
@@ -309,13 +422,13 @@ alert = function(identity, unit)
     local source = GL.RelationSource(record)
     local guildKey = inheritedGuildKey(record)
     local pvp = record.pvp or {}
-    local groupGuild = source == "guild" and (pvp.deaths or 0) + (pvp.probableDeaths or 0)
-        + (pvp.aggressions or 0) + (pvp.probableAggressions or 0) == 0
+    local groupGuild = source == "guild" and (pvp.deaths or 0)
+        + (pvp.aggressions or 0) == 0
     local key = record.key .. ":" .. relation .. ":" .. source .. ":" .. (guildKey or "") .. (groupGuild and ":group" or "")
     if relation ~= "friend" and lastAlert[key] and now - lastAlert[key] < (settings.alertCooldown or 180) then GL.Trace("cooldown", identity, unit) return end
     validateToast()
     -- Guild crowds must not displace an equally serious personal/PvP warning.
-    if toast and toast:IsShown() and (styles[toast.relation].priority > style.priority
+    if toast and toast:IsShown() and not toast.signal and (styles[toast.relation].priority > style.priority
         or (groupGuild and relation ~= "friend" and not toast.guildBurst and styles[toast.relation].priority == style.priority)) then GL.Trace("priority", identity, unit) return end
     lastAlert[key] = now
     local burstKey, burst
@@ -329,7 +442,7 @@ alert = function(identity, unit)
             if not burst.people[record.key] then
                 burst.people[record.key], burst.count = true, burst.count + 1
                 if toast and toast:IsShown() and toast.guildBurst == burst then
-                    toast.hint:SetText(burst.count .. " membres aperçus • clic : première fiche")
+                    toast.hint:SetText(L("%d membres aperçus • clic : première fiche"):format(burst.count))
                 end
             end
             return
@@ -340,20 +453,17 @@ alert = function(identity, unit)
         end
     end
     local frame = makeToast()
+    if previewToast and previewToast:IsShown() then previewToast:Hide() end
     frame.key, frame.relation, frame.source, frame.expires = record.key, relation, source, now + 6
+    frame.signal, frame.signalAt = nil, nil
     frame.guildKey, frame.guildBurst = guildKey, burst
-    frame.hint:SetText("Clic : fiche  •  clic droit : fermer")
-    frame.icon:SetTexture(style.icon)
-    frame.icon:SetVertexColor(1, 1, 1)
-    frame.stripe:SetColorTexture(style.color[1], style.color[2], style.color[3], 1)
-    frame.title:SetTextColor(unpack(style.color))
+    frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
+    styleToast(frame, style)
     refreshToastText(frame, record)
     frame:Show()
     GL.Trace("shown", identity, unit)
     if settings.sounds then
-        local sounds = SOUNDKIT or {}
-        local sound
-        if relation == "friend" then sound = sounds.IG_QUEST_LOG_OPEN else sound = sounds.RAID_WARNING end
+        local sound = alertSound(relation)
         if sound and (not lastSound or now - lastSound.time >= 2 or style.priority > lastSound.priority) then
             GL.Safe(PlaySound, sound, "Master")
             lastSound = { time = now, priority = style.priority }
@@ -361,14 +471,68 @@ alert = function(identity, unit)
     end
 end
 
-local function observe(unit, notify)
+local signalSources = { say = "Parole entendue", yell = "Cri entendu", partyTarget = "Cible d’un équipier proche" }
+local function indirectSignal(guid, source)
+    local settings = GL.Settings()
+    if not settings.indirectAlerts or not settings.enemyAlerts or GL.IsPvPInstance() then return end
+    guid = GL.Clean(guid, "string")
+    local me = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    if not me or not guid or #guid > 128 or not guid:match("^Player%-%w") or guid == me then return end
+    local record = GL.Get("guid:" .. guid)
+    if not record or record.guid ~= guid then return end
+    local relation = GL.Relation(record)
+    if (relation ~= "enemy" and relation ~= "warning") or isGroupmate(record) then return end
+    local now = GL.Now()
+    local cooldown = math.max(15, settings.alertCooldown or 180)
+    local seen = record.encounters and record.encounters.seen[me]
+    if seen and now >= seen and now - seen < cooldown then return end
+    local previous = signals[guid]
+    if previous and now >= previous and now - previous < cooldown then
+        signals[guid] = now
+        return
+    end
+    validateToast()
+    if (toast and toast:IsShown()) or (latestSignal and now >= latestSignal and now - latestSignal < 15) then return end
+    -- ponytail: cap temporary hints at 64 contacts and one banner per 15 s.
+    -- Only known threats reach this path; it never records sightings or PvP.
+    local count, oldest = 0, nil
+    for key, at in pairs(signals) do
+        if now < at or now - at >= cooldown then signals[key] = nil
+        else
+            count = count + 1
+            if not oldest or at < signals[oldest] then oldest = key end
+        end
+    end
+    if count >= 64 then signals[oldest] = nil end
+    signals[guid], latestSignal = now, now
+    if previewToast and previewToast:IsShown() then previewToast:Hide() end
+    local frame = makeToast()
+    frame.key, frame.relation, frame.source = record.key, relation, GL.RelationSource(record)
+    frame.guildKey, frame.guildBurst = inheritedGuildKey(record), nil
+    frame.signal, frame.signalAt, frame.expires = signalSources[source], now, now + 6
+    frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
+    styleToast(frame, styles[relation])
+    frame.stripe:SetColorTexture(0.74, 0.57, 0.32, 1)
+    frame.title:SetTextColor(0.94, 0.80, 0.57)
+    refreshToastText(frame, record)
+    frame:Show()
+    GL.Trace("indirect", record, source)
+    local sounds = SOUNDKIT or {}
+    local sound = sounds.MAP_PING or sounds.IG_MAINMENU_OPTION_CHECKBOX_ON or sounds.IG_QUEST_LOG_OPEN
+    if sound and settings.sounds then GL.Safe(PlaySound, sound, "Master") end
+end
+
+local function observe(unit, notify, reuseObservation)
     unit = GL.Clean(unit, "string")
-    if not unit or not GL.db then return end
-    if not notify and GL.Safe(UnitIsVisible, unit) ~= true then return end
-    local identity = GL.Identity(unit)
+    if not unit or not GL.db or GL.IsPvPInstance() then return end
+    if not unit:match("^nameplate%d+$") and (not notify or UnitIsVisible) and GL.Safe(UnitIsVisible, unit) ~= true then return end
+    local identity = GL.Identity(unit, reuseObservation)
     if identity then
         GL.Trace("observed", identity, unit)
+        if GL.Bounties and notify and GL.db.settings.enemyAlerts then GL.Bounties.Observe(identity.guid) end
         local record = GL.RecordSeen(identity, true)
+        encounterState(record,unit)
+        partyWarning(record, unit)
         if notify or (record and GL.Relation(record) == "friend") then alert(identity, unit) end
     elseif notify then
         GL.Trace("unreadable", nil, unit)
@@ -402,8 +566,8 @@ local function addUnit(unit)
     if C_Timer and C_Timer.After then C_Timer.After(0.25, update) end
 end
 
-function D.Refresh(changedRecord)
-    if not GL.db then return end
+function D.Refresh(changedRecord, reason)
+    if not GL.db or reason == "honor" then return end
     for font, saved in pairs(pendingNames) do
         if not sameColor(colorOf(font), saved.applied) then pendingNames[font] = nil
         elseif canChange(font) then
@@ -412,55 +576,62 @@ function D.Refresh(changedRecord)
         end
     end
     validateToast()
+    if GL.IsPvPInstance() then
+        for _, marker in pairs(markers) do hideMarker(marker) end
+        return
+    end
     for _, entry in pairs(visible) do
-        updateMarker(entry)
+        updateMarker(entry, true)
         local record = entry.identity and GL.Get(entry.identity)
         if type(changedRecord) == "table" and record and record.key == changedRecord.key then
             alert(entry.identity, entry.unit)
         end
     end
-    observe("target", false)
-    observe("mouseover", false)
+    observe("target", false, true)
+    observe("mouseover", false, true)
     local count = GL.Clean(GL.Safe(GetNumGroupMembers), "number") or 0
     local raid = GL.Safe(IsInRaid) == true
     for i = 1, count > 0 and (raid and math.min(count, 40) or 4) or 0 do
-        observe((raid and "raid" or "party") .. i, false)
+        observe((raid and "raid" or "party") .. i, false, true)
     end
     validateToast()
 end
 
 function D.Tooltip(tooltip)
-    if not GL.db or tooltip ~= GameTooltip then return end
+    if not GL.db or tooltip ~= GameTooltip or GL.IsPvPInstance() then return end
     local _, unit = GL.Safe(tooltip.GetUnit, tooltip)
     unit = GL.Clean(unit, "string")
     local identity = unit and GL.Identity(unit)
-    local record = identity and GL.RecordSeen(identity, true)
+    local direct = unit and (unit:match("^nameplate%d+$") or not UnitIsVisible or GL.Safe(UnitIsVisible, unit) == true)
+    local record = identity and (direct and GL.RecordSeen(identity, true) or GL.Get(identity))
+    partyWarning(record, unit)
     if record and GL.Relation(record) == "friend" then alert(identity, unit) end
-    if not record or tooltip._grudgeLedgerKey == record.key then return end
+    if not record or tooltip._grudgeLedgerKey == record.key or GL.IsGroupOnly(record) then return end
     tooltip._grudgeLedgerKey = record.key
     local relation = GL.Relation(record)
     local style = styles[relation]
     tooltip:AddLine(" ")
-    tooltip:AddLine("Grudge Ledger — " .. (style and style.label or "Neutre"),
+    tooltip:AddLine("Grudge Ledger — " .. L(style and style.label or "Neutre"),
         style and style.color[1] or 0.85, style and style.color[2] or 0.85,
         style and style.color[3] or 0.85)
-    if GL.RelationConfidence(record) == "probable" then
-        tooltip:AddLine("? Identification PvP probable — à confirmer", 1, 0.85, 0.3, true)
+    local tags = GL.TagText and GL.TagText(record)
+    if tags then tooltip:AddLine(L("Étiquettes : %s"):format(tags), 0.95, 0.82, 0.58, true) end
+    tooltip._grudgeLedgerExpanded = not GL.Settings().compactTooltips or GL.Safe(IsShiftKeyDown) == true
+    if not tooltip._grudgeLedgerExpanded then
+        tooltip:AddLine(L("Maj : notes et bilan PvP"), 0.8, 0.75, 0.64)
+        return
     end
     local guild = guildLabel(record, relation)
     if guild then tooltip:AddLine(guild, 0.85, 0.85, 0.85, true) end
     local note = recordNote(record)
     if note then tooltip:AddLine(note, 0.9, 0.85, 0.7, true) end
-    tooltip:AddLine("Camaraderie : " .. tostring(record.reputation or 0), 0.85, 0.85, 0.85)
+    tooltip:AddLine(L("Camaraderie : %s"):format(tostring(record.reputation or 0)), 0.85, 0.85, 0.85)
     local pvp = record.pvp or {}
-    if (pvp.aggressions or 0) + (pvp.probableAggressions or 0) > 0 then
-        tooltip:AddLine(("Agressions : %d confirmée(s), %d probable(s)"):format(pvp.aggressions or 0, pvp.probableAggressions or 0), 1, 0.6, 0.1, true)
+    if (pvp.aggressions or 0) > 0 then
+        tooltip:AddLine(L("Agressions") .. " : " .. (pvp.aggressions or 0), 1, 0.6, 0.1, true)
     end
     if (pvp.kills or 0) + (pvp.deaths or 0) > 0 then
-        tooltip:AddLine(("PvP confirmé : %d victoire(s), %d mort(s)"):format(pvp.kills or 0, pvp.deaths or 0), 0.85, 0.85, 0.85, true)
-    end
-    if (pvp.probableKills or 0) + (pvp.probableDeaths or 0) > 0 then
-        tooltip:AddLine(("PvP probable : %d victoire(s), %d mort(s)"):format(pvp.probableKills or 0, pvp.probableDeaths or 0), 1, 0.7, 0.35, true)
+        tooltip:AddLine(L("PvP : %d victoire(s), %d mort(s)"):format(pvp.kills or 0, pvp.deaths or 0), 0.85, 0.85, 0.85, true)
     end
 end
 
@@ -474,24 +645,66 @@ local function scanPlates()
     end
 end
 
-function D.OnEvent(_, event, unit)
+local awaitingResurrection
+function D.OnEvent(_, event, unit, ...)
     if not GL.db then return end
-    if event == "NAME_PLATE_UNIT_ADDED" then addUnit(unit)
+    if event == "CHAT_MSG_SAY" or event == "CHAT_MSG_YELL" then
+        -- In both native events field 12 is the speaker GUID. Never read chat text.
+        indirectSignal(select(11, ...), event == "CHAT_MSG_SAY" and "say" or "yell")
+    elseif event == "UNIT_TARGET" then
+        unit = GL.Clean(unit, "string")
+        if unit and unit:match("^party[1-4]$") and GL.Safe(UnitIsVisible, unit) == true then
+            indirectSignal(GL.Safe(UnitGUID, unit .. "target"), "partyTarget")
+        end
+    elseif event == "MODIFIER_STATE_CHANGED" then
+        unit = GL.Clean(unit, "string")
+        if GL.Settings().compactTooltips and (unit == "LSHIFT" or unit == "RSHIFT") and GameTooltip and GameTooltip._grudgeLedgerKey
+            and GameTooltip:IsShown() and GameTooltip._grudgeLedgerExpanded ~= (GL.Safe(IsShiftKeyDown) == true) then
+            local _, token = GL.Safe(GameTooltip.GetUnit, GameTooltip)
+            if token and GL.Safe(UnitExists, token) then
+                if GameTooltip.RefreshData and (not GameTooltip.GetPrimaryTooltipInfo or GL.Safe(GameTooltip.GetPrimaryTooltipInfo, GameTooltip)) then GL.Safe(GameTooltip.RefreshData, GameTooltip)
+                else GL.Safe(GameTooltip.SetUnit, GameTooltip, token) end
+            end
+        end
+    elseif event == "NAME_PLATE_UNIT_ADDED" then addUnit(unit)
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         unit = GL.Clean(unit, "string")
         if unit then removeUnit(unit) end
     elseif event == "PLAYER_TARGET_CHANGED" then observe("target", true)
     elseif event == "UPDATE_MOUSEOVER_UNIT" then observe("mouseover", true)
-    elseif event == "PLAYER_ENTERING_WORLD" then
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         for token in pairs(visible) do removeUnit(token) end
         guildBursts = {}
+        nearbyDead,followAlerts={},{}
+        signals, latestSignal = {}, nil
         if toast then toast:Hide() end
+        if previewToast then previewToast:Hide() end
         scanPlates()
+    elseif event == "PLAYER_DEAD" then
+        awaitingResurrection = true
+    elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
+        if awaitingResurrection and GL.Safe(UnitIsDeadOrGhost, "player") == false then
+            followAlerts={}
+            awaitingResurrection, lastAlert, lastSound = nil, {}, nil
+            for _, entry in pairs(visible) do entry.recordKey = nil end
+            scanPlates()
+            D.Refresh()
+            observe("target", true)
+        end
     elseif event == "PLAYER_REGEN_ENABLED" or event == "GROUP_ROSTER_UPDATE" then D.Refresh()
     end
 end
 
 local eventFrame = CreateFrame("Frame", "GrudgeLedgerDisplayEvents")
+local listening = false
+local function syncSignals()
+    local enabled = GL.Settings().indirectAlerts and GL.Settings().enemyAlerts
+    if listening == enabled then return end
+    listening = enabled
+    local method = enabled and eventFrame.RegisterEvent or eventFrame.UnregisterEvent
+    for _, event in ipairs({ "UNIT_TARGET", "CHAT_MSG_SAY", "CHAT_MSG_YELL" }) do GL.Safe(method, eventFrame, event) end
+    if not enabled then signals, latestSignal = {}, nil end
+end
 eventFrame:SetScript("OnEvent", D.OnEvent)
 eventFrame:SetScript("OnUpdate", function(_, delta)
     elapsed = elapsed + delta
@@ -501,12 +714,14 @@ eventFrame:SetScript("OnUpdate", function(_, delta)
     -- with ThreatPlates updates. Use its update hook if very large crowds prove costly.
     D.Refresh()
     if toast and toast:IsShown() and GL.Now() >= toast.expires then toast:Hide() end
+    if previewToast and previewToast:IsShown() and GL.Now() >= previewToast.expires then previewToast:Hide() end
 end)
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
-    "UPDATE_MOUSEOVER_UNIT", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
+    "UPDATE_MOUSEOVER_UNIT", "MODIFIER_STATE_CHANGED", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }) do
     GL.Safe(eventFrame.RegisterEvent, eventFrame, event)
 end
 GL.On("READY", function()
+    syncSignals()
     if GameTooltip and GameTooltip.HookScript then
         GL.Safe(GameTooltip.HookScript, GameTooltip, "OnTooltipCleared", function(tt) tt._grudgeLedgerKey = nil end)
         if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
@@ -517,3 +732,4 @@ GL.On("READY", function()
 end)
 GL.On("CHANGED", D.Refresh)
 GL.On("SETTINGS", D.Refresh)
+GL.On("SETTINGS", syncSignals)
