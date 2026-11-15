@@ -78,7 +78,7 @@ local function clearModel(view)
 end
 local positionButton
 local function applyOutfit(view)
-    local actor=view.actor
+    local actor=view.preview
     actor:Undress()
     for i,b in ipairs(view.buttons) do
         if i<=12 or i==17 or i==18 or (i==19 and not view.buttons[17].item and not view.buttons[17].inspectedLink) then
@@ -100,8 +100,8 @@ end
 
 local function layoutBody(view)
     local live=view.modelGUID~=nil
-    local outfit=not live and view.previewReady and not next(view.pendingItems)
-    if view.scene then view.scene:SetAlpha(outfit and 1 or 0) end
+    local outfit=not live and view.previewReady
+    view.preview:SetAlpha(outfit and 1 or 0)
     if live or outfit then view.face:Hide() else view.face:Show() end
     local caption=live and L("Modèle en jeu") or outfit and L("Tenue reconstituée") or L("Portrait")
     view.caption:SetText(caption)
@@ -113,52 +113,17 @@ local function layoutBody(view)
     end
 end
 
-local function finishPreview(view,actor)
-    if view.actor~=actor or not view.loading or view.previewReady or not actor:IsLoaded() then return end
-    local file=actor:GetModelFileID()
+local function finishPreview(view)
+    local model=view.preview
+    if not view.displayID or view.previewReady or model:GetDisplayInfo()~=view.displayID then return end
+    local file=model:GetModelFileID()
     if not file or file==0 then return end
-    if file~=view.mesh and file~=view.meshHD then
-        view.rejectedSeeds[view.seedGUID]=true
-        view.loading=nil
-        return
-    end
-    view.loading=nil
     view.previewReady=true
     applyOutfit(view)
     layoutBody(view)
 end
 
-local function usableUnit(unit,sex)
-    return unit and GL.Safe(UnitIsPlayer,unit) and GL.Safe(UnitSex,unit)==sex
-        and GL.Safe(UnitIsVisible,unit) and (not IsUnitModelReadyForUI or GL.Safe(IsUnitModelReadyForUI,unit))
-end
-local function seedUnit(view,hint)
-    local fallback
-    local function usable(unit)
-        if not usableUnit(unit,view.sex) then return end
-        local guid=GL.Safe(UnitGUID,unit)
-        if not guid or view.rejectedSeeds[guid] then return end
-        fallback=fallback or unit
-        local _,_,raceID=GL.Safe(UnitRace,unit)
-        return raceID==view.raceID
-    end
-    if usable("player") then return "player" end
-    if usable(hint) then return hint end
-    for _,unit in ipairs({"target","mouseover","focus"}) do
-        if usable(unit) then return unit end
-    end
-    for i=1,GetNumGroupMembers and GetNumGroupMembers() or 0 do
-        local unit=(IsInRaid and IsInRaid() and "raid" or "party")..i
-        if usable(unit) then return unit end
-    end
-    local plates=GL.Safe(C_NamePlate and C_NamePlate.GetNamePlates)
-    for _,plate in ipairs(plates or {}) do
-        if usable(plate.namePlateUnitToken) then return plate.namePlateUnitToken end
-    end
-    return fallback
-end
-
-local function paintBody(view,hint)
+local function paintBody(view)
     local record=view.record
     if not record then return end
     local unit=GL.VisiblePortraitUnit(record)
@@ -173,34 +138,7 @@ local function paintBody(view,hint)
     else
         clearModel(view)
     end
-    local actor=view.actor
-    if not view.modelGUID and actor and not view.previewReady then
-        if not view.loading then
-            local seed=seedUnit(view,hint)
-            if seed then
-                local guid=GL.Safe(UnitGUID,seed)
-                actor:ClearModel()
-                view.seedGUID=guid
-                local request={}
-                view.loading=request
-                if not GL.Safe(actor.SetModelByUnit,actor,seed,false,false,false,true,false,view.raceID) then
-                    view.rejectedSeeds[guid]=true
-                    view.loading=nil
-                end
-                -- A client can finish without signalling, or leave a rejected mesh loaded.
-                if C_Timer and C_Timer.After then C_Timer.After(2,function()
-                    if view.actor~=actor or view.seedGUID~=guid or view.previewReady or not view:IsVisible() then return end
-                    finishPreview(view,actor)
-                    if view.loading==request then
-                        view.rejectedSeeds[guid]=true
-                        view.loading=nil
-                    end
-                    if not view.previewReady and not view.loading then paintBody(view) end
-                end) end
-            end
-        end
-        finishPreview(view,actor)
-    end
+    finishPreview(view)
     layoutBody(view)
 end
 local function build(parent,slots)
@@ -212,14 +150,13 @@ local function build(parent,slots)
     view.model:SetPoint("BOTTOMRIGHT",view.stage,"BOTTOMRIGHT",-2,24)
     view.model:EnableMouse(false)
     GL.Safe(view.model.SetPortraitZoom,view.model,0)
-    -- The native dressing room uses scene 596 and a unit-backed character compositor.
-    if C_ModelInfo and ModelSceneMixin then
-        view.scene=CreateFrame("ModelScene",nil,view.stage,"ModelSceneMixinTemplate")
-        view.scene:SetAllPoints(view.model)
-        view.scene:EnableMouse(false)
-        view.scene:SetAlpha(0)
-        view.scene:SetFromModelSceneID(596)
-    end
+    view.preview=CreateFrame("DressUpModel",nil,view.stage)
+    view.preview:SetAllPoints(view.model)
+    view.preview:EnableMouse(false)
+    GL.Safe(view.preview.SetKeepModelOnHide,view.preview,true)
+    GL.Safe(view.preview.SetPortraitZoom,view.preview,0)
+    view.preview:SetAlpha(0)
+    view.preview:SetScript("OnModelLoaded",function() finishPreview(view) end)
     view.face=CreateFrame("Frame",nil,view.stage)
     view.face:SetPoint("CENTER",view.stage,"CENTER",0,8)
     view.face.raceIcon=view.face:CreateTexture(nil,"ARTWORK")
@@ -235,8 +172,6 @@ local function build(parent,slots)
     view:SetScript("OnHide",function(self)
         for _,b in ipairs(self.buttons) do closeTip(b) end
         clearModel(self)
-        self.loading,self.seedGUID=nil,nil
-        self.rejectedSeeds={}
     end)
     view:SetScript("OnShow",paintBody)
     -- ponytail: native models are needed only while the selected player is visible.
@@ -260,7 +195,7 @@ local function build(parent,slots)
                 openTip(owner)
                 owner.waitingForItem=nil
             end
-        else paintBody(self,type(id)=="string" and id or nil) end
+        else paintBody(self) end
     end)
     for _,event in ipairs({"PLAYER_TARGET_CHANGED","UPDATE_MOUSEOVER_UNIT","PLAYER_FOCUS_CHANGED",
         "NAME_PLATE_UNIT_ADDED","NAME_PLATE_UNIT_REMOVED","UNIT_MODEL_CHANGED","UNIT_PORTRAIT_UPDATE","GROUP_ROSTER_UPDATE",
@@ -292,37 +227,34 @@ positionButton=function(b,i,w,h,rail,rowHeight)
     end
 end
 local raceByID={"Human","Orc","Dwarf","NightElf","Scourge","Tauren","Gnome","Troll"}
+-- Classic humanoid NPC displays with a baked skin in CreatureDisplayInfoExtra.
+-- The bare player display IDs carry no skin when loaded outside a unit.
+local dressedDisplays={
+    Human={2080,3977}, Orc={3851,1378}, Dwarf={8709,4112}, NightElf={2595,1937},
+    Scourge={1574,15952}, Tauren={3813,2118}, Gnome={15265,3124}, Troll={2588,6430},
+}
 local function dressPreview(view,identity)
     local record=view.record
     local race=record.race or raceByID[record.raceID]
     local catalogRace=type(identity)=="table" and raceByID[identity.raceID]
     local sex=record.sex or (catalogRace and (not race or catalogRace==race) and identity.sex)
-    race=race or catalogRace
-    local raceID
-    for i,token in ipairs(raceByID) do if token==race then raceID=i break end end
+    local displays=dressedDisplays[race or catalogRace]
+    local id=displays and (sex==2 or sex==3) and displays[sex-1]
     view.pendingItems={}
     view.itemRetries={}
-    if view.actor and view.sex==sex and view.raceID==raceID then
-        if view.previewReady then applyOutfit(view) end
+    if id and view.displayID==id then
+        if view.previewReady then applyOutfit(view) else finishPreview(view) end
         return
     end
-    if view.actor then
-        view.actor:SetOnModelLoadedCallback(nil)
-        view.actor:ClearModel()
-    end
-    view.actor,view.previewReady,view.loading,view.seedGUID=nil,nil,nil,nil
-    view.rejectedSeeds={}
-    if not (view.scene and raceID and (sex==2 or sex==3)) then return end
-    local actor=view.scene:GetPlayerActor(nil,false,race,sex)
-    if not (actor and actor.SetModelByUnit and actor.IsLoaded and actor.TryOn and actor.SetOnModelLoadedCallback) then return end
-    local gender=sex==2 and "Male" or "Female"
-    local path=("Character\\%s\\%s\\%s%s"):format(race,gender,race,gender)
-    local fileID=C_UIFileAsset and C_UIFileAsset.GetFileID or GetFileIDFromPath
-    view.mesh=GL.Safe(fileID,path..".m2")
-    view.meshHD=GL.Safe(fileID,path.."_HD.m2")
-    if not ((view.mesh or 0)>0 or (view.meshHD or 0)>0) then return end
-    view.actor,view.raceID,view.sex=actor,raceID,sex
-    actor:SetOnModelLoadedCallback(function(loaded) finishPreview(view,loaded) end)
+    local model=view.preview
+    view.displayID,view.previewReady=nil,nil
+    model:SetAlpha(0)
+    if not (model.ClearModel and model.GetDisplayInfo and model.GetModelFileID and model.SetDisplayInfo and model.TryOn and model.Undress) then return end
+    model:ClearModel()
+    if not id then return end
+    view.displayID=id
+    model:SetDisplayInfo(id)
+    finishPreview(view)
 end
 function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetails)
     local view=parent.equipment or build(parent,slots)

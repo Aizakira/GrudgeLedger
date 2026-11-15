@@ -27,36 +27,22 @@ local function draw(guid)
     return parent.equipment
 end
 local create=CreateFrame
-local actor,dressed={},{}
-function actor:ClearModel() self.file=nil end
-function actor:SetModelByUnit(unit,sheathe,autoDress,hide,native,bow,race)
-    assert((unit=="player" or unit=="target") and not autoDress and native and race==5)
-    self.seed=unit
-    self.race=race
-    return true
-end
-function actor:IsLoaded() return self.file~=nil end
-function actor:GetModelFileID() return self.file end
-function actor:SetOnModelLoadedCallback(callback) self.loaded=callback end
-function actor:Undress() dressed={} end
-function actor:TryOn(link) dressed[link]=true end
-ModelSceneMixin={}
-C_ModelInfo={}
-C_UIFileAsset={GetFileID=function(path)
-    if path=="Character\\Scourge\\Male\\ScourgeMale.m2" then return 42 end
-end}
+local dressed,model={},nil
 function CreateFrame(kind,...)
     local widget=create(kind,...)
-    if kind=="ModelScene" then
-        function widget:SetFromModelSceneID(id) assert(id==596) end
-        function widget:GetPlayerActor() return actor end
+    if kind=="DressUpModel" then
+        model=widget
+        function widget:ClearModel() self.display=nil; self.file=nil end
+        function widget:SetDisplayInfo(id) self.requested=id; self.requests=(self.requests or 0)+1 end
+        function widget:GetDisplayInfo() return self.display end
+        function widget:GetModelFileID() return self.file end
+        function widget:Undress() dressed={} end
+        function widget:TryOn(link) dressed[link]=true end
     end
     return widget
 end
-local donorSex,targetSex=3,nil
-function UnitSex(unit) return unit=="player" and donorSex or unit=="target" and targetSex end
-function UnitRace(unit) if unit=="target" then return "Mort-vivant","Scourge",5 end end
-function UnitIsVisible(unit) return UnitGUID(unit)~=nil end
+function UnitSex(unit) return unit=="player" and 3 or nil end
+function UnitIsVisible(unit) return unit=="player" end
 local timers={}
 C_Timer={After=function(delay,cb) timers[#timers+1]=cb end}
 local cachedForPreview=false
@@ -64,25 +50,20 @@ C_Item={IsItemDataCachedByID=function() return cachedForPreview end,RequestLoadI
 local view=draw(archived)
 assert(#view.buttons==19 and view.stage:GetWidth()>=150)
 assert(view.buttons[17].slotName=="weapon" and view.buttons[19].slotName=="ranged")
-assert(view.stage:IsShown() and view.face:IsShown() and not actor.race,"no compatible unit, show portrait")
-donorSex=2
-view.scripts.OnEvent(view,"PLAYER_TARGET_CHANGED")
-assert(actor.race==5 and view.face:IsShown(),"keep portrait until the actual mesh has loaded")
-actor.file=777
-actor.loaded(actor)
-assert(view.face:IsShown() and not view.previewReady,"reject seed geometry of another race")
-targetSex=2
-timers[1]()
-assert(actor.seed=="target" and view.face:IsShown(),"wrong or stalled seed retries with an available compatible player")
-actor.file=42
-actor.loaded(actor)
-assert(view.previewReady and view.face:IsShown() and not dressed[cape.ref] and view.pendingItems[9890])
+assert(view.stage:IsShown() and view.face:IsShown() and model.requested==1574,"offline male undead loads without a matching visible donor or scene")
+draw(archived)
+assert(model.requests==1,"redrawing while the native model is streaming must not restart it")
+model.display,model.file=3851,111
+model.scripts.OnModelLoaded(model)
+assert(view.face:IsShown() and not view.previewReady,"a stale orc load is rejected")
+model.display,model.file=model.requested,42
+model.scripts.OnModelLoaded(model)
+assert(view.previewReady and not view.face:IsShown() and not dressed[cape.ref] and view.pendingItems[9890])
 view.scripts.OnEvent(view,"ITEM_DATA_LOAD_RESULT",9890,false)
-assert(view.face:IsShown() and view.itemRetries[9890])
+assert(not view.face:IsShown() and view.itemRetries[9890],"one uncached item cannot replace the body with a portrait")
 timers[#timers]()
 cachedForPreview=true
 view.scripts.OnEvent(view,"ITEM_DATA_LOAD_RESULT",9890,true)
-assert(not view.face:IsShown())
 assert(dressed[cape.ref] and not view.pendingItems[9890],"cold item is worn when the cache supplies it")
 local back=view.buttons[4]
 assert(back.item==cape and back.scripts.OnClick)
