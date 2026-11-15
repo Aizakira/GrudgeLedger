@@ -69,7 +69,7 @@ local function onMenu(_, root, data)
     root:CreateButton(L("Avis négatif (-1)"), function() GL.AdjustReputation(captured, -1, "Avis personnel", "manual") end)
     root:CreateButton(L("Ajouter une note"), function() GL.EditNote(captured) end)
     root:CreateButton(L("Ouvrir la fiche"), function()
-        local record = GL.Remember(captured)
+        local record = GL.Remember(captured, true)
         if record then GL.ShowLedger(record.key) end
     end)
     if captured.guild then

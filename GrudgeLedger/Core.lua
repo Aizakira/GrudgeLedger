@@ -180,6 +180,7 @@ function GL.Identity(unit, reuseObservation)
         if cached then observations[guid], observationCount = nil, observationCount - 1 end
         return nil
     end
+    identity.unit = unit
     local className, class = GL.Safe(UnitClass, unit)
     identity.class, identity.className = cleanName(class), cleanName(className)
     local raceName, race, raceID = GL.Safe(UnitRace, unit)
@@ -460,7 +461,7 @@ local function merge(provisional, record)
     refreshReputation(record)
 end
 
-function GL.Remember(identity)
+function GL.Remember(identity, inspect)
     if not GL.db or type(identity) ~= "table" then return nil end
     local clean = GL.IdentityFromName(identity.name, identity.surname, identity.guid)
     if not clean then return nil end
@@ -522,6 +523,11 @@ function GL.Remember(identity)
         elseif previous and previous ~= record.key then
             GL.db.aliases[clean.alias] = false -- two GUIDs, same display name: do not guess
         end
+    end
+    if inspect and record.guid and GL.InspectDossierUnit then
+        local unit = identity.unit
+        if not unit or GL.Safe(UnitGUID, unit) ~= record.guid then unit = GL.VisiblePortraitUnit(record) end
+        GL.InspectDossierUnit(unit, record.guid)
     end
     return record
 end
@@ -797,7 +803,7 @@ function GL.PlayerStatistics(metric)
 end
 function GL.SetReaction(identity, reaction)
     if reactionScores[reaction] == nil then return nil end
-    local record = GL.Remember(identity)
+    local record = GL.Remember(identity, true)
     if not record then return nil end
     local previous, score, source = record.reaction, record.reputation, record.reactionSource
     record.reaction = reaction
@@ -815,7 +821,7 @@ function GL.AdjustReputation(identity, delta, reason, source)
     delta = GL.Clean(delta, "number")
     if not delta or delta ~= delta or math.abs(delta) == math.huge or delta == 0 then return nil end
     delta = math.max(-100, math.min(100, math.floor(delta)))
-    local record = GL.Remember(identity)
+    local record = GL.Remember(identity, true)
     if not record then return nil end
     local before = record.reputation or reactionScores[GL.Relation(record)] or 0
     if source == "emote" and (not record.reaction or record.reactionSource == "emote" or record.reactionSource == "automatic") then

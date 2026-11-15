@@ -58,6 +58,7 @@ function GL.InspectDossierUnit(unit, guid)
     local record = GL.Get("guid:" .. guid)
     state.snapshot = state.snapshot or (record and record.inspection) or {}
     local snapshot = state.snapshot
+    if record and next(snapshot) then record.inspection = snapshot end
     if not state.statsRead or now - state.statsRead >= 60 then
         state.statsRead = now
         local stats = captureStats(unit)

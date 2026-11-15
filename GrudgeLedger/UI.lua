@@ -2098,7 +2098,7 @@ local function buildLedger()
     f.addTarget = button(f, L("Ajouter la cible"), 195, -155, 112, function()
         local identity = GL.Identity("target")
         if not identity then GL.Print(L("Sélectionne un joueur pour ouvrir sa fiche.")) return end
-        local record = GL.Remember(identity)
+        local record = GL.Remember(identity, true)
         if record then
             if GL.Safe(UnitIsVisible, "target") == true then GL.RecordSeen(identity, true) end
             GL.ShowLedger(record.key)

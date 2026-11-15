@@ -98,3 +98,53 @@ mock.Fire("INSPECT_READY",late)
 advance(9)
 assert(not lateRecord.inspection.trees and not lateRecord.inspection.gear and requests==3)
 print("PASS dossier inspect: first contact, native gear/stats/talents visible at simulated t+4s after one lost reply, cached/out-of-range cases")
+
+-- Exercise the actual add button and both reputation paths without the tracker or opening a dossier.
+local outgoing
+DoEmote = function() end
+hooksecurefunc = function(name, callback) if name == "DoEmote" then outgoing = callback end end
+assert(loadfile(TEST_ROOT.."/Social.lua"))("GrudgeLedger")
+GL.Emit("READY")
+GL.Settings().guideSeen = true
+GL.ShowLedger()
+local add = GrudgeLedgerWindow.addTarget
+local requestedUnit
+NotifyInspect = function(unit) requestedUnit = unit; requests = requests + 1 end
+local function checkAction(unit, suffix, action, delta)
+    advance(3)
+    ready = false
+    local who = "Player-9-" .. suffix
+    mock.units[unit] = {guid=who, name="Social", surname=suffix}
+    local before = requests
+    action()
+    local contact = assert(GL.Get("guid:" .. who))
+    assert(requests == before + 1 and requestedUnit == unit, "inspect must start with the interaction")
+    assert(contact.pvp.kills == 0 and contact.pvp.deaths == 0 and not contact.unit)
+    if delta then assert(contact.reputation == delta, "gesture must apply once") end
+    advance(1)
+    ready = true
+    mock.Fire("INSPECT_READY", who)
+    assert(contact.inspection.gear[1] == link and contact.inspection.trees[1].points == 2)
+    action()
+    assert(requests == before + 1, "a fresh inspection must be reused")
+    if delta then assert(contact.reputation == delta) end
+end
+checkAction("target", "00C1", function() add:GetScript("OnClick")(add, "LeftButton") end)
+checkAction("target", "00C2", function() assert(GL.SendGesture("KISS")) end, 1)
+checkAction("party1", "00C3", function() outgoing("SPIT", "Social 00C3") end, -1)
+advance(6)
+ready = false
+CanInspect = function() return false end
+mock.units.target = {guid="Player-9-00C4", name="Far", surname="Away"}
+local before = requests
+assert(GL.SendGesture("SPIT"))
+advance(10)
+local far = assert(GL.Get(GL.Identity("target")))
+assert(far.reputation == -1 and not far.inspection.gear and requests == before)
+CanInspect = function() return true end
+add:GetScript("OnClick")(add, "LeftButton")
+assert(requests == before + 1, "adding a known contact again must retry missing equipment")
+ready = true
+mock.Fire("INSPECT_READY", far.guid)
+assert(far.inspection.gear[1] == link and far.reputation == -1)
+print("PASS dossier interactions: manual add, kiss, named spit, fresh cache, unavailable inspection")
