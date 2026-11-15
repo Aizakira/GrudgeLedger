@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.11.0-alpha.4
+GRUDGE LEDGER — 0.11.0-alpha.5
+
+Les insignes des étiquettes sont visibles dans la liste du Journal et en haut de la fiche. Le bouclier vert à coche signifie « Fiable ». Survolez les insignes de la fiche pour lire leurs noms.
 
 Journal → Notes → Étiquettes : ajoutez ou retirez vos repères privés (butin ninja, joueur boosté, départ anticipé, comportement toxique, sabotage, fiable). Retrouvez-les à l’invitation, en groupe, au survol et avec le filtre du Journal.
 

@@ -22,6 +22,7 @@ for name, expected_width, expected_height, transparent in (
     ("LedgerBook.tga", 256, 256, True),
     ("JournalMedallion.tga", 128, 128, True), ("JournalSettings.tga", 64, 64, True),
     ("JournalClose.tga", 64, 64, True),
+    ("JournalTags.tga", 256, 128, True),
     ("JournalDialog.tga", 512, 512, True),
     ("JournalTitlePlate.tga", 512, 64, True),
     ("JournalWordmark.tga", 512, 128, True),

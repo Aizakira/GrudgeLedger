@@ -48,6 +48,30 @@ assert(not ledger.rows[1]:IsShown() and ledger.emptyPage:IsShown() and not edito
 click(ledger.reset)
 assert(ledger.tagFilters.all.active and not ledger.notesOnly.active and #GL.SearchPlayers() == 2)
 
+GL.ShowLedger(record.key)
+local function selectedRow()
+    for _, row in ipairs(ledger.rows) do if row.key == record.key then return row end end
+end
+local row = assert(selectedRow())
+local strip = ledger.tagStrip
+assert(strip:IsShown() and strip.caption:GetText() == "Fiable" and strip.caption:IsShown())
+assert(row.tagStrip.caption:GetText() == "Fiable" and row.tagStrip.caption:IsShown())
+assert(table.concat(strip.icons[1].texCoord, ",") == "0.25,0.5,0.5,1" and GL.Relation(record) == "neutral")
+for _, choice in ipairs(GL.TagChoices) do if choice[1] ~= "reliable" then GL.ToggleTag(aqua, choice[1]) end end
+assert(strip.icons[6]:IsShown() and not strip.caption:IsShown() and row.tagStrip.caption:GetText() == "+3")
+GL.SetSetting("compactMode", true)
+GL.ShowLedger(record.key)
+row = assert(selectedRow())
+assert(row.tagStrip.icons[1]:IsShown() and not row.tagStrip.icons[2]:IsShown() and row.tagStrip.caption:GetText() == "+5")
+GL.ShowLedger(sameFirst.key)
+assert(not strip:IsShown(), "selecting an untagged contact clears the previous header")
+GL.ShowLedger(record.key)
+for _, choice in ipairs(GL.TagChoices) do GL.ToggleTag(aqua, choice[1]) end
+assert(not strip:IsShown() and not selectedRow().tagStrip:IsShown() and selectedRow().name:GetWidth() == 168)
+GL.ToggleTag(aqua, "reliable")
+assert(strip.caption:GetText() == "Fiable" and not strip.icons[2]:IsShown())
+GL.SetSetting("compactMode", false)
+
 local provisional = GL.IdentityFromName("Forge", "Light")
 local guidOnly = GL.IdentityFromName("Forge", nil, "Player-1-forge")
 GL.ToggleTag(provisional, "leaver") GL.ToggleTag(guidOnly, "boosted")

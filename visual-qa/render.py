@@ -438,6 +438,7 @@ def main():
               "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details", "combat-report"]
     views += ["bounty-target", "bounty-contract", "bounty-history", "dossier-gear", "dossier-talents", "dossier-pvp", "dossier-reputation"]
+    views += ["journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
     if sys.argv[1:]: views = sys.argv[1:]

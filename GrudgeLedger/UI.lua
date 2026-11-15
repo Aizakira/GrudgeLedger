@@ -571,6 +571,75 @@ end
 local function showIf(region, visible)
     if visible then region:Show() else region:Hide() end
 end
+-- The four-column texture follows the display order in GL.TagChoices.
+local function journalTags(parent, record, compact)
+    local header = parent == ledger
+    local strip = parent.tagStrip
+    if not GL.HasTag or not GL.HasTag(record) then
+        if strip then strip.record = nil strip:Hide() end
+        return 0
+    end
+    if not strip then
+        strip = CreateFrame("Frame", nil, parent)
+        parent.tagStrip, strip.icons = strip, {}
+        strip.caption = label(strip, "", nil, 0, 0)
+        journalFont(strip.caption, "GameFontNormalLarge", header and 13 or 11)
+        GL.Safe(strip.caption.SetJustifyV, strip.caption, "MIDDLE")
+        strip.caption:SetTextColor(unpack(header and theme.ink or theme.brass))
+        strip:EnableMouse(header)
+        if header then
+            strip:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(L("Étiquettes personnelles"))
+                for i, choice in ipairs(GL.TagChoices) do
+                    if GL.HasTag(self.record, choice[1]) then
+                        local x, y = ((i-1)%4)*64, math.floor((i-1)/4)*64
+                        local glyph = ("|T%sJournalTags:16:16:0:0:256:128:%d:%d:%d:%d|t"):format(media, x, x+64, y, y+64)
+                        GameTooltip:AddLine(glyph .. " " .. L(choice[2]), 1, 1, 1)
+                    end
+                end
+                GameTooltip:Show()
+            end)
+            strip:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+    end
+    local size = header and 24 or 18
+    local limit = header and #GL.TagChoices or (compact and 1 or 3)
+    local count, shown, width, single = 0, 0, 0
+    for i, choice in ipairs(GL.TagChoices) do
+        if GL.HasTag(record, choice[1]) then
+            count, single = count + 1, L(choice[2])
+            if shown < limit then
+                shown = shown + 1
+                local icon = strip.icons[shown]
+                if not icon then
+                    icon = bookIcon(strip, width, 0, size, media .. "JournalTags")
+                    strip.icons[shown] = icon
+                end
+                local col, row = (i-1)%4, math.floor((i-1)/4)
+                icon:SetTexCoord(col/4, (col+1)/4, row/2, (row+1)/2)
+                icon:Show()
+                width = width + size + 2
+            end
+        end
+    end
+    for i = shown+1, #strip.icons do strip.icons[i]:Hide() end
+    local caption = count > shown and ("+" .. (count-shown)) or (count == 1 and not compact and single) or ""
+    strip.caption:SetText(caption)
+    local textWidth = math.ceil(GL.Safe(strip.caption.GetStringWidth, strip.caption) or #caption*8)
+    local withText = caption ~= "" and (header or textWidth <= 65)
+    showIf(strip.caption, withText)
+    if withText then
+        moveTo(strip.caption, width, 0)
+        strip.caption:SetHeight(size)
+        width = width + textWidth + 2
+    end
+    strip:SetSize(width, size)
+    moveTo(strip, (header and 919 or (compact and 209 or 273)) - width, header and 206 or (compact and 6 or 26))
+    strip.record = record
+    strip:Show()
+    return width
+end
 local encounterHelp = L("Une rencontre recommence après plus de 10 min sans observation. Le total inclut les rencontres avant le changement d'avis ; les anciens passages ne sont pas reconstitués.")
 local recentHelp = L("Dernière observation enregistrée, tous vos personnages confondus. Une personne vue récemment n'est pas forcément encore à proximité.")
 local confirmedHelp = L("Mon bilan PvP")
@@ -1761,6 +1830,10 @@ end
 
 local function renderDetail()
     local record = currentRecord()
+    local tagWidth = journalTags(ledger, record)
+    moveTo(ledger.detailSource, 753, tagWidth > 0 and 184 or 196)
+    ledger.detailSource:SetHeight(tagWidth > 0 and 21 or 39)
+    ledger.detailGuild:SetWidth(math.min(315, 480-tagWidth))
     local tab = ledger.detailTab or "summary"
     if record then ledger.emptyPage:Hide() else ledger.emptyPage:Show() end
     for key, control in pairs(ledger.detailTabs) do
@@ -2361,6 +2434,8 @@ local function buildLedger()
             GameTooltip:AddLine(self.portraitUnit and L("Portrait actuel du joueur") or self.livePortraitGUID and L("Portrait vu en jeu") or self.archivedPortrait
                 and L("Portrait enregistré de l’Armurerie") or L("Icône générique"), 0.82, 0.78, 0.69)
             if record.guild then GameTooltip:AddLine(plain(record.guild)) end
+            local tags = GL.TagText and GL.TagText(record)
+            if tags then GameTooltip:AddLine(L("Étiquettes : %s"):format(tags), 1, 0.88, 0.55, true) end
             GameTooltip:Show()
         end)
         row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -2607,8 +2682,6 @@ local function layoutIndex(f, compact)
         row:SetPoint("TOPLEFT", 32, -326 - (i - 1) * (compact and 33 or 50))
         row:SetHeight(compact and 31 or 48)
         row.name:ClearAllPoints() row.name:SetPoint("TOPLEFT", compact and 34 or 52, compact and -7 or -4)
-        row.name:SetWidth(compact and 168 or 145)
-        row.identity:SetWidth(198)
         row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 215, compact and -8 or -6)
         row.relation:SetWidth(58)
         row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 200, -6)
@@ -2673,6 +2746,10 @@ refresh = function(focusSelected)
                 detail = note and note.text or L("Aucune note")
             end
             row.identity:SetText(plain(detail):gsub("[\r\n]", " "))
+            local compact = ledger.pageSize == 9
+            local tagWidth = journalTags(row, record, compact)
+            row.name:SetWidth(compact and (168-tagWidth) or 145)
+            row.identity:SetWidth(compact and 198 or (198-tagWidth))
             identityIcons(row, record)
             local background = selectedKey == record.key and theme.red or theme.panel
             row.bg:SetColorTexture(unpack(background))

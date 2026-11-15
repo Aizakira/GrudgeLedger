@@ -16,6 +16,7 @@ sizes = {
     "LevelMedallion": (64, 64),
     "JournalSettings": (64, 64),
     "JournalClose": (64, 64),
+    "JournalTags": (256, 128),
     "LedgerBook": (256, 256),
 }
 

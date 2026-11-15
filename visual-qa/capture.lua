@@ -269,12 +269,24 @@ local function dossierExample()
 end
 function QA.capture(name)
     hideWindows()
+    records[10].tags = nil
     GL.SetSetting("readableFont", name:find("%-readable") ~= nil)
     GL.SetSetting("readingScale", name:find("%-largeprint") and 1.25 or 1)
-    GL.SetSetting("compactMode", name == "journal-compact")
+    GL.SetSetting("compactMode", name:find("%-compact") ~= nil)
     name = name:gsub("%-readable", "")
     name = name:gsub("%-largeprint", "")
     UIParent:SetSize(1920, 1080)
+    if name:find("^journal%-tags") then
+        local contact = records[10]
+        contact.tags = {reliable=true}
+        if name:find("%-all") then
+            for _, choice in ipairs(GL.TagChoices) do contact.tags[choice[1]] = true end
+        end
+        if name:find("%-small") then UIParent:SetSize(1024, 600) end
+        GL.ShowLedger(contact.key)
+        GrudgeLedgerWindow.detailTabs.summary:Click()
+        return GrudgeLedgerWindow
+    end
     if name:find("^dossier%-") or name:find("^bounty%-") then
         local guid=dossierExample()
         mock.units.player.guild="Les Veilleurs de l'Aube"
