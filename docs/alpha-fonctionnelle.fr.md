@@ -1,4 +1,4 @@
-# Grudge Ledger 0.11.2 — essai en jeu
+# Grudge Ledger 0.11.3 — essai en jeu
 
 **Après une rencontre JcJ.** Le livre relève les caractéristiques et les pièces déjà visibles pendant le combat. Si le client autorise l’inspection, il demande aussi la tenue et les talents de l’adversaire. La fiche ouverte affiche la réponse dès sa réception et le Journal conserve le relevé après la perte de vue. Un adversaire hostile peut être impossible à inspecter, même à proximité. En l’absence de relevé web chargé, **Lien vers l’Armurerie** sélectionne l’adresse du personnage, à copier dans un navigateur. Le compagnon complète la fiche lors du prochain import et WoW charge ces données au rechargement de l’interface.
 
@@ -12,7 +12,7 @@ Ouvrir le livre avec `/gl`. Dans **Relations**, choisir **Menaces**, **Amis**, *
 python tools/sync_portraits.py "CHEMIN_DU_JEU/_forever_" --region eu --locale fr-fr
 ```
 
-La miniature privilégie le portrait vu en jeu, puis l’avatar individuel publié par l’Armurerie. Le survol indique sa provenance. L’importeur vérifie l’identité, partage les variantes d’objets identiques entre les fiches et conserve la dernière copie valable si un personnage n’est plus disponible. Les portraits, données d’Armurerie et données de compte restent privés. Redémarrer le client pour charger de nouveaux fichiers ou un nouveau module ; activer le module privé dans la liste des addons. Ensuite, un rechargement suffit pour relire un module déjà connu.
+La miniature utilise en priorité le portrait observé en jeu. À défaut, le client présente un aperçu reconstitué avec les données du dossier lorsqu’elles sont disponibles. Le survol indique sa provenance. L’importeur vérifie l’identité, partage les variantes d’objets identiques entre les fiches et conserve la dernière copie valable si un personnage n’est plus disponible. Les portraits, données d’Armurerie et données de compte restent privés. Redémarrer le client pour charger de nouveaux fichiers ou un nouveau module ; activer le module privé dans la liste des addons. Ensuite, un rechargement suffit pour relire un module déjà connu.
 
 Pour automatiser les prochains imports sur ce poste, ajouter `--watch` à la même commande et la laisser ouverte. L’outil observe les sauvegardes écrites par WoW ; les profils récents restent en cache. Arrêt avec Ctrl+C. Il n’y a pas d’actualisation web instantanée pendant un combat.
 

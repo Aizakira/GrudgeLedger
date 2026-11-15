@@ -53,14 +53,12 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
     portraits.sync(root, "eu", contacts)
     folder = addon.parent / "GrudgeLedgerPortraits"
     texture = folder / (guid + ".tga")
+    assert not texture.exists() and all(call.args[0] != url for call in requests.call_args_list)
+    portraits.sync(root, "eu", contacts, profiles_only=False)
     with Image.open(texture) as image:
         assert image.size == (64, 64) and image.mode == "RGB"
     before = texture.read_bytes()
-    assert 'armory:2a' in (folder / "Portraits.lua").read_text()
-    assert not (folder / (guid + "-body.tga")).exists()
-    assert '["avatarKey"]=' + portraits.lua(guid) in (folder / "Profiles.lua").read_text()
-    texture.write_bytes(b"broken")
-    assert portraits.sync(root, "eu", contacts) == 0 and texture.read_bytes() == before
+    assert guid not in (folder / "Portraits.lua").read_text()
     archive=(folder/"Profiles.lua").read_text()
     assert "999999" in archive and "AGILITY" in archive and "bonus_list" in archive
     other=guid.replace("2A","2B")
@@ -69,15 +67,13 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
     portraits.publish_profiles(folder)
     assert (folder/"Profiles.lua").read_text().count("New cloak")==1
     second=json.loads(duplicate.read_bytes())
-    second.update(characterHex="2b", identity=dict(second["identity"],name="Other Name"),
-                  avatarReceipt=dict(second["avatarReceipt"],name="other name",url=url.replace("/42-avatar", "/43-avatar")))
-    (folder/(other+".tga")).write_bytes(before)
+    second.update(avatarKey=other, avatarHex="2b", avatarReceipt={"url":url}, portrait=True, body=True)
     second["gear"]["back"]["stats"][0]["value"]=9
     duplicate.write_text(json.dumps(second))
     portraits.publish_profiles(folder)
     assert (folder/"Profiles.lua").read_text().count("New cloak")==2
-    assert "armory:" not in (folder/"Portraits.lua").read_text()
-    assert "avatarKey" not in (folder/"Profiles.lua").read_text()
+    assert all('["'+key+'"]' not in (folder/"Profiles.lua").read_text()
+               for key in ("avatarKey", "avatarHex", "avatarReceipt", "portrait", "body"))
     requests.reset_mock()
     portraits.sync(root, "eu", contacts)
     assert requests.call_count == 0
@@ -140,7 +136,7 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
                 {"name":"Aube","standing":"Amical","value":0,"maxValue":6000}]}]}
         return ("var characterProfileInitialState = " + json.dumps(state)).encode()
     with patch.object(portraits,"fetch",side_effect=full_response):
-        portraits.sync(root,"eu",contacts,force=True,locale="fr-fr",archive_body=True)
+        portraits.sync(root,"eu",contacts,force=True,profiles_only=False,locale="fr-fr")
     result = json.loads((folder/(guid+".json")).read_text())
     assert result["battlegrounds"] == [{"name":"Goulet","games":3,"wins":0,"losses":3}]
     assert result["reputations"] == [{"name":"Aube","group":"Alliance","standing":"Amical","value":0,"max":6000}]
@@ -148,7 +144,7 @@ with TemporaryDirectory() as tmp, patch.object(portraits, "fetch", side_effect=f
         assert body.size==(256,512) and body.mode=="RGBA"
         x,y,right,bottom=body.getbbox()
         assert (right-x)*3==bottom-y and x>0 and y>0
-    assert '["body"]=true' in (folder/"Profiles.lua").read_text("utf8")
+    assert '["body"]=true' not in (folder/"Profiles.lua").read_text("utf8")
     with patch.object(portraits,"fetch") as unexpected:
         assert portraits.body_texture(dict(character,media={"main-sd-raw":{"url":body_url.replace("/42/","/41/")}})) is None
         unexpected.assert_not_called()

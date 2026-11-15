@@ -313,31 +313,54 @@ GL.PaintBookPortrait(dossier,{fullName="Unknown Dealer"})
 assert(dossier.raceIcon.atlas=="raceicon128-human-female" and not dossier.archivedPortrait,
     "a verified name-only identity gets a race portrait while awaiting a live face")
 GL.ArmoryProfile = realProfile
--- The image receipt and current companion index must agree for this identity.
-GetCurrentRegion = function() return 3 end
+-- An offline contact gets an in-game, equipped approximation, even if an old
+-- catalog still contains a signed web head. A live/native face always replaces it.
+assert(loadfile(TEST_ROOT.."/DossierEquipment.lua"))("GrudgeLedger")
+local makeFrame=CreateFrame
+local dressed, cached={},false
+CreateFrame=function(kind,...)
+    local frame=makeFrame(kind,...)
+    if kind=="DressUpModel" then
+        function frame:ClearModel() self.loadedDisplay=nil end
+        function frame:SetDisplayInfo(id) self.requested=id end
+        function frame:GetDisplayInfo() return self.loadedDisplay end
+        function frame:GetModelFileID() return self.loadedDisplay and 400 end
+        function frame:SetPortraitZoom(zoom) self.zoom=zoom end
+        function frame:TryOn(link) dressed[link]=true end
+        function frame:Undress() dressed={} end
+    end
+    return frame
+end
+C_Item={IsItemDataCachedByID=function(id) return id~=9 or cached end,RequestLoadItemDataByID=function(id) assert(id==9) end}
+GetCurrentRegion=function() return 3 end
 local contact={fullName="Donor Sample", guid="Player-42-00001ABC", raceID=1, sex=3}
-local alias="name:donor sample"
-local key="Name-"..string.rep("a",64)
-local profile={identity={name=contact.fullName,raceID=1,sex=3},region="eu",characterHex="1abc",avatarHex="1abc",avatarKey=contact.guid}
-GrudgeLedgerArmory={profiles={[contact.guid]=profile}}
+local profile={identity={name=contact.fullName,raceID=1,sex=3},region="eu",characterHex="1abc",avatarHex="1abc",avatarKey=contact.guid,
+    gear={head=1,shoulder=2}}
+GrudgeLedgerArmory={items={{id=9},{id=11}},profiles={[contact.guid]=profile}}
 GrudgeLedgerPortraitIndex={[contact.guid]="armory:1abc"}
 GL.PaintBookPortrait(dossier,contact)
-assert(dossier.archivedPortrait=="armory" and dossier.raceIcon.texture:match("Player%-42%-00001ABC$"))
+local headshot=dossier.headshot
+assert(headshot.requested==3977 and not dossier.archivedPortrait and not dossier.reconstructedPortrait)
+headshot.loadedDisplay=3851
+headshot.scripts.OnModelLoaded(headshot)
+assert(not dossier.reconstructedPortrait,"an old orc load must never draw over a human record")
+headshot.loadedDisplay=headshot.requested
+headshot.scripts.OnModelLoaded(headshot)
+assert(not dossier.reconstructedPortrait and headshot.zoom==1 and dressed["item:11"] and not dressed["item:9"])
+cached=true
+headshot.scripts.OnEvent(headshot,"ITEM_DATA_LOAD_RESULT",9,true)
+assert(dossier.reconstructedPortrait and dressed["item:9"] and dressed["item:11"])
 GrudgeLedgerNativePortraits={[contact.guid]=true}
 GL.PaintBookPortrait(dossier,contact)
-assert(dossier.archivedPortrait=="native" and dossier.raceIcon.texture:match("%-native$"))
-GrudgeLedgerNativePortraits=nil
-GrudgeLedgerPortraitIndex[contact.guid]="armory:2fff"
+headshot.scripts.OnModelLoaded(headshot)
+assert(dossier.archivedPortrait=="native" and not dossier.reconstructedPortrait and not headshot:IsShown())
+units.target={guid=contact.guid}
 GL.PaintBookPortrait(dossier,contact)
-assert(not dossier.archivedPortrait,"a different character receipt is rejected")
-profile.alias,profile.avatarKey,profile.mediaKey=alias,key,key
-GrudgeLedgerArmory.profiles={["eu:"..alias]=profile}
-GrudgeLedgerPortraitIndex={[key]="armory:1abc"}
+assert(dossier.portraitUnit=="target" and not dossier.archivedPortrait and not headshot:IsShown())
+units.target=nil
+profile.alias="name:donor sample"
+GrudgeLedgerArmory.profiles={["eu:"..profile.alias]=profile}
 contact.guid=nil
 GL.PaintBookPortrait(dossier,contact)
-assert(dossier.archivedPortrait=="armory" and dossier.raceIcon.texture:sub(-#key)==key)
-contact.armorySnapshot=profile
-GrudgeLedgerArmory.profiles={}
-GL.PaintBookPortrait(dossier,contact)
-assert(not dossier.archivedPortrait,"a saved Armory snapshot cannot revive an obsolete media receipt")
+assert(dossier.reconstructedPortrait and not dossier.archivedPortrait,"name-only contacts use the same in-game preview")
 print("PASS identity UI: filters, pagination, identity merge, historical guilds, recycled portraits, live appearance events, invisible or restricted units, persisted identity only")

@@ -71,16 +71,12 @@ def character_profile(region, name, guid, locale="en-us"):
 
 
 def portrait(data):
-    from native_portraits_windows import usable_face
     media = data["avatar"]["url"]
     with Image.open(io.BytesIO(fetch(media, 512_000))) as img:
         if img.format != "JPEG" or img.width != img.height or not 32 <= img.width <= 512:
             raise ValueError("unexpected avatar format")
         buf = io.BytesIO()
-        thumb = img.convert("RGB").resize((64, 64), Image.Resampling.LANCZOS)
-        if not usable_face(thumb):
-            raise ValueError("empty avatar")
-        thumb.save(buf, format="TGA")
+        img.convert("RGB").resize((64, 64), Image.Resampling.LANCZOS).save(buf, format="TGA")
         return buf.getvalue()
 
 
@@ -306,36 +302,11 @@ def valid_texture(path, size):
         return False
 
 
-def avatar_digest(profile, path):
-    receipt = profile.get("avatarReceipt")
-    region, char = profile.get("region"), profile.get("characterHex")
-    name = profile.get("identity", {}).get("name")
-    if (not isinstance(receipt, dict) or region not in ("eu", "us", "kr", "tw")
-            or not isinstance(char, str) or not re.fullmatch(r"[0-9a-f]{1,16}", char)
-            or not isinstance(name, str) or not name or receipt.get("name") != name.casefold()
-            or not re.fullmatch(rf"https://render\.worldofwarcraft\.com/forever-{region}/character/\d+/{int(char,16)}-avatar\.jpg",
-                                str(receipt.get("url", "")))):
-        return None
-    if path.stem.startswith("Name-"):
-        if profile.get("alias") != "name:" + name.casefold() or media_stem(region,profile["alias"]) != path.stem:
-            return None
-    elif not re.fullmatch(GUID,path.stem) or int(path.stem.rsplit("-",1)[1],16) != int(char,16):
-        return None
-    if valid_texture(path,(64,64)):
-        try:
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        except OSError:
-            return None
-        if digest == receipt.get("sha256"):
-            return digest
-
-
 def publish_profiles(folder):
     profiles, variants, indices = {}, [], {}
     manifest = folder / "Profiles.lua"
     recovery = folder / "Profiles.last-good.lua.bak"
     incomplete = False
-    avatars = {}
     files = set(folder.glob("*.json")) | {f.with_suffix("") for f in folder.glob("*.json.bak")}
     for file in sorted(files):
         if not re.fullmatch(GUID + "|" + NAME_STEM, file.stem):
@@ -350,17 +321,9 @@ def publish_profiles(folder):
             region, alias = profile["region"], profile["alias"]
             if media_stem(region, alias) != key:
                 raise ValueError("incorrect name archive key")
-            profile["mediaKey"] = key
-            profile["portrait"] = valid_texture(file.with_suffix(".tga"), (64, 64))
             key = region + ":" + alias
-        if valid_texture(folder / (file.stem + "-body.tga"), (256, 512)):
-            profile["body"] = True
-        digest = avatar_digest(profile,file.with_suffix(".tga"))
-        if digest:
-            avatars.setdefault(digest,[]).append((key,file.stem))
-        profile.pop("avatarReceipt",None)
-        profile.pop("avatarKey",None)
-        profile.pop("avatarHex",None)
+        for field in ("avatarReceipt", "avatarKey", "avatarHex", "mediaKey", "body", "portrait"):
+            profile.pop(field, None)
         for slot, item in profile["gear"].items():
             item = game_item(item, profile.get("armorySchema"))
             variant = lua(item)
@@ -369,29 +332,15 @@ def publish_profiles(folder):
                 indices[variant] = len(variants)
             profile["gear"][slot] = indices[variant]
         profiles[key] = profile
-    portrait_index = {}
-    for matches in avatars.values():
-        identities = {(profiles[key]["region"], profiles[key]["characterHex"], profiles[key]["identity"]["name"].casefold())
-                      for key, _ in matches}
-        if len(identities) == 1:
-            for key, stem in matches:
-                profile = profiles[key]
-                profile["avatarKey"], profile["avatarHex"] = stem, profile["characterHex"]
-                portrait_index[stem] = "armory:" + profile["characterHex"]
     if incomplete and manifest.is_file() and not recovery.exists():
         write_atomic(recovery, manifest.read_bytes())
     catalog = ("GrudgeLedgerArmory = " + lua({"profiles": profiles, "items": variants}) + "\n").encode()
     write_atomic(manifest, catalog)
     if not incomplete and recovery.exists():
         write_atomic(recovery, catalog)
-    from native_portraits_windows import native_guids
-    portrait_index.update(dict.fromkeys(native_guids(folder),"native"))
-    write_atomic(folder / "Portraits.lua", ("GrudgeLedgerPortraitIndex = " + lua(portrait_index) + "\n").encode("ascii"))
-    return len(portrait_index)
 
 
-def sync(root, region, contacts, force=False, profiles_only=False, achievements=False, locale="en-us", retry_after=None,
-         archive_body=False):
+def sync(root, region, contacts, force=False, profiles_only=True, achievements=False, locale="en-us", retry_after=None):
     addons = root / "Interface" / "AddOns"
     if not (addons / "GrudgeLedger" / "GrudgeLedger.toc").is_file():
         raise ValueError("Grudge Ledger is missing from the selected game folder")
@@ -409,9 +358,8 @@ def sync(root, region, contacts, force=False, profiles_only=False, achievements=
         previous, source = cached_profile(cache)
         fresh_achievements = 0 <= time.time() - (previous.get("achievementsAt") or 0) < 7 * 86400
         same_locale = previous.get("locale", "en-us") == locale
-        body_current = "bodyAvailable" in previous and previous.get("bodyChecked") and (not previous.get("bodyAvailable")
-                       or valid_texture(folder / (stems[guid] + "-body.tga"), (256, 512)))
-        media_current = profiles_only or (avatar_digest(previous,path) and (not archive_body or body_current))
+        media_current = profiles_only or ("bodyAvailable" in previous and previous.get("bodyChecked") and valid_texture(path, (64, 64))
+                         and (not previous.get("bodyAvailable") or valid_texture(folder / (stems[guid] + "-body.tga"), (256, 512))))
         has_data = usable_identity(previous) and previous.get("stats") and previous.get("gear")
         if not force and source == cache and has_data and same_locale and previous.get("armorySchema") == 3 and media_current and (not achievements or fresh_achievements) and all(
                 f.is_file() and 0 <= time.time() - f.stat().st_mtime < 7 * 86400 for f in required):
@@ -427,8 +375,6 @@ def sync(root, region, contacts, force=False, profiles_only=False, achievements=
                 character = character_profile(region, name, None if named else guid, locale)
                 snapshot = compact(character)
                 snapshot.update(region=region, characterHex=character["characterHex"])
-                if previous.get("avatarReceipt"):
-                    snapshot["avatarReceipt"] = previous["avatarReceipt"]
                 if named:
                     snapshot["alias"] = guid
                     if previous.get("characterHex", snapshot["characterHex"]) != snapshot["characterHex"]:
@@ -475,15 +421,11 @@ def sync(root, region, contacts, force=False, profiles_only=False, achievements=
                 if not profiles_only:
                     try:
                         data = portrait(character)
-                        snapshot["avatarReceipt"] = {"name": snapshot["identity"]["name"].casefold(),
-                                                     "url": character["avatar"]["url"],
-                                                     "sha256": hashlib.sha256(data).hexdigest()}
                     except (ValueError, OSError) as exc:
                         data = None
                         if not path.is_file():
                             unavailable += 1
                         print(f"Portrait unavailable for {guid}: {ascii(str(exc))}")
-                if archive_body and not profiles_only:
                     try:
                         body = body_texture(character)
                         if body:
@@ -515,7 +457,7 @@ def sync(root, region, contacts, force=False, profiles_only=False, achievements=
             if retry_after is not None:
                 if (not usable_identity(snapshot) or not snapshot["gear"] or not snapshot["stats"]
                         or (achievements and not 0 <= time.time() - (snapshot.get("achievementsAt") or 0) < 7 * 86400)
-                        or (not profiles_only and (data is None or (archive_body and not snapshot["bodyChecked"])))):
+                        or (not profiles_only and (data is None or not snapshot["bodyChecked"]))):
                     retry_after[guid] = time.monotonic() + 1800
                 else:
                     retry_after.pop(guid, None)
@@ -526,10 +468,14 @@ def sync(root, region, contacts, force=False, profiles_only=False, achievements=
                 retry_after[guid] = time.monotonic() + 1800
     # Publish only complete textures. A later run can recover a fully written
     # portrait even if a previous import stopped before publishing the index.
-    indexed = publish_profiles(folder)
+    from native_portraits_windows import native_guids
+    keys = dict.fromkeys(native_guids(folder), "native")
+    index = "GrudgeLedgerPortraitIndex = " + lua(keys) + "\n"
+    write_atomic(folder / "Portraits.lua", index.encode("ascii"))
+    publish_profiles(folder)
     native_file = b"NativePortraits.lua\n" if (folder/"NativePortraits.lua").is_file() else b""
     write_atomic(folder / "GrudgeLedgerPortraits.toc", TOC + b"Profiles.lua\n" + native_file)
-    print(f"{updated} updated, {fresh} recent, {unavailable} unavailable. {indexed} portraits in {folder}", flush=True)
+    print(f"{updated} updated, {fresh} recent, {unavailable} unavailable. {len(keys)} portraits in {folder}", flush=True)
     return unavailable
 
 
@@ -540,9 +486,9 @@ def main():
     parser.add_argument("--locale", choices=("en-us", "fr-fr", "es-es"), default="en-us", help="language of equipment, enchantments and talents")
     parser.add_argument("--name", help="only synchronize this full character name")
     parser.add_argument("--force", action="store_true", help="refresh even within seven days")
-    media = parser.add_mutually_exclusive_group()
-    media.add_argument("--profiles-only", action="store_true", help="import character data without downloading images")
-    media.add_argument("--archive-web-images", action="store_true", help="also archive website body artwork for reference")
+    parser.add_argument("--profiles-only", action="store_true", default=True, help="import character data only (default)")
+    parser.add_argument("--archive-web-images", dest="profiles_only", action="store_false",
+                        help="archive website artwork for reference")
     parser.add_argument("--pvp-achievements", action="store_true", help="also fetch completed PvP achievements")
     parser.add_argument("--watch", action="store_true", help="watch locally saved journals; stop with Ctrl+C")
     parser.add_argument("--native-portraits", action="store_true", help="archive observed portrait tiles on Windows while watching")
@@ -579,8 +525,7 @@ def main():
                             contacts.setdefault(key.removeprefix("guid:"), set()).add(name)
                 unavailable = 0
                 if contacts:
-                    unavailable = sync(args.game, args.region, contacts, args.force, args.profiles_only, args.pvp_achievements,
-                                       args.locale, retry_after, archive_body=args.archive_web_images)
+                    unavailable = sync(args.game, args.region, contacts, args.force, args.profiles_only, args.pvp_achievements, args.locale, retry_after)
                     args.force = False
                 elif not args.watch:
                     parser.exit(1, "No matching saved contacts. Save the journal with /reload and try again.\n")
