@@ -90,7 +90,7 @@ end
 function GL.SendGesture(token)
     if token ~= "KISS" and token ~= "SPIT" then return false end
     local identity = GL.Identity("target")
-    if not identity then GL.Print(L("Sélectionne un joueur pour lui envoyer ce geste.")) return false end
+    if not identity then GL.Print(L("Sélectionnez un joueur pour lui envoyer ce geste.")) return false end
     if not GL.Settings().socialTracking then
         GL.Print(L("Active « %s » dans les réglages."):format(L("Noter mes gestes envers les joueurs")))
         return false

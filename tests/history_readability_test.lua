@@ -54,8 +54,8 @@ local function text(tab)
                     GrudgeLedgerCorrections.keep.scripts.OnClick()
                 elseif row.event.questTitle and row.event.kind == "death" and row.event.confidence == "confirmed" then
                     row.details.scripts.OnClick()
-                    assert(GrudgeLedgerCorrections.proof:GetText():find("UNIT_DIED",1,true))
                     if row.event == first then
+                        assert(GrudgeLedgerCorrections.proof:GetText():find("UNIT_DIED",1,true))
                         assert(row.playerLevel:IsShown() and row.playerLevel:GetText() == "Vous · niv. 34")
                         assert(row.opponentLevel:IsShown() and row.opponentLevel:GetText() == "Adversaire · niv. 39")
                         assert(not row.hint:IsShown())
@@ -75,7 +75,7 @@ end
 local rendered = text()
 assert(rendered:find("Niveaux : vous 34, adversaire 39 (+5) · Familier impliqué", 1, true))
 for _, expected in ipairs({
-    "Vous a tué", "Vous l'avez vaincu",
+    "Mort en combat", "Vous l'avez vaincu",
     "Vous a infligé des dégâts", "Geste demandé : Bisou", "Geste demandé : Crachat",
     "Geste demandé : Bisou — avis +1", "Geste demandé : Crachat — avis -1", "Vous l'avez marqué : Ami", "Super donjon ||cff00ff00",
     "11/11/2026 12:00", "Quartier commerçant · Hurlevent", "Quête suivie : Les oreilles des trolls",
@@ -108,7 +108,17 @@ table.insert(record.history, { kind = "death", confidence = "confirmed", zone = 
 local legacy = record.history[#record.history]
 text()
 assert(not legacy.questTitle and not legacy.subzone, "never invent context for legacy events")
-assert(text():find("Vous a tué", 1, true))
+assert(text():find("Mort en combat", 1, true))
+
+-- An identified participant and a later killing blow are one death for this player.
+local mixed, event = GL.RecordPvP(identity,"death","confirmed","Participation à l’attaque ayant causé votre mort.","mixed",nil,nil,false)
+assert(text():find("A participé à votre mort",1,true))
+local before = assert(mixed.pvp.deaths)
+assert(before > 0)
+local _, upgraded = GL.RecordPvP(identity,"death","confirmed","Dégâts létaux explicitement attribués à ce joueur.","mixed",nil,nil,true)
+assert(upgraded == event and upgraded.killingBlow and mixed.pvp.deaths == before)
+assert(not GL.RecordPvP(identity,"death","confirmed","repeat","mixed",nil,nil,true))
+assert(text():find("A porté le coup fatal",1,true))
 
 local function withoutQuest()
     GL.AdjustReputation(identity, 1, "Contexte indisponible", "manual")

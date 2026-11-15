@@ -10,7 +10,7 @@ local function run(mode)
     local captured, captureTick, ticks, speedReads = false, nil, 0, 0
     env.print = function(s)
         messages[#messages + 1] = s
-        if s:find("Point capture", 1, true) then captured = true; captureTick = ticks end
+        if s:find("Point enregistré.", 1, true) then captured = true; captureTick = ticks end
     end
     local secret = {}
     env.issecretvalue = function(v) return v == secret end
@@ -91,7 +91,7 @@ local function run(mode)
     assert(not saved.result:find("Testeur", 1, true), "no names saved")
     local expected = ({ working = "POSITIF", broken = "NEGATIF", stale = "INCONCLUANT",
         ["blank-cache"] = "INCONCLUANT", secret = "SANS TEMOIN", empty = "SANS TEMOIN",
-        throws = "ANNULE [positionnement virtuel du point]", moving = "ANNULE : Ton personnage a commence a bouger",
+        throws = "ANNULE [positionnement virtuel du point]", moving = "ANNULE : Votre personnage a commencé à bouger",
         ["stay-over"] = "ANNULE : la souris est restee", stop = "ANNULE", combat = "ANNULE : Debut du combat",
         metadata = "NEGATIF", ["late-hover"] = "POSITIF", ["delayed-leave"] = "POSITIF", ["no-hover"] = "SANS TEMOIN",
         ["missing-hover-api"] = "INDISPONIBLE", ["secret-speed"] = "vitesse lisible", ["secret-coordinate"] = "Coordonnee indisponible",

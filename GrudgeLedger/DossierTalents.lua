@@ -1,7 +1,7 @@
 -- The Armory reports purchased trait definition IDs, not spell IDs or screen positions.
 local GL,UI=GrudgeLedger,GrudgeLedger.UITheme
-local fr=not GetLocale or GetLocale()=="frFR"
-local function tr(a,b) return fr and a or b end
+local L=GL.L
+local french=not GetLocale or GetLocale()=="frFR"
 local function array(v) return type(v)=="table" and v or {} end
 local function label(v) return type(v)=="string" and v~="" and UI.plain(v) or nil end
 local classByTalent,branchByTalent={},{}
@@ -19,7 +19,7 @@ function GL.ReadInspectedTalents(class)
     if not config or not config.treeIDs or #config.treeIDs==0 then return end
     local result,matched={},false
     for index,branch in ipairs(catalog) do
-        result[index]={name=tr(branch.fr,branch.en),points=0,talents={}}
+        result[index]={id=branch.en:lower():gsub(" ","-"),name=L(branch.fr),points=0,talents={}}
     end
     for _,treeID in ipairs(config.treeIDs) do
         local nodes=GL.Safe(C_Traits.GetTreeNodes,treeID)
@@ -77,7 +77,7 @@ local function readBuild(trees,class)
         if not branch then
             for i,d in ipairs(GL.DossierTalentData[class] or {}) do
                 local slug=d.en:lower():gsub(" ","-")
-                if d.en==tree.name or d.fr==tree.name or slug==tree.id then branch=i; break end
+                if slug==tree.id or d.en==tree.name or d.fr==tree.name or L(d.fr)==tree.name then branch=i; break end
             end
         end
         if branch then branches[branch]=tree end
@@ -86,30 +86,35 @@ local function readBuild(trees,class)
     return ranked,branches,unplaced,complete
 end
 
+local function nodeName(node, savedName)
+    local name = node and GL.Safe(C_Spell and C_Spell.GetSpellName or GetSpellInfo, node[2])
+    return label(name) or label(savedName) or (node and (french and node[8] or node[7])) or L("Talent")
+end
+
 local function hideTip(button)
     if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(button) then GameTooltip:Hide() end
 end
 local function hover(button)
     if not GameTooltip then return end
     local node,t=button.node,button.learned
-    local name=label(t and t[2]) or (node and tr(node[8],node[7])) or tr("Talent","Talent")
+    local name=nodeName(node, t and t[2])
     GameTooltip:SetOwner(button,"ANCHOR_RIGHT")
     GameTooltip:SetText(name,1,.85,.45)
     if button.rank~=nil then
-        GameTooltip:AddLine(tr("Rang ","Rank ")..button.rank..(node and (" / "..node[5]) or ""),1,1,1)
+        GameTooltip:AddLine(L("Rang ")..button.rank..(node and (" / "..node[5]) or ""),1,1,1)
     else
-        GameTooltip:AddLine(tr("Rang non renseigné","Rank unavailable"),.75,.75,.75)
+        GameTooltip:AddLine(L("Rang non renseigné"),.75,.75,.75)
     end
     local desc=label(t and t[5])
     if not desc and node and C_Spell and C_Spell.GetSpellDescription then
         desc=label(GL.Safe(C_Spell.GetSpellDescription,node[2]))
         if desc and button.rank and button.rank>0 then
-            GameTooltip:AddLine(tr("Description du sort de base","Base spell description"),.8,.8,.8)
+            GameTooltip:AddLine(L("Description du sort de base"),.8,.8,.8)
         end
     end
     if desc then GameTooltip:AddLine(desc,1,.85,.55,true) end
     if button.requires then
-        GameTooltip:AddLine(tr("Talent lié : ","Linked talent: ")..button.requires,.8,.8,.8,true)
+        GameTooltip:AddLine(L("Talent lié : ")..button.requires,.8,.8,.8,true)
     end
     GameTooltip:Show()
 end
@@ -190,7 +195,7 @@ function GL.DrawDossierTalents(parent,record,profile)
         local bw=width/3
         for i,d in ipairs(catalog) do
             local branch=branches[i]
-            local name=label(branch and branch.name) or tr(d.fr,d.en)
+            local name=L(d.fr)
             local points=branch and branch.points or (known and 0)
             local left=(i-1)*bw
             if i>1 then line(left,3,1,336) end
@@ -217,21 +222,20 @@ function GL.DrawDossierTalents(parent,record,profile)
                         line(math.min(a.x,b.x),a.y-1,math.abs(a.x-b.x),2,lit)
                         for j=1,3 do line(b.x-step*(17+j),b.y-j,1,j*2,lit) end
                     end
-                    local req=tr(a.node[8],a.node[7])
+                    local req=nodeName(a.node, a.button.learned and a.button.learned[2])
                     b.button.requires=b.button.requires and (b.button.requires..", "..req) or req
                 end
             end
         end
         height=349
         labels=labels+1
-        caption(parent,labels,known and tr("En couleur : points investis. En gris : talent non appris.","Color: points spent. Gray: unlearned talent.")
-            or tr("Répartition incomplète ou non publiée. Les rangs inconnus sont indiqués au survol.",
-                  "Build incomplete or unpublished. Hover to see which ranks are unknown."),5,height,width-10,true)
+        caption(parent,labels,known and L("En couleur : points investis. En gris : talent non appris.")
+            or L("Répartition incomplète ou non publiée. Les rangs inconnus sont indiqués au survol."),5,height,width-10,true)
         height=height+39
     end
     if #extras>0 then
         labels=labels+1
-        caption(parent,labels,tr("Talents publiés sans emplacement connu","Published talents with unknown position"),4,height,width-8,true)
+        caption(parent,labels,L("Talents publiés sans emplacement connu"),4,height,width-8,true)
         height=height+29
         for i,t in ipairs(extras) do
             n=n+1
@@ -240,7 +244,7 @@ function GL.DrawDossierTalents(parent,record,profile)
         end
         height=height+35*math.ceil(#extras/2)
     elseif not catalog then
-        caption(parent,1,tr("Aucun arbre de talents publié pour ce joueur.","No talent tree published for this player."),6,8,width-12,true)
+        caption(parent,1,L("Aucun arbre de talents publié pour ce joueur."),6,8,width-12,true)
         height=40
     end
     return height

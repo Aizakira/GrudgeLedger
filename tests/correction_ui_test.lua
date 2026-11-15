@@ -139,7 +139,7 @@ SlashCmdList.GRUDGELEDGER("debug")
 assert(preparations == 0, "opening diagnostic never changes the minimap")
 click(button(d, "Préparer la minimap"))
 assert(preparations == 1 and d:IsShown() and not d.edit.focus and d.radarStatus:GetText():find("en combat", 1, true))
-GL.PrepareDruidRadar = function() return true, "Minimap prête. Lance « Validation druide »." end
+GL.PrepareDruidRadar = function() return true, "Minimap prête. Lancez « Validation druide »." end
 click(button(d, "Préparer la minimap"))
 assert(d:IsShown() and d.radarStatus:GetText():find("prête", 1, true) and not scheduled and not ran, "preparation stays open and never starts a scan")
 C_Timer = { After = function(delay, callback) assert(delay == 3); scheduled = callback end }

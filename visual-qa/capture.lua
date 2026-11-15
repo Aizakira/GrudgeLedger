@@ -292,11 +292,12 @@ function QA.capture(name)
             return GL.OpenBounties(target.guid,"view")
         end
         if name=="bounty-contract" then
+            local opponent=records[7]
             if not QA.contract then
-                QA.contract=assert(GL.Bounties.Post(guid,"Isabeau Clairfeuille",1200000,{quota=3,
+                QA.contract=assert(GL.Bounties.Post(opponent.guid,opponent.fullName,1200000,{quota=3,
                     group="party",split="equal",souvenir="screenshot",note="Prendre une capture de la dernière victoire pour la guilde."}))
             end
-            return GL.OpenBounties(guid,"view")
+            return GL.OpenBounties(opponent.guid,"view")
         end
         assert(GL.OpenPlayerDossier(guid))
         local f=GrudgeLedgerPlayerDossier

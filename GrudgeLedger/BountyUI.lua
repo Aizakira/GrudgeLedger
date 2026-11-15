@@ -5,8 +5,7 @@ local f, refresh, startForm, selectOrder
 local t = UI.theme
 local media="Interface\\AddOns\\GrudgeLedger\\Media\\"
 local pageSize = 6
-local english = GetLocale and GetLocale() ~= "frFR"
-local function L(fr, en) return english and en or fr end
+local L = GL.L
 local function mine() return GL.Safe(UnitGUID, "player") end
 local function contact(id) return id and GL.Get("guid:" .. id) end
 local function who(id)
@@ -32,9 +31,9 @@ local function total(o)
     return n
 end
 local function money(n)
-    if n % 10000 == 0 then return math.floor(n / 10000) .. L(" PO", " g") end
-    return ("%d %s %d %s %d %s"):format(math.floor(n / 10000), L("po", "g"), math.floor(n / 100) % 100,
-        L("pa", "s"), n % 100, L("pc", "c"))
+    if n % 10000 == 0 then return math.floor(n / 10000) .. L(" PO") end
+    return ("%d %s %d %s %d %s"):format(math.floor(n / 10000), L("po"), math.floor(n / 100) % 100,
+        L("pa"), n % 100, L("pc"))
 end
 local function copper(value)
     local whole, fraction = value:match("^%s*(%d+)[.,](%d+)%s*$")
@@ -45,20 +44,21 @@ local function copper(value)
     end
 end
 local states = {
-    open=L("En cours","Open"), claimed=L("En attente de synchronisation","Awaiting sync"),
-    fulfilled=L("Prime faite · règlement en attente","Bounty complete · payment pending"),
-    sent=L("Courrier en transit","Mail in transit"), paid=L("Payée","Paid"),
-    withdrawn=L("Retirée","Withdrawn"), expired=L("Expirée","Expired")
+    open=L("En cours"), claimed=L("Objectif atteint · en attente du commanditaire"),
+    superseded=L("Prime remplacée"),
+    fulfilled=L("Prime faite · règlement en attente"),
+    sent=L("Courrier en transit"), paid=L("Payée"),
+    withdrawn=L("Retirée"), expired=L("Expirée")
 }
-local souvenirs = { none=L("Aucun","None"), screenshot=L("Capture d’écran","Screenshot"), video=L("Vidéo","Video") }
+local souvenirs = { none=L("Aucun"), screenshot=L("Capture d’écran"), video=L("Vidéo") }
 local filterLists = {
-    active={{"all",L("Toutes les primes","All bounties")},{"pinned",L("Épinglées","Pinned")},
-        {"issued",L("Mes contrats","Issued by me")},{"solo",L("Hors groupe","Solo only")},{"party",L("Groupe autorisé","Groups allowed")}},
-    history={{"all",L("Tous les états","All statuses")},{"incoming",L("Or à recevoir","Gold to receive")},
-        {"transit",L("Courrier en transit","Mail in transit")},{"due",L("Or à envoyer","Gold to send")},{"paid",L("Payées","Paid")}}
+    active={{"all",L("Toutes les primes")},{"pinned",L("Épinglées")},
+        {"issued",L("Mes contrats publiés")},{"solo",L("Hors groupe")},{"party",L("Groupe autorisé")}},
+    history={{"all",L("Tous les états")},{"incoming",L("Or à recevoir")},
+        {"transit",L("Courrier en transit")},{"due",L("Or à envoyer")},{"paid",L("Payées")}}
 }
 local function members(o)
-    local w=o.winner or o.first
+    local w=o.winner or o.priorWinner or o.first
     if not w then return {} end
     local result = {w.actor}
     for id in (w.detail or ""):gmatch("[^,]+") do result[#result+1] = id end
@@ -79,13 +79,13 @@ local function account(o,me)
             end
         end
     end
-    a.role=o.owner==me and (a.hunted and L("Chasse et contrat","Hunted and issued") or L("Commanditaire","Issuer"))
-        or a.hunted and L("Chasseur","Hunter") or (o.pot[me] and L("Contributeur","Contributor") or L("Participant","Participant"))
+    a.role=o.owner==me and (a.hunted and L("Chasse et contrat") or L("Commanditaire"))
+        or a.hunted and L("Chasseur") or (o.pot[me] and L("Contributeur") or L("Participant"))
     a.status=states[o.state]
-    if o.winner then
-        a.status=a.amount==0 and L("Terminée","Completed") or a.remaining==0 and states.paid
-            or a.due>0 and L("À envoyer","To send") or a.incoming>0 and L("À recevoir","To receive")
-            or a.transit==a.remaining and states.sent or L("Paiement en attente","Payment pending")
+    if o.winner and not o.supersededBy then
+        a.status=a.amount==0 and L("Terminée") or a.remaining==0 and states.paid
+            or a.due>0 and L("À envoyer") or a.incoming>0 and L("À recevoir")
+            or a.transit==a.remaining and states.sent or L("Paiement en attente")
     end
     return a
 end
@@ -98,7 +98,7 @@ local function pins(create)
     end
     return GL.db.bountyPins and GL.db.bountyPins[me] or {}
 end
-local function isOpen(o) return o.state == "open" or o.state == "claimed" end
+local function isOpen(o) return o.state == "open" end
 local function passFilter(o, filter, me, pinned, a)
     if filter == "issued" then return o.owner == me end
     if filter == "pinned" then return pinned[o.id] end
@@ -158,28 +158,47 @@ end
 local function actionResult(id,err)
     if id then f.cachedOrders=nil; return true end
     local errors = {
-        duplicate=L("Une prime est déjà ouverte sur ce joueur.","This player already has an open bounty."),
-        guild=L("Une guilde est nécessaire pour publier.","Join a guild to publish a bounty."),
-        limit=L("Limite de contrats, de montant ou de renouvellement atteinte.","Contract, amount or renewal limit reached."),
-        invalid=L("Opération refusée. Vérifiez le contrat, le montant et la consigne (100 octets).","Rejected. Check contract, amount and instructions (100 bytes).")
+        ally=L("Cet allié peut recevoir des étiquettes dans le Journal."),
+        duplicate=L("Une prime est déjà ouverte sur ce joueur."),
+        guild=L("Une guilde est nécessaire pour publier."),
+        limit=L("Limite de contrats, de montant ou de renouvellement atteinte."),
+        invalid=L("Vérifiez le contrat, le montant et la consigne.")
     }
-    message(errors[err] or L("Opération refusée. Actualisez le contrat.","Action rejected. Refresh the contract."))
+    message(errors[err] or L("Opération refusée. Actualisez le contrat."))
     return false
 end
 local function compactDate(ts)
     return (ts and GL.Safe(date,"%d/%m/%Y %H:%M",ts)) or "—"
+end
+local function noteError(value)
+    if #value>100 then return L("Raccourcissez la consigne. Les caractères accentués occupent plus de place.") end
+    if GL.ContainsControlOrMarkup(value) or value:find(";",1,true) then
+        return L("Retirez les points-virgules et les codes de mise en forme.")
+    end
+end
+local function showNoteBudget(edit,label)
+    label:SetText(L("Espace utilisé : %d %%"):format(#edit:GetText()))
+end
+local function huntRules(group,split)
+    local rule=L("Les coups fatals doivent venir du même chasseur ou de son familier.")
+    if group=="solo" then return rule.." "..L("Chasse en solo.") end
+    if split=="equal" then
+        return rule.." "..L("Groupe de 5 maximum. Parts égales entre le vainqueur et ses équipiers de guilde visibles à la dernière victoire.")
+    end
+    return rule.." "..L("Groupe de 5 maximum. Toute la prime revient au vainqueur.")
 end
 local function showEditor(kind)
     local o = f.order
     if not o then return end
     f.editing = kind
     f.tools:Hide(); f.editor:Show()
-    local titles = {pledge=L("Votre contribution en PO (jusqu’à 1 000)","Your contribution in gold (up to 1,000)"),
-        note=L("Consigne libre (100 octets)","Free instructions (100 bytes)"),
-        withdraw=L("Retirer ce contrat de la guilde ?","Withdraw this guild contract?")}
+    local titles = {pledge=L("Votre contribution en PO (jusqu’à 1 000)"),
+        note=L("Consigne libre"),
+        withdraw=L("Retirer ce contrat de la guilde ?")}
+    visible(f.editor.budget,kind=="note")
     f.editor.title:SetText(titles[kind]); visible(f.editor.field,kind ~= "withdraw")
     f.editor.field:SetText(kind == "note" and (o.note or "") or "")
-    f.editor.ok:SetText(kind=="withdraw" and L("Confirmer le retrait","Confirm withdrawal") or L("Valider","Save"))
+    f.editor.ok:SetText(kind=="withdraw" and L("Confirmer le retrait") or L("Valider"))
     if kind ~= "withdraw" then f.editor.field:SetFocus() end
     message()
 end
@@ -189,24 +208,33 @@ local function commitEdit()
     local id,err
     if kind=="pledge" then
         local amount = copper(f.editor.field:GetText())
-        if not amount or amount <= 0 then return message(L("Saisissez une contribution supérieure à zéro.","Enter a positive contribution.")) end
+        if not amount or amount <= 0 then return message(L("Saisissez une contribution supérieure à zéro.")) end
         id,err=B.Pledge(o.id,amount)
-    elseif kind=="note" then id,err=B.Update(o.id,f.editor.field:GetText(),false)
+    elseif kind=="note" then
+        local value=f.editor.field:GetText()
+        local problem=noteError(value)
+        if problem then return message(problem) end
+        id,err=B.Update(o.id,value,false)
     elseif kind=="withdraw" then id,err=B.Withdraw(o.id) end
     if actionResult(id,err) then
         f.editing=nil
         if kind=="withdraw" then chooseTab("history"); selectOrder(o.id) else refresh() end
-        message(L("Modification enregistrée.","Change saved."))
+        message(L("Modification enregistrée."))
     end
 end
 local function setTarget(record)
-    f.target = record
-    f.form.target:SetText(record and UI.plain(record.fullName or record.name) or L("Sélectionnez un joueur à gauche","Select a player on the left"))
+    f.target = GL.BountyTargetEligible(record) and record or nil
+    record = f.target
+    f.form.target:SetText(record and UI.plain(record.fullName or record.name) or L("Sélectionnez un joueur à gauche"))
+    if record and record.faction~="Alliance" and record.faction~="Horde" then
+        f.form.target:SetText(UI.plain(record.fullName or record.name).." · "..L("Faction inconnue"))
+    end
     f.form.publish:SetEnabled(record ~= nil)
 end
 local function syncOptions()
     for _, pair in ipairs(f.form.options) do UI.selectButton(pair.control, f.draft[pair.key]==pair.value) end
     f.form.equal:SetEnabled(f.draft.group=="party")
+    f.form.rules:SetText(huntRules(f.draft.group,f.draft.split).." "..L("Souvenir facultatif."))
 end
 startForm = function(record, origin)
     f.editing, f.origin, f.tab, f.repostFrom = nil, origin, "active", nil
@@ -215,6 +243,7 @@ startForm = function(record, origin)
     f.draft={group="solo",split="winner",souvenir="none"}
     f.form.gold:SetText(""); f.form.quota:SetText("1"); f.form.note:SetText("")
     setTarget(record); syncOptions(); resetList(); message(); refresh()
+    if record and not f.target then actionResult(nil,"ally") end
 end
 local function cancelForm()
     local origin,previous=f.origin,f.repostFrom
@@ -226,29 +255,28 @@ end
 local function publish()
     if not f.target then return end
     local guild=GL.Safe(GetGuildInfo,"player")
-    if not guild then return message(L("Rejoignez une guilde pour publier la prime.","Join a guild to publish this bounty.")) end
+    if not guild then return message(L("Rejoignez une guilde pour publier la prime.")) end
     if f.draftGuild and guild~=f.draftGuild then
-        return message(L("Vous avez changé de guilde. Rouvrez la création pour la nouvelle guilde.","Your guild changed. Reopen the form to post to your new guild."))
+        return message(L("Vous avez changé de guilde. Rouvrez la création pour la nouvelle guilde."))
     end
     local amount, q = copper(f.form.gold:GetText()), f.form.quota:GetText():match("^%d+$")
     q = tonumber(q)
-    if not amount then return message(L("La récompense doit être comprise entre 0 et 1 000 PO.","Enter a reward from 0 to 1,000 gold.")) end
-    if not q or q < 1 or q > 99 then return message(L("Choisissez entre 1 et 99 victoires.","Choose from 1 to 99 wins.")) end
+    if not amount then return message(L("La récompense doit être comprise entre 0 et 1 000 PO.")) end
+    if not q or q < 1 or q > 99 then return message(L("Choisissez entre 1 et 99 victoires.")) end
     local note = f.form.note:GetText()
-    if #note>100 or GL.ContainsControlOrMarkup(note) or note:find(";",1,true) then
-        return message(L("Consigne limitée à 100 octets, sans point-virgule ni code de couleur.","Use up to 100 bytes, without semicolons or color codes."))
-    end
+    local problem=noteError(note)
+    if problem then return message(problem) end
     local options = {quota=q,group=f.draft.group,split=f.draft.split,souvenir=f.draft.souvenir,note=note}
     local id,err = B.Post(f.target.guid,f.target.fullName or f.target.name,amount,options)
-    if actionResult(id,err) then chooseTab("active"); selectOrder(id); message(L("Prime publiée à la guilde.","Bounty posted to your guild.")) end
+    if actionResult(id,err) then chooseTab("active"); selectOrder(id); message(L("Prime publiée à la guilde.")) end
 end
 local function makeForm()
     local form=CreateFrame("Frame",nil,f); f.form=form; form:SetAllPoints(f); form.options={}
-    text(form,358,163,525,26,20,nil,L("Créer une prime de guilde","Create a guild bounty"))
-    text(form,358,202,72,23,13,t.inkMuted,L("Cible","Target"))
+    text(form,358,163,525,26,20,nil,L("Créer une prime de guilde"))
+    text(form,358,202,72,23,13,t.inkMuted,L("Cible"))
     form.target=text(form,430,197,457,44,18,t.ink)
-    text(form,358,251,250,24,14,nil,L("Récompense totale (PO)","Total reward (gold)"))
-    text(form,642,251,250,24,14,nil,L("Victoires requises","Wins required"))
+    text(form,358,251,250,24,14,nil,L("Récompense totale (PO)"))
+    text(form,642,251,250,24,14,nil,L("Victoires requises"))
     form.gold=input(form,358,277,243,12,true); form.quota=input(form,642,277,195,2,true)
     local function choice(key, value, label, x, y, w)
         local c=button(form,label,x,y,w,function()
@@ -259,22 +287,24 @@ local function makeForm()
         form.options[#form.options+1]={key=key,value=value,control=c}
         return c
     end
-    text(form,358,332,135,25,14,nil,L("Chasse","Hunt"))
-    choice("group","solo",L("Hors groupe","Solo only"),489,324,180)
-    choice("group","party",L("Groupe autorisé","Groups allowed"),682,324,196)
-    text(form,358,372,135,24,14,nil,L("Répartition","Payout"))
-    choice("split","winner",L("Au vainqueur","Winner takes all"),489,364,180)
-    form.equal=choice("split","equal",L("Parts égales","Equal shares"),682,364,196)
-    tip(form.equal,L("Entre le vainqueur et les membres de guilde de son groupe présents à proximité de la dernière victoire.","Split with nearby guild party members at the final win."))
-    text(form,358,414,135,24,14,nil,L("Souvenir","Keepsake"))
+    text(form,358,332,135,25,14,nil,L("Chasse"))
+    choice("group","solo",L("Hors groupe"),489,324,180)
+    choice("group","party",L("Groupe autorisé"),682,324,196)
+    text(form,358,372,135,24,14,nil,L("Répartition"))
+    choice("split","winner",L("Au vainqueur"),489,364,180)
+    form.equal=choice("split","equal",L("Parts égales"),682,364,196)
+    tip(form.equal,L("Entre le vainqueur et les membres de guilde de son groupe présents à proximité de la dernière victoire."))
+    text(form,358,414,135,24,14,nil,L("Souvenir"))
     choice("souvenir","none",souvenirs.none,489,406,108)
-    choice("souvenir","screenshot",L("Capture","Screenshot"),606,406,140)
-    choice("souvenir","video",L("Vidéo","Video"),755,406,123)
-    text(form,358,455,540,22,14,nil,L("Consigne libre · facultative","Special instructions · optional"))
+    choice("souvenir","screenshot",L("Capture"),606,406,140)
+    choice("souvenir","video",L("Vidéo"),755,406,123)
+    text(form,358,455,291,22,14,nil,L("Consigne libre · facultative"))
     form.note=input(form,358,482,520,100,true)
-    text(form,358,526,535,56,13,t.inkMuted,L("Les victoires sont comptées automatiquement. Les souvenirs et les consignes libres sont facultatifs.","Wins count automatically. Keepsakes and free instructions are optional."))
-    form.cancel=button(form,L("Annuler","Cancel"),358,597,148,cancelForm,true)
-    form.publish=button(form,L("Créer la prime","Post bounty"),606,597,272,publish,true)
+    form.budget=text(form,655,455,223,22,12,t.inkMuted); form.budget:SetJustifyH("RIGHT")
+    form.note:SetScript("OnTextChanged",function(self) showNoteBudget(self,form.budget) end)
+    form.rules=text(form,358,514,535,79,13,t.inkMuted)
+    form.cancel=button(form,L("Annuler"),358,597,148,cancelForm,true)
+    form.publish=button(form,L("Créer la prime"),606,597,272,publish,true)
     UI.selectButton(form.publish,true); form:Hide()
 end
 
@@ -292,15 +322,15 @@ local function makeDetail()
     p.level.caption=text(p.level,0,0,28,28,14,t.paper); p.level.caption:SetJustifyH("CENTER")
     GL.Safe(p.level.caption.SetJustifyV,p.level.caption,"MIDDLE")
     face:SetScript("OnClick",function() if f.order then showDossier(f.order.target,f.order.name) end end)
-    tip(face,L("Ouvrir la fiche du joueur","Open player dossier"))
+    tip(face,L("Ouvrir la fiche du joueur"))
     p.name=text(p,475,201,420,32,22,t.ink)
     p.identity=text(p,476,236,418,24,13,t.inkMuted)
     local coin=p:CreateTexture(nil,"ARTWORK"); coin:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
     coin:SetPoint("TOPLEFT",476,-271); coin:SetSize(20,20)
     p.price=text(p,503,261,256,38,26,t.red)
-    p.rewardLabel=text(p,769,271,128,29,12,t.inkMuted,L("Récompense totale","Total reward"))
+    p.rewardLabel=text(p,769,271,128,29,12,t.inkMuted,L("Récompense totale"))
     p.rewardLabel:SetJustifyH("RIGHT")
-    for _,y in ipairs({305,376,479}) do
+    for _,y in ipairs({305,397,481}) do
         local rule=p:CreateTexture(nil,"ARTWORK"); rule:SetPoint("TOPLEFT",358,-y)
         rule:SetSize(540,1); rule:SetColorTexture(unpack(t.gold)); rule:SetAlpha(.6)
     end
@@ -309,11 +339,11 @@ local function makeDetail()
     UI.surface(p.track,t.gold); UI.surface(p.track,t.panel,1,1)
     p.fill=p.track:CreateTexture(nil,"ARTWORK"); p.fill:SetPoint("LEFT",p.track,"LEFT",1,0)
     p.fill:SetHeight(4); p.fill:SetColorTexture(.77,.52,.16,1)
-    p.rules=text(p,358,342,548,40,13,t.inkMuted)
-    p.owner=text(p,358,384,291,32,13,t.inkMuted)
-    p.deadline=text(p,670,385,228,32,12,t.inkMuted)
-    text(p,358,419,531,19,12,t.inkMuted,L("Consigne du contrat","Contract instructions"))
-    p.note=text(p,358,440,538,38,14)
+    p.rules=text(p,358,342,548,54,12,t.inkMuted)
+    p.owner=text(p,358,398,291,26,13,t.inkMuted)
+    p.deadline=text(p,670,398,228,26,12,t.inkMuted)
+    text(p,358,426,531,17,12,t.inkMuted,L("Consigne du contrat"))
+    p.note=text(p,358,446,538,34,14)
     p.payment=text(p,358,487,547,26,14)
     p.people={}
     for i=1,5 do
@@ -326,14 +356,23 @@ local function makeDetail()
         local o=f.order
         if o then local saved=pins(true); saved[o.id]=not saved[o.id] or nil; refresh() end
     end,true)
-    bar.pledge=button(bar,L("Contribuer","Contribute"),512,522,160,function() showEditor("pledge") end,true)
-    bar.manage=text(bar,358,563,520,19,12,t.inkMuted,L("Gestion du contrat","Manage contract"))
-    bar.note=button(bar,L("Modifier la consigne","Edit instructions"),358,586,193,function() showEditor("note") end,true)
-    bar.renew=button(bar,L("Renouveler","Renew"),557,586,138,function()
-        if f.order and actionResult(B.Update(f.order.id,nil,true)) then refresh(); message(L("Contrat renouvelé.","Contract renewed.")) end
+    bar.pledge=button(bar,L("Contribuer"),512,522,160,function() showEditor("pledge") end,true)
+    bar.manage=text(bar,358,563,520,19,12,t.inkMuted,L("Gestion du contrat"))
+    bar.note=button(bar,L("Modifier la consigne"),358,586,193,function() showEditor("note") end,true)
+    bar.renew=button(bar,L("Prolonger"),557,586,138,function()
+        if f.order and actionResult(B.Update(f.order.id,nil,true)) then refresh(); message(L("Contrat renouvelé.")) end
     end,true)
-    bar.withdraw=button(bar,L("Retirer la prime","Withdraw bounty"),701,586,194,function() showEditor("withdraw") end,true)
-    p.repost=button(p,L("Renouveler la prime","Renew bounty"),358,565,234,function()
+    bar.withdraw=button(bar,L("Retirer la prime"),701,586,194,function() showEditor("withdraw") end,true)
+    p.retained=button(p,L("Voir la prime retenue"),358,610,282,function()
+        local previous=f.order
+        local current=B.OpenFor(previous.target)
+        if current and current.id==previous.supersededBy and current.state=="open" then
+            chooseTab("active"); selectOrder(current.id)
+        else
+            message(L("La prime retenue est déjà terminée."))
+        end
+    end,true)
+    p.repost=button(p,L("Republier la prime"),358,565,234,function()
         local o=f.order
         if not B.CanRepost(o) then return end
         startForm(contact(o.target) or {guid=o.target,fullName=o.name})
@@ -341,12 +380,14 @@ local function makeDetail()
         f.draft.group,f.draft.split,f.draft.souvenir=o.group or "party",o.split or "equal",o.souvenir or "none"
         f.form.gold:SetText(tostring((o.pot[o.owner] or 0)/10000))
         f.form.quota:SetText(tostring(o.quota or 1)); f.form.note:SetText(o.note or ""); syncOptions()
-        message(L("Nouveau contrat : seule votre mise est reprise. Vérifiez puis publiez.","New contract: only your own pledge is carried over. Review and post."))
+        message(L("Nouveau contrat : seule votre mise est reprise. Vérifiez puis publiez."))
     end,true)
     local edit=CreateFrame("Frame",nil,p); f.editor=edit; edit:SetAllPoints(p)
-    edit.title=text(edit,358,495,540,20,14); edit.field=input(edit,358,520,532,100,true)
+    edit.budget=text(edit,665,497,227,22,12,t.inkMuted); edit.budget:SetJustifyH("RIGHT")
+    edit.title=text(edit,358,495,303,23,14); edit.field=input(edit,358,520,532,100,true)
+    edit.field:SetScript("OnTextChanged",function(self) showNoteBudget(self,edit.budget) end)
     edit.ok=button(edit,"",358,565,235,commitEdit,true)
-    edit.cancel=button(edit,L("Annuler","Cancel"),606,565,160,function() f.editing=nil; refresh() end,true)
+    edit.cancel=button(edit,L("Annuler"),606,565,160,function() f.editing=nil; refresh() end,true)
     edit:Hide()
 end
 local function renderDetail(o)
@@ -360,14 +401,15 @@ local function renderDetail(o)
     visible(p.level,lvl~=nil); if lvl then p.level.caption:SetText(tostring(lvl)) end
     p.identity:SetText(UI.plain(table.concat({race,class,faction}," · ")))
     p.price:SetText(money(total(o)))
-    local winner=o.winner and o.winner.actor
+    local final=o.winner or o.priorWinner
+    local winner=final and final.actor
     local me=mine()
     local a=account(o,me)
     visible(p.stars,a.remaining>0)
     if a.remaining>0 then p.kicker:SetTextColor(.43,.23,.025) else p.kicker:SetTextColor(unpack(t.red)) end
     for i,c in ipairs(p.people) do c.guid=nil; c:Hide() end
     if winner then
-        p.kicker:SetText(L("Prime faite · ","Bounty complete · ")..a.status)
+        p.kicker:SetText(o.supersededBy and states.superseded or L("Prime faite · ")..a.status)
         local hunters=members(o)
         for i,h in ipairs(hunters) do
             local c=p.people[i]
@@ -379,25 +421,29 @@ local function renderDetail(o)
                     local send,unreceived,received=B.Payment(o,payer,h)
                     share,waiting,toSend=share+unreceived+received,waiting+unreceived,toSend+send
                 end
-                local status=share==0 and L("Sans courrier","No mail due") or waiting==0 and L("Reçu","Received")
-                    or toSend==0 and L("En transit","In transit") or L("En attente","Pending")
+                local status=share==0 and L("Sans courrier") or waiting==0 and L("Reçu")
+                    or toSend==0 and L("En transit") or L("En attente")
                 c:SetText(UI.plain(who(h)).." · "..status)
                 local breakdown=UI.plain(who(h)).."\n"..status
                 if share>0 then breakdown=breakdown.." · "..money(share-waiting).." / "..money(share) end
-                if retained>0 then breakdown=breakdown.."\n"..L("Part conservée : ","Retained share: ")..money(retained) end
+                if retained>0 then breakdown=breakdown.."\n"..L("Part conservée : ")..money(retained) end
                 tip(c,breakdown); c:Show()
             end
         end
         local detail={a.role}
-        if a.due>0 then detail[#detail+1]=L("À envoyer : ","To send: ")..money(a.due) end
-        if a.incoming>0 then detail[#detail+1]=L("À recevoir : ","To receive: ")..money(a.incoming) end
-        if a.received>0 then detail[#detail+1]=L("Reçu : ","Received: ")..money(a.received) end
-        if a.due+a.incoming==0 and a.transit>0 then detail[#detail+1]=L("En transit : ","In transit: ")..money(a.transit) end
+        if a.due>0 then detail[#detail+1]=L("À envoyer : ")..money(a.due) end
+        if a.incoming>0 then detail[#detail+1]=L("À recevoir : ")..money(a.incoming) end
+        if a.received>0 then detail[#detail+1]=L("Reçu : ")..money(a.received) end
+        if a.due+a.incoming==0 and a.transit>0 then detail[#detail+1]=L("En transit : ")..money(a.transit) end
         p.payment:SetText(table.concat(detail,"  ·  "))
-        p.progress:SetText(L("Victoires : ","Wins: ")..(o.quota or 1).."/"..(o.quota or 1))
+        p.progress:SetText(L("Victoires : ")..(o.quota or 1).."/"..(o.quota or 1))
     else
-        p.kicker:SetText(o.state=="open" and L("MISE À PRIX","WANTED") or states[o.state])
-        p.progress:SetText(L("Vos victoires : ","Your wins: ")..B.Progress(o).."/"..(o.quota or 1).."   ·   "..(states[o.state] or ""))
+        p.kicker:SetText(o.state=="open" and L("MISE À PRIX") or states[o.state])
+        if o.state=="claimed" then
+            p.progress:SetText(L("Victoires : ")..(o.quota or 1).."/"..(o.quota or 1))
+        else
+            p.progress:SetText(L("Vos victoires : ")..B.Progress(o).."/"..(o.quota or 1))
+        end
         p.payment:SetText("")
     end
     local gauge=o.state=="open" and (o.quota or 1)>1
@@ -407,16 +453,18 @@ local function renderDetail(o)
         visible(p.fill,part>0)
         if part>0 then p.fill:SetWidth(127*part) end
     end
-    p.rules:SetText((o.group=="solo" and L("Chasse hors groupe","Solo only") or L("Groupe autorisé","Groups allowed"))
-        .."   ·   "..(o.split=="equal" and L("Or partagé à parts égales","Gold split equally") or L("Or au vainqueur","Winner takes all"))
-        .."\n"..L("Souvenir : ","Keepsake: ")..(souvenirs[o.souvenir] or souvenirs.none))
-    p.owner:SetText(L("Commanditaire : ","Issuer: ")..UI.plain(who(o.owner)))
-    p.deadline:SetText(winner and L("Terminée : ","Completed: ")..compactDate(o.winner.time)
-        or L("Échéance : ","Expires: ")..compactDate(o.expires))
-    p.note:SetText(o.note and o.note~="" and UI.plain(o.note) or L("Aucune consigne particulière.","No special instructions."))
-    visible(p.repost,B.CanRepost(o)); if o.state~="open" then f.editing=nil end
+    local rules=huntRules(o.group,o.split)
+    if o.souvenir and o.souvenir~="none" then
+        rules=rules.." "..L("Souvenir facultatif : %s."):format(souvenirs[o.souvenir] or souvenirs.none)
+    end
+    p.rules:SetText(rules)
+    p.owner:SetText(L("Commanditaire : ")..UI.plain(who(o.owner)))
+    p.deadline:SetText(winner and L("Terminée : ")..compactDate(final.time)
+        or L("Échéance : ")..compactDate(o.expires))
+    p.note:SetText(o.note and o.note~="" and UI.plain(o.note) or L("Aucune consigne particulière."))
+    visible(p.retained,o.state=="superseded"); visible(p.repost,o.state~="superseded" and B.CanRepost(o)); if o.state~="open" then f.editing=nil end
     visible(f.tools,isOpen(o) and not f.editing); visible(f.editor,f.editing~=nil)
-    f.tools.pin:SetText(pins()[o.id] and L("Désépingler","Unpin") or L("Épingler","Pin"))
+    f.tools.pin:SetText(pins()[o.id] and L("Désépingler") or L("Épingler"))
     f.tools.pledge:SetEnabled(o.state=="open")
     local owner=o.state=="open" and o.owner==mine()
     visible(f.tools.manage,owner); visible(f.tools.note,owner); visible(f.tools.renew,owner); visible(f.tools.withdraw,owner)
@@ -428,11 +476,11 @@ end
 local function filteredContacts(query)
     local list, seen={},{}
     local current=GL.Identity("target")
-    if current and current.guid and current.guid~=mine() and (current.fullName or ""):lower():find(query:lower(),1,true) then
+    if GL.BountyTargetEligible(current) and (current.fullName or ""):lower():find(query:lower(),1,true) then
         list[#list+1]=current; seen[current.guid]=true
     end
     for _,record in ipairs(GL.SearchPlayers({query=query,sort="name"})) do
-        if record.guid and record.guid~=mine() and not seen[record.guid] then list[#list+1]=record end
+        if GL.BountyTargetEligible(record) and not seen[record.guid] then list[#list+1]=record end
     end
     return list
 end
@@ -485,7 +533,7 @@ refresh=function()
         f.selected=selected and selected.id
     end
     f.order=selected; f.offset=math.max(0,math.min(f.offset,#list-pageSize)); f.count=#list
-    f.heading:SetText(creating and L("Choisir la cible","Choose a target") or f.tab=="history" and L("Mon historique","My history") or L("Primes en cours","Open bounties"))
+    f.heading:SetText(creating and L("Choisir la cible") or f.tab=="history" and L("Mon historique") or L("Primes en cours"))
     visible(f.heading,creating or f.tab~="history")
     for key,b in pairs(f.roles) do
         visible(b,not creating and f.tab=="history"); UI.selectButton(b,key==f.role)
@@ -493,7 +541,7 @@ refresh=function()
     UI.selectButton(f.activeTab,not creating and f.tab=="active"); UI.selectButton(f.historyTab,not creating and f.tab=="history")
     visible(f.filter,not creating); visible(f.new,not creating)
     if not creating then
-        for _,entry in ipairs(filterLists[f.tab]) do if entry[1]==f.filterKey then f.filter:SetText(L("Filtre : ","Filter: ")..entry[2]) end end
+        for _,entry in ipairs(filterLists[f.tab]) do if entry[1]==f.filterKey then f.filter:SetText(L("Filtre : ")..entry[2]) end end
     end
     for i,row in ipairs(f.rows) do
         local e=list[i+f.offset]; row.entry=e; visible(row,e~=nil)
@@ -506,17 +554,17 @@ refresh=function()
             GL.PaintBookPortrait(row,r)
             row.title:SetText(UI.plain(e.fullName or e.name))
             local _,class,_,level=targetInfo(r)
-            row.meta:SetText(creating and ((level and (L("Niv. ","Lvl ")..level.." · ") or "")..UI.plain(class))
+            row.meta:SetText(creating and ((level and (L("Niv. ")..level.." · ") or "")..UI.plain(class))
                 or a and (a.role.." · "..a.status) or (money(total(e)).." · "..(states[e.state] or "")))
             visible(row.selected,creating and f.target and f.target.guid==id or not creating and f.selected==e.id)
         end
     end
     f.prev:SetEnabled(f.offset>0); f.next:SetEnabled(f.offset+pageSize<#list)
     f.page:SetText(#list==0 and "0" or (f.offset+1).."–"..math.min(f.offset+pageSize,#list).." / "..#list)
-    f.empty:SetText(#list==0 and (query~="" and L("Aucun résultat pour cette recherche.","No results for your search.")
-        or creating and L("Aucun contact identifié. Ciblez un personnage en jeu.","No known contact. Target a player in game.")
-        or f.tab=="active" and not GL.Safe(GetGuildInfo,"player") and L("Rejoignez une guilde pour utiliser les primes.","Join a guild to use bounties.")
-        or L("Aucune prime dans cette sélection.","No bounties in this selection.")) or "")
+    f.empty:SetText(#list==0 and (query~="" and L("Aucun résultat pour cette recherche.")
+        or creating and L("Aucun adversaire identifié. Ciblez un adversaire en jeu.")
+        or f.tab=="active" and not GL.Safe(GetGuildInfo,"player") and L("Rejoignez une guilde pour utiliser les primes.")
+        or L("Aucune prime dans cette sélection.")) or "")
     if not creating then renderDetail(selected) end
 end
 
@@ -524,8 +572,8 @@ local function build()
     f=UI.bookWindow("GrudgeLedgerBounties", "Grudge Ledger")
     f.tab,f.filterKey,f.offset="active","all",0
     GL.SetupBookNavigation(f,"bounties")
-    f.activeTab=button(f,L("En cours","Open"),35,162,122,function() chooseTab("active") end)
-    f.historyTab=button(f,L("Mon historique","My history"),160,162,145,function() chooseTab("history") end)
+    f.activeTab=button(f,L("À chasser"),35,162,122,function() chooseTab("active") end)
+    f.historyTab=button(f,L("Mon historique"),160,162,145,function() chooseTab("history") end)
     f.heading=text(f,36,203,268,26,18,t.paper)
     f.roles={}
     local function role(key,title,x,width)
@@ -533,11 +581,11 @@ local function build()
             f.role=key; f.offset=0; f.selected=nil; f.filters:Hide(); refresh()
         end)
     end
-    role("all",L("Tout","All"),35,54)
-    role("hunted",L("Mes chasses","My hunts"),92,102)
-    role("issued",L("Mes contrats","My contracts"),197,110)
+    role("all",L("Tout"),35,54)
+    role("hunted",L("Remportées"),92,102)
+    role("issued",L("Publiées"),197,110)
     f.search=input(f,36,236,269,64,false)
-    f.placeholder=text(f.search,9,5,250,19,12,t.muted,L("Rechercher un joueur…","Search players…"))
+    f.placeholder=text(f.search,9,5,250,19,12,t.muted,L("Rechercher un joueur…"))
     f.filter=button(f,"",36,270,269,function()
         if f.filters:IsShown() then return f.filters:Hide() end
         for n,c in ipairs(f.filterChoices) do
@@ -574,7 +622,7 @@ local function build()
     f.prev=button(f,"<",36,562,66,function() shift(-pageSize) end)
     f.next=button(f,">",239,562,66,function() shift(pageSize) end)
     f.page=text(f,101,568,137,18,12,t.paper); f.page:SetJustifyH("CENTER")
-    f.new=button(f,L("Créer une prime","Create bounty"),36,609,269,function() startForm(nil) end)
+    f.new=button(f,L("Créer une prime"),36,609,269,function() startForm(nil) end)
     local listArea=CreateFrame("Frame",nil,f)
     listArea:SetPoint("TOPLEFT",33,-305); listArea:SetSize(275,pageSize*40+8)
     if listArea.EnableMouseWheel then
@@ -632,10 +680,12 @@ function GL.OpenBounties(guid,mode)
             if o.target==guid and isOpen(o) then selectOrder(o.id); return f end
         end
         chooseTab("history")
+        local recent
         for _,o in pairs(currentOrders()) do
-            if o.target==guid then selectOrder(o.id); return f end
+            if o.target==guid and (not recent or o.at>recent.at or o.at==recent.at and o.id>recent.id) then recent=o end
         end
-        chooseTab("active"); message(L("Aucune prime pour ce joueur.","No bounty for this player."))
+        if recent then selectOrder(recent.id); return f end
+        chooseTab("active"); message(L("Aucune prime pour ce joueur."))
     end
     return f
 end

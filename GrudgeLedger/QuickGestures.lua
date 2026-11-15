@@ -67,7 +67,7 @@ GL.On("READY", function()
             GameTooltip:SetText(L(title))
             GameTooltip:AddLine(L(help), 1, 0.85, 0.6)
             local recipient = GL.Identity("target")
-            GameTooltip:AddLine(recipient and L("Cible : %s"):format(recipient.fullName:gsub("|", "||")) or L("Sélectionne un joueur."), 1, 1, 1)
+            GameTooltip:AddLine(recipient and L("Cible : %s"):format(recipient.fullName:gsub("|", "||")) or L("Sélectionnez un joueur."), 1, 1, 1)
             if token == "SPIT" then
                 GameTooltip:AddLine(L("Le /spit natif peut rester un crachat au sol : le jeu décide du texte reçu, même avec une cible."), 1, 0.75, 0.4, true)
             end

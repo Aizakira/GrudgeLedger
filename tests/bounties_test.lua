@@ -211,4 +211,87 @@ now=now+39*86400
 a.event(nil,"PLAYER_LOGIN"); flush()
 b.online=true; b.event(nil,"PLAYER_LOGIN"); flush()
 assert(a.b.History()[archived].state=="paid" and b.b.History()[archived].state=="paid")
+-- Two publishers cannot see each other before the first exchange. All clients
+-- choose the same target contract, and replaying each packet emits only one debt.
+local simultaneous="Player-8-overlap"
+local replacementNotices={}
+for _,p in ipairs({a,b,late}) do
+    local who=p.id
+    p.env.GrudgeLedger.Print=function(text)
+        if text:find("Prime remplacée",1,true) then replacementNotices[who]=(replacementNotices[who] or 0)+1 end
+    end
+end
+local one=assert(a.b.Post(simultaneous,"Overlap",120000))
+local two=assert(b.b.Post(simultaneous,"Overlap",240000))
+flush()
+local canonical=a.b.OpenFor(simultaneous).id
+local replaced=canonical==one and two or one
+for _,p in ipairs({a,b,late}) do
+    assert(p.b.OpenFor(simultaneous).id==canonical)
+    local other=p.b.List()[replaced]
+    assert(other.state=="superseded" and other.supersededBy==canonical and not p.b.Pledge(replaced,1))
+end
+late.b.Kill(simultaneous);flush()
+local issuer=canonical==one and a or b
+local otherIssuer=canonical==one and b or a
+assert(replacementNotices[otherIssuer.id]==1 and not replacementNotices[issuer.id] and not replacementNotices[late.id])
+for _,p in ipairs({a,b,late}) do
+    local all=p.b.List()
+    assert(all[canonical].winner.actor==late.id and p.b.Due(all[canonical],issuer.id,late.id)==all[canonical].pot[issuer.id])
+    assert(not all[replaced].winner and p.b.Progress(all[replaced],late.id)==0 and p.b.Due(all[replaced],b.id,late.id)==0)
+end
+
+-- An already-dispatched installment and the rest of its contract survive an
+-- older, overlapping publication arriving late. The inbox still settles it.
+local targetLate="Player-8-late"
+local owed=assert(b.b.Post(targetLate,"Late",1000));flush()
+a.b.Kill(targetLate);flush()
+assert(b.b.ConfirmPayment(owed,a.id,400));flush()
+local olderStamp=b.b.List()[owed].at-1
+local oldRaw=table.concat({"O",late.id,77,olderStamp,targetLate,999,"Late"},";")
+for _,p in ipairs({a,b}) do
+    p.event(nil,"CHAT_MSG_ADDON","GLBounty1",oldRaw,"GUILD",late.name)
+    local all=p.b.List()
+    assert(all[late.id..":77"].supersededBy==owed and p.b.Due(all[owed],b.id,a.id)==600)
+end
+inbox(a,b.name,"[GL:"..owed.."/0] Late",400);flush()
+assert(select(3,b.b.Payment(b.b.List()[owed],b.id,a.id))==400)
+
+-- A real native send is already in flight on a partition when an overlapping
+-- contract that has also been paid arrives. Neither contract can charge twice.
+local overlapMail="Player-8-inflight"
+local inFlight=assert(b.b.Post(overlapMail,"Mail",700));flush()
+a.b.Kill(overlapMail);flush()
+env.SendMailNameEditBox.v="";env.SendMailSubjectEditBox.v="";env.SendMailMoney.n=0
+assert(b.b.PrepareMail(inFlight,a.id))
+local subject=env.SendMailSubjectEditBox.v
+send(a.name,subject)
+local otherOrder,claim=late.id..":101",a.id..":102"
+local function raw(p,actor,kind,seq,stamp,order,value,detail)
+    local message=table.concat({kind,actor.id,seq,stamp,order,value,detail},";")
+    p.event(nil,"CHAT_MSG_ADDON","GLBounty1",message,"GUILD",actor.name)
+end
+raw(b,late,"O",101,now-300,overlapMail,500,"Mail")
+raw(b,a,"K",102,now,otherOrder,"","")
+raw(b,late,"F",103,now,otherOrder,claim,"")
+raw(b,late,"Y",104,now,otherOrder,500,a.id)
+assert(b.b.List()[inFlight].state=="superseded")
+b.event(nil,"MAIL_SEND_SUCCESS");b.event(nil,"MAIL_SEND_SUCCESS")
+local historical=b.b.History()[inFlight]
+assert(historical.state=="superseded" and historical.paid[b.id.."/"..a.id]==700)
+assert(b.b.Due(historical,b.id,a.id)==0 and select(2,b.b.Payment(historical,b.id,a.id))==700)
+raw(b,a,"V",105,now,inFlight,"0,700",b.id)
+assert(select(3,b.b.Payment(b.b.History()[inFlight],b.id,a.id))==700)
+
+local guildTarget="Player-8-friend"
+a.env.UnitFactionGroup=function() return "Alliance" end
+a.env.GrudgeLedger.Get=function() return {guid=guildTarget,faction="Alliance"} end
+assert(not a.env.GrudgeLedger.BountyTargetEligible({guid=guildTarget,faction="Alliance"}))
+local rejected,reason=a.b.Post(guildTarget,"Friend",1)
+assert(not rejected and reason=="ally" and not a.b.OpenFor(guildTarget))
+a.env.GrudgeLedger.Get=function() return {guid=guildTarget,faction="Horde"} end
+assert(a.b.Post(guildTarget,"Opponent",1))
+assert(a.b.ShareFights(false) and a.b.ShareDeaths(true))
+local fights,deaths=a.b.Sharing()
+assert(fights==false and deaths==true)
 print("PASS guild bounties: offline relay, duplicate messages, owner resolution, split, partial payments, expiration, withdrawal, automatic order, guild isolation.")

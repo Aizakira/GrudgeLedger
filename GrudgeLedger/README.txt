@@ -1,6 +1,8 @@
-GRUDGE LEDGER — 0.11.0-alpha.3
+GRUDGE LEDGER — 0.11.0-alpha.4
 
-Classements → Guildes regroupe les relations, les combats, les membres connus et les avis de guilde. La commande /gl guildes ouvre cette rubrique.
+Journal → Notes → Étiquettes : ajoutez ou retirez vos repères privés (butin ninja, joueur boosté, départ anticipé, comportement toxique, sabotage, fiable). Retrouvez-les à l’invitation, en groupe, au survol et avec le filtre du Journal.
+
+Relations → Guildes regroupe les relations, les combats, les membres connus et les avis de guilde. La commande /gl guildes ouvre cette rubrique.
 
 Alpha : ouvrir /gl, puis Primes. Un clic sur une ligne sélectionne la cible ou le contrat ; le portrait du contrat ouvre la fiche du joueur (équipement, arbres de talents, JcJ et réputations). À la boîte aux lettres, sélectionner la prime ; le jeu prépare une part à la fois. Cliquer manuellement sur Envoyer pour chaque destinataire.
 

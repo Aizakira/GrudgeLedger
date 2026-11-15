@@ -20,9 +20,16 @@ local function add(n)
     return p
 end
 local a,b=add("Alpha"),add("Beta")
+local ally=add("GuildAlly")
+GL.Get(ally).faction="Alliance"
+assert(not GL.ContactBountyMode(GL.Get(ally)))
+assert(GL.ContactBountyMode(GL.Get(a))=="create")
+
 assert(GL.Bounties.Post(b.guid,b.fullName,10000))
 local f=GL.OpenBounties()
-click(f.new); f.search:SetText("Alpha")
+click(f.new); f.search:SetText("GuildAlly")
+assert(f.count==0 and not f.form.publish:IsEnabled())
+f.search:SetText("Alpha")
 assert(f.count==1 and f.rows[1].raceIcon and not f.target)
 click(f.rows[1])
 assert(not GrudgeLedgerPlayerDossier and f.rows[1].selected:IsShown() and f.form:IsVisible())
@@ -32,9 +39,15 @@ f.form.gold:SetText("120"); f.form.quota:SetText("3"); f.form.note:SetText("Scre
 for _,pair in ipairs(f.form.options) do
     if pair.value=="party" or pair.value=="equal" or pair.value=="screenshot" then click(pair.control) end
 end
+assert(f.form.rules:GetText():find("équipiers de guilde visibles",1,true))
+f.form.note:SetText(string.rep("é",51))
+assert(f.form.budget:GetText():find("102",1,true)); click(f.form.publish)
+assert(f.form:IsShown() and f.feedback:GetText():find("Raccourcissez",1,true))
+f.form.note:SetText("Screenshot for the guild.")
 click(f.form.publish)
 local o=f.order
 assert(o and o.target==a.guid and o.quota==3 and o.group=="party" and o.split=="equal" and o.souvenir=="screenshot")
+assert(f.detail.rules:GetText():find("même chasseur",1,true) and f.detail.rules:GetText():find("Capture",1,true))
 assert(o.pot[o.owner]==1200000 and o.note=="Screenshot for the guild.")
 assert(f.detail.progress:GetText():find("0/3",1,true) and not f.form:IsShown())
 click(f.tools.pledge); f.editor.field:SetText("3"); click(f.editor.ok)

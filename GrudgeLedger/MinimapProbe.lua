@@ -44,7 +44,7 @@ local function cleanup(state)
     if state and state.soft then
         pcall(Minimap.UpdateMouseoverAtPoint, Minimap, -10000, -10000)
         local ok = pcall(Minimap.SetUsingSoftCursor, Minimap, false)
-        if not ok then say("Impossible de restaurer le curseur virtuel : utilise /reload.") end
+        if not ok then say("Impossible de restaurer le curseur virtuel : utilisez /reload.") end
         state.soft = nil
     end
 end
@@ -63,11 +63,11 @@ local function finish(text)
 end
 local function check(state, offMap)
     if not Minimap:IsVisible() then fail("La minimap n'est pas visible.") end
-    if InCombatLockdown() then fail("Tu es en combat.") end
-    if UnitIsDeadOrGhost("player") then fail("Ton personnage est mort.") end
+    if InCombatLockdown() then fail("Vous êtes en combat.") end
+    if UnitIsDeadOrGhost("player") then fail("Votre personnage est mort.") end
     local speed = GetUnitSpeed("player")
     if not public(speed, "number") then fail("Le jeu ne fournit pas une vitesse lisible.") end
-    if speed ~= 0 then fail("Ton personnage se deplace.") end
+    if speed ~= 0 then fail("Votre personnage se déplace.") end
     if offMap and Minimap:IsMouseOver() then fail("La souris est revenue sur la minimap pendant la relecture.") end
     if state.scale then
         local x, y = Minimap:GetCenter()
@@ -108,7 +108,7 @@ local function start()
     active = state
     local _, build = GetBuildInfo()
     say("v0.2.0 / Build " .. (public(build, "string") and build or L("inconnu")) ..
-        L(" : tu as 30 secondes pour survoler le POINT d'un joueur IMMOBILE dans la minimap en haut a droite. Reste immobile aussi."))
+        L(" : vous avez 30 secondes pour survoler le point d'un joueur immobile sur la minicarte en haut à droite. Restez immobile également."))
     local attempts = 0
     local function capture()
         attempts = attempts + 1
@@ -132,7 +132,7 @@ local function start()
         for _, key in ipairs({ "x", "y", "cx", "cy", "scale", "zoom" }) do
             if not public(state[key], "number") then fail("Coordonnee indisponible ou protegee : " .. key .. ".") end
         end
-        say("Point capture. Retire la souris de la minimap maintenant, sans bouger ton personnage. Attends le resultat.")
+        say("Point enregistré. Retirez le curseur de la minicarte en gardant votre personnage immobile. Attendez le résultat.")
         local leaveAttempts = 0
         local function replay()
             state.step = "sortie de la souris"
@@ -181,7 +181,7 @@ SlashCmdList.GRUDGELEDGERPROBE = function(message)
     local command = (message or ""):lower():match("^%s*(.-)%s*$")
     if command == "test" then start()
     elseif command == "stop" then if active then finish("ANNULE par le joueur.") end
-    else say(latest or (GrudgeLedger and GrudgeLedger.db and GrudgeLedger.db.minimapProbe and GrudgeLedger.db.minimapProbe.result) or "v0.2.0 /glprobe test : survole un point, puis retire la souris au message. /glprobe stop : annuler. Aucun changement de pistage.") end
+    else say(latest or (GrudgeLedger and GrudgeLedger.db and GrudgeLedger.db.minimapProbe and GrudgeLedger.db.minimapProbe.result) or "v0.2.0 /glprobe test : survolez un point, puis retirez le curseur au signal. /glprobe stop : annuler. Aucun changement de pistage.") end
 end
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -189,7 +189,7 @@ events:RegisterEvent("PLAYER_STARTED_MOVING")
 events:RegisterEvent("PLAYER_LEAVING_WORLD")
 events:SetScript("OnEvent", function(_, event)
     if not active then return end
-    local reasons = { PLAYER_REGEN_DISABLED = "Debut du combat.", PLAYER_STARTED_MOVING = "Ton personnage a commence a bouger.",
+    local reasons = { PLAYER_REGEN_DISABLED = "Debut du combat.", PLAYER_STARTED_MOVING = "Votre personnage a commencé à bouger.",
         PLAYER_LEAVING_WORLD = "Changement de zone ou deconnexion." }
     finish("ANNULE : " .. (reasons[event] or "Evenement inattendu."))
 end)

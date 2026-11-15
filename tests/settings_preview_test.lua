@@ -5,7 +5,11 @@ time, GetServerTime = function() return now end, function() return now end
 SOUNDKIT = { IG_QUEST_LOG_OPEN = 7, RAID_WARNING = 12 }
 PlaySound = function(id) sounds[#sounds+1] = id end
 SendChatMessage = function(message) messages[#messages+1] = message end
-for _, module in ipairs({"Core", "Display", "UITheme", "UI"}) do
+local toc=assert(io.open(TEST_ROOT .. "/GrudgeLedger.toc","r"))
+local version=toc:read("*a"):match("## Version: ([^\r\n]+)")
+toc:close()
+GetAddOnMetadata=function(name,key) assert(name=="GrudgeLedger" and key=="Version"); return version end
+for _, module in ipairs({"Core", "Display", "UITheme", "UI","Bounties"}) do
     assert(loadfile(TEST_ROOT .. "/" .. module .. ".lua"))("GrudgeLedger")
 end
 local GL = GrudgeLedger
@@ -13,6 +17,19 @@ GL.InitDB()
 local function click(button) button:GetScript("OnClick")(button, "LeftButton") end
 SlashCmdList.GRUDGELEDGER("settings")
 local f = GrudgeLedgerSettings
+assert(GL.version==version)
+GetNormalizedRealmName=function() return "Realm" end
+mock.units.player.guild="Première"
+mock.Fire("PLAYER_GUILD_UPDATE")
+assert(f.shareFights:IsEnabled() and not f.shareFights:GetChecked() and not f.shareDeaths:GetChecked())
+f.shareFights:SetChecked(true); click(f.shareFights)
+assert(select(1,GL.Bounties.Sharing()) and not select(2,GL.Bounties.Sharing()))
+mock.units.player.guild="Deuxième"; mock.Fire("PLAYER_GUILD_UPDATE")
+assert(not f.shareFights:GetChecked() and f.shareGuild:GetText():find("Deuxième",1,true))
+f.shareDeaths:SetChecked(true); click(f.shareDeaths)
+assert(not select(1,GL.Bounties.Sharing()) and select(2,GL.Bounties.Sharing()))
+mock.units.player.guild=nil; mock.Fire("PLAYER_GUILD_UPDATE")
+assert(not f.shareFights:IsEnabled() and not f.shareDeaths:IsEnabled())
 local size, delay = f.sliders.iconSize, f.sliders.alertCooldown
 local changes = 0
 GL.On("SETTINGS", function() changes = changes + 1 end)

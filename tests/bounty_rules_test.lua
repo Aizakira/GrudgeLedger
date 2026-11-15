@@ -10,6 +10,7 @@ local gl={db={},Safe=function(f,...) return f(...) end,Now=function() return now
     On=function() end,Emit=function(k) if k=="BOUNTIES_CHANGED" then changed=(changed or 0)+1 end end,
     Print=function() notices=(notices or 0)+1 end}
 env.GrudgeLedger=gl
+env.SlashCmdList={}
 env.GetGuildInfo=function() return "Guild" end
 env.GetNormalizedRealmName=function() return "Realm" end
 env.GetNumGuildMembers=function() return #ids end
@@ -94,4 +95,17 @@ assert(b.Due(b.List()[grouped],owner,hunter)==50000 and b.ConfirmPayment(grouped
 assert(b.History()[grouped].state=="sent" and not b.ConfirmPayment(grouped,hunter,1))
 receive("V",hunter,15,grouped,"0,60000",owner)
 assert(b.History()[grouped].state=="paid")
+local sameSecond="Player-8-second"
+receive("O",partner,41,sameSecond,"123","Previous")
+receive("X",partner,42,partner..":41","","")
+local noticesBefore=notices
+local successor=assert(b.Post(sameSecond,"Successor",400))
+assert(b.OpenFor(sameSecond).id==successor and b.List()[partner..":41"].state=="withdrawn")
+assert(notices==noticesBefore,"publishing after an observed same-second close must not send a replacement warning")
+env.SlashCmdList.GLBOUNTY("nota "..successor.." nueva")
+assert(b.OpenFor(sameSecond).note=="nueva")
+env.SlashCmdList.GLBOUNTY("renew "..successor.." updated")
+assert(b.OpenFor(sameSecond).note=="updated")
+now=now+7*86400+1
+assert(b.CanRepost(b.List()[successor]) and b.Post(sameSecond,"Later",100))
 print("PASS guild alpha rules: personal quota, replay, legacy claims, solo/group, split, notification and durable history")

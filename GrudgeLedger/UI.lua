@@ -7,6 +7,7 @@ local statisticsWindow, journalWindow, guideWindow
 local showSettings, inspectEvent
 local selectedKey, filter, offset = nil, "all", 0
 local factionFilter = "all"
+local tagFilter = "all"
 local notesOnly = false
 local listSort, listDetail = "recent", "identity"
 local sortChoices = { { "recent", L("Dernière interaction") }, { "name", L("Nom") }, { "reputation", L("Réputation") }, { "kills", L("Victoires") }, { "deaths", L("Morts") }, { "encounters", L("Nb de rencontres") } }
@@ -326,7 +327,12 @@ local function eventTitle(event)
         end
     end
     if event.kind == "trade" then return L("Échange terminé") end
-    if event.kind == "death" then return L("Vous a tué") end
+    if event.kind == "death" then
+        if event.evidence == "Le familier de ce joueur vous a porté le coup fatal." then return L("Coup fatal de son familier") end
+        if event.killingBlow or event.evidence == "Dégâts létaux explicitement attribués à ce joueur." then return L("A porté le coup fatal") end
+        if event.killingBlow == false or event.evidence == "Participation à l’attaque ayant causé votre mort." then return L("A participé à votre mort") end
+        return L("Mort en combat")
+    end
     if event.kind == "kill" then return L("Vous l'avez vaincu") end
     if event.kind == "aggression" then return L("Vous a infligé des dégâts") end
     if event.kind == "reputation" then
@@ -360,7 +366,7 @@ local function bookNavigation(f, selected)
     f.navigation = {}
     for i, entry in ipairs({
         { "ledger", L("Journal"), function() GL.ShowLedger() end },
-        { "players", L("Classements"), function() GL.ShowStatistics() end },
+        { "players", L("Relations"), function() GL.ShowStatistics() end },
         { "journal", L("Bilan"), function() GL.ShowJournal("summary") end },
         { "bounties", L("Primes"), function() GL.OpenBounties() end },
     }) do
@@ -381,8 +387,19 @@ local function activeBounty(guid)
     if not guid or not GL.Bounties then return end
     return GL.Bounties.OpenFor and GL.Bounties.OpenFor(guid)
 end
+function GL.ContactBountyMode(record)
+    if not record or not record.guid or not GL.Bounties then return end
+    if activeBounty(record.guid) then return "view" end
+    if GL.BountyTargetEligible(record) then return "create" end
+    local history=GL.db and GL.db.bountyHistory
+    for _,order in pairs(history and history[GL.Safe(UnitGUID,"player")] or {}) do
+        if order.target==record.guid then return "view" end
+    end
+end
 function GL.OpenContactBounty(guid)
-    if guid then return GL.OpenBounties(guid, activeBounty(guid) and "view" or "create") end
+    if not guid then return end
+    local mode=GL.ContactBountyMode(GL.Get("guid:"..guid) or {guid=guid})
+    if mode then return GL.OpenBounties(guid,mode) end
 end
 local refresh
 
@@ -456,7 +473,7 @@ function GL.ShowGuilds(identity)
         guildWindow, f.offset = f, 0
         label(f, L("Les membres héritent de l'avis de leur guilde. Un choix personnel reste prioritaire."), nil, 18, -54, 620)
         f.rows = {}
-        f.empty = label(f, L("Aucune guilde enregistrée.\n\nSaisis son nom exact à droite ou utilise la guilde de ta cible."), nil, 23, -119, 230)
+        f.empty = label(f, L("Aucune guilde enregistrée.\n\nSaisissez son nom exact à droite ou utilisez la guilde de votre cible."), nil, 23, -119, 230)
         f.empty:SetTextColor(unpack(theme.muted))
         for i = 1, 9 do
             local row = CreateFrame("Button", nil, f)
@@ -509,7 +526,7 @@ function GL.ShowGuilds(identity)
         end)
         button(f, L("Guilde de la cible"), 288, -426, 343, function()
             local target = GL.Identity("target")
-            if not target or not target.guild then f.status:SetText(L("Sélectionne un joueur dont la guilde est connue.")) return end
+            if not target or not target.guild then f.status:SetText(L("Sélectionnez un joueur dont la guilde est connue.")) return end
             GL.ShowGuilds(target)
         end)
         selectRealm(f, GL.Clean(GL.Safe(GetRealmName), "string"))
@@ -555,35 +572,35 @@ local function showIf(region, visible)
     if visible then region:Show() else region:Hide() end
 end
 local encounterHelp = L("Une rencontre recommence après plus de 10 min sans observation. Le total inclut les rencontres avant le changement d'avis ; les anciens passages ne sont pas reconstitués.")
-local recentHelp = L("Dernière observation enregistrée, tous tes personnages confondus. Une personne vue récemment n'est pas forcément encore à proximité.")
+local recentHelp = L("Dernière observation enregistrée, tous vos personnages confondus. Une personne vue récemment n'est pas forcément encore à proximité.")
 local confirmedHelp = L("Mon bilan PvP")
 local statisticsChoices = {
     players = {
         { name = L("Menaces"), entries = {
-            { "grudge", L("Rancunes les plus fortes"), L("Tes ennemis et les personnes à surveiller, selon leur solde négatif actuel."), "point", L("Solde actuel"), L("Les rancunes restent tenaces : une mort pèse dix victoires. Un avis manuel ou de guilde peut aussi signaler un danger sans solde négatif.") },
+            { "grudge", L("Rancunes les plus fortes"), L("Vos ennemis et les personnes à surveiller, selon leur solde négatif actuel."), "point", L("Solde actuel"), L("Les rancunes restent tenaces : une mort pèse dix victoires. Un avis manuel ou de guilde peut aussi signaler un danger sans solde négatif.") },
             { "enemiesSeen", L("Menaces les plus recroisées"), L("Celles que vous avez rencontrées le plus souvent."), "rencontre", L("Rencontres"), encounterHelp },
-            { "enemiesRecent", L("Menaces vues récemment"), L("Tes ennemis et les personnes à surveiller, du plus récemment aperçu au plus ancien."), "date", L("Dernière observation"), recentHelp },
-            { "aggressions", L("Le plus d'agressions"), L("Les joueurs avec le plus d'agressions enregistrées à ton encontre."), "agression", L("Agressions"), L("Nombre d'épisodes enregistrés, pas de coups reçus ni de fréquence horaire.") },
+            { "enemiesRecent", L("Menaces vues récemment"), L("Vos ennemis et les personnes à surveiller, du plus récemment aperçu au plus ancien."), "date", L("Dernière observation"), recentHelp },
+            { "aggressions", L("Le plus d'agressions"), L("Les joueurs avec le plus d'agressions enregistrées à votre encontre."), "agression", L("Agressions"), L("Nombre d'épisodes enregistrés, pas de coups reçus ni de fréquence horaire.") },
         } },
         { name = L("Amis"), entries = {
-            { "friendsSeen", L("Amis les plus recroisés"), L("Tes amis actuels que tu as rencontrés le plus souvent."), "rencontre", L("Rencontres"), encounterHelp },
-            { "reputation", L("Affinités les plus fortes"), L("Tes amis classés selon leur solde positif actuel."), "point", L("Solde actuel"), L("Les avis, les gestes et les faits PvP alimentent le solde. Un ami désigné par un avis de guilde peut avoir un solde nul.") },
-            { "friendsRecent", L("Amis vus récemment"), L("Tes amis actuels, du plus récemment aperçu au plus ancien."), "date", L("Dernière observation"), recentHelp },
-            { "friendsGrouped", L("Compagnons de groupe"), L("Les amis actuels avec lesquels tu as partagé le plus de sessions de groupe."), "session", L("Sessions partagées"), L("Ouvrez la fiche pour lire la durée en ligne des sessions mesurées. Partager un groupe ne rend personne ami automatiquement.") },
+            { "friendsSeen", L("Amis les plus recroisés"), L("Vos amis actuels que vous avez rencontrés le plus souvent."), "rencontre", L("Rencontres"), encounterHelp },
+            { "reputation", L("Affinités les plus fortes"), L("Vos amis classés selon leur solde positif actuel."), "point", L("Solde actuel"), L("Les avis, les gestes et les faits PvP alimentent le solde. Un ami désigné par un avis de guilde peut avoir un solde nul.") },
+            { "friendsRecent", L("Amis vus récemment"), L("Vos amis actuels, du plus récemment aperçu au plus ancien."), "date", L("Dernière observation"), recentHelp },
+            { "friendsGrouped", L("Compagnons de groupe"), L("Les amis actuels avec lesquels vous avez partagé le plus de sessions de groupe."), "session", L("Sessions partagées"), L("Ouvrez la fiche pour lire la durée en ligne des sessions mesurées. Partager un groupe ne rend personne ami automatiquement.") },
             { "friendsOnline", L("Temps passé en groupe"), L("Les amis avec lesquels vous avez passé le plus de temps en groupe, tous deux en ligne."), "durée", L("Temps en groupe"), L("Les durées commencent lorsque le suivi observe les deux joueurs connectés. Les anciennes sessions et les champs de bataille sont exclus du calcul.") },
         } },
         { name = L("Combats"), entries = {
-            { "deaths", L("Ceux qui m'ont le plus tué"), L("Les joueurs auxquels le plus de tes morts sont attribuées."), "mort", L("Morts"), confirmedHelp },
-            { "kills", L("Adversaires les plus vaincus"), L("Les joueurs contre lesquels tu as le plus de victoires."), "victoire", L("Victoires"), confirmedHelp },
+            { "deaths", L("Morts par adversaire"), L("Nombre de vos morts auxquelles chaque adversaire a participé."), "mort", L("Morts"), L("Plusieurs adversaires peuvent participer au même combat. Le coup fatal est indiqué lorsqu’il est connu.") },
+            { "kills", L("Adversaires les plus vaincus"), L("Les joueurs contre lesquels vous avez le plus de victoires."), "victoire", L("Victoires"), confirmedHelp },
         } },
     },
     guilds = {
         { name = L("Relations"), entries = {
-            { "grudges", L("Le plus de rancunes"), L("Guildes réunissant le plus de membres avec une rancune personnelle."), "rancune", L("Rancunes personnelles"), L("Dernière guilde connue des personnes de ton livre. Un avis global sur une guilde ne crée pas artificiellement des rancunes personnelles.") },
-            { "friends", L("Le plus d'amis"), L("Guildes réunissant le plus de membres que tu apprécies personnellement."), "ami", L("Amis personnels"), L("Dernière guilde connue des personnes de ton livre. Les relations héritées d'un avis global sur la guilde ne gonflent pas ce total.") },
+            { "grudges", L("Le plus de rancunes"), L("Guildes réunissant le plus de membres avec une rancune personnelle."), "rancune", L("Rancunes personnelles"), L("Dernière guilde connue des personnes de votre livre. Un avis global sur une guilde ne crée pas artificiellement des rancunes personnelles.") },
+            { "friends", L("Le plus d'amis"), L("Guildes réunissant le plus de membres que vous appréciez personnellement."), "ami", L("Amis personnels"), L("Dernière guilde connue des personnes de votre livre. Les relations héritées d'un avis global sur la guilde ne gonflent pas ce total.") },
         } },
         { name = L("Combats"), entries = {
-            { "deaths", L("Guildes qui m'ont le plus tué"), L("Morts, rattachées à la guilde connue au moment des faits."), "mort", L("Morts"), L("Une même mort n'est comptée qu'une fois par guilde impliquée. Les faits sans guilde connue restent non attribués.") },
+            { "deaths", L("Morts par guilde adverse"), L("Morts, rattachées à la guilde connue au moment des faits."), "mort", L("Morts"), L("Une même mort n'est comptée qu'une fois par guilde impliquée. Les faits sans guilde connue restent non attribués.") },
             { "kills", L("Guildes les plus vaincues"), L("Victoires contre les membres de ces guildes."), "victoire", L("Victoires"), L("Guilde mémorisée au moment du combat.") },
             { "aggressions", L("Le plus d'agressions"), L("Agressions attribuées aux membres de ces guildes."), "agression", L("Agressions"), L("Guilde mémorisée lors des faits. Plusieurs membres peuvent participer à un même épisode ; les faits sans guilde restent non attribués.") },
         } },
@@ -761,7 +778,7 @@ local function refreshStatistics()
         if b.reaction then UI.selectButton(b, rule and b.reaction == rule.reaction) end
     end
     f.selection:SetText(#rows == 0 and "" or guild and (f.selected and L("Définir l’avis de guilde") or L("Sélectionnez une guilde pour définir un avis."))
-        or L("Clique sur une personne pour lire son histoire."))
+        or L("Cliquez sur une personne pour lire son histoire."))
     f.footnote:SetText(choice[6])
 end
 function GL.ShowStatistics(mode, category)
@@ -1632,7 +1649,7 @@ local function showDiagnostic(private)
         button(f, L("Validation druide"), 484, -461, 145, function()
             if SlashCmdList.GRUDGELEDGERDRUIDRADAR and C_Timer and type(C_Timer.After) == "function" then
                 f:Hide()
-                GL.Print(L("Essai dans 3 secondes : place la souris sur le monde, hors fenêtres, puis reste immobile."))
+                GL.Print(L("Essai dans 3 secondes : placez la souris sur le monde, hors fenêtres, puis restez immobile."))
                 C_Timer.After(3, function() SlashCmdList.GRUDGELEDGERDRUIDRADAR("validation") end)
             end
         end)
@@ -1667,7 +1684,7 @@ local function showDiagnostic(private)
         lines[#lines + 1] = key .. " : " .. ((value == "0" or value == "1") and value or L("indisponible"))
     end
     diagnosticWindow.private = private == true
-    diagnosticWindow.privacy:SetText(private == true and L("Journal local : contient les noms de ton livre. Ne le publie pas tel quel.")
+    diagnosticWindow.privacy:SetText(private == true and L("Journal local : contient les noms de votre livre. Ne le publiez pas tel quel.")
         or L("Rapport anonyme : Ctrl+C pour copier. Aucun nom ni note personnelle."))
     lines[#lines + 1] = GL.DetectionReport(private == true)
     diagnosticWindow.edit:SetText(table.concat(lines, "\n"))
@@ -1753,10 +1770,9 @@ local function renderDetail()
     for _, b in ipairs(ledger.actions) do b:SetEnabled(record ~= nil) end
     ledger.guildButton:SetEnabled(record ~= nil and record.guild ~= nil)
     ledger.tools:SetEnabled(record ~= nil)
-    showIf(ledger.contactBounty, record and record.guid and tab == "summary")
-    if record and record.guid and tab == "summary" and ledger:IsShown() then
-        ledger.contactBounty:SetText(activeBounty(record.guid) and L("Voir la prime") or L("Créer une prime"))
-    end
+    local bountyMode=tab=="summary" and ledger:IsShown() and GL.ContactBountyMode(record)
+    showIf(ledger.contactBounty,bountyMode)
+    if bountyMode then ledger.contactBounty:SetText(bountyMode=="view" and L("Voir la prime") or L("Créer une prime")) end
     if not record then ledger.toolsMenu:Hide() end
     for reaction, control in pairs(ledger.reactions) do
         UI.selectButton(control, record and GL.Relation(record) == reaction)
@@ -1816,7 +1832,7 @@ local function renderDetail()
                 local n = counts[field] or 0
                 local kills = field == "kills"
                 card.caption:SetText(matchup and (kills and L("Victoires") or L("Morts"))
-                    or (kills and L("Vous l’avez vaincu") or L("Vous a tué")))
+                    or (kills and L("Vous l’avez vaincu") or L("Vos morts")))
                 card.value:SetText(matchup and tostring(n) or (n == 1 and L("1 fois") or L("%d fois"):format(n)))
             end
         end
@@ -1888,6 +1904,7 @@ local function renderDetail()
         elseif tab == "notes" then
             local editor = noteEditor()
             if editor.identity ~= record then
+                if editor.tagMenu then editor.tagMenu:Hide() end
                 editor.identity, editor.noteOffset = record, 0
                 selectNote(editor, record.notes[#record.notes])
             else editor:RefreshList() end
@@ -1901,7 +1918,7 @@ local function renderDetail()
 end
 
 local function enableRecognition()
-    if GL.Safe(InCombatLockdown) then GL.Print(L("Active le repérage hors combat.")) return end
+    if GL.Safe(InCombatLockdown) then GL.Print(L("Activez le repérage hors combat.")) return end
     local set = (C_CVar and C_CVar.SetCVar) or SetCVar
     local get = (C_CVar and C_CVar.GetCVar) or GetCVar
     local ready = true
@@ -1914,7 +1931,7 @@ local function enableRecognition()
     GL.SetSetting("nameColor", true)
     if settingsWindow then settingsWindow:UpdatePlateStatus() end
     GL.Print(ready and L("Repérage activé : barres de noms, icônes et couleurs. Ennemi = rouge, méfiance = orange.")
-        or L("Icônes et couleurs activées, mais le jeu n'a pas confirmé toutes les barres de noms. Vérifie les réglages d'affichage."))
+        or L("Icônes et couleurs activées, mais le jeu n'a pas confirmé toutes les barres de noms. Vérifiez les réglages d'affichage."))
 end
 
 local function settingText(page, text, x, y, width, size, color)
@@ -1940,7 +1957,7 @@ showSettings = function()
         local categories = {
             {"appearance", L("Apparence"), L("Apparence et lisibilité")},
             {"alerts", L("Alertes"), L("Alertes de proximité")},
-            {"relations", L("Relations et PvP"), L("Ce que votre livre retient")},
+            {"relations", L("Relations et JcJ"), L("Ce que votre livre retient")},
             {"shortcuts", L("Raccourcis"), L("Vos gestes à portée de main")},
             {"data", L("Données et diagnostic"), L("Votre livre personnel")},
         }
@@ -1962,13 +1979,13 @@ showSettings = function()
             page:SetAllPoints(f) f.pages[key] = page
             settingText(page, entry[3], 356, 160, 554, 24)
         end
-        local function check(category, key, text, y, width, x)
+        local function check(category, key, text, y, width, x, save)
             local control = CreateFrame("CheckButton", nil, f.pages[category], "UICheckButtonTemplate")
             control:SetPoint("TOPLEFT", (x or 356) - 3, -y) control:SetSize(26, 26)
             control:SetHitRectInsets(0, -(width or 522) + 28, 0, 0)
             settingText(control, text, 32, 4, (width or 522) - 33, 14)
-            control:SetScript("OnClick", function(self) GL.SetSetting(key, self:GetChecked() and true or false) end)
-            f.checks[key] = control
+            control:SetScript("OnClick", function(self) if save then save(self:GetChecked() and true or false) else GL.SetSetting(key, self:GetChecked() and true or false) end end)
+            if not save then f.checks[key] = control end
             return control
         end
         local function range(page, key, title, x, y, width, low, high, step, format)
@@ -2068,21 +2085,27 @@ showSettings = function()
         f.testStatus = settingText(p, "", 638, 396, 269, 13, theme.inkMuted)
         settingText(p, L("Un signal indirect indique une voix entendue ou la cible d’un équipier proche. Les amis du groupe restent silencieux ; les autres amis sont signalés après 10 min d’absence."), 356, 439, 547, 13)
         check("alerts", "partyWarnings", L("Prévenir mon groupe d’un ancien agresseur"), 534)
+        check("alerts", "tagReminders", L("Rappels privés des étiquettes en groupe"), 629)
         settingText(p, L("Petit groupe en monde ouvert ou donjon. Un message au plus par minute et par personne toutes les 30 minutes."), 356, 582, 547, 13, theme.inkMuted)
         p = f.pages.relations
-        check("relations", "pvpTracking", L("Enregistrer le PvP en monde ouvert"), 217)
-        check("relations", "socialTracking", L("Noter mes gestes envers les joueurs"), 257)
-        check("relations", "groupTracking", L("Compter les groupes avec mes contacts"), 297)
-        check("relations", "tradeTracking", L("Consigner les échanges réussis avec mes contacts"), 337)
-        settingText(p, L("Comment évolue une rancune ?"), 356, 388, 544, 18)
+        check("relations", "pvpTracking", L("Enregistrer le PvP en monde ouvert"), 203)
+        check("relations", "socialTracking", L("Noter mes gestes envers les joueurs"), 235)
+        check("relations", "groupTracking", L("Compter les groupes avec mes contacts"), 267)
+        check("relations", "tradeTracking", L("Consigner les échanges réussis avec mes contacts"), 299)
+        settingText(p, L("Comment évolue une rancune ?"), 356, 340, 544, 18)
         for i, rule in ipairs({{L("Il vous tue"),"−10"}, {L("Il vous agresse"),"−1"}, {L("Vous le vainquez"),"+1"}}) do
             local x = 358+(i-1)*183
-            settingText(p, rule[1], x, 432, 178, 15)
-            settingText(p, rule[2], x, 460, 170, 19)
+            settingText(p, rule[1], x, 372, 178, 15)
+            settingText(p, rule[2], x, 396, 170, 19)
         end
-        settingText(p, L("Les victoires compensent la dette de PvP. Seul un avis positif peut créer une amitié."), 356, 507, 548, 14)
-        settingText(p, L("Champs de bataille et arènes"), 356, 563, 548, 17)
-        settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 604, 548, 13, theme.inkMuted)
+        settingText(p, L("Les victoires compensent la dette de PvP. Seul un avis positif peut créer une amitié."), 356, 425, 548, 14)
+        settingText(p, L("Champs de bataille et arènes"), 356, 579, 548, 17)
+        settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 609, 548, 13, theme.inkMuted)
+        f.shareGuild = settingText(p, "", 356, 461, 541, 16)
+        f.shareFights = check("relations", nil, L("Partager mes victoires et morts avec ma guilde"), 493, nil, nil,
+            function(value) GL.Bounties.ShareFights(value); f:SyncControls() end)
+        f.shareDeaths = check("relations", nil, L("Signaler mes morts pour les primes automatiques"), 530, nil, nil,
+            function(value) GL.Bounties.ShareDeaths(value); f:SyncControls() end)
         p = f.pages.shortcuts
         check("shortcuts", "quickGestures", L("Afficher les boutons bisou et crachat"), 219)
         for i, entry in ipairs({{media.."GestureKiss", L("Envoyer un baiser · +1")}, {"Interface\\Icons\\Spell_Nature_CorrosiveBreath", L("Cracher · −1")}}) do
@@ -2119,6 +2142,12 @@ showSettings = function()
         function f:SyncControls()
             local settings = GL.Settings()
             for key, c in pairs(self.checks) do c:SetChecked(settings[key]) end
+            local guild = GL.Safe(GetGuildInfo, "player")
+            local fights, deaths
+            if GL.Bounties and GL.Bounties.Sharing then fights, deaths = GL.Bounties.Sharing() end
+            self.shareFights:SetChecked(fights == true); self.shareDeaths:SetChecked(deaths == true)
+            self.shareFights:SetEnabled(guild ~= nil and GL.Bounties ~= nil); self.shareDeaths:SetEnabled(guild ~= nil and GL.Bounties ~= nil)
+            self.shareGuild:SetText(guild and L("Partage avec %s"):format(UI.plain(guild)) or L("Partage de guilde · hors guilde"))
             self.readingLabel:SetText(L("Lecture : %d %%"):format(math.floor(settings.readingScale*100 + .5)))
             for key, slider in pairs(self.sliders) do slider:Sync(settings[key]) end
             self:DrawMarkers(settings.iconSize)
@@ -2126,6 +2155,8 @@ showSettings = function()
             UI.selectButton(self.grimoire, not settings.readableFont)
             self:UpdatePlateStatus()
         end
+        f:RegisterEvent("PLAYER_GUILD_UPDATE")
+        f:SetScript("OnEvent", function(self) if self:IsShown() then self:SyncControls() end end)
     end
     settingsWindow:SyncControls()
     showBook(settingsWindow)
@@ -2174,7 +2205,7 @@ local function buildLedger()
     f.detailTab, f.query = "summary", ""
     f.addTarget = button(f, L("Ajouter la cible"), 195, -155, 112, function()
         local identity = GL.Identity("target")
-        if not identity then GL.Print(L("Sélectionne un joueur pour ouvrir sa fiche.")) return end
+        if not identity then GL.Print(L("Sélectionnez un joueur pour ouvrir sa fiche.")) return end
         local record = GL.Remember(identity, true)
         if record then
             if GL.Safe(UnitIsVisible, "target") == true then GL.RecordSeen(identity, true) end
@@ -2222,21 +2253,23 @@ local function buildLedger()
         if opening then openMenu = menu menu:Show() menu:Raise() end
     end
     f:HookScript("OnHide", closeMenu)
-    local function filterMenu(x, options, select)
+    local function filterMenu(x, options, select, y, width)
+        y, width = y or 193, width or 134
         local menu = CreateFrame("Frame", nil, f)
-        menu:SetPoint("TOPLEFT", x, -222) menu:SetSize(134, #options * 28 + 4)
+        menu:SetPoint("TOPLEFT", x, -y-29) menu:SetSize(width, #options * 28 + 4)
         menu:EnableMouse(true) menu:SetFrameStrata("FULLSCREEN_DIALOG") menu:SetToplevel(true)
+        if menu.SetFrameLevel then menu:SetFrameLevel(f:GetFrameLevel()+8) end
         surface(menu, theme.gold) surface(menu, theme.panel, 1)
         local choices = {}
         for i, entry in ipairs(options) do
             local value = entry[2]
-            choices[value] = button(menu, entry[1], 2, -2 - (i - 1) * 28, 130, function()
+            choices[value] = button(menu, entry[1], 2, -2 - (i - 1) * 28, width-4, function()
                 menu:Hide() select(value) offset = 0 refresh()
             end, true)
         end
         menu:Hide()
-        local opener = button(f, "", x, -193, 134, function() toggleMenu(menu) end)
-        opener.caption:ClearAllPoints() opener.caption:SetPoint("TOPLEFT", 3, -5) opener.caption:SetWidth(112)
+        local opener = button(f, "", x, -y, width, function() toggleMenu(menu) end)
+        opener.caption:ClearAllPoints() opener.caption:SetPoint("TOPLEFT", 3, -5) opener.caption:SetWidth(width-22)
         local arrow = opener:CreateTexture(nil, "ARTWORK")
         arrow:SetPoint("RIGHT", -3, 0) arrow:SetSize(16, 16)
         arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
@@ -2246,6 +2279,11 @@ local function buildLedger()
         { L("Ennemis"), "enemy" }, { L("Neutres"), "neutral" } }, function(value) filter = value end)
     f.factionFilter, f.factions = filterMenu(173, { { L("Toutes factions"), "all" }, { L("Alliance"), "Alliance" },
         { L("Horde"), "Horde" }, { L("Inconnue"), "unknown" } }, function(value) factionFilter = value end)
+    if GL.TagChoices then
+        local options = { { L("Toutes les étiquettes"), "all" } }
+        for _, entry in ipairs(GL.TagChoices) do options[#options + 1] = { L(entry[2]), entry[1] } end
+        f.tagFilter, f.tagFilters = filterMenu(36, options, function(value) tagFilter = value end, 293, 271)
+    end
     f.rows = {}
     f.sort = button(f, L("Dernière interaction"), 149, -229, 158, function()
         if not f.query or f.query == "" then return end
@@ -2265,7 +2303,7 @@ local function buildLedger()
         refresh()
     end, nil, false)
     f.reset = button(f, L("Effacer"), 218, -262, 89, function()
-        filter, factionFilter, notesOnly, offset, f.query = "all", "all", false, 0, ""
+        filter, factionFilter, tagFilter, notesOnly, offset, f.query = "all", "all", "all", false, 0, ""
         f.search:SetText("") refresh()
     end)
     for i = 1, 9 do
@@ -2335,7 +2373,7 @@ local function buildLedger()
     journalFont(f.total, "GameFontHighlightSmall", 12)
     GL.Safe(f.total.SetWordWrap, f.total, false)
     f.total:SetTextColor(unpack(theme.muted))
-    f.empty = label(f, "", nil, 45, -321, 249)
+    f.empty = label(f, "", nil, 45, -345, 249)
     f.empty:SetTextColor(unpack(theme.muted))
     f.raceIcon = f:CreateTexture(nil, "ARTWORK")
     f.raceIcon:SetPoint("TOPLEFT", 357, -157) f.raceIcon:SetSize(67, 68)
@@ -2465,7 +2503,7 @@ local function buildLedger()
     f.counters = CreateFrame("Frame", nil, f)
     f.counters:SetPoint("TOPLEFT", 354, -269) f.counters:SetSize(558, 160)
     f.metrics = {}
-    for i, entry in ipairs({ { "deaths", L("Vous a tué") }, { "kills", L("Vous l’avez vaincu") } }) do
+    for i, entry in ipairs({ { "deaths", L("Vos morts") }, { "kills", L("Vous l’avez vaincu") } }) do
         local card = CreateFrame("Frame", nil, f.counters)
         card:SetPoint("TOPLEFT", (i - 1) * 285, 0) card:SetSize(278, 69)
         parchmentPanel(card)
@@ -2566,8 +2604,8 @@ local function layoutIndex(f, compact)
     f.pageSize, offset = pageSize, 0
     for i, row in ipairs(f.rows) do
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 32, -301 - (i - 1) * (compact and 36 or 53))
-        row:SetHeight(compact and 34 or 51)
+        row:SetPoint("TOPLEFT", 32, -326 - (i - 1) * (compact and 33 or 50))
+        row:SetHeight(compact and 31 or 48)
         row.name:ClearAllPoints() row.name:SetPoint("TOPLEFT", compact and 34 or 52, compact and -7 or -4)
         row.name:SetWidth(compact and 168 or 145)
         row.identity:SetWidth(198)
@@ -2590,7 +2628,7 @@ refresh = function(focusSelected)
     listSort = searched and GL.Settings().listSort or "recent"
     listDetail = GL.Settings().listDetail or listDetail
     local records = GL.SearchPlayers({ query = ledger.query or "", relation = filter, faction = factionFilter,
-        notesOnly = notesOnly, sort = listSort, selectedKey = selectedKey })
+        notesOnly = notesOnly, tag = tagFilter, sort = listSort, selectedKey = selectedKey })
     local selectionIndex
     for index, record in ipairs(records) do
         if selectedKey == record.key then
@@ -2644,7 +2682,7 @@ refresh = function(focusSelected)
         else row.key = nil row:Hide() end
     end
     ledger.total:SetText(counted(#records, "personne"))
-    ledger.filtersActive = (ledger.query or "") ~= "" or filter ~= "all" or factionFilter ~= "all" or notesOnly
+    ledger.filtersActive = (ledger.query or "") ~= "" or filter ~= "all" or factionFilter ~= "all" or tagFilter ~= "all" or notesOnly
     if #records == 0 then
         ledger.empty:SetText(ledger.filtersActive and L("Aucun résultat.") or L("Aucune fiche enregistrée."))
         ledger.empty:Show()
@@ -2666,6 +2704,10 @@ refresh = function(focusSelected)
     end
     ledger.relationFilter:SetText(filter == "all" and L("Tous les avis") or relationNames[filter])
     ledger.factionFilter:SetText(factionNames[factionFilter] or (factionFilter == "unknown" and L("Inconnue") or L("Toutes factions")))
+    for value, control in pairs(ledger.tagFilters or {}) do
+        UI.selectButton(control, value == tagFilter)
+        if value == tagFilter then ledger.tagFilter:SetText(control:GetText()) end
+    end
     ledger.previous:SetEnabled(offset > 0)
     ledger.next:SetEnabled(offset + ledger.pageSize < #records)
     ledger.sort:SetEnabled(searched)
@@ -2685,7 +2727,7 @@ function GL.ShowLedger(key)
     if journalWindow then journalWindow:Hide() end
     if key then
         selectedKey = record.key
-        filter, factionFilter, offset, notesOnly = "all", "all", 0, false
+        filter, factionFilter, tagFilter, offset, notesOnly = "all", "all", "all", 0, false
         ledger.query, ledger.detailTab = "", "summary"
         ledger.historyPage.kind, ledger.historyPage.offset = "all", 0
         ledger.search:SetText("")
@@ -2721,7 +2763,25 @@ noteEditor = function()
     local f = CreateFrame("Frame", "GrudgeLedgerNote", ledger)
     noteWindow, f.rows, f.noteOffset = f, {}, 0
     f:SetPoint("TOPLEFT", 353, -278) f:SetSize(560, 382)
-    f.heading = label(f, L("Notes personnelles"), "large", 2, -4, 545) f.heading:SetTextColor(unpack(theme.ink))
+    f.heading = label(f, L("Notes personnelles"), "large", 2, -4, 300) f.heading:SetTextColor(unpack(theme.ink))
+    if GL.TagChoices then
+        local menu = CreateFrame("Frame", nil, f)
+        f.tagMenu, f.tagChoices = menu, {}
+        menu:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -29) menu:SetSize(370, 98)
+        menu:SetFrameStrata("FULLSCREEN_DIALOG") menu:SetToplevel(true) menu:EnableMouse(true)
+        if menu.SetFrameLevel then menu:SetFrameLevel(f:GetFrameLevel()+8) end
+        surface(menu, theme.gold) surface(menu, theme.paper, 1)
+        for i, choice in ipairs(GL.TagChoices) do
+            local id = choice[1]
+            f.tagChoices[id] = button(menu, L(choice[2]), 5 + ((i-1)%2)*182, -5-math.floor((i-1)/2)*31, 178,
+                function() GL.ToggleTag(f.identity, id) end, true, true)
+        end
+        f.tags = button(f, L("Étiquettes personnelles"), 328, -2, 222, function()
+            if menu:IsShown() then menu:Hide() else menu:Show() menu:Raise() end
+        end, nil, true)
+        menu:Hide()
+        f:HookScript("OnHide", function() menu:Hide() end)
+    end
     local privacy = label(f, L("Ces notes restent dans votre livre."), nil, 2, -32, 545) privacy:SetTextColor(unpack(theme.inkMuted))
     f.new = button(f, L("+ Nouvelle note"), 2, -68, 157, function() selectNote(f) f.edit:SetFocus() end, nil, true)
     for i=1,5 do
@@ -2810,6 +2870,9 @@ noteEditor = function()
     f.error = label(f,"",nil,176,-327,374) f.error:SetTextColor(unpack(inkColors.enemy)) f.error:SetHeight(50)
     function f:RefreshList()
         local record = GL.Get(self.identity)
+        local tags = GL.TagText and GL.TagText(record)
+        privacy:SetText(tags and L("Étiquettes : %s"):format(tags) or L("Ces notes restent dans votre livre."))
+        for id, control in pairs(self.tagChoices or {}) do UI.selectButton(control, GL.HasTag(record, id)) end
         local notes = record and record.notes or {}
         local size, count = #self.rows, #notes
         self.noteOffset = math.max(0, math.min(self.noteOffset, math.floor(math.max(0,count-1)/size)*size))
@@ -2995,6 +3058,7 @@ GL.On("SETTINGS", function()
 end)
 -- Aliases are stable across locales so existing macros survive a language change.
 local commandAliases = {
+    relations = "stats", relationships = "stats", relaciones = "stats",
     summary = "bilan", resumen = "bilan", history = "chronique", historial = "chronique",
     guilds = "guildes", hermandades = "guildes", guild = "guilde", hermandad = "guilde",
     logs = "traces", registros = "traces", ajustes = "settings", opciones = "options",
@@ -3029,13 +3093,13 @@ SlashCmdList.GRUDGELEDGER = function(message)
         if reason == "" then GL.ShowGuilds() return end
         local relation = reason:gsub("[A-Z]", string.lower)
         local reaction = reactionCommands[commandAliases[relation] or relation]
-        if not reaction then GL.Print(L("/gl guilde ami|ennemi|mefiance|neutre — utilise la guilde de ta cible.")) return end
+        if not reaction then GL.Print(L("/gl guilde ami|ennemi|mefiance|neutre — utilisez la guilde de votre cible.")) return end
         local identity = GL.Identity("target")
-        if not identity or not identity.guild then GL.Print(L("Sélectionne un joueur dont la guilde est connue.")) return end
+        if not identity or not identity.guild then GL.Print(L("Sélectionnez un joueur dont la guilde est connue.")) return end
         GL.SetGuildReaction(identity, reaction)
     elseif command == "+" or command == "-" or reactionCommands[command] or command == "note" then
         local identity = GL.Identity("target")
-        if not identity then GL.Print(L("Sélectionne un joueur pour cette action.")) return end
+        if not identity then GL.Print(L("Sélectionnez un joueur pour cette action.")) return end
         if command == "+" or command == "-" then
             GL.AdjustReputation(identity, command == "+" and 1 or -1, reason ~= "" and reason or "Avis personnel", "manual")
         elseif command == "note" then

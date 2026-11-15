@@ -614,6 +614,8 @@ function D.Tooltip(tooltip)
     tooltip:AddLine("Grudge Ledger — " .. L(style and style.label or "Neutre"),
         style and style.color[1] or 0.85, style and style.color[2] or 0.85,
         style and style.color[3] or 0.85)
+    local tags = GL.TagText and GL.TagText(record)
+    if tags then tooltip:AddLine(L("Étiquettes : %s"):format(tags), 0.95, 0.82, 0.58, true) end
     tooltip._grudgeLedgerExpanded = not GL.Settings().compactTooltips or GL.Safe(IsShiftKeyDown) == true
     if not tooltip._grudgeLedgerExpanded then
         tooltip:AddLine(L("Maj : notes et bilan PvP"), 0.8, 0.75, 0.64)

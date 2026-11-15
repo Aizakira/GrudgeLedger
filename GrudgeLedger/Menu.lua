@@ -68,6 +68,16 @@ local function onMenu(_, root, data)
     root:CreateButton(L("Avis positif (+1)"), function() GL.AdjustReputation(captured, 1, "Avis personnel", "manual") end)
     root:CreateButton(L("Avis négatif (-1)"), function() GL.AdjustReputation(captured, -1, "Avis personnel", "manual") end)
     root:CreateButton(L("Ajouter une note"), function() GL.EditNote(captured) end)
+    if GL.TagChoices then
+        local submenu = root:CreateButton(L("Étiquettes personnelles"))
+        for _, choice in ipairs(GL.TagChoices) do
+            local id, caption = choice[1], L(choice[2])
+            local function checked() return GL.HasTag(GL.Get(captured), id) end
+            local function toggle() GL.ToggleTag(captured, id) end
+            if submenu.CreateCheckbox then submenu:CreateCheckbox(caption, checked, toggle)
+            else submenu:CreateButton((checked() and "✓ " or "") .. caption, toggle) end
+        end
+    end
     root:CreateButton(L("Ouvrir la fiche"), function()
         local record = GL.Remember(captured, true)
         if record then GL.ShowLedger(record.key) end

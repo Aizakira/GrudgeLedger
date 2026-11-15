@@ -3,7 +3,7 @@ local mock=assert(loadfile(TEST_WORK.."/tests/wow_mock.lua"))()
 assert(loadfile(TEST_ROOT.."/Core.lua"))("GrudgeLedger")
 assert(loadfile(TEST_ROOT.."/UITheme.lua"))()
 assert(loadfile(TEST_ROOT.."/UI.lua"))()
-for _,n in ipairs({"DossierEquipment","DossierTalentData","DossierTalents","PlayerDossier"}) do assert(loadfile(TEST_ROOT.."/"..n..".lua"))() end
+for _,n in ipairs({"Bounties","DossierEquipment","DossierTalentData","DossierTalents","PlayerDossier"}) do assert(loadfile(TEST_ROOT.."/"..n..".lua"))() end
 local GL=GrudgeLedger
 GL.InitDB()
 local guid="Player-1-00AB"
@@ -23,7 +23,7 @@ GrudgeLedgerArmory={items={{name="Helm",icon=123},{name="Same ID, other variant"
     reputations={{group="Alliance",name="Forge",standing="Amical",value=1200,max=6000}},achievements={{name="Account champion",accountWide=true,icon=777}}}}}
 GrudgeLedgerPortraitIndex={[guid]=true}
 mock.units.player.guild="Fixture Guild"
-GL.Bounties={GuildFights=function(target) assert(target==guid) return 3,5 end}
+GL.Bounties.GuildFights=function(target) assert(target==guid) return 3,5 end
 local returned=false
 assert(GL.OpenPlayerDossier(guid,function() returned=true end))
 local f=GrudgeLedgerPlayerDossier
@@ -59,7 +59,7 @@ assert(all():find("Forge Amical · 1200 / 6000",1,true) and not all():find("Arat
 click(f.back)
 assert(returned and not f:IsShown())
 -- Guild-only targets and missing archive rows must never create a personal journal entry.
-GL.Bounties=nil
+mock.units.player.guild=nil
 local other="Player-42-000B"
 assert(GL.OpenPlayerDossier(other,nil,"Other | captain"))
 assert(f.nameLabel:GetText()=="Other || captain" and not GL.Get("guid:"..other))

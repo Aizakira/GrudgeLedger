@@ -1,7 +1,7 @@
 -- Grudge Ledger: shared identities, relationships and persistent history.
 -- Identity/saved-variable approach informed by Worth Remembering (Kyle, GPL-3.0).
 local ADDON, private = ...
-GrudgeLedger = { version = "0.10.8", errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
+GrudgeLedger = { errors = {}, icon = "Interface\\AddOns\\GrudgeLedger\\Media\\JournalMedallion",
     minimapIcon = "Interface\\AddOns\\GrudgeLedger\\Media\\LedgerBook" }
 local GL = GrudgeLedger
 local translations = private and private.translations
@@ -24,7 +24,7 @@ local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
     groupTracking = true, socialTracking = true, tradeTracking = false, minimapAngle = 225, readableFont = false,
-    quickGestures = true, detectionLog = true, partyWarnings = false, chatBadges = false, compactTooltips = false,
+    quickGestures = true, detectionLog = true, partyWarnings = false, tagReminders = true, chatBadges = false, compactTooltips = false,
     listSort = "recent", listDetail = "identity", readingScale = 1, compactMode = false, guideSeen = false,
 }
 local listSorts = { recent = true, name = true, reputation = true, kills = true, deaths = true, encounters = true }
@@ -47,6 +47,8 @@ function GL.Safe(fn, ...)
     local ok, a, b, c, d = pcall(fn, ...)
     if ok then return GL.Clean(a), GL.Clean(b), GL.Clean(c), GL.Clean(d) end
 end
+
+GL.version = GL.Safe(C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata, ADDON or "GrudgeLedger", "Version") or "?"
 
 function GL.IsPvPInstance()
     local _, kind = GL.Safe(IsInInstance)
@@ -113,7 +115,10 @@ function GL.On(event, fn)
     table.insert(listeners[event], fn)
 end
 function GL.Emit(event, ...)
-    if event == "CHANGED" then invalidateJournal() end
+    if event == "CHANGED" then
+        invalidateJournal()
+        if select(2, ...) == "tags" then guildStatistics = nil end
+    end
     for _, fn in ipairs(listeners[event] or {}) do
         local ok, err = pcall(fn, ...)
         if not ok then GL.Debug(event .. ": " .. tostring(err)) end
@@ -364,6 +369,7 @@ end
 
 local function merge(provisional, record)
     openingProofs[record] = nil
+    if GL.MergeTags then GL.MergeTags(provisional, record) end
     invalidateJournal()
     guildStatistics, socialTotals[record] = nil, nil
     if (provisional.lastEncounterAt or 0) > (record.lastEncounterAt or 0) then
@@ -591,6 +597,7 @@ function GL.Relation(record) local relation = effectiveRelation(record) return r
 function GL.RelationSource(record) local _, source = effectiveRelation(record) return source end
 function GL.IsGroupOnly(record)
     if not record or (record.groupCount or 0) == 0 or record.reaction or #(record.notes or {}) > 0
+        or (GL.HasTag and GL.HasTag(record))
         or (record.reputation or 0) ~= 0 or GL.Relation(record) ~= "neutral" then return false end
     for _, count in pairs(record.pvp or {}) do if type(count) == "number" and count > 0 then return false end end
     for _, event in ipairs(record.history or {}) do
@@ -991,19 +998,30 @@ local function combatContext(value)
     end
     if next(snapshot) then return snapshot end
 end
-function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat, report)
+function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat, report, killingBlow)
     if GL.IsPvPInstance() then return nil end
     if kind ~= "kill" and kind ~= "death" then return nil end
     if confidence ~= "confirmed" then return nil end
     local record = GL.Remember(identity)
     if not record then return nil end
     if eventId then
-        for _, event in ipairs(record.history) do if event.eventId == eventId then return nil end end
+        for _, event in ipairs(record.history) do
+            if event.eventId == eventId then
+                if kind == "death" and event.kind == kind and killingBlow and not event.killingBlow and not event.voided then
+                    event.killingBlow, event.evidence = true, evidence
+                    if combat and combat.pet and event.combat then event.combat.pet = true end
+                    event.report = report or event.report
+                    GL.Emit("CHANGED", record)
+                    return record, event
+                end
+                return nil
+            end
+        end
     end
     local field = pvpFields[kind][confidence]
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
-    local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId,
+    local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, killingBlow = killingBlow,
         combat = withLevels(combatContext(combat), identity, record), report = report })
     GL.Emit("CHANGED", record)
     return record, event
@@ -1173,6 +1191,7 @@ local function recordText(record, notes, past)
         end
     end
     if notes then
+        if GL.TagText then parts[#parts + 1] = GL.TagText(record) end
         for _, note in ipairs(record.notes or {}) do
             if type(note) == "table" and type(note.text) == "string" then parts[#parts + 1] = note.text end
         end
@@ -1188,6 +1207,7 @@ function GL.SearchPlayers(options)
             and (not options.relation or options.relation == "all" or GL.Relation(record) == options.relation)
             and (not options.faction or options.faction == "all" or faction == options.faction)
             and (not options.notesOnly or #record.notes > 0)
+            and (not options.tag or options.tag == "all" or (GL.HasTag and GL.HasTag(record, options.tag)))
             and (#words == 0 or matchesWords(recordText(record, true, true), words)) then result[#result + 1] = record end
     end
     local sort = listSorts[options.sort] and options.sort or "recent"
@@ -1692,67 +1712,72 @@ GL.ArmoryStatInfo = {
     {"SPELLPOWER", "Puissance des sorts", "Interface\\Icons\\spell_nature_lightning"},
 }
 if SlashCmdList then
-    SLASH_GLPROFILE1="/glfiche"
+    SLASH_GLPROFILE1, SLASH_GLPROFILE2, SLASH_GLPROFILE3 = "/glfiche", "/gldossier", "/glficha"
     SlashCmdList.GLPROFILE=function(input)
         local cmd,arg=input:match("^%s*(%S*)%s*(.-)%s*$")
-        if cmd=="partager" and (arg=="oui" or arg=="non") then
-            if not GL.Bounties or not GL.Safe(GetGuildInfo,"player") then GL.Print("Guilde indisponible."); return end
-            GL.Bounties.ShareFights(arg=="oui")
-            GL.Print(arg=="oui" and "Partage des combats activé." or "Partage des combats désactivé.")
+        local aliases={share="partager", compartir="partager", follow="suivre", seguir="suivre", stop="arreter", parar="arreter"}
+        cmd=aliases[cmd] or cmd
+        if cmd=="partager" and (arg=="oui" or arg=="non" or arg=="on" or arg=="off" or arg=="sí" or arg=="si" or arg=="no") then
+            if not GL.Bounties or not GL.Safe(GetGuildInfo,"player") then GL.Print(L("Guilde indisponible.")); return end
+            local enabled=arg=="oui" or arg=="on" or arg=="sí" or arg=="si"
+            GL.Bounties.ShareFights(enabled)
+            GL.Print(enabled and L("Partage des combats activé.") or L("Partage des combats désactivé."))
             return
         end
         local identity=GL.Identity("target")
         local record=arg~="" and GL.Get("guid:"..arg) or (arg=="" and identity and GL.Get(identity))
         if cmd=="suivre" and not record and arg=="" and identity then record=GL.Remember(identity) end
-        if not record then GL.Print("Sélectionnez un personnage ou indiquez son GUID."); return end
+        if not record then GL.Print(L("Sélectionnez un personnage ou indiquez son GUID.")); return end
         if cmd=="suivre" or cmd=="arreter" then
             record.followEncounter=cmd=="suivre" or nil
-            GL.Print((record.followEncounter and "Suivi activé : " or "Suivi arrêté : ")..record.fullName)
+            GL.Print((record.followEncounter and L("Suivi activé : ") or L("Suivi arrêté : "))..record.fullName)
             return
         end
         if GL.Bounties then
             local wins,losses=GL.Bounties.GuildFights(record.guid)
-            GL.Print(record.fullName.." — Victoires de la guilde : "..wins.." · Morts de la guilde : "..losses)
+            GL.Print(record.fullName.." — "..((wins+losses==0) and L("Aucun résultat partagé") or L("Victoires de la guilde : %d · Morts de la guilde : %d"):format(wins,losses)))
         end
         local profile=GL.ArmoryProfile(record)
-        if not profile then GL.Print("Aucun relevé Armurerie importé."); return end
-        if profile.updated then GL.Print("Armurerie · "..date("%d/%m/%Y %H:%M",math.floor(profile.updated/1000))) end
-        if profile.honorableKills~=nil then GL.Print("Victoires honorables : "..profile.honorableKills) end
-        if profile.pvpRank~=nil then GL.Print("Rang JcJ : "..profile.pvpRank) end
+        if not profile then GL.Print(L("Aucun relevé Armurerie importé.")); return end
+        if profile.updated then GL.Print(L("Armurerie · ")..date("%d/%m/%Y %H:%M",math.floor(profile.updated/1000))) end
+        if profile.honorableKills~=nil then GL.Print(L("Victoires honorables : ")..profile.honorableKills) end
+        if profile.pvpRank~=nil then GL.Print(L("Rang JcJ : ")..profile.pvpRank) end
         local summary={}
         for _,stat in ipairs(GL.ArmoryStatInfo) do
             local amount=profile.stats and profile.stats[stat[1]]
-            if type(amount)=="number" then summary[#summary+1]=stat[2].." "..amount end
+            if type(amount)=="number" then summary[#summary+1]=L(stat[2]).." "..amount end
         end
         if #summary>0 then GL.Print(table.concat(summary," · ")) end
         if profile.achievements then
-            GL.Print("Hauts faits JcJ obtenus : "..#profile.achievements)
+            GL.Print(L("Hauts faits JcJ obtenus : ")..#profile.achievements)
             for _,a in ipairs(profile.achievements) do
-                GL.Print(a.name..(a.accountWide and " (compte)" or ""))
+                GL.Print(a.name..(a.accountWide and L(" (compte)") or ""))
             end
         end
-        for _,tree in ipairs(profile.trees) do
+        for _,tree in ipairs(profile.trees or {}) do
             local ranks={}
-            for _,t in ipairs(tree.talents) do ranks[#ranks+1]=t[2].." "..t[3] end
+            for _,t in ipairs(tree.talents or {}) do ranks[#ranks+1]=t[2].." "..t[3] end
             GL.Print(tree.name.." ("..tree.points..") : "..table.concat(ranks,", "))
         end
         local slots={}
-        for slot in pairs(profile.gear) do slots[#slots+1]=slot end
+        for slot in pairs(profile.gear or {}) do slots[#slots+1]=slot end
         table.sort(slots)
         for _,slot in ipairs(slots) do
             local item=GL.ArmoryItem(record,slot)
-            local values={}
-            local link=GL.ArmoryItemLink(item)
-            if link and not item.stats then
-                local stats=GL.Safe(C_Item and C_Item.GetItemStats or GetItemStats,link) or {}
-                for key,amount in pairs(stats) do values[#values+1]=tostring(amount).." "..(_G[key] or key) end
-                table.sort(values)
+            if item then
+                local values={}
+                local link=GL.ArmoryItemLink(item)
+                if link and not item.stats then
+                    local stats=GL.Safe(C_Item and C_Item.GetItemStats or GetItemStats,link) or {}
+                    for key,amount in pairs(stats) do values[#values+1]=tostring(amount).." "..(_G[key] or key) end
+                    table.sort(values)
+                end
+                if item.armor then values[#values+1]=tostring(item.armor.value)..L(" armure") end
+                for _,stat in ipairs(item.stats or {}) do
+                    values[#values+1]=stat.display and stat.display.display_string or tostring(stat.value).." "..stat.type.name
+                end
+                GL.Print((link or item.name or tostring(item.id)).." "..table.concat(values,", "))
             end
-            if item.armor then values[#values+1]=tostring(item.armor.value).." armure" end
-            for _,stat in ipairs(item.stats or {}) do
-                values[#values+1]=stat.display and stat.display.display_string or tostring(stat.value).." "..stat.type.name
-            end
-            GL.Print((link or item.name or tostring(item.id)).." "..table.concat(values,", "))
         end
     end
 end

@@ -1,7 +1,6 @@
 -- The Armory slot order mirrors the character sheet: two rails and three weapon slots.
 local GL, UI = GrudgeLedger, GrudgeLedger.UITheme
-local french = not GetLocale or GetLocale() == "frFR"
-local function tr(fr, en) return french and fr or en end
+local L = GL.L
 local qualityID = {POOR=0, COMMON=1, UNCOMMON=2, RARE=3, EPIC=4, LEGENDARY=5, ARTIFACT=6, HEIRLOOM=7}
 local inventorySlots = {"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSlot","ShirtSlot","TabardSlot","WristSlot",
     "HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot",
@@ -18,7 +17,7 @@ local function openTip(button)
     button.waitingForItem=not link and button.item and button.item.ref
     if link and GameTooltip.SetHyperlink then
         GameTooltip:SetHyperlink(link)
-        GameTooltip:AddLine(tr("Maj + clic pour insérer dans la discussion.","Shift-click to insert in chat."),.75,.75,.75)
+        GameTooltip:AddLine(L("Maj + clic pour insérer dans la discussion."),.75,.75,.75)
         GameTooltip:Show()
         return
     end
@@ -28,10 +27,10 @@ local function openTip(button)
         for line in button.itemDetails(button.item):gmatch("[^\n]+") do
             GameTooltip:AddLine(line, 1, 1, 1, true)
         end
-        GameTooltip:AddLine(tr("Relevé Armurerie · lien en jeu indisponible.","Armory snapshot · game link unavailable."),.75,.75,.75,true)
+        GameTooltip:AddLine(L("Relevé Armurerie · lien en jeu indisponible."),.75,.75,.75,true)
     else
-        GameTooltip:AddLine(button.hasVariant and tr("Détails de l’objet indisponibles.", "Item details unavailable.")
-            or tr("Aucune pièce publiée pour cet emplacement.", "No item published for this slot."), 1, 1, 1, true)
+        GameTooltip:AddLine(button.hasVariant and L("Détails de l’objet indisponibles.")
+            or L("Aucune pièce publiée pour cet emplacement."), 1, 1, 1, true)
     end
     GameTooltip:Show()
 end
@@ -54,7 +53,7 @@ end
 
 local function slotButton(parent, slot, index)
     local b=CreateFrame("Button",nil,parent)
-    b.slotName=tr(slot[2],slot[3])
+    b.slotName=L(slot[2])
     b.slotID,b.emptyIcon=GL.Safe(GetInventorySlotInfo or (C_PaperDollInfo and C_PaperDollInfo.GetInventorySlotInfo),inventorySlots[index])
     b.trim=b:CreateTexture(nil,"BACKGROUND")
     b.icon=b:CreateTexture(nil,"ARTWORK")
@@ -87,7 +86,7 @@ local function paintBody(view)
         clearModel(view)
         view.image:SetTexture(view.bodyPath)
         view.image:Show()
-        view.caption:SetText(tr("Armurerie","Armory"))
+        view.caption:SetText(L("Armurerie"))
     elseif unit and GL.Safe(UnitGUID,unit)==record.guid and view.model.SetUnit
         and (not IsUnitModelReadyForUI or GL.Safe(IsUnitModelReadyForUI,unit)) then
         if view.modelUnit~=unit or view.modelGUID~=record.guid then
@@ -97,7 +96,7 @@ local function paintBody(view)
         end
         if view.modelGUID==record.guid then
             view.model:Show()
-            view.caption:SetText(tr("Modèle en jeu","Live model"))
+            view.caption:SetText(L("Modèle en jeu"))
         end
     else
         clearModel(view)
