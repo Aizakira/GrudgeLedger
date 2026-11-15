@@ -111,6 +111,17 @@ local function latestCombat(record)
 end
 
 local frame
+local regions={"us","kr","eu","tw"}
+local function armoryURL(fullName)
+    local region=regions[GL.Safe(GetCurrentRegion)]
+    if not region or type(fullName)~="string" or not fullName:find(" ",1,true) then return end
+    local slug=(strlower or string.lower)(fullName):gsub(" +","-"):gsub("[^a-z0-9%-]",function(c)
+        return ("%%%02X"):format(c:byte())
+    end)
+    local locale=GL.Safe(GetLocale)
+    local lang=locale=="frFR" and "fr-fr" or (locale=="esES" or locale=="esMX") and "es-es" or "en-us"
+    return "https://worldofwarcraft.blizzard.com/"..lang.."/forever/"..region.."/armory/character/"..slug
+end
 local percentages={CRITICALSTRIKE=true,DODGE=true,PARRY=true,BLOCK=true,HASTE=true,VERSATILITY=true,AVOIDANCE=true}
 local function statValue(key,v)
     local function number(n)
@@ -124,7 +135,17 @@ end
 local function draw(f)
     local localRecord=GL.Get("guid:"..f.guid)
     local record=localRecord or {guid=f.guid}
-    local profile=object(GL.ArmoryProfile(record))
+    local archive=object(GL.ArmoryProfile(record))
+    local profile=setmetatable({}, {__index=archive})
+    local inspection,pending
+    if GL.DossierInspection then inspection,pending=GL.DossierInspection(record) end
+    inspection=object(inspection)
+    local archivedAt=tonumber(archive.updated) or 0
+    if archivedAt>=100000000000 then archivedAt=archivedAt/1000 end
+    if inspection.gear and (not archive.gear or inspection.gearAt>=archivedAt) then
+        profile.inspectedGear,profile.partialGear=inspection.gear,inspection.partialGear
+    end
+    if inspection.trees and (not archive.trees or inspection.talentsAt>=archivedAt) then profile.trees=inspection.trees end
     local public=object(profile.identity)
     local name=text(record.fullName) or text(public.name) or text(f.knownName)
     if not name and GL.Bounties and GL.Bounties.MemberName then name=text(GL.Bounties.MemberName(f.guid)) end
@@ -138,6 +159,13 @@ local function draw(f)
     local event=latestCombat(record)
     local combat=object(event and event.combat)
     local stats=object(profile.stats)
+    local liveStats=inspection.stats and (not next(stats) or inspection.statsAt>=archivedAt)
+    if liveStats then
+        local combined={}
+        for key,v in pairs(stats) do combined[key]=v end
+        for key,v in pairs(inspection.stats) do combined[key]=v end
+        stats=combined
+    end
     -- Reuse the two-column stat rows as the selected character changes.
     local used,seen,y=0,{},0
     local function addStat(key)
@@ -158,7 +186,10 @@ local function draw(f)
     for i=used+1,#f.statCells do f.statCells[i]:Hide() end
     y=math.ceil(used/2)*47
     local info={}
-    if used==0 then info[1]=tr("Caractéristiques non publiées.\n","No attributes published.\n") end
+    if used==0 then info[1]=tr("Aucun relevé de caractéristiques.\n","No attribute snapshot.\n") end
+    if liveStats then
+        info[#info+1]=field(tr("Caractéristiques vues en jeu","Attributes seen in game"),timestamp(inspection.statsAt))
+    end
     info[#info+1]=field(tr("Guilde","Guild"),text(record.guild) or text(public.guild))
     info[#info+1]=field(tr("Niveau Armurerie","Armory level"),valueOf(profile.level))
     info[#info+1]=field(tr("Niveau vu en jeu","Last observed level"),text(GL.ValidLevel(record.level)))
@@ -171,8 +202,26 @@ local function draw(f)
     f.observed:ClearAllPoints(); f.observed:SetPoint("TOPLEFT",0,-y-5); f.observed:SetText(table.concat(info,"\n"))
     f.identityBody:SetHeight(math.max(f.identityScroll:GetHeight(),y+f.observed:GetStringHeight()+12))
     local snap=f.page=="reputation" and profile.reputationsAt or profile.updated
-    f.source:SetText(tr("Relevé Armurerie : ","Armory snapshot: ")..timestamp(snap))
-    f.ilvl:SetText(f.page=="gear" and field(tr("Niv. d’objet moyen","Average item level"),valueOf(profile.averageItemLevel)) or "")
+    local observedAt=f.page=="gear" and profile.inspectedGear and inspection.gearAt
+        or f.page=="talents" and inspection.trees and profile.trees==inspection.trees and inspection.talentsAt
+    local source
+    if observedAt then
+        source=(f.page=="gear" and profile.partialGear and tr("Inspection partielle · ","Partial inspection · ")
+            or tr("Inspection en jeu · ","Inspected in game · "))..timestamp(observedAt)
+    elseif snap then source=tr("Relevé Armurerie : ","Armory snapshot: ")..timestamp(snap)
+    elseif pending and (f.page=="gear" or f.page=="talents") then
+        source=tr("Inspection en cours…","Inspecting…")
+    elseif f.page=="gear" or f.page=="talents" then
+        local unit=GL.VisiblePortraitUnit(record)
+        if not unit then source=tr("Hors de vue · aucun relevé chargé","Out of sight · no snapshot loaded")
+        else source=tr("Aucun relevé disponible en jeu","No in-game snapshot available") end
+    else source=tr("Aucun relevé Armurerie chargé","No Armory snapshot loaded") end
+    f.source:SetText(source)
+    f.armoryURL=not snap and armoryURL(record.fullName or public.name or f.knownName)
+    if f.armoryURL then f.armoryButton:Show() else f.armoryButton:Hide(); f.armoryLink:Hide() end
+    local itemLevel=profile.averageItemLevel
+    if profile.inspectedGear then itemLevel=inspection.averageItemLevel end
+    f.ilvl:SetText(f.page=="gear" and field(tr("Niv. d’objet moyen","Average item level"),valueOf(itemLevel)) or "")
     for key,b in pairs(f.tabs) do UI.selectButton(b,f.page==key) end
     local gear,talents=f.page=="gear",f.page=="talents"
     if gear then f.equipment:Show(); GL.DrawDossierEquipment(f.equipment,record,profile,slots,slotOrder,itemDetails) else f.equipment:Hide() end
@@ -270,6 +319,14 @@ local function build()
     f.identityScroll,f.identityBody=scrollArea(f,40,-297,243,296)
     f.observed=UI.label(f.identityBody,"",nil,0,0,239); f.observed:SetTextColor(unpack(UI.theme.muted))
     f.bounty=UI.button(f,tr("Prime de ce joueur","Player bounty"),40,-612,247,function() GL.OpenContactBounty(f.guid) end)
+    f.armoryButton=UI.button(f,tr("Lien vers l’Armurerie","Armory link"),40,-643,247,function()
+        f.armoryLink:SetText(f.armoryURL); f.armoryLink:Show(); f.armoryLink:SetFocus(); f.armoryLink:HighlightText()
+    end)
+    f.armoryLink=CreateFrame("EditBox",nil,f.armoryButton,"InputBoxTemplate")
+    f.armoryLink:SetSize(245,24); f.armoryLink:SetPoint("CENTER")
+    f.armoryLink:SetAutoFocus(false); f.armoryLink:Hide()
+    f.armoryLink:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
+    f.armoryLink:SetScript("OnEditFocusLost",function(self) self:Hide() end)
     f.tabs={}; f.rows={}; f.statCells={}
     for i,s in ipairs({{"gear","Équipement","Equipment"},{"talents","Talents","Talents"},{"pvp","JcJ","PvP"},{"reputation","Réputations","Reputations"}}) do
         local key=s[1]
@@ -288,9 +345,15 @@ end
 function GL.OpenPlayerDossier(guid,onReturn,knownName)
     if type(guid)~="string" or #guid>32 or not guid:match("^Player%-%w+%-%w+$") then return false end
     frame=frame or build()
+    frame.armoryLink:Hide()
     frame.guid,frame.onReturn,frame.knownName,frame.page=guid,onReturn,knownName,"gear"
     frame.scroll:SetVerticalScroll(0); frame.identityScroll:SetVerticalScroll(0)
+    if GL.InspectDossierUnit then GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=guid}),guid) end
     GL.ShowBookPage(frame)
     draw(frame)
     return true
 end
+
+GL.On("DOSSIER_UPDATED",function(guid)
+    if frame and frame:IsShown() and frame.guid==guid then draw(frame) end
+end)

@@ -357,6 +357,7 @@ function T.Observe(unit, reuseObservation)
         local previousGuild = record and record.guild
         record = GL.RecordSeen(identity)
         if record and GL.ObservePortrait then GL.ObservePortrait(unit) end
+        if record and unit=="target" and GL.InspectDossierUnit then GL.InspectDossierUnit(unit,identity.guid) end
         if record and record.guild ~= previousGuild then GL.Emit("CHANGED", record) end
     end
     if not enabled() or not f or deathHandled then return end
@@ -404,6 +405,7 @@ function T.Observe(unit, reuseObservation)
         f.enemies[identity.key] = enemy
     end
     enemy.identity = identity
+    if GL.InspectDossierUnit then GL.InspectDossierUnit(unit, identity.guid) end
     local now = GL.Now()
     if dead == nil then dead = bool(UnitIsDeadOrGhost, unit) end
     if dead == false then

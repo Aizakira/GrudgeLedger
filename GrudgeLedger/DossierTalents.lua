@@ -11,6 +11,42 @@ for class,trees in pairs(GL.DossierTalentData) do
     end
 end
 
+function GL.ReadInspectedTalents(class)
+    local catalog=GL.DossierTalentData[class]
+    local configID=Constants and Constants.TraitConsts and Constants.TraitConsts.INSPECT_TRAIT_CONFIG_ID
+    if not catalog or not configID or not C_Traits or not GL.Safe(C_Traits.HasValidInspectData) then return end
+    local config=GL.Safe(C_Traits.GetConfigInfo,configID)
+    if not config or not config.treeIDs or #config.treeIDs==0 then return end
+    local result,matched={},false
+    for index,branch in ipairs(catalog) do
+        result[index]={name=tr(branch.fr,branch.en),points=0,talents={}}
+    end
+    for _,treeID in ipairs(config.treeIDs) do
+        local nodes=GL.Safe(C_Traits.GetTreeNodes,treeID)
+        if not nodes or #nodes==0 then return end
+        for _,nodeID in ipairs(nodes) do
+            local node=GL.Safe(C_Traits.GetNodeInfo,configID,nodeID)
+            if not node then return end
+            local rank=GL.Clean(node.ranksPurchased,"number") or GL.Clean(node.activeRank,"number")
+            if not rank then return end
+            if rank>0 or not matched then
+                local entryID=node.activeEntry and node.activeEntry.entryID or (node.entryIDs and node.entryIDs[1])
+                local entry=entryID and GL.Safe(C_Traits.GetEntryInfo,configID,entryID)
+                local id=entry and GL.Clean(entry.definitionID,"number")
+                if id and classByTalent[id]==class then
+                    matched=true
+                    if rank>0 then
+                        local branch=result[branchByTalent[id]]
+                        branch.talents[#branch.talents+1]={id,nil,rank}
+                        branch.points=branch.points+rank
+                    end
+                elseif rank>0 then return end
+            end
+        end
+    end
+    return matched and result or nil
+end
+
 local function classOf(record,profile)
     local class=array(profile.identity).classFile or record.class
     if GL.DossierTalentData[class] then return class end

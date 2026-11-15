@@ -14,7 +14,7 @@ end
 local function openTip(button)
     if not GameTooltip then return end
     GameTooltip:SetOwner(button, "ANCHOR_CURSOR")
-    local link=GL.ArmoryItemLink(button.item)
+    local link=button.inspectedLink or GL.ArmoryItemLink(button.item)
     button.waitingForItem=not link and button.item and button.item.ref
     if link and GameTooltip.SetHyperlink then
         GameTooltip:SetHyperlink(link)
@@ -37,7 +37,7 @@ local function openTip(button)
 end
 local function insertItem(button,mouseButton)
     if mouseButton~="LeftButton" or not IsModifiedClick("CHATLINK") then return end
-    local link=GL.ArmoryItemLink(button.item)
+    local link=button.inspectedLink or GL.ArmoryItemLink(button.item)
     if link then
         local insert=ChatFrameUtil and ChatFrameUtil.InsertLink or ChatEdit_InsertLink
         if insert then insert(link) end
@@ -55,8 +55,7 @@ end
 local function slotButton(parent, slot, index)
     local b=CreateFrame("Button",nil,parent)
     b.slotName=tr(slot[2],slot[3])
-    local _, emptyIcon=GL.Safe(GetInventorySlotInfo,inventorySlots[index])
-    b.emptyIcon=emptyIcon
+    b.slotID,b.emptyIcon=GL.Safe(GetInventorySlotInfo or (C_PaperDollInfo and C_PaperDollInfo.GetInventorySlotInfo),inventorySlots[index])
     b.trim=b:CreateTexture(nil,"BACKGROUND")
     b.icon=b:CreateTexture(nil,"ARTWORK")
     b.icon:SetPoint("TOPLEFT",b.trim,"TOPLEFT",1,-1)
@@ -203,19 +202,23 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
         local key=variantKeys[i]
         local archive=GrudgeLedgerArmory
         local item=key and archive and type(archive.items)=="table" and GL.ArmoryItem(record,key)
+        local link=profile.inspectedGear and profile.inspectedGear[b.slotID]
+        b.inspectedLink=link
+        if profile.inspectedGear and (link or not profile.partialGear) then item=nil end
         b.item=type(item)=="table" and item or nil
-        b:SetScript("OnClick",b.item and b.item.ref and insertItem or nil)
-        b.itemDetails,b.hasVariant=itemDetails,key~=nil
-        b.itemName=b.item and type(item.name)=="string" and UI.plain(item.name) or nil
+        b:SetScript("OnClick",(link or (b.item and b.item.ref)) and insertItem or nil)
+        b.itemDetails,b.hasVariant=itemDetails,b.item~=nil or (not profile.inspectedGear and key~=nil)
+        local name=link and link:match("|h%[(.-)%]|h") or (b.item and item.name)
+        b.itemName=type(name)=="string" and UI.plain(name) or nil
         local quality=b.item and type(item.quality)=="table" and qualityID[item.quality.type]
         local r,g,blue
         if quality then r,g,blue=GL.Safe(GetItemQualityColor,quality) end
         b.color=r and {r,g,blue} or UI.theme.paper
         if r then b.trim:SetColorTexture(r,g,blue) else b.trim:SetColorTexture(unpack(UI.theme.gold)) end
-        local icon=b.item and tonumber(item.icon)
+        local icon=link and GL.Safe(C_Item and C_Item.GetItemIconByID or GetItemIcon,link) or (b.item and tonumber(item.icon))
         local texture=(icon and icon>0 and icon) or b.emptyIcon
         if texture then b.icon:SetTexture(texture) else b.icon:SetColorTexture(unpack(UI.theme.panel)) end
-        b.icon:SetAlpha((b.item or not texture) and 1 or .45)
+        b.icon:SetAlpha((link or b.item or not texture) and 1 or .45)
         b.title:SetText(b.itemName or "—")
     end
 end
