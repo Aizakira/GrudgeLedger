@@ -765,4 +765,85 @@ assert(#messages==1 and messages[1]:find("ressuscit",1,true))
 GL.SetSetting("enemyAlerts", false)
 assert(not toast.shown and not eventFrame.events.CHAT_MSG_SAY and not eventFrame.events.UNIT_TARGET)
 assert(#GL.errors == 0)
+-- The real observation/toast path also accepts guild contracts without a journal record.
+do
+    for token in pairs(plates) do D.OnEvent(nil, "NAME_PLATE_UNIT_REMOVED", token) end
+    units.target, units.mouseover = nil, nil
+    local wanted = { name="Wanted", surname="Stranger", guid="Player-1-bounty" }
+    local order = { id="contract-1", target=wanted.guid, state="open", expires=now+10000, note="At the bridge |Ttest" }
+    GL.Bounties = { OpenFor=function(guid)
+        if guid==order.target and now<=order.expires then return order end
+    end }
+    local openedBounty
+    GL.OpenBounties = function(guid) openedBounty=guid end
+    GL.SetSetting("enemyAlerts", true)
+    GL.SetSetting("sounds", true)
+    now=now+400
+    local before, chatBefore = #sounds, #messages
+    units.nameplate20=wanted
+    makePlate("nameplate20")
+    local identity=GL.Identity("nameplate20")
+    assert(not GL.Get(identity))
+    D.OnEvent(nil,"NAME_PLATE_UNIT_ADDED","nameplate20")
+    flushTimers()
+    assert(toast.shown and toast.bounty.id==order.id and toast.relation=="enemy")
+    assert(toast.title.text=="Cible de prime à proximité" and toast.note.text=="At the bridge ||Ttest")
+    assert(#sounds==before+1 and sounds[#sounds][1]==SOUNDKIT.RAID_WARNING and #messages==chatBefore)
+    D.Refresh()
+    assert(toast.shown and not GL.Get(identity), "a bounty toast survives refresh without creating a journal record")
+    units.target,units.mouseover=wanted,wanted
+    D.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+    D.OnEvent(nil,"UPDATE_MOUSEOVER_UNIT")
+    assert(#sounds==before+1, "nameplate, target and mouseover share one alert cooldown")
+    units.target={name="Other",surname="Person",guid="Player-1-other"}
+    toast.scripts.OnClick(toast,"LeftButton")
+    assert(openedBounty==wanted.guid, "click opens the captured bounty after targeting someone else")
+    units.target=wanted
+    now=now+GL.Settings().alertCooldown-1
+    D.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+    assert(not toast.shown and #sounds==before+1)
+    now=now+1
+    D.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+    assert(toast.shown and #sounds==before+2)
+    order.note="Updated instruction"
+    GL.Emit("BOUNTIES_CHANGED")
+    assert(toast.note.text==order.note and #sounds==before+2)
+    order.state="claimed"
+    GL.Emit("BOUNTIES_CHANGED")
+    assert(not toast.shown, "completed hunt removes the active bounty toast")
+    for _,state in ipairs({"claimed","fulfilled","paid","withdrawn","expired"}) do
+        order.state=state; now=now+400
+        D.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+        assert(not toast.shown and #sounds==before+2)
+    end
+    order.state="open"; order.expires=now-1
+    D.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+    assert(not toast.shown)
+    order.expires=now+10000
+    GL.SetSetting("enemyAlerts",false)
+    D.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+    assert(not toast.shown)
+    GL.SetSetting("enemyAlerts",true)
+    IsInInstance=function()return true,"pvp" end
+    D.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+    assert(not toast.shown)
+    IsInInstance=function()return false,"none" end
+    GL.SetSetting("sounds",false)
+    GL.Emit("BOUNTIES_CHANGED")
+    assert(toast.shown and #sounds==before+2, "newly received contract uses visible units and honors muted sounds")
+    -- A known enemy with the same contract still produces one popup/sound, without changing their rating.
+    now=now+400
+    GL.SetSetting("sounds",true)
+    local known=GL.SetReaction(identity,"enemy")
+    D.OnEvent(nil,"PLAYER_TARGET_CHANGED")
+    local knownSounds=#sounds
+    D.OnEvent(nil,"UPDATE_MOUSEOVER_UNIT")
+    assert(toast.bounty and #sounds==knownSounds and GL.Relation(known)=="enemy")
+    assert(#sounds==before+3)
+    -- Switching to a different guild removes the contract immediately, even before toast expiry.
+    GL.Bounties.OpenFor=function()end
+    D.Refresh()
+    assert(not toast.shown)
+    assert(#GL.errors==0,GL.errors[1] and GL.errors[1].text)
+end
 print("PASS display: existing plates, ThreatPlates, confidence badges/corrections, color restoration, recycling, secret/protected values, cooldowns/sounds, captured clicks, guild inheritance/burst grouping/PvP exemptions, tooltips and missing APIs")

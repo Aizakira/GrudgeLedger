@@ -9,9 +9,9 @@
 
 A small personal player journal for **World of Warcraft Forever**: friends, enemies, notes, guild opinions and PvP encounters, brought together in one addon.
 
-[Français](README.fr.md) · [Download](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.4) · [Report a bug or suggest an idea](https://github.com/Aizakira/GrudgeLedger/issues)
+[Français](README.fr.md) · [Download](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.5) · [Report a bug or suggest an idea](https://github.com/Aizakira/GrudgeLedger/issues)
 
-**[Try the guild bounties alpha (0.11.4)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.4)** to post contracts, track a hunt, split the gold by mail and compare dated guild opinions. The release includes the installable ZIP and playtest notes.
+**[Try the guild bounties alpha (0.11.5)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.5)** to post contracts, track a hunt, split the gold by mail and compare dated guild opinions. The release includes the installable ZIP and playtest notes.
 
 ## Why this exists
 
@@ -343,7 +343,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 ## Install
 
-1. Download the **`GrudgeLedger-<version>.zip`** addon package from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.4).
+1. Download the **`GrudgeLedger-<version>.zip`** addon package from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.5).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 

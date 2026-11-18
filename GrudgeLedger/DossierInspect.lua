@@ -50,9 +50,22 @@ local function readGear(unit)
     return next(gear) and gear, unresolved
 end
 
+local function inspectToken(unit, guid)
+    if unit and GL.Safe(UnitGUID, unit) == guid and GL.Safe(UnitIsVisible, unit) == true then return unit end
+    unit = GL.VisiblePortraitUnit({guid=guid})
+    if unit then return unit end
+    local size = GL.Clean(GL.Safe(GetNumGroupMembers), "number") or 0
+    local raid = GL.Safe(IsInRaid) == true
+    for i = 1, math.min(size, raid and 40 or 4) do
+        local token = (raid and "raid" or "party") .. i
+        if GL.Safe(UnitGUID, token) == guid and GL.Safe(UnitIsVisible, token) == true then return token end
+    end
+end
+
 function GL.InspectDossierUnit(unit, guid, retrySample)
-    if type(guid) ~= "string" or not guid:match("^Player%-") or not unit
-        or GL.Safe(UnitGUID, unit) ~= guid or GL.Safe(UnitIsVisible, unit) ~= true or GL.IsPvPInstance() then return end
+    if type(guid) ~= "string" or not guid:match("^Player%-") or GL.IsPvPInstance() then return end
+    unit = inspectToken(unit, guid)
+    if not unit then return end
     local now = GL.Now()
     local state = stateFor(guid)
     local record = GL.Get("guid:" .. guid)
@@ -142,8 +155,7 @@ events:SetScript("OnEvent", function(_, _, guid)
     guid = GL.Clean(guid, "string")
     if not pending or pending.guid ~= guid then return end
     local request = pending
-    local unit = request.unit
-    if GL.Safe(UnitGUID, unit) ~= guid then unit = GL.VisiblePortraitUnit({guid = guid}) end
+    local unit = inspectToken(request.unit, guid)
     if not unit or GL.Safe(UnitGUID, unit) ~= guid or not GL.Safe(UnitIsVisible, unit) or GL.IsPvPInstance() then return end
     pending = nil
     local state = request.state

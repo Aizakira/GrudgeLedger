@@ -15,6 +15,7 @@ local methods = getmetatable(UIParent).__index
 function methods:SetParent(parent) self.parent = parent end
 function methods:SetAtlas(atlas) assert(knownAtlas[atlas]) self.atlas, self.texture = atlas, nil end
 function methods:SetTexture(path) self.texture, self.atlas = path, nil end
+function methods:SetAlpha(value) self.alpha = value end
 
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
@@ -354,14 +355,32 @@ assert(dossier.reconstructedPortrait and dressed["item:9"] and dressed["item:11"
 GrudgeLedgerNativePortraits={[contact.guid]=true}
 GL.PaintBookPortrait(dossier,contact)
 headshot.scripts.OnModelLoaded(headshot)
-assert(dossier.archivedPortrait=="native" and dossier.reconstructedPortrait and headshot:IsShown(), "the saved native face remains behind the animated offline preview")
+assert(dossier.archivedPortrait=="native" and not dossier.reconstructedPortrait and not headshot:IsShown()
+    and dossier.raceIcon.alpha==1, "an archived native face must remain visible instead of an approximate model")
 units.target={guid=contact.guid}
+GL.Remember(GL.IdentityFromName("Donor", "Sample", contact.guid))
+GL.ObservePortrait("target")
 GL.PaintBookPortrait(dossier,contact)
 assert(dossier.portraitUnit=="target" and dossier.liveModelPortrait and headshot.unitSet=="target" and not dossier.reconstructedPortrait)
 units.target={guid="Player-42-FFFF"}
 headshot.scripts.OnModelLoaded(headshot)
 assert(not dossier.liveModelPortrait, "a recycled token cannot complete a live portrait for the previous character")
 units.target=nil
+GL.PaintBookPortrait(dossier,contact)
+headshot.scripts.OnModelLoaded(headshot)
+assert(dossier.livePortraitGUID==contact.guid and not dossier.reconstructedPortrait and not headshot:IsShown()
+    and dossier.raceIcon.alpha==1, "leaving range retains the observed face even after a late model callback")
+-- The list and detail use this same priority, including after spirit release.
+dossier:Hide()
+GL.ShowLedger(contact.key or ("guid:"..contact.guid))
+portraitEvent("PLAYER_DEAD")
+portraitEvent("PLAYER_ALIVE")
+portraitEvent("PLAYER_ENTERING_WORLD")
+local retained=assert(rowFor("guid:"..contact.guid))
+for _, slot in ipairs({f,retained}) do
+    assert(slot.livePortraitGUID==contact.guid and slot.raceIcon.alpha==1
+        and not slot.reconstructedPortrait and (not slot.headshot or not slot.headshot:IsShown()))
+end
 profile.alias="name:donor sample"
 GrudgeLedgerArmory.profiles={["eu:"..profile.alias]=profile}
 contact.guid=nil

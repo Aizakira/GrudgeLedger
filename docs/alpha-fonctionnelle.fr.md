@@ -1,4 +1,4 @@
-# Grudge Ledger 0.11.4 — essai en jeu
+# Grudge Ledger 0.11.5 — essai en jeu
 
 **Après une rencontre JcJ.** Le livre relève les caractéristiques et les pièces déjà visibles pendant le combat. Si le client autorise l’inspection, il demande aussi la tenue et les talents de l’adversaire. La fiche ouverte affiche la réponse dès sa réception et le Journal conserve le relevé après la perte de vue. Un adversaire hostile peut être impossible à inspecter, même à proximité. En l’absence de relevé web chargé, **Lien vers l’Armurerie** sélectionne l’adresse du personnage, à copier dans un navigateur. Le compagnon complète la fiche lors du prochain import et WoW charge ces données au rechargement de l’interface.
 
@@ -6,13 +6,15 @@ Ouvrir le livre avec `/gl`. Dans **Relations**, choisir **Menaces**, **Amis**, *
 
 **Fiche d’un joueur.** Dans le Journal, cliquer sur le nom de la fiche ouverte ou sur **Armurerie**. Depuis une prime, cliquer sur le portrait. **Retour** retrouve le contrat sélectionné. Les caractéristiques se trouvent dans la colonne gauche. **Équipement** présente la tenue autour du personnage : survoler une pièce pour lire sa variante, ses statistiques et ses effets. Le modèle en pied apparaît lorsque le jeu peut afficher le personnage dont l’identifiant correspond à la fiche. Hors de vue, le client habille un mannequin de la race et du sexe de la fiche avec les pièces connues, même lorsque le joueur est seul. Le visage du mannequin peut différer de celui du personnage. Le portrait reste au centre pendant le chargement ou si aucun modèle compatible n’est disponible. Le Journal conserve le dernier relevé valable dès qu’il est chargé pour un contact. **Talents** place les talents selon les arbres du client Forever ; le survol affiche leurs détails. **JcJ** sépare victoires honorables, rang et champs de bataille publics des combats personnels et de guilde. **Réputations** liste les factions et leur progression publiée. Un champ absent reste inconnu ; un zéro publié reste un zéro. Les niveaux observés au combat et le niveau de l’Armurerie restent distincts. Le dossier ne donne pas de position en temps réel.
 
+**Fiches partagées.** Les membres équipés de cette version échangent automatiquement les données publiques disponibles pour les fiches de guilde et les cibles de primes. Les sections manquantes peuvent être complétées par un membre, une inspection autorisée ou le compagnon local. Les notes et le journal personnel restent privés. Voir [le fonctionnement et les limites](shared-dossiers.fr.md).
+
 **Actualiser l’Armurerie.** Le jeu lit le module privé local GrudgeLedgerPortraits. L’addon ne fait pas de requête web pendant le combat. Après sauvegarde du Journal (`/reload` ou déconnexion), depuis le dépôt avec Python et Pillow :
 
 ```powershell
 python tools/sync_portraits.py "CHEMIN_DU_JEU/_forever_" --region eu --locale fr-fr
 ```
 
-Les contacts du Journal et des primes ont un portrait animé. À portée, le client affiche la tête du personnage identifié. Hors de vue, il utilise sa race, son sexe et les pièces connues pour reconstruire le portrait. Un contact ajouté par nom seul obtient son aperçu dès que son identité est disponible. L’importeur vérifie l’identité, partage les variantes d’objets identiques entre les fiches et conserve la dernière copie valable si un personnage n’est plus disponible. Les portraits, données d’Armurerie et données de compte restent privés. Redémarrer le client pour charger de nouveaux fichiers ou un nouveau module ; activer le module privé dans la liste des addons. Ensuite, un rechargement suffit pour relire un module déjà connu.
+Les contacts du Journal et des primes ont un portrait animé. À portée, le client affiche la tête du personnage identifié. Hors de vue, le portrait vu en jeu est conservé lorsqu’il est en mémoire ou archivé. Sinon, le client utilise sa race, son sexe et les pièces connues pour reconstruire un aperçu. Un contact ajouté par nom seul obtient son aperçu dès que son identité est disponible. L’importeur vérifie l’identité, partage les variantes d’objets identiques entre les fiches et conserve la dernière copie valable si un personnage n’est plus disponible. Les portraits, données d’Armurerie et données de compte restent privés. Redémarrer le client pour charger de nouveaux fichiers ou un nouveau module ; activer le module privé dans la liste des addons. Ensuite, un rechargement suffit pour relire un module déjà connu.
 
 Pour automatiser les prochains imports sur ce poste, ajouter `--watch` à la même commande et la laisser ouverte. L’outil observe les sauvegardes écrites par WoW ; les profils récents restent en cache. Arrêt avec Ctrl+C. Il n’y a pas d’actualisation web instantanée pendant un combat.
 
@@ -34,6 +36,8 @@ Sous Windows, ajouter aussi `--native-portraits` pour conserver la première min
 4. Le deuxième chasseur ouvre sa boîte. Après synchronisation, les trois historiques doivent afficher « Payée ». Fermer et rouvrir la boîte, puis recharger l’interface. Les deux parts doivent toujours totaliser 12 PO.
 
 ## Étiquettes et primes dans l’alpha 4
+
+Une cible de prime en cours directement observée déclenche le même popup et le même son qu’une alerte ennemie, même sans fiche dans le Journal. Le titre indique « Cible de prime à proximité » et le clic ouvre le contrat. Les réglages des alertes ennemies, du son et du délai entre rappels s’appliquent ; le délai séparé de deux minutes et le message de proximité dans le chat sont supprimés. La prime ne modifie pas le classement personnel. Une prime terminée, retirée ou expirée ne déclenche plus cette alerte. La détection repose sur une barre de nom, le ciblage ou le survol, hors champ de bataille et arène.
 
 Dans **Journal → Notes → Étiquettes**, choisissez un ou plusieurs repères. Le menu du personnage permet également d’ouvrir ses étiquettes. Cliquez à nouveau sur un repère pour le retirer. Le filtre du Journal se combine avec le nom, la faction et l’avis. « Fiable » permet aussi de retrouver un bon équipier. Les étiquettes appartiennent au carnet privé du compte. Les rappels d’invitation et de groupe se règlent dans **Réglages → Alertes**.
 

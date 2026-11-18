@@ -134,6 +134,7 @@ local function publish(s,owner,target,digest,at,account,name,authorName)
     j.cards[key]=c
     j.byTarget[target]=j.byTarget[target] or {}
     j.byTarget[target][key]=true
+    if not j.hidden[target] then GL.RequestArmory("guid:"..target,name,target) end
     return c
 end
 function G.Publish(record)
@@ -317,6 +318,7 @@ function G.CatchUp(s,me,joining)
         if joining or owner==me then sendDelete(s,owner,target,token) end
     end
     for _,c in pairs(j.cards) do
+        if not j.hidden[c.target] then GL.RequestArmory("guid:"..c.target,c.name,c.target) end
         if joining and (c.owner~=me or not j.secrets[c.key]) then B.SendJournal(s,"V;"..c.key) end
         if c.owner==me and c.name and j.secrets[c.key] then sendCreate(s,c) end
         for _,e in pairs(c.opinions) do if e.actor==me then sendTag(s,c,e) end end

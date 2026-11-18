@@ -692,3 +692,4 @@ end
 
 -- A burst of sync events repaints the visible panel only once on the next frame.
 GL.On("BOUNTIES_CHANGED",function() if f then f.dirty=true end end)
+GL.On("DOSSIER_UPDATED",function() if f then f.dirty=true end end)

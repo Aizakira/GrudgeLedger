@@ -367,7 +367,7 @@ function B.Due(o,payer,hunter)
     return due
 end
 local queue,queued,active={}, {},nil
-local joined, openTargets, lastAlert, indexedScope
+local joined, openTargets, indexedScope
 local reconcileInbox
 local draft,pending,hooked,selectedOrder
 local pendingRefresh={}
@@ -402,6 +402,11 @@ end
 B.GuildScope = scope
 function B.SendJournal(s, message)
     schedule(s, "J;" .. message)
+end
+function B.SendDossier(s,messages)
+    if active==s and #queue+#messages>512 then return false end
+    for _,msg in ipairs(messages) do schedule(s,"J;"..msg) end
+    return true
 end
 -- Per-member cumulative totals survive replay and offline catch-up.
 local function mergeScore(s,actor,target,wins,losses)
@@ -540,16 +545,6 @@ function B.OpenFor(target)
     local o=openTargets[target]
     if o and (o.state=="claimed" or GL.Now()<=o.expires) then return o end
 end
-function B.Observe(target)
-    if not joined then return end
-    local o=B.OpenFor(target)
-    if not o or o.state~="open" then return end
-    local now=GL.Now()
-    if now<=o.expires and (not lastAlert[o.id] or now-lastAlert[o.id]>=120) then
-        lastAlert[o.id]=now
-        GL.Print(ML("Prime de guilde : %s"):format(o.name)..(o.note and o.note~="" and " — "..o.note or ""))
-    end
-end
 function B.Withdraw(id)
     local s,me=scope()
     local o=s and view(s)[id]
@@ -638,6 +633,10 @@ local function receive(msg,sender)
     budget.n=budget.n+1
     if budget.n>45 then return end
     if msg:sub(1,2)=="J;" then
+        if msg:sub(3,5)=="S1;" then
+            if sender~=me and GL.SharedDossiers then GL.SharedDossiers.Receive(s,sender,msg:sub(3)) end
+            return
+        end
         if sender~=me and GL.GuildProfiles then GL.GuildProfiles.Receive(s,me,sender,msg:sub(3)) end
         return
     end
@@ -970,10 +969,10 @@ local function join()
         end
         lastPrune=GL.Now()
     end
-    if s and not next(roster) then joined,openTargets,lastAlert=nil,nil,{}; return end
+    if s and not next(roster) then joined,openTargets=nil,nil; return end
     if s~=joined then
         budgets={}
-        joined,openTargets,lastAlert=s,nil,{}
+        joined,openTargets=s,nil
         if s then
             finalize(s,me)
             schedule(s,"Q")

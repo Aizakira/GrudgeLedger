@@ -40,6 +40,21 @@ GL.InitDB()
 assert(legacy.reputation == -9 and legacy.pvp.deaths == 1 and legacy.pvp.kills == 2)
 assert(legacy.pvp.probableDeaths == nil and legacy.history[2].confidence == "confirmed")
 
+-- Issue #22: one previously attributed death stays one through two reloads.
+local migrated = GL.Remember(GL.IdentityFromName("Migration", "Example", "Player-1-migration"))
+migrated.pvp.probableDeaths, migrated.pvp.probableAggressions = 1, 1
+migrated.history = {
+    {kind="death", confidence="probable", eventId="old-death"},
+    {kind="aggression", confidence="probable", eventId="old-attack"},
+}
+for _ = 1, 2 do
+    GL.InitDB()
+    assert(migrated.pvp.deaths == 1 and migrated.pvp.aggressions == 1 and migrated.reputation == -11)
+end
+assert(not GL.RecordPvP(migrated, "death", "confirmed", "Repeated signal", "old-death"))
+GL.RecordPvP(migrated, "death", "confirmed", "New encounter", "new-death")
+assert(migrated.pvp.deaths == 2 and migrated.reputation == -21)
+
 -- A later Neutral click used to pin this same outstanding debt at zero.
 legacy.reaction, legacy.reactionSource, legacy.reputation = "neutral", "manual", 0
 table.insert(legacy.history, {kind="reaction", reaction="neutral"})
