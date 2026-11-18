@@ -403,6 +403,11 @@ B.GuildScope = scope
 function B.SendJournal(s, message)
     schedule(s, "J;" .. message)
 end
+function B.SendDossier(s,messages)
+    if active==s and #queue+#messages>512 then return false end
+    for _,msg in ipairs(messages) do schedule(s,"J;"..msg) end
+    return true
+end
 -- Per-member cumulative totals survive replay and offline catch-up.
 local function mergeScore(s,actor,target,wins,losses)
     s.scores=s.scores or {}
@@ -628,6 +633,10 @@ local function receive(msg,sender)
     budget.n=budget.n+1
     if budget.n>45 then return end
     if msg:sub(1,2)=="J;" then
+        if msg:sub(3,5)=="S1;" then
+            if sender~=me and GL.SharedDossiers then GL.SharedDossiers.Receive(s,sender,msg:sub(3)) end
+            return
+        end
         if sender~=me and GL.GuildProfiles then GL.GuildProfiles.Receive(s,me,sender,msg:sub(3)) end
         return
     end

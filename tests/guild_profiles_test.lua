@@ -20,7 +20,7 @@ local function client(i,saved)
     env.C_ChatInfo.RegisterAddonMessagePrefix=function() end
     env.C_ChatInfo.SendAddonMessage=function(prefix,msg,channel)
         assert(#msg<=255 and not msg:find("SECRET",1,true))
-        wire[#wire+1]={prefix,msg,channel,c.name,c.guild}
+        if not c.drop or not c.drop(msg) then wire[#wire+1]={prefix,msg,channel,c.name,c.guild} end
         return 0
     end
     env.C_Timer={NewTicker=function(delay,fn) if delay==0.5 then c.tick=fn end; return {Cancel=function() end} end}
@@ -147,4 +147,91 @@ local _,automatic=a.g.View(auto);assert(automatic.leaver==1)
 -- Another character on the publisher's account can withdraw using its saved capability.
 a.m.units.player.guid="Player-1-alt"; assert(a.g.Withdraw(auto))
 for _,p in ipairs(clients) do assert(#p.GL.errors==0,p.GL.errors[1] and p.GL.errors[1].text) end
-print("PASS guild profiles: private attribution, journal actions, disagreements, withdrawals, reloads, offline witnesses, replay, re-publication and guild isolation")
+-- Public dossiers travel through the real guild transport without a companion on B/C.
+do
+    clients,wire={},{}
+    local a,b=client(1),client(2)
+    flush()
+    local identity=a.GL.IdentityFromName("Public","Target","Player-1-abcd")
+    local record=a.GL.Remember(identity)
+    a.GL.AddNote(identity,"SECRET personal note")
+    a.env.GrudgeLedgerArmory={items={{id=100,name="Helmet",ref="item:100",icon=123}},profiles={
+        [identity.guid]={updated=now,identity={name="Public Target",raceID=6,sex=2,classFile="DRUID"},
+            level=44,gear={head=1},stats={HEALTH=1500},trees={{id="balance",name="Balance",points=1,talents={{762,nil,1}}}},
+            honorableKills=12,pvpRank=2,reputations={{name="Faction",standing="Friendly",value=12,max=100}},
+            notes="SECRET",history={{kind="death",name="SECRET"}}}}}
+    assert(a.g.Publish(record))
+    flush()
+    for _,peer in ipairs({a,b}) do assert(#peer.GL.errors==0,peer.GL.errors[1] and peer.GL.errors[1].text) end
+    local p=assert(b.GL.ArmoryProfile(identity),"shared profile missing")
+    assert(p.gear.head.id==100 and p.identity.raceID==6 and p.trees[1].talents[1][3]==1)
+    assert(p.honorableKills==12 and p.reputations[1].value==12 and p.stats.HEALTH==1500)
+    assert(p.sharedSource and not p.notes and not p.history and not b.GL.Get(identity))
+    assert(b.GL.db.armoryRequests[identity.key.."|public target"],"received cards enqueue the automatic Armory fallback")
+    b.GL.OpenPlayerDossier(identity.guid,nil,"Public Target")
+    assert(b.env.GrudgeLedgerPlayerDossier.equipment.equipment.buttons[1].itemName=="Helmet")
+    assert(#b.GL.errors==0,b.GL.errors[1] and b.GL.errors[1].text)
+    -- Local newer data wins, but a missing section still comes from a peer.
+    b.env.GrudgeLedgerArmory={profiles={[identity.guid]={updated=now+1,gear={chest={id=200,name="Chest",ref="item:200"}},stats={HEALTH=2000}}}}
+    p=b.GL.ArmoryProfile(identity)
+    assert(p.stats.HEALTH==2000 and p.gear.head.id==100 and p.gear.chest.id==200 and p.trees[1].points==1)
+    -- Reload retains the public cache; a second peer fills data with the original author offline.
+    local saved=b.GL.db
+    a.online=false
+    b=client(2,saved);flush()
+    assert(b.GL.ArmoryProfile(identity).gear.head.id==100)
+    local c=client(3)
+    -- Card editions deliberately require their original author to be online.
+    -- Give C its already-received card, then exercise offline dossier relay.
+    local scope=c.GL.Bounties.GuildScope()
+    local existing=b.GL.Bounties.GuildScope().journal
+    scope.journal={cards=existing.cards,hidden={},withdrawn={},secrets={},seq=0}
+    c.GL.SharedDossiers.Refresh();flush()
+    assert(c.GL.ArmoryProfile(identity).gear.head.id==100)
+    -- New partial observations fill another slot without erasing previously received gear.
+    a.online=true;now=now+301
+    a.env.GrudgeLedgerArmory.profiles[identity.guid].updated=now
+    a.env.GrudgeLedgerArmory.profiles[identity.guid].gear={chest={id=300,name="New chest",ref="item:300"}}
+    b.GL.SharedDossiers.Refresh();flush()
+    p=b.GL.ArmoryProfile(identity)
+    assert(p.gear.head.id==100 and p.gear.chest.id==300)
+    -- An oversized optional achievement list must not block essential equipment data.
+    local huge={}
+    for i=1,256 do huge[i]={id=i,name=string.rep("Long public achievement ",40)} end
+    a.env.GrudgeLedgerArmory.profiles[identity.guid].achievements=huge
+    -- A dropped fragment preserves the last complete snapshot; the next periodic request repairs it.
+    now=now+301
+    a.env.GrudgeLedgerArmory.profiles[identity.guid].updated=now
+    a.env.GrudgeLedgerArmory.profiles[identity.guid].stats={HEALTH=3333}
+    a.drop=function(msg)return msg:match("^J;S1;P;[^;]+;[^;]+;2;") end
+    b.GL.SharedDossiers.Refresh();flush()
+    assert(b.GL.ArmoryProfile(identity).stats.HEALTH~=3333)
+    a.drop=nil;now=now+301
+    b.GL.SharedDossiers.Refresh();flush()
+    assert(b.GL.ArmoryProfile(identity).stats.HEALTH==3333)
+    assert(not b.GL.ArmoryProfile(identity).achievements)
+    -- A contract without a shared journal card follows the same automatic path.
+    local target="Player-1-abce"
+    a.env.GrudgeLedgerArmory.profiles[target]={updated=now,identity={name="Other Target",faction="Horde"},gear={head=1},stats={HEALTH=800}}
+    assert(a.GL.Bounties.Post(target,"Other Target",100))
+    flush()
+    assert(b.GL.ArmoryProfile({guid=target}).gear.head.id==100 and not b.GL.Get("guid:"..target))
+    b.GL.SharedDossiers.Observe({guid=target,raceID=2,sex=2,class="HUNTER",level=40})
+    assert(b.GL.ArmoryProfile({guid=target}).identity.raceID==2)
+    -- Truncated, oversized, unrequested and hostile payloads cannot overwrite the last good snapshot.
+    local before=p.gear.chest.id
+    for _,msg in ipairs({"S1;P;"..identity.guid..";8;1;999;x", "S1;P;"..identity.guid..";9;1;1;s8:evilcode",
+        "S1;P;Player-1-unknown;9;1;1;t0:", "S1;P;"..identity.guid..";9;1;1;|Texploit"}) do
+        b.m.Fire("CHAT_MSG_ADDON","GLBounty1","J;"..msg,"GUILD",a.name)
+    end
+    assert(b.GL.ArmoryProfile(identity).gear.chest.id==before)
+    -- Visibility and guild boundaries also govern cached dossiers.
+    b.g.HideTarget(identity.guid)
+    assert(not b.GL.ArmoryProfile(identity))
+    b.g.HideTarget(identity.guid,true);flush()
+    assert(b.GL.ArmoryProfile(identity))
+    b.m.units.player.guild="Elsewhere"; b.guild="Elsewhere"; b.m.Fire("PLAYER_GUILD_UPDATE")
+    assert(not b.GL.ArmoryProfile(identity))
+    for _,p in ipairs(clients) do assert(#p.GL.errors==0,p.GL.errors[1] and p.GL.errors[1].text) end
+end
+print("PASS guild profiles and public dossiers: transport, private-data exclusion, auto recovery, partial/newer merge, reload, offline relay, malformed messages and guild isolation")

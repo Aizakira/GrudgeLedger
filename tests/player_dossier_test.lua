@@ -32,6 +32,9 @@ record.class = nil
 GrudgeLedgerPortraitIndex={[guid]=true}
 mock.units.player.guild="Fixture Guild"
 GL.Bounties.GuildFights=function(target) assert(target==guid) return 3,5 end
+GL.Bounties.GuildScope=function() return {scores={[guid]={["Player-1-victim"]={1,3}}}} end
+local memberName=GL.Bounties.MemberName
+GL.Bounties.MemberName=function(id) return id=="Player-1-victim" and "Guild Victim" or memberName(id) end
 local returned=false
 assert(GL.OpenPlayerDossier(guid,function() returned=true end))
 local f=GrudgeLedgerPlayerDossier
@@ -62,6 +65,7 @@ click(f.tabs.pvp)
 assert(all():find("396",1,true) and all():find("Rang JcJ 0",1,true) and all():find("Account champion (compte)",1,true))
 assert(all():find("Arathi 3 parties · 2 V / 1 D",1,true))
 assert(all():find("1 / 0",1,true) and all():find("3 / 5",1,true))
+assert(all():find("Guild Victim 1 V / 3 D",1,true),"guild member deaths remain separate from personal history")
 click(f.tabs.reputation)
 assert(all():find("Forge Amical · 1200 / 6000",1,true) and not all():find("Arathi",1,true))
 click(f.back)

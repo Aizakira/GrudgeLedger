@@ -1740,7 +1740,7 @@ end
 -- Resolve catalog indices before saving a journal snapshot. Each import can renumber items.
 local rememberedProfiles = setmetatable({}, {__mode="k"})
 local brokenCatalogs = setmetatable({}, {__mode="k"})
-function GL.ArmoryProfile(record, remember)
+local function localArmoryProfile(record, remember)
     if not record then return end
     local archive = GrudgeLedgerArmory
     local profiles = type(archive) == "table" and archive.profiles
@@ -1773,6 +1773,11 @@ function GL.ArmoryProfile(record, remember)
         record.armorySnapshot, rememberedProfiles[record] = snapshot, imported
     end
     return imported
+end
+function GL.ArmoryProfile(record, remember, localOnly)
+    local profile=localArmoryProfile(record,remember)
+    if record and not localOnly and GL.SharedDossiers then return GL.SharedDossiers.Merge(record,profile) end
+    return profile
 end
 function GL.ArmoryItem(record,slot)
     local profile=GL.ArmoryProfile(record)

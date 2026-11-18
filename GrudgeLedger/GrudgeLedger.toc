@@ -36,5 +36,6 @@ DossierEquipment.lua
 DossierTalentData.lua
 DossierTalents.lua
 DossierInspect.lua
+SharedDossiers.lua
 PlayerDossier.lua
 BountyUI.lua
