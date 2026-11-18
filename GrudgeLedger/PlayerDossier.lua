@@ -142,10 +142,10 @@ local function draw(f)
     inspection=object(inspection)
     local archivedAt=tonumber(archive.updated) or 0
     if archivedAt>=100000000000 then archivedAt=archivedAt/1000 end
-    if inspection.gear and (not archive.gear or inspection.gearAt>=archivedAt) then
+    if inspection.gear and (not archive.gear or inspection.gearAt>=(archive.gearAt or archivedAt)) then
         profile.inspectedGear,profile.partialGear=inspection.gear,inspection.partialGear
     end
-    if inspection.trees and (not archive.trees or inspection.talentsAt>=archivedAt) then profile.trees=inspection.trees end
+    if inspection.trees and (not archive.trees or inspection.talentsAt>=(archive.treesAt or archivedAt)) then profile.trees=inspection.trees end
     local public=object(profile.identity)
     local mode=GL.ContactBountyMode(record)
     if mode then
@@ -164,7 +164,7 @@ local function draw(f)
     local event=latestCombat(record)
     local combat=object(event and event.combat)
     local stats=object(profile.stats)
-    local liveStats=inspection.stats and (not next(stats) or inspection.statsAt>=archivedAt)
+    local liveStats=inspection.stats and (not next(stats) or inspection.statsAt>=(archive.statsAt or archivedAt))
     if liveStats then
         local combined={}
         for key,v in pairs(stats) do combined[key]=v end
@@ -213,7 +213,9 @@ local function draw(f)
     local observedAt=f.page=="gear" and profile.inspectedGear and inspection.gearAt
         or f.page=="talents" and inspection.trees and profile.trees==inspection.trees and inspection.talentsAt
     local source
-    if observedAt then
+    if profile.sharedSource and not observedAt then
+        source=L("Relevé partagé par %s"):format(GL.Bounties.MemberName(profile.sharedSource) or profile.sharedName or L("Membre de guilde"))
+    elseif observedAt then
         source=(f.page=="gear" and profile.partialGear and L("Inspection partielle · ")
             or L("Inspection en jeu · "))..timestamp(observedAt)
     elseif snap then source=L("Relevé Armurerie : ")..timestamp(snap)
@@ -290,6 +292,12 @@ local function draw(f)
             local wins,losses=GL.Bounties.GuildFights(f.guid)
             if wins==0 and losses==0 then row(L("Aucun résultat partagé pour cette cible."))
             else row(L("Victoires / morts"),wins.." / "..losses) end
+            local scope=GL.Bounties.GuildScope()
+            local members=scope and scope.scores and scope.scores[f.guid] or {}
+            for _,member in ipairs(sortedKeys(members)) do
+                local score=members[member]
+                row(GL.Bounties.MemberName(member) or L("Membre de guilde"),score[1]..L(" V").." / "..score[2]..L(" D"))
+            end
         else row(unknown) end
         row(L("Hauts faits JcJ"),type(profile.achievements)=="table" and tostring(#profile.achievements) or unknown,true)
         if profile.achievementsAt then row(field(L("Relevé"),timestamp(profile.achievementsAt))) end

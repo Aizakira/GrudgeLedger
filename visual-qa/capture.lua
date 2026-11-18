@@ -324,6 +324,12 @@ function QA.capture(name)
         end
         assert(GL.OpenPlayerDossier(guid))
         local f=GrudgeLedgerPlayerDossier
+        if name=="dossier-shared" then
+            GrudgeLedgerArmory.profiles[guid].sharedSource="Player-1-qa-source"
+            GrudgeLedgerArmory.profiles[guid].sharedName="Célestine Longuebrise"
+            GL.OpenPlayerDossier(guid)
+            return f
+        end
         f.tabs[name:sub(9)]:Click()
         return f
     elseif name == "journal" or name == "journal-compact" or name == "journal-transparent" or name == "journal-no-paper" or name == "journal-no-book" or name == "journal-small" or name == "journal-small-bottom" or name:find("^journal%-history") or name:find("^journal%-notes") or name == "journal-matchup" then

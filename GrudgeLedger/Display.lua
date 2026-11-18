@@ -529,6 +529,7 @@ local function observe(unit, notify, reuseObservation)
     local identity = GL.Identity(unit, reuseObservation)
     if identity then
         GL.Trace("observed", identity, unit)
+        if GL.SharedDossiers and notify then GL.SharedDossiers.Observe(identity) end
         if GL.Bounties and notify and GL.db.settings.enemyAlerts then GL.Bounties.Observe(identity.guid) end
         local record = GL.RecordSeen(identity, true)
         encounterState(record,unit)
