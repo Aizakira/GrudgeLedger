@@ -41,9 +41,9 @@ print("PASS client language selection, language fallback, catalog parity and for
 -- Load a fresh copy of the real TOC for each client. Exercise visible buttons,
 -- runtime data, and a failed command, which dictionary parity alone cannot check.
 local words = {
-    fr = {"À chasser", "Créer la prime", "Tête", "Réputations de factions", "Caractéristiques", "Butin ninja", "Aucun envoi incertain à vérifier."},
-    en = {"To hunt", "Post bounty", "Head", "Faction reputations", "Attributes", "Ninja looting", "No uncertain mail to check."},
-    es = {"Por cazar", "Publicar recompensa", "Cabeza", "Reputación de facciones", "Atributos", "Robo de botín", "No hay envíos pendientes de verificación."},
+    fr = {"À chasser", "Créer la prime", "Tête", "Factions", "Caractéristiques", "Butin ninja", "Aucun envoi incertain à vérifier."},
+    en = {"To hunt", "Post bounty", "Head", "Factions", "Attributes", "Ninja looting", "No uncertain mail to check."},
+    es = {"Por cazar", "Publicar recompensa", "Cabeza", "Facciones", "Atributos", "Robo de botín", "No hay envíos pendientes de verificación."},
 }
 for locale, lang in pairs({frFR="fr", enUS="en", enGB="en", esES="es", esMX="es", deDE="en"}) do
     local e=setmetatable({}, {__index=_G})

@@ -1679,6 +1679,21 @@ local function eventAction(e)
     return eventTitle(e) .. delta
 end
 
+-- Reuse journal wording for personal facts; shared facts name both participants.
+function GL.HistoryTitle(e, actor, target)
+    if not actor then return eventAction(e) end
+    actor,target=plain(actor),plain(target)
+    if e.kind=="kill" then return L("%s a vaincu %s"):format(actor,target) end
+    if e.kind=="death" then
+        return (e.killingBlow==1 and L("%s a été tué par %s") or L("%s est mort dans un combat contre %s")):format(actor,target)
+    end
+    if e.kind=="aggression" then return L("%s a subi des dégâts de %s"):format(actor,target) end
+    if e.kind=="reputation" then return L("%s a modifié son avis sur %s"):format(actor,target).." · "..string.format("%+d",e.delta or 0) end
+    if e.kind=="reaction" then return L("%s a classé %s"):format(actor,target).." · "..(relationNames[e.reaction] or L("Automatique")) end
+    if e.kind=="trade" then return L("Échange entre %s et %s"):format(actor,target) end
+    return L("%s a partagé un groupe avec %s"):format(actor,target)
+end
+
 local function eventReason(e)
     if e.kind == "honor" then
         return honorRecipient(e) .. "\n" .. L("Le jeu annonce votre gain d’honneur. Plusieurs joueurs peuvent recevoir de l’honneur pour le même combat.")
@@ -2341,13 +2356,21 @@ showSettings = function()
             settingText(p, rule[2], x, 396, 170, 19)
         end
         settingText(p, L("Les victoires compensent la dette de PvP. Seul un avis positif peut créer une amitié."), 356, 425, 548, 14)
-        settingText(p, L("Champs de bataille et arènes"), 356, 579, 548, 17)
-        settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 609, 548, 13, theme.inkMuted)
+        settingText(p, L("Champs de bataille et arènes"), 356, 606, 548, 17)
+        settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 635, 548, 13, theme.inkMuted)
         f.shareGuild = settingText(p, "", 356, 461, 541, 16)
         f.shareFights = check("relations", nil, L("Partager mes victoires et morts avec ma guilde"), 493, nil, nil,
             function(value) GL.Bounties.ShareFights(value); f:SyncControls() end)
         f.shareDeaths = check("relations", nil, L("Signaler mes morts pour les primes automatiques"), 530, nil, nil,
             function(value) GL.Bounties.ShareDeaths(value); f:SyncControls() end)
+        f.shareSocial = check("relations", nil, L("Partager mes faits datés et mon avis de guilde"), 567, nil, nil,
+            function(value) GL.SharedDossiers.ShareSocial(value); f:SyncControls() end)
+        f.shareSocial:SetScript("OnEnter",function(self)
+            GameTooltip:SetOwner(self,"ANCHOR_TOP")
+            GameTooltip:AddLine(L("Partage votre solde, votre relation et jusqu’à 32 faits récents par personnage publié ou mis à prix. Les notes et motifs libres restent privés."),1,1,1,true)
+            GameTooltip:Show()
+        end)
+        f.shareSocial:SetScript("OnLeave",function() GameTooltip:Hide() end)
         p = f.pages.shortcuts
         check("shortcuts", "quickGestures", L("Afficher les boutons bisou et crachat"), 219)
         for i, entry in ipairs({{media.."GestureKiss", L("Envoyer un baiser · +1")}, {"Interface\\Icons\\Spell_Nature_CorrosiveBreath", L("Cracher · −1")}}) do
@@ -2389,6 +2412,8 @@ showSettings = function()
             if GL.Bounties and GL.Bounties.Sharing then fights, deaths = GL.Bounties.Sharing() end
             self.shareFights:SetChecked(fights == true); self.shareDeaths:SetChecked(deaths == true)
             self.shareFights:SetEnabled(guild ~= nil and GL.Bounties ~= nil); self.shareDeaths:SetEnabled(guild ~= nil and GL.Bounties ~= nil)
+            self.shareSocial:SetChecked(GL.SharedDossiers and GL.SharedDossiers.SharingSocial() or false)
+            self.shareSocial:SetEnabled(guild ~= nil and GL.SharedDossiers ~= nil)
             self.shareGuild:SetText(guild and L("Partage avec %s"):format(UI.plain(guild)) or L("Partage de guilde · hors guilde"))
             self.readingLabel:SetText(L("Lecture : %d %%"):format(math.floor(settings.readingScale*100 + .5)))
             for key, slider in pairs(self.sliders) do slider:Sync(settings[key]) end

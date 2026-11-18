@@ -322,6 +322,14 @@ function QA.capture(name)
             end
             return GL.OpenBounties(opponent.guid,"view")
         end
+        if name=="dossier-relations" then
+            GL.GuildProfiles.Publish(GL.Get("guid:"..guid))
+            local scope=GL.Bounties.GuildScope()
+            scope.socialReports={qa={actor=records[4].guid,target=guid,seq=1,at=qaClock,received=qaClock,
+                authorName="Célestine Longuebrise",score=-11,relation="enemy",events={
+                    {kind="death",time=qaClock-1800,killingBlow=1,zone="Vallée de Strangleronce"},
+                    {kind="aggression",time=qaClock-1840,zone="Vallée de Strangleronce"}}}}
+        end
         assert(GL.OpenPlayerDossier(guid))
         local f=GrudgeLedgerPlayerDossier
         if name=="dossier-shared" then

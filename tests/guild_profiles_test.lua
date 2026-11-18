@@ -72,6 +72,10 @@ b.GL.OpenGuildProfiles()
 local other=b.env.GrudgeLedgerGuildProfiles
 click(other.tags[1]); click(other.tags[7])
 flush()
+click(other.dossier)
+assert(b.env.GrudgeLedgerPlayerDossier.guid==contact.guid and not other:IsShown())
+click(b.env.GrudgeLedgerPlayerDossier.back)
+assert(other:IsShown() and other.subject:GetText()==first.name)
 for _,p in ipairs(clients) do
     local hist,counts=p.g.View(p.g.ForTarget(contact.guid))
     assert(#hist==3 and counts.reliable==1 and counts.ninja==1 and counts.unreliable==1)
@@ -234,4 +238,78 @@ do
     assert(not b.GL.ArmoryProfile(identity))
     for _,p in ipairs(clients) do assert(#p.GL.errors==0,p.GL.errors[1] and p.GL.errors[1].text) end
 end
-print("PASS guild profiles and public dossiers: transport, private-data exclusion, auto recovery, partial/newer merge, reload, offline relay, malformed messages and guild isolation")
+-- Social testimony is opt-in, attributed to its actual sender and never a personal record.
+do
+    clients,wire={},{}
+    local a,b=client(1),client(2)
+    flush()
+    local identity=a.GL.IdentityFromName("Social","Target","Player-1-cafe")
+    local record=a.GL.RecordAggression(identity,"confirmed","SECRET evidence","social-attack")
+    now=now+60
+    local _,death=a.GL.RecordPvP(identity,"death","confirmed","SECRET reason","social-death",nil,nil,true)
+    a.GL.AddNote(identity,"SECRET personal note")
+    assert(record.reputation==-11 and a.g.Publish(record))
+    flush()
+    assert(#b.GL.SharedDossiers.SocialReports(identity.guid)==0,"social sharing defaults off")
+    assert(not next(b.GL.Bounties.GuildScope().socialReports or {}),"never-enabled clients do not send empty social reports")
+    a.env.SlashCmdList.GRUDGELEDGER("settings")
+    local settings=a.env.GrudgeLedgerSettings
+    click(settings.tabs.relations)
+    settings.shareSocial:SetChecked(true)
+    click(settings.shareSocial)
+    assert(a.GL.SharedDossiers.SharingSocial())
+    flush()
+    local report=assert(b.GL.SharedDossiers.SocialReports(identity.guid)[1])
+    assert(report.actor==a.id and report.score==-11 and report.relation=="enemy")
+    assert(#report.events==2 and report.events[1].time==death.time and report.events[1].killingBlow==1)
+    assert(not report.events[1].evidence and not report.events[1].reason and not b.GL.Get(identity))
+    -- Our own opinion and notes remain independent of this testimony.
+    local mine=b.GL.Remember(identity)
+    b.GL.AddNote(identity,"SECRET my note")
+    b.GL.OpenPlayerDossier(identity.guid)
+    local dossier=b.env.GrudgeLedgerPlayerDossier
+    click(dossier.tabs.relations)
+    local rendered={}
+    for _,row in ipairs(dossier.rows) do if row:IsShown() then rendered[#rendered+1]=row.caption:GetText().." "..row.amount:GetText() end end
+    local content=table.concat(rendered,"\n")
+    assert(content:find("-11",1,true) and content:find("Member1",1,true) and content:find("Social Target",1,true),content)
+    assert(mine.reputation==0 and #mine.history==0 and mine.notes[1].text=="SECRET my note")
+    b=client(2,b.GL.db);flush()
+    assert(b.GL.SharedDossiers.SocialReports(identity.guid)[1].score==-11,"testimony survives reload")
+    assert(a.GL.VoidPvP(identity,death,false,"SECRET correction"))
+    now=now+31; a.GL.SharedDossiers.Refresh(); flush()
+    report=b.GL.SharedDossiers.SocialReports(identity.guid)[1]
+    assert(report.score==-1 and #report.events==1,"correction replaces the snapshot, including duplicated transport")
+    -- Only the author can publish their testimony, even when public data is relayed.
+    a.online=false
+    local c=client(3)
+    local scope=c.GL.Bounties.GuildScope()
+    scope.journal={cards=b.GL.Bounties.GuildScope().journal.cards,hidden={},withdrawn={},secrets={},seq=0}
+    c.GL.SharedDossiers.Refresh();flush()
+    assert(#c.GL.SharedDossiers.SocialReports(identity.guid)==0,"peers cannot impersonate an offline witness")
+    a.online=true
+    for i=1,40 do now=now+1; a.GL.RecordAggression(identity,"confirmed",nil,"social-extra-"..i) end
+    now=now+31
+    local old={}
+    a.drop=function(msg) if msg:match("^J;S1;P;") then old[#old+1]=msg end; return false end
+    a.GL.SharedDossiers.Refresh();flush();a.drop=nil
+    assert(#b.GL.SharedDossiers.SocialReports(identity.guid)[1].events==32)
+    now=now+31; a.GL.SharedDossiers.ShareSocial(false);flush()
+    assert(#b.GL.SharedDossiers.SocialReports(identity.guid)==0,"turning sharing off withdraws the report")
+    now=now+11
+    for _,msg in ipairs(old) do b.m.Fire("CHAT_MSG_ADDON","GLBounty1",msg,"GUILD",a.name) end
+    assert(#b.GL.SharedDossiers.SocialReports(identity.guid)==0,"late packets cannot resurrect withdrawn testimony")
+    -- Invalid fields cannot overwrite the last good author sequence or forge another author.
+    local target=identity.guid
+    local function packet(score)
+        local body="t1:s6:socialt5:s2:atn10:"..now.."s5:scoren"..#tostring(score)..":"..score..
+            "s8:relations5:enemys6:eventst0:s5:actors11:Player-1-a9"
+        return "J;S1;P;"..target..";"..(now*1000)..";1;1;"..body
+    end
+    b.m.Fire("CHAT_MSG_ADDON","GLBounty1",packet(101),"GUILD",a.name)
+    assert(#b.GL.SharedDossiers.SocialReports(target)==0)
+    b.m.Fire("CHAT_MSG_ADDON","GLBounty1",packet(-3),"GUILD",a.name)
+    assert(b.GL.SharedDossiers.SocialReports(target)[1].actor==a.id)
+    for _,p in ipairs(clients) do assert(#p.GL.errors==0,p.GL.errors[1] and p.GL.errors[1].text) end
+end
+print("PASS guild profiles and dossiers: public data, opt-in social facts, provenance, corrections, bounded history, reload, privacy, relay, malformed messages and guild isolation")

@@ -1,4 +1,6 @@
-# Grudge Ledger 0.11.6 — essai en jeu
+# Grudge Ledger 0.12.0 — essai en jeu
+
+**Nouveau dans cette version.** Les primes indiquent leur auteur sous **Créée par**. Le nom, le portrait et **Fiche complète** ouvrent le dossier ; le bouton est aussi présent dans les Fiches de guilde. **Relations** rassemble votre journal daté et les témoignages attribués à chaque membre, avec leur solde et leur classement. Le partage des faits se règle séparément dans **Réglages > Relations et JcJ**, avec une limite de 32 faits récents par cible et sans notes privées. Voir la [recette à deux clients et les limites du partage](shared-dossiers.fr.md).
 
 **Après une rencontre JcJ.** Le livre relève les caractéristiques et les pièces déjà visibles pendant le combat. Si le client autorise l’inspection, il demande aussi la tenue et les talents de l’adversaire. La fiche ouverte affiche la réponse dès sa réception et le Journal conserve le relevé après la perte de vue. Un adversaire hostile peut être impossible à inspecter, même à proximité. En l’absence de relevé web chargé, **Lien vers l’Armurerie** sélectionne l’adresse du personnage, à copier dans un navigateur. Le compagnon complète la fiche lors du prochain import et WoW charge ces données au rechargement de l’interface.
 

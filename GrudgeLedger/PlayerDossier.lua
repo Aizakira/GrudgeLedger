@@ -111,6 +111,75 @@ local function latestCombat(record)
     return latest
 end
 
+local relationNames={friend=L("Ami"),warning=L("Méfiance"),enemy=L("Ennemi"),neutral=L("Neutre")}
+local function relationsPage(f,record,row)
+    local B,G,S=GL.Bounties,GL.GuildProfiles,GL.SharedDossiers
+    local timeline={}
+    local function add(at,description,source)
+        timeline[#timeline+1]={at=tonumber(at) or 0,description=description,source=source,seq=#timeline+1}
+    end
+    row(L("Avis sur ce personnage"),nil,true)
+    if record then
+        row(L("Votre carnet"),string.format("%+d",record.reputation or 0).." · "..(relationNames[GL.Relation(record)] or unknown))
+        if GL.TagText and GL.TagText(record) then row(GL.TagText(record)) end
+        for _,item in ipairs(GL.JournalEvents()) do
+            if item.record==record then
+                local e=item.event
+                local description=GL.HistoryTitle(e)
+                if e.text then description=description.."\n"..UI.plain(e.text) end
+                if e.zone and e.zone~="?" then description=description.." · "..UI.plain(e.zone) end
+                if e.voided then description=description.." · "..L("Annulé · exclu") end
+                add(e.time,description,L("Votre journal").." · "..UI.plain(e.actorName or L("Auteur inconnu")))
+            end
+        end
+    else row(L("Aucune rencontre personnelle enregistrée.")) end
+    local reports=S and S.SocialReports(f.guid) or {}
+    for _,report in ipairs(reports) do
+        local author=UI.plain(B.MemberName(report.actor) or report.authorName or L("Membre de guilde"))
+        row(author,string.format("%+d",report.score).." · "..relationNames[report.relation])
+        row(field(L("Relevé"),timestamp(report.at)))
+        for _,e in ipairs(report.events) do
+            add(e.time,GL.HistoryTitle(e,author,f.nameLabel:GetText())..(e.zone and (" · "..UI.plain(e.zone)) or ""),L("Témoignage de %s"):format(author))
+        end
+    end
+    if #reports==0 then row(L("Aucun historique ni solde partagé par les autres membres.")) end
+    row(L("Le partage des faits et avis se règle dans Réglages > Relations. Les notes restent privées."))
+    local seen,tagNames={},{}
+    for _,choice in ipairs(G and G.choices or {}) do tagNames[choice[1]]=L(choice[2]) end
+    for _,card in ipairs(G and G.List() or {}) do
+        if card.target==f.guid then
+            local history=G.View(card)
+            for _,e in ipairs(history) do
+                local key=e.actor..":"..e.seq
+                if not seen[key] then
+                    seen[key]=true
+                    add(e.time,(e.on and L("Étiquette ajoutée : ") or L("Étiquette retirée : "))..(tagNames[e.tag] or unknown),
+                        L("Avis de %s"):format(UI.plain(e.authorName)))
+                end
+            end
+        end
+    end
+    for _,order in pairs(B and B.List() or {}) do
+        if order.target==f.guid then
+            local author=UI.plain(B.MemberName(order.owner) or L("Membre de guilde"))
+            add(order.at,L("Mise à prix créée"),L("Créée par %s"):format(author))
+            if order.endedAt then add(order.endedAt,L("Fin de la mise à prix"),L("Créée par %s"):format(author)) end
+        end
+    end
+    table.sort(timeline,function(a,b) if a.at~=b.at then return a.at>b.at end return a.seq>b.seq end)
+    row(L("Interactions datées"),nil,true)
+    row(L("Les témoignages restent attribués à leur auteur ; ils ne modifient pas votre avis."))
+    local offset=math.min(f.historyOffset or 0,math.max(0,math.ceil(#timeline/40)-1)*40)
+    f.historyOffset=offset
+    f.historyPrev:SetEnabled(offset>0); f.historyNext:SetEnabled(offset+40<#timeline)
+    f.historyCount:SetText(("%d–%d / %d"):format(#timeline>0 and offset+1 or 0,math.min(offset+40,#timeline),#timeline))
+    if #timeline==0 then row(L("Aucune interaction datée disponible.")) end
+    for i=offset+1,math.min(offset+40,#timeline) do
+        local entry=timeline[i]
+        row(timestamp(entry.at).." · "..entry.source.."\n"..entry.description)
+    end
+end
+
 local frame
 local function armoryURL(fullName)
     local region=GL.ArmoryRegion()
@@ -227,6 +296,7 @@ local function draw(f)
         else source=L("Aucun relevé disponible en jeu") end
     else source=L("Aucun relevé Armurerie chargé") end
     f.source:SetText(source)
+    if f.page=="relations" then f.source:SetText(L("Journal personnel et témoignages de guilde")) end
     f.armoryURL=armoryURL(record.fullName or public.name or f.knownName)
     if f.armoryURL then f.armoryButton:Show() else f.armoryButton:Hide(); f.armoryLink:Hide() end
     local itemLevel=profile.averageItemLevel
@@ -234,6 +304,9 @@ local function draw(f)
     f.ilvl:SetText(f.page=="gear" and field(L("Niv. d’objet moyen"),valueOf(itemLevel)) or "")
     for key,b in pairs(f.tabs) do UI.selectButton(b,f.page==key) end
     local gear,talents=f.page=="gear",f.page=="talents"
+    for _,control in ipairs({f.historyPrev,f.historyNext,f.historyCount}) do
+        if f.page=="relations" then control:Show() else control:Hide() end
+    end
     if gear then f.equipment:Show(); GL.DrawDossierEquipment(f.equipment,record,profile,slots,slotOrder,itemDetails) else f.equipment:Hide() end
     if talents then
         f.talentScroll:Show()
@@ -261,7 +334,9 @@ local function draw(f)
         local h=math.max(heading and 35 or 26,r.caption:GetStringHeight()+10,r.amount:GetStringHeight()+10)
         r:ClearAllPoints(); r:SetPoint("TOPLEFT",0,-height); r:SetSize(514,h); r:Show(); height=height+h
     end
-    if f.page=="reputation" then
+    if f.page=="relations" then
+        relationsPage(f,localRecord,row)
+    elseif f.page=="reputation" then
         row(L("Réputations auprès des factions"),nil,true)
         local reps=object(profile.reputations)
         if #reps==0 then row(profile.reputations and L("Aucune faction publiée.") or L("Réputations non disponibles dans ce relevé.")) end
@@ -344,9 +419,9 @@ local function build()
     f.armoryLink:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
     f.armoryLink:SetScript("OnEditFocusLost",function(self) self:Hide() end)
     f.tabs={}; f.rows={}; f.statCells={}
-    for i,s in ipairs({{"gear","Équipement"},{"talents","Talents"},{"pvp","JcJ"},{"reputation","Réputations de factions"}}) do
+    for i,s in ipairs({{"gear","Équipement"},{"talents","Talents"},{"pvp","JcJ"},{"reputation","Factions"},{"relations","Relations"}}) do
         local key=s[1]
-        f.tabs[key]=UI.button(f,L(s[2]),352+(i-1)*137,-156,132,function()
+        f.tabs[key]=UI.button(f,L(s[2]),352+(i-1)*110,-156,105,function()
             f.page=key; f.scroll:SetVerticalScroll(0); draw(f)
         end,true,true)
     end
@@ -356,6 +431,14 @@ local function build()
     f.equipment=CreateFrame("Frame",nil,f); f.equipment:SetPoint("TOPLEFT",359,-229); f.equipment:SetSize(515,398)
     f.talentScroll,f.talents=scrollArea(f,352,-225,529,403)
     f.talentScroll.scrollBarHideable=true
+    f.historyPrev=UI.button(f,L("Précédent"),352,-645,130,function()
+        f.historyOffset=math.max(0,(f.historyOffset or 0)-40); f.scroll:SetVerticalScroll(0); draw(f)
+    end,nil,true)
+    f.historyNext=UI.button(f,L("Suivant"),758,-645,130,function()
+        f.historyOffset=(f.historyOffset or 0)+40; f.scroll:SetVerticalScroll(0); draw(f)
+    end,nil,true)
+    f.historyCount=UI.label(f,"",nil,493,-652,252); f.historyCount:SetJustifyH("CENTER")
+    f.historyCount:SetTextColor(unpack(UI.theme.inkMuted))
     return f
 end
 function GL.OpenPlayerDossier(id,onReturn,knownName)
@@ -372,13 +455,18 @@ function GL.OpenPlayerDossier(id,onReturn,knownName)
     frame=frame or build()
     frame.armoryLink:Hide()
     frame.key,frame.guid,frame.onReturn,frame.knownName,frame.page=key,guid,onReturn,knownName,"gear"
+    frame.historyOffset=0
     frame.scroll:SetVerticalScroll(0); frame.identityScroll:SetVerticalScroll(0)
     if GL.InspectDossierUnit then GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=guid}),guid) end
     GL.ShowBookPage(frame)
     draw(frame)
+    if guid and GL.SharedDossiers then GL.SharedDossiers.Request(guid) end
     return true
 end
 
 GL.On("DOSSIER_UPDATED",function(guid)
-    if frame and frame:IsShown() and frame.guid==guid then draw(frame) end
+    if frame and frame:IsShown() and (not guid or frame.guid==guid) then draw(frame) end
 end)
+for _,event in ipairs({"CHANGED","GUILD_PROFILES","BOUNTIES_CHANGED"}) do
+    GL.On(event,function() if frame and frame:IsShown() then draw(frame) end end)
+end

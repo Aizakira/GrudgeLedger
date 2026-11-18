@@ -1,5 +1,5 @@
--- Public character data only. Personal notes, opinions and combat history never
--- enter this payload; guild fight totals keep their existing attribution/opt-in.
+-- Public character data plus separately opted-in, author-attributed social snapshots.
+-- Notes, free-text reasons and combat logs never enter the wire payload.
 local GL, B = GrudgeLedger, GrudgeLedger.Bounties
 local S = {}
 GL.SharedDossiers = S
@@ -60,6 +60,82 @@ local function allowed(target)
     local card=GL.GuildProfiles.ForTarget(target)
     local order=B.OpenFor(target)
     if card or (order and order.state=="open") then return s,(card and card.name or order.name) end
+end
+local relations={friend=true,warning=true,enemy=true,neutral=true}
+local socialKinds={kill=true,death=true,aggression=true,reputation=true,reaction=true,grouped=true,group=true,trade=true}
+local function signed(v)
+    if type(v)=="number" and v==math.floor(v) and v>=-100 and v<=100 then return v end
+end
+local function socialEvent(e)
+    if type(e)~="table" or not socialKinds[e.kind] or not stamp(e.time) then return end
+    local zone=clean(e.zone,"s")
+    local out={kind=e.kind,time=stamp(e.time),zone=zone and #zone<=128 and zone or nil,delta=signed(e.delta)}
+    if relations[e.reaction] then out.reaction=e.reaction end
+    if e.killingBlow==true or e.killingBlow==1 then out.killingBlow=1 end
+    return out
+end
+function S.SharingSocial()
+    local s,me=B.GuildScope()
+    return s and s.shareSocial and s.shareSocial[me]==true or false
+end
+local function ownSocial(target)
+    local r=GL.Get("guid:"..target)
+    if not S.SharingSocial() then
+        local s,me=B.GuildScope()
+        if s and s.shareSocial and s.shareSocial[me]==false then return {removed=1,at=GL.Now()} end
+        return
+    end
+    if not r then return end
+    local me=GL.Author()
+    local events={}
+    -- ponytail: share the latest 32 structured facts, not entire private journals.
+    -- A paged history protocol is the upgrade path if guild use needs older facts.
+    for i=#r.history,1,-1 do
+        local e=r.history[i]
+        if e.actorGUID==me and not e.voided and e.voidReason~="battleground" then
+            local item=socialEvent(e)
+            if item then events[#events+1]=item; if #events==32 then break end end
+        end
+    end
+    return {at=GL.Now(),score=signed(r.reputation) or 0,relation=GL.Relation(r),events=events}
+end
+local function receiveSocial(s,sender,target,seq,data)
+    if type(data)~="table" or not stamp(data.at) or not seq then return false end
+    local report={actor=sender,target=target,seq=seq,at=stamp(data.at),received=GL.Now(),authorName=B.MemberName(sender)}
+    if data.removed==1 then report.removed=true
+    else
+        if not signed(data.score) or not relations[data.relation] or type(data.events)~="table" then return false end
+        report.score,report.relation,report.events=data.score,data.relation,{}
+        local n=0
+        for i,e in pairs(data.events) do
+            if type(i)~="number" or i<1 or i>32 or i~=math.floor(i) then return false end
+            local item=socialEvent(e)
+            if not item or item.time>report.at then return false end
+            report.events[i]=item; n=n+1
+        end
+        if n~=#report.events then return false end
+    end
+    s.socialReports=s.socialReports or {}
+    local key=sender..":"..target
+    local old=s.socialReports[key]
+    if old and seq<=old.seq then return false end
+    if not old then
+        -- ponytail: cap all authors/targets together at 256 reports per guild.
+        local n,oldest=0,nil
+        for k,v in pairs(s.socialReports) do n=n+1; if not oldest or v.received<s.socialReports[oldest].received then oldest=k end end
+        if n>=256 then s.socialReports[oldest]=nil end
+    end
+    s.socialReports[key]=report
+    return true
+end
+function S.SocialReports(target)
+    local s=allowed(target)
+    local out={}
+    for _,r in pairs(s and s.socialReports or {}) do
+        if r.target==target and not r.removed then out[#out+1]=r end
+    end
+    table.sort(out,function(a,b)return a.actor<b.actor end)
+    return out
 end
 local function merge(fields,key,data,at,source)
     data=clean(data,schema[key]); at=stamp(at)
@@ -192,10 +268,37 @@ local function decode(text)
     local data=read(0); assert(pos==#text+1); return data
 end
 local function escape(text) return (text:gsub("[^%w .,:_%-]",function(c)return ("%%%02X"):format(c:byte()) end)) end
-local pending, requested, responded={}, {}, {}
+local pending, requested, responded, dirty={}, {}, {}, {}
+local lastPush=0
 local active
 local function reset(s)
-    if active~=s then active=s; pending,requested,responded={},{},{} end
+    if active~=s then active=s; pending,requested,responded,dirty={},{},{},{}; lastPush=0 end
+end
+local function send(s,target,fields)
+    local selected,body={},nil
+    for _,key in ipairs({"social","identity","gear","trees","stats","level","averageItemLevel","honorableKills","pvpRank","reputations","battlegrounds","achievements"}) do
+        if fields[key] then
+            selected[key]=fields[key]
+            local candidate=escape(encode(selected))
+            if #candidate<=46080 then body=candidate else selected[key]=nil end
+        end
+    end
+    if not body then return end
+    s.dossierSeq=math.max((s.dossierSeq or 0)+1,GL.Now()*1000)
+    local total=math.ceil(#body/180)
+    local messages={}
+    for part=1,total do messages[#messages+1]=table.concat({"S1","P",target,s.dossierSeq,part,total,body:sub((part-1)*180+1,part*180)},";") end
+    return B.SendDossier(s,messages)
+end
+function S.ShareSocial(enabled)
+    local s,me=B.GuildScope()
+    if not s or not me then return end
+    reset(s)
+    s.shareSocial=s.shareSocial or {}; s.shareSocial[me]=enabled==true
+    for _,card in ipairs(GL.GuildProfiles.List()) do dirty[card.target]=true end
+    for _,order in pairs(B.List()) do if order.state=="open" then dirty[order.target]=true end end
+    S.Refresh()
+    GL.Emit("DOSSIER_UPDATED")
 end
 function S.Request(target)
     local s,name=allowed(target)
@@ -227,23 +330,9 @@ function S.Receive(s,sender,raw)
         local fields=localFields(target,name)
         local saved=s.dossiers and s.dossiers[target]
         for k,e in pairs(saved and saved.fields or {}) do merge(fields,k,e.data,e.at,e.source) end
-        if not next(fields) then return end
-        local selected,body={},nil
-        -- ponytail: prioritize usable identity/gear over very large optional histories.
-        -- Over-budget sections remain unknown; a paged section protocol can lift this cap.
-        for _,key in ipairs({"identity","gear","trees","stats","level","averageItemLevel","honorableKills","pvpRank","reputations","battlegrounds","achievements"}) do
-            if fields[key] then
-                selected[key]=fields[key]
-                local candidate=escape(encode(selected))
-                if #candidate<=46080 then body=candidate else selected[key]=nil end
-            end
-        end
-        if not body then return end
-        s.dossierSeq=math.max((s.dossierSeq or 0)+1,GL.Now()*1000)
-        local total=math.ceil(#body/180)
-        local messages={}
-        for part=1,total do messages[#messages+1]=table.concat({"S1","P",target,s.dossierSeq,part,total,body:sub((part-1)*180+1,part*180)},";") end
-        if B.SendDossier(s,messages) then responded[target]=GL.Now() end
+        -- Only our own social snapshot travels; public observations may be relayed.
+        fields.social=ownSocial(target)
+        if send(s,target,fields) then responded[target]=GL.Now() end
         return
     end
     local id,part,total,body
@@ -268,23 +357,39 @@ function S.Receive(s,sender,raw)
     for k,e in pairs(data) do
         if schema[k] and type(e)=="table" and (e.source=="armory" or e.source=="inspection") then merge(result,k,e.data,e.at,e.source) end
     end
-    if not next(result) then return end
     local _,expectedName=allowed(target)
     local publicName=result.identity and result.identity.data.name
     if publicName and publicName:lower()~=expectedName:lower() then return end
-    local saved=cache(s,target)
-    for k,e in pairs(result) do merge(saved.fields,k,e.data,e.at,e.source) end
-    saved.received,saved.sender=GL.Now(),sender
-    saved.senderName=B.MemberName(sender)
-    GL.Emit("DOSSIER_UPDATED",target)
+    local changed=receiveSocial(s,sender,target,tonumber(id),data.social)
+    if next(result) then
+        local saved=cache(s,target)
+        for k,e in pairs(result) do merge(saved.fields,k,e.data,e.at,e.source) end
+        saved.received,saved.sender=GL.Now(),sender
+        saved.senderName=B.MemberName(sender); changed=true
+    end
+    if changed then GL.Emit("DOSSIER_UPDATED",target) end
 end
 function S.Refresh()
     local s=B.GuildScope()
     reset(s)
     if not s then return end
+    if GL.Now()-lastPush>=30 then
+        for target in pairs(dirty) do
+            if allowed(target)~=s then dirty[target]=nil
+            else
+                local report=ownSocial(target)
+                if not report or send(s,target,{social=report}) then dirty[target]=nil; lastPush=GL.Now() end
+                break
+            end
+        end
+    end
     for _,card in ipairs(GL.GuildProfiles.List()) do S.Request(card.target) end
     for _,order in pairs(B.List()) do if order.state=="open" then S.Request(order.target) end end
 end
+GL.On("CHANGED",function(record)
+    local s=B.GuildScope(); reset(s)
+    if s and record and record.guid and S.SharingSocial() and allowed(record.guid)==s then dirty[record.guid]=true end
+end)
 GL.On("GUILD_PROFILES",S.Refresh)
 GL.On("BOUNTIES_CHANGED",S.Refresh)
 local frame=CreateFrame("Frame")
