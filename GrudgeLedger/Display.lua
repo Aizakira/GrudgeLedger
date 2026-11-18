@@ -20,6 +20,11 @@ local alert
 local lastSound
 local function alertSetting(relation) return relation == "friend" and "friendAlerts" or "enemyAlerts" end
 
+local function activeBounty(identity)
+    local order = identity and GL.Bounties and GL.Bounties.OpenFor(identity.guid)
+    if order and order.state == "open" then return order end
+end
+
 local function isGroupmate(record, unit)
     if unit and (GL.Safe(UnitInParty, unit) == true or type(GL.Safe(UnitInRaid, unit)) == "number") then return true end
     if not record.guid then return false end
@@ -126,24 +131,28 @@ local function refreshToastText(frame, record)
             or L("%s · il y a %d s\nDistance inconnue"):format(L(frame.signal), age))
         return
     end
-    frame.title:SetText(alertTitle(record, frame.relation))
+    frame.title:SetText(frame.bounty and L("Cible de prime à proximité") or alertTitle(record, frame.relation))
     local name = record.fullName or record.name or L("Joueur connu")
     if record.guild and GL.RelationSource(record) ~= "guild" then name = name .. " <" .. record.guild .. ">" end
     frame.name:SetText(name)
-    local hint = L("Déjà rencontré : %s"):format(record.lastZone or L("lieu inconnu"))
-    frame.note:SetText(recordNote(record) or hint)
+    local hint = frame.bounty and L("Aucune consigne particulière.")
+        or L("Déjà rencontré : %s"):format(record.lastZone or L("lieu inconnu"))
+    local note = frame.bounty and frame.bounty.note
+    frame.note:SetText(note and note ~= "" and note:gsub("|", "||") or recordNote(record) or hint)
 end
 
 local function validateToast()
     if not toast or not toast:IsShown() then return end
     if GL.IsPvPInstance() then toast:Hide() return end
-    local record = GL.Get(toast.key)
-    if not record or GL.Relation(record) ~= toast.relation or GL.RelationSource(record) ~= toast.source
-        or inheritedGuildKey(record) ~= toast.guildKey
+    local record = GL.Get(toast.key) or toast.bountyIdentity
+    local bounty = toast.bounty and activeBounty(record)
+    if not record or (toast.bounty and (not bounty or bounty.id ~= toast.bounty.id))
+        or (not toast.bounty and (GL.Relation(record) ~= toast.relation or GL.RelationSource(record) ~= toast.source
+        or inheritedGuildKey(record) ~= toast.guildKey))
         or GL.Now() >= toast.expires or not GL.Settings()[alertSetting(toast.relation)]
         or (toast.signal and not GL.Settings().indirectAlerts)
         or ((toast.signal or toast.relation == "friend") and isGroupmate(record)) then toast:Hide()
-    else refreshToastText(toast, record) end
+    else toast.bounty = bounty; refreshToastText(toast, record) end
 end
 
 local function canChange(region)
@@ -251,9 +260,13 @@ local function updateMarker(entry, reuseObservation)
     partyWarning(record, entry.unit)
     local relation = record and GL.Relation(record)
     local guildKey = record and inheritedGuildKey(record)
-    if record and (relation == "friend" or entry.recordKey ~= record.key or entry.relation ~= relation or entry.guildKey ~= guildKey) and alert then
+    local bounty = activeBounty(identity)
+    local bountyID = bounty and bounty.id
+    if alert and ((bountyID and entry.bountyID ~= bountyID) or (record and
+        (relation == "friend" or entry.recordKey ~= record.key or entry.relation ~= relation or entry.guildKey ~= guildKey))) then
         alert(identity, entry.unit)
     end
+    entry.bountyID = bountyID
     entry.recordKey, entry.relation, entry.guildKey = record and record.key, relation, guildKey
     local style = relation and styles[relation]
     if not style or GL.IsGroupOnly(record) or not GL.Settings().markers then
@@ -366,7 +379,10 @@ local function makeToast(preview)
     frame:SetScript("OnClick", function(self, button)
         local key = self.key
         self:Hide()
-        if button == "LeftButton" and key and GL.ShowLedger then GL.ShowLedger(key) end
+        if button == "LeftButton" then
+            if self.bounty and GL.OpenBounties then GL.OpenBounties(self.bounty.target)
+            elseif key and GL.ShowLedger then GL.ShowLedger(key) end
+        end
     end)
     -- ponytail: clicking opens the captured record, avoiding protected targeting
     -- and recycled unit-token hazards. A future targeting control needs secure UI.
@@ -406,9 +422,12 @@ end
 
 alert = function(identity, unit)
     if not GL.db or not identity or GL.IsPvPInstance() then return end
+    local bounty = activeBounty(identity)
     local record = GL.Get(identity)
+    -- A received contract does not create a personal journal entry or enemy rating.
+    if bounty and not record then record = identity end
     if not record then GL.Trace("unknown", identity, unit) return end
-    local relation = GL.Relation(record)
+    local relation = bounty and "enemy" or GL.Relation(record)
     if relation == "neutral" then GL.Trace("neutral", identity, unit) return end
     if relation == "friend" then
         local fresh = newFriendEncounter(record, unit)
@@ -419,8 +438,8 @@ alert = function(identity, unit)
     local settings = GL.Settings()
     if not style or not settings[alertSetting(relation)] then GL.Trace("disabled", identity, unit) return end
     local now = GL.Now()
-    local source = GL.RelationSource(record)
-    local guildKey = inheritedGuildKey(record)
+    local source = bounty and "bounty" or GL.RelationSource(record)
+    local guildKey = not bounty and inheritedGuildKey(record) or nil
     local pvp = record.pvp or {}
     local groupGuild = source == "guild" and (pvp.deaths or 0)
         + (pvp.aggressions or 0) == 0
@@ -456,8 +475,9 @@ alert = function(identity, unit)
     if previewToast and previewToast:IsShown() then previewToast:Hide() end
     frame.key, frame.relation, frame.source, frame.expires = record.key, relation, source, now + 6
     frame.signal, frame.signalAt = nil, nil
+    frame.bounty, frame.bountyIdentity = bounty, bounty and identity or nil
     frame.guildKey, frame.guildBurst = guildKey, burst
-    frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
+    frame.hint:SetText(L(bounty and "Clic : prime  •  clic droit : fermer" or "Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, style)
     refreshToastText(frame, record)
     frame:Show()
@@ -510,6 +530,7 @@ local function indirectSignal(guid, source)
     frame.key, frame.relation, frame.source = record.key, relation, GL.RelationSource(record)
     frame.guildKey, frame.guildBurst = inheritedGuildKey(record), nil
     frame.signal, frame.signalAt, frame.expires = signalSources[source], now, now + 6
+    frame.bounty, frame.bountyIdentity = nil, nil
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[relation])
     frame.stripe:SetColorTexture(0.74, 0.57, 0.32, 1)
@@ -529,7 +550,6 @@ local function observe(unit, notify, reuseObservation)
     local identity = GL.Identity(unit, reuseObservation)
     if identity then
         GL.Trace("observed", identity, unit)
-        if GL.Bounties and notify and GL.db.settings.enemyAlerts then GL.Bounties.Observe(identity.guid) end
         local record = GL.RecordSeen(identity, true)
         encounterState(record,unit)
         partyWarning(record, unit)
@@ -731,5 +751,10 @@ GL.On("READY", function()
     scanPlates()
 end)
 GL.On("CHANGED", D.Refresh)
+GL.On("BOUNTIES_CHANGED", function()
+    D.Refresh()
+    observe("target", true)
+    observe("mouseover", true)
+end)
 GL.On("SETTINGS", D.Refresh)
 GL.On("SETTINGS", syncSignals)

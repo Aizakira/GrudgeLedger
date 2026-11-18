@@ -35,6 +35,8 @@ Sous Windows, ajouter aussi `--native-portraits` pour conserver la première min
 
 ## Étiquettes et primes dans l’alpha 4
 
+Une cible de prime en cours directement observée déclenche le même popup et le même son qu’une alerte ennemie, même sans fiche dans le Journal. Le titre indique « Cible de prime à proximité » et le clic ouvre le contrat. Les réglages des alertes ennemies, du son et du délai entre rappels s’appliquent ; le délai séparé de deux minutes et le message de proximité dans le chat sont supprimés. La prime ne modifie pas le classement personnel. Une prime terminée, retirée ou expirée ne déclenche plus cette alerte. La détection repose sur une barre de nom, le ciblage ou le survol, hors champ de bataille et arène.
+
 Dans **Journal → Notes → Étiquettes**, choisissez un ou plusieurs repères. Le menu du personnage permet également d’ouvrir ses étiquettes. Cliquez à nouveau sur un repère pour le retirer. Le filtre du Journal se combine avec le nom, la faction et l’avis. « Fiable » permet aussi de retrouver un bon équipier. Les étiquettes appartiennent au carnet privé du compte. Les rappels d’invitation et de groupe se règlent dans **Réglages → Alertes**.
 
 Dans **Réglages → Relations et JcJ**, le personnage peut partager ses résultats de combat avec sa guilde et, séparément, signaler ses morts pour les primes automatiques. Les deux options sont désactivées au départ pour chaque personnage et chaque guilde.

@@ -367,7 +367,7 @@ function B.Due(o,payer,hunter)
     return due
 end
 local queue,queued,active={}, {},nil
-local joined, openTargets, lastAlert, indexedScope
+local joined, openTargets, indexedScope
 local reconcileInbox
 local draft,pending,hooked,selectedOrder
 local pendingRefresh={}
@@ -539,16 +539,6 @@ function B.OpenFor(target)
     end
     local o=openTargets[target]
     if o and (o.state=="claimed" or GL.Now()<=o.expires) then return o end
-end
-function B.Observe(target)
-    if not joined then return end
-    local o=B.OpenFor(target)
-    if not o or o.state~="open" then return end
-    local now=GL.Now()
-    if now<=o.expires and (not lastAlert[o.id] or now-lastAlert[o.id]>=120) then
-        lastAlert[o.id]=now
-        GL.Print(ML("Prime de guilde : %s"):format(o.name)..(o.note and o.note~="" and " — "..o.note or ""))
-    end
 end
 function B.Withdraw(id)
     local s,me=scope()
@@ -970,10 +960,10 @@ local function join()
         end
         lastPrune=GL.Now()
     end
-    if s and not next(roster) then joined,openTargets,lastAlert=nil,nil,{}; return end
+    if s and not next(roster) then joined,openTargets=nil,nil; return end
     if s~=joined then
         budgets={}
-        joined,openTargets,lastAlert=s,nil,{}
+        joined,openTargets=s,nil
         if s then
             finalize(s,me)
             schedule(s,"Q")

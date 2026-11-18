@@ -60,9 +60,8 @@ assert(not b.b.Update(order,"not mine",true))
 assert(a.b.Update(order,"Patrouille au rivage",true));flush()
 local renewed=b.b.List()[order]
 assert(renewed.note=="Patrouille au rivage" and renewed.expires>renewed.at+7*86400 and renewed.pot[b.id]==50000)
-local notices=0
-b.env.GrudgeLedger.Print=function() notices=notices+1 end
-b.b.Observe(target);b.b.Observe(target);assert(notices==1)
+assert(b.b.OpenFor(target).id==order and b.b.OpenFor(target).state=="open")
+b.env.GrudgeLedger.Print=function() end
 a.online=false
 local c=client(3);flush()
 assert(c.b.List()[order].pot[b.id]==50000)
