@@ -62,7 +62,7 @@ local function rowFor(key)
 end
 local row = assert(rowFor(record.key))
 assert(row.identity:GetText() == "Alliance · Naine · Chamane")
-assert(row.raceIcon.atlas == "raceicon128-dwarf-female" and row.classIcon.atlas == "classicon-shaman")
+assert(row.raceIcon.texture == GL.icon and row.classIcon.atlas == "classicon-shaman")
 -- A character observed in French can be viewed later on a different client.
 -- Only its display changes. A custom name survives if the client has no matching token.
 do
@@ -93,8 +93,8 @@ do
 end
 knownAtlas["raceicon128-dwarf-female"], knownAtlas["raceicon-dwarf-female"] = nil, true
 GL.ShowLedger(dwarf.key)
-assert(rowFor(record.key).raceIcon.atlas == "raceicon-dwarf-female" and f.raceIcon.atlas == "raceicon-dwarf-female",
-    "both the index and the profile support the alternative native race atlas name")
+assert(rowFor(record.key).raceIcon.texture == GL.icon and f.raceIcon.texture == GL.icon,
+    "both the index and the profile use the book while no portrait is available")
 assert(f.detailIdentity:GetText() == "Alliance · Enano · Chamane" and f.levelBadge:IsShown() and f.levelBadge.caption:GetText() == "42", "profile shares the cached native race label with the index")
 click(f.relationFilter) assert(f.filters.friend.parent:IsShown())
 click(f.filters.friend) assert(not f.filters.friend.parent:IsShown())
@@ -131,12 +131,12 @@ GL.ShowLedger(hordeFriend.key)
 row = assert(rowFor(hordeFriend.key))
 assert(row.identity:GetText():find("Mage", 1, true))
 assert(row.classIcon.texture:find("UI%-CharacterCreate%-Classes") and row.classIcon.texCoord[1] == 0.25)
-assert(row.raceIcon.texture == row.classIcon.texture and row.raceIcon.texCoord[1] == 0.25,
-    "class-only contacts use their class emblem as the main image")
+assert(row.raceIcon.texture == GL.icon and row.raceIcon.texCoord[1] == 0,
+    "class-only contacts retain the class badge and use the book as their portrait fallback")
 C_Texture, GetClassAtlas, CLASS_ICON_TCOORDS = nil, nil, nil
 GL.ShowLedger(record.key)
-assert(not rowFor(record.key).classIcon.texture and rowFor(record.key).raceIcon.texture:find("INV_BannerPVP_02"),
-    "missing atlas APIs fall back to the player's faction")
+assert(not rowFor(record.key).classIcon.texture and rowFor(record.key).raceIcon.texture == GL.icon,
+    "missing atlas APIs still fall back to the book")
 
 -- Pagination must compose with filters and return to the first page on a change.
 for i = 1, 12 do add("Paged" .. i, "Horde", "enemy") end
@@ -311,28 +311,21 @@ GL.ArmoryProfile = function() return {identity={raceID=1,sex=3,classFile="WARLOC
 C_Texture = {GetAtlasInfo=function(atlas) return knownAtlas[atlas] and {} end}
 knownAtlas["raceicon128-human-female"] = true
 GL.PaintBookPortrait(dossier,{fullName="Unknown Dealer"})
-assert(dossier.raceIcon.atlas=="raceicon128-human-female" and not dossier.archivedPortrait,
-    "a verified name-only identity gets a race portrait while awaiting a live face")
+assert(dossier.raceIcon.texture==GL.icon and not dossier.archivedPortrait,
+    "a verified identity alone is not a saved portrait")
 GL.ArmoryProfile = realProfile
 -- An offline contact gets an in-game, equipped approximation, even if an old
--- catalog still contains a signed web head. A live/native face always replaces it.
+-- catalog still contains a signed web head. A saved native face is the 2D fallback.
 assert(loadfile(TEST_ROOT.."/DossierEquipment.lua"))("GrudgeLedger")
-local makeFrame=CreateFrame
 local dressed, cached={},false
-CreateFrame=function(kind,...)
-    local frame=makeFrame(kind,...)
-    if kind=="DressUpModel" then
-        function frame:ClearModel() self.loadedDisplay=nil end
-        function frame:SetDisplayInfo(id) self.requested=id end
-        function frame:SetUnit(unit) self.unitSet=unit; self.loadedDisplay=110; return true end
-        function frame:GetDisplayInfo() return self.loadedDisplay end
-        function frame:GetModelFileID() return self.loadedDisplay and 400 end
-        function frame:SetPortraitZoom(zoom) self.zoom=zoom end
-        function frame:TryOn(link) dressed[link]=true end
-        function frame:Undress() dressed={} end
-    end
-    return frame
-end
+function methods:ClearModel() self.loadedDisplay=nil end
+function methods:SetDisplayInfo(id) self.requested=id end
+function methods:SetUnit(unit) self.unitSet=unit; self.loadedDisplay=110; return true end
+function methods:GetDisplayInfo() return self.loadedDisplay end
+function methods:GetModelFileID() return self.loadedDisplay and 400 end
+function methods:SetPortraitZoom(zoom) self.zoom=zoom end
+function methods:TryOn(link) dressed[link]=true end
+function methods:Undress() dressed={} end
 C_Item={IsItemDataCachedByID=function(id) return id~=9 or cached end,RequestLoadItemDataByID=function(id) assert(id==9) end}
 GetCurrentRegion=function() return 3 end
 local contact={fullName="Donor Sample", guid="Player-42-00001ABC", raceID=1, sex=3}
@@ -355,10 +348,12 @@ assert(dossier.reconstructedPortrait and dressed["item:9"] and dressed["item:11"
 GrudgeLedgerNativePortraits={[contact.guid]=true}
 GL.PaintBookPortrait(dossier,contact)
 headshot.scripts.OnModelLoaded(headshot)
-assert(dossier.archivedPortrait=="native" and not dossier.reconstructedPortrait and not headshot:IsShown()
-    and dossier.raceIcon.alpha==1, "an archived native face must remain visible instead of an approximate model")
+assert(dossier.archivedPortrait=="native" and dossier.reconstructedPortrait and headshot:IsShown()
+    and dossier.raceIcon.alpha==0, "loaded 3D takes priority over an archived 2D face")
 units.target={guid=contact.guid}
-GL.Remember(GL.IdentityFromName("Donor", "Sample", contact.guid))
+local savedContact=GL.IdentityFromName("Donor", "Sample", contact.guid)
+savedContact.race,savedContact.raceID,savedContact.sex="Human",contact.raceID,contact.sex
+GL.Remember(savedContact)
 GL.ObservePortrait("target")
 GL.PaintBookPortrait(dossier,contact)
 assert(dossier.portraitUnit=="target" and dossier.liveModelPortrait and headshot.unitSet=="target" and not dossier.reconstructedPortrait)
@@ -368,8 +363,12 @@ assert(not dossier.liveModelPortrait, "a recycled token cannot complete a live p
 units.target=nil
 GL.PaintBookPortrait(dossier,contact)
 headshot.scripts.OnModelLoaded(headshot)
-assert(dossier.livePortraitGUID==contact.guid and not dossier.reconstructedPortrait and not headshot:IsShown()
-    and dossier.raceIcon.alpha==1, "leaving range retains the observed face even after a late model callback")
+assert(dossier.livePortraitGUID==contact.guid and not dossier.reconstructedPortrait
+    and dossier.raceIcon.alpha==1, "while 3D loads, the observed 2D face remains visible")
+headshot.loadedDisplay=headshot.requested
+headshot.scripts.OnModelLoaded(headshot)
+assert(dossier.reconstructedPortrait and headshot:IsShown() and dossier.raceIcon.alpha==0,
+    "outside range the loaded 3D reconstruction replaces the cached 2D face")
 -- The list and detail use this same priority, including after spirit release.
 dossier:Hide()
 GL.ShowLedger(contact.key or ("guid:"..contact.guid))
@@ -378,9 +377,25 @@ portraitEvent("PLAYER_ALIVE")
 portraitEvent("PLAYER_ENTERING_WORLD")
 local retained=assert(rowFor("guid:"..contact.guid))
 for _, slot in ipairs({f,retained}) do
-    assert(slot.livePortraitGUID==contact.guid and slot.raceIcon.alpha==1
-        and not slot.reconstructedPortrait and (not slot.headshot or not slot.headshot:IsShown()))
+    slot.headshot.loadedDisplay=slot.headshot.requested
+    slot.headshot.scripts.OnModelLoaded(slot.headshot)
+    assert(slot.livePortraitGUID==contact.guid and slot.raceIcon.alpha==0
+        and slot.reconstructedPortrait and slot.headshot:IsShown(),
+        "3D priority in list/detail: "..tostring(slot.livePortraitGUID).."/"..tostring(slot.raceIcon.alpha)
+            .."/"..tostring(slot.reconstructedPortrait).."/"..tostring(slot.headshot:IsShown()))
 end
+local mannequin=GL.MannequinDisplay
+GL.MannequinDisplay=function() end
+GL.PaintBookPortrait(dossier,contact)
+headshot.scripts.OnModelLoaded(headshot)
+assert((dossier.livePortraitGUID==contact.guid or dossier.archivedPortrait=="native")
+    and dossier.raceIcon.alpha==1 and not headshot:IsShown(),
+    "without a compatible 3D model the saved 2D portrait is used")
+GL.PaintBookPortrait(dossier,{fullName="No Portrait",faction="Horde",class="MAGE"})
+headshot.scripts.OnModelLoaded(headshot)
+assert(dossier.raceIcon.texture==GL.icon and dossier.raceIcon.alpha==1 and not headshot:IsShown(),
+    "without 3D or a saved portrait, show the book and never a stale model")
+GL.MannequinDisplay=mannequin
 profile.alias="name:donor sample"
 GrudgeLedgerArmory.profiles={["eu:"..profile.alias]=profile}
 contact.guid=nil
