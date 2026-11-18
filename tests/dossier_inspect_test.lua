@@ -160,3 +160,25 @@ assert(not delayed.inspection.gear)
 ready=true
 advance(1)
 assert(delayed.inspection.gear[1]==link and delayed.inspection.partialGear)
+
+-- A party member tagged from a saved row is neither targeted nor hovered.
+advance(6)
+assert(loadfile(TEST_ROOT.."/Tags.lua"))("GrudgeLedger")
+local partyGUID="Player-9-00E1"
+mock.units.party2={guid=partyGUID,name="Party",surname="Member"}
+GetNumGroupMembers=function() return 3 end
+IsInRaid=function() return false end
+local member=GL.Remember(GL.Identity("party2"))
+CanInspect=function() return true end
+local previous=requests
+ready=false
+assert(GL.ToggleTag(member,"reliable"))
+assert(requests==previous+1 and requestedUnit=="party2","tag should immediately inspect the group member")
+-- The party reordered before the server answered.
+mock.units.party3,mock.units.party2=mock.units.party2,nil
+advance(2)
+ready=true
+mock.Fire("INSPECT_READY",partyGUID)
+assert(member.inspection.gear[1]==link and member.inspection.trees[1].points==2)
+GL.SetReaction(member,"enemy")
+assert(requests==previous+1,"using an enemy label must reuse a fresh inspection")

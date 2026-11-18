@@ -49,7 +49,7 @@ function GL.ToggleTag(identity, id)
     if not labels[id] then return false end
     local actor, name, account = GL.Author()
     if not actor then return false end
-    local record = GL.Remember(identity)
+    local record = GL.Remember(identity, true)
     if not record then return false end
     record.tags = type(record.tags) == "table" and record.tags or {}
     record.tags[id] = record.tags[id] ~= true or nil

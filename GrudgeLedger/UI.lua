@@ -175,6 +175,10 @@ end
 -- Reconstruct only from the selected record's in-game items. The viewer uses
 -- this same textured mannequin, whose facial features are approximate.
 local function animatedHead(row, record, unit, refreshUnit)
+    if not unit and (row.livePortraitGUID or row.archivedPortrait) then
+        if row.headshot then row.headshot:Hide() end
+        return
+    end
     local profile = GL.ArmoryProfile(record)
     local display = GL.MannequinDisplay and GL.MannequinDisplay(record, profile and profile.identity)
     if not unit and not display then
