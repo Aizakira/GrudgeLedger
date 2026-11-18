@@ -175,10 +175,6 @@ end
 -- Reconstruct only from the selected record's in-game items. The viewer uses
 -- this same textured mannequin, whose facial features are approximate.
 local function animatedHead(row, record, unit, refreshUnit)
-    if not unit and (row.livePortraitGUID or row.archivedPortrait) then
-        if row.headshot then row.headshot:Hide() end
-        return
-    end
     local profile = GL.ArmoryProfile(record)
     local display = GL.MannequinDisplay and GL.MannequinDisplay(record, profile and profile.identity)
     if not unit and not display then
@@ -354,27 +350,7 @@ local function paintStaticPortrait(row, record, unit)
         row.archivedPortrait = "native"
         return
     end
-    face:SetTexture(nil)
-    local race = GL.Clean(record.race, "string")
-    local sexID = record.sex
-    local profile = GL.ArmoryProfile(record)
-    if not race or not sexID then
-        local public = profile and profile.identity
-        if public and public.raceID then
-            for token, id in pairs(baseRaceIDs) do
-                if id == public.raceID and (not race or race == token) then
-                    race, sexID = token, sexID or public.sex
-                    break
-                end
-            end
-        end
-    end
-    local sex = sexID == 2 and "male" or sexID == 3 and "female"
-    local suffix = race and sex and (race:lower() .. "-" .. sex)
-    if not (suffix and (identityAtlas(face, "raceicon128-" .. suffix) or identityAtlas(face, "raceicon-" .. suffix))) then
-        if classIcon(face, record) then row.classIcon:SetAlpha(0)
-        else face:SetTexture(factionPortrait[record.faction] or GL.icon) end
-    end
+    face:SetTexture(GL.icon)
 end
 
 local function paintPortrait(row, record, unit, refreshUnit)
