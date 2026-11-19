@@ -1,5 +1,10 @@
 # Architecture and performance
 
+> **Historical review.** The text below describes 0.6.1. It predates guild
+> bounties, guild cards and shared dossiers. Current structure rules are in
+> [AGENTS.md](../AGENTS.md); saved data and guild messages are described in
+> [protocole-et-sauvegarde.fr.md](protocole-et-sauvegarde.fr.md).
+
 Review for 0.6.1, 12 November 2026. This describes the implementation and its
 limits, not a guarantee of live-client performance.
 
