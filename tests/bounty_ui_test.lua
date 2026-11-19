@@ -4,7 +4,7 @@ local now=1800000000
 GetServerTime=function() return now end
 GetNormalizedRealmName=function() return "Realm" end
 mock.units.player.guild="Test Guild"
-for _,name in ipairs({"Core","UITheme","UI","Bounties","DossierEquipment","PlayerDossier","BountyUI"}) do
+for _,name in ipairs({"Core","UITheme","UI","Transport","Bounties","DossierEquipment","PlayerDossier","BountyUI"}) do
     assert(loadfile(TEST_ROOT.."/"..name..".lua"))("GrudgeLedger")
 end
 local GL=GrudgeLedger

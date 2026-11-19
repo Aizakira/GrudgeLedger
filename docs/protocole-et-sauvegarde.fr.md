@@ -88,7 +88,7 @@ Trois migrations existent. Elles sont repérées par trois marqueurs indépendan
 
 ## 2. Messages de guilde
 
-Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLBounty1`. Un seul fichier les envoie et les reçoit : `Bounties.lua`.
+Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLBounty1`. Un seul fichier les envoie et les reçoit : `Transport.lua`. Les autres modules lui confient des messages terminés ; `Bounties.lua` interprète les primes et les fiches de guilde, `SharedDossiers.lua` les relevés.
 
 ### Règles de confiance
 
@@ -109,8 +109,8 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `J;T;propriétaire;cible;empreinte;numéro;date;compte;étiquette;0 ou 1` | Avis d'un membre sur une fiche |
 | `J;D;propriétaire;cible;secret` | Retrait d'une fiche ; le secret prouve le droit de retirer |
 | `J;V;clé` | Demande de rejeu d'une fiche |
-| `J;S1;Q;cible` | Demande du relevé public d'une cible |
-| `J;S1;P;cible;numéro;partie;total;corps` | Fragment d'un relevé |
+| `J;S2;Q;cible;dates` | Demande du relevé public d'une cible. `dates` donne, pour chacun des onze champs publics, la date du relevé déjà détenu (0 s'il manque) |
+| `J;S2;P;cible;numéro;nature;partie;total;corps` | Fragment d'un relevé. `nature` vaut `r` pour une réponse contenant des données publiques, `t` pour le seul témoignage de l'expéditeur |
 
 ### Types d'événement de prime
 
@@ -130,18 +130,31 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `Y` | Paiement déclaré envoyé par un contributeur | Le payeur |
 | `V` | Courrier constaté reçu | Le bénéficiaire |
 
-### Relevés `S1`
+### Relevés `S2`
 
 Le corps d'un relevé est une structure à longueurs préfixées (`t` table, `s` texte, `n` nombre), puis échappée en `%XX`. Seuls les champs d'une liste fermée sont acceptés : identité, équipement, talents, caractéristiques, niveau, JcJ, réputations, champs de bataille, hauts faits, et le témoignage de l'expéditeur.
+
+Ordre des dates d'une demande : `identity`, `gear`, `trees`, `stats`, `level`, `averageItemLevel`, `honorableKills`, `pvpRank`, `reputations`, `battlegrounds`, `achievements`. Chaque date est un temps Unix en secondes.
+
+Échange :
+
+1. Un membre demande chaque cible partagée ou primée, au plus une fois toutes les 5 minutes, en annonçant les dates de ce qu'il détient.
+2. Un détenteur ne répond qu'avec les champs plus récents que ceux annoncés. S'il n'a rien de plus récent, il se tait. Un arrivant qui n'a rien est donc servi à sa première demande.
+3. La réponse attend de 0 à 7 secondes, selon le membre et la cible. Quand un autre membre commence une réponse `r` pour la même cible, une réponse encore en attente est annulée. Les champs qui manqueraient arrivent à la demande suivante.
+4. Le témoignage de l'expéditeur accompagne chaque réponse `r`. Sans données publiques à envoyer, il part seul (`t`) s'il a changé ou s'il n'a pas été diffusé depuis 30 minutes.
+5. Un fragment n'ouvre un transfert que s'il en est la partie 1. Un expéditeur n'a qu'un transfert ouvert à la fois ; les parties doivent arriver dans l'ordre.
 
 | Limite | Valeur |
 | --- | --- |
 | Taille d'un fragment | 180 octets |
 | Fragments par relevé | 256 |
 | Taille d'un relevé encodé | 46 080 octets |
-| Transferts entrants simultanés | 8 |
-| Durée de vie d'un transfert incomplet | 300 secondes |
-| Délai entre deux demandes, et entre deux réponses, pour une cible | 300 secondes |
+| Transferts entrants simultanés | 8, un par expéditeur |
+| Abandon d'un transfert incomplet | 120 secondes après son dernier fragment |
+| Délai entre deux demandes pour une cible | 300 secondes |
+| Délai entre deux réponses `r` pour une cible | 60 secondes |
+| Attente avant une réponse | 0 à 7 secondes, propre à chaque membre |
+| Rediffusion d'un témoignage inchangé | 30 minutes |
 | Faits par témoignage | 32 |
 | Envoi spontané d'un témoignage modifié | Une cible toutes les 30 secondes |
 | Décodage | 8 192 éléments, profondeur 10, texte de 2 048 octets, table de 1 024 clés |
@@ -151,8 +164,11 @@ Le corps d'un relevé est une structure à longueurs préfixées (`t` table, `s`
 | Limite | Valeur |
 | --- | --- |
 | Taille d'un message | 255 octets |
-| Cadence d'envoi | Un message toutes les 0,5 seconde, ralentie par la limite du jeu |
-| File des relevés | 512 messages ; au-delà, l'envoi du relevé est refusé |
+| Cadence d'envoi | Un essai toutes les 0,5 seconde, ralenti par la limite du jeu (10 messages d'avance, puis un par seconde selon la documentation, à confirmer sur Forever) |
+| Priorité | Primes, totaux, rattrapage et fiches de guilde passent avant les relevés |
+| File des relevés | 512 messages ; au-delà, l'envoi du relevé est refusé et réessayé à la demande suivante |
+| Refus du jeu | Codes 3, 8 et 11 (limites de débit, messagerie verrouillée) : le message attend. Code 9 (erreur générale) : trois essais. Autre code : message abandonné, avec le reste de son transfert |
+| Messagerie verrouillée | Aucun envoi tant que `C_ChatInfo.InChatMessagingLockdown()` répond vrai |
 | Messages acceptés d'un même expéditeur | 45 par tranche de 10 secondes |
 | Demande `Q` d'un même expéditeur | Une par tranche de 10 secondes |
 | Conservation des événements de primes | 38 jours |
@@ -162,13 +178,13 @@ Le corps d'un relevé est une structure à longueurs préfixées (`t` table, `s`
 
 ### Compatibilité
 
-Les relevés `S1` exigent la 0.12.0 ou une version compatible des deux côtés. Les versions antérieures reçoivent les primes et les avis et ignorent le reste. Tout changement de forme d'un message doit dire ici ce que voient les clients restés à l'ancienne version.
+Décision du propriétaire, 19 novembre 2026 : pas de compatibilité. Les relevés `S2` exigent la 0.13.0 des deux côtés. Une 0.13.0 ignore les messages `S1` de la 0.12.0, et une 0.12.0 ignore les messages `S2`. Les deux versions continuent d'échanger les primes, les totaux et les fiches de guilde, dont le format n'a pas changé. Les versions antérieures à la 0.12.0 ignorent tous les relevés. Tout changement de forme d'un message doit dire ici ce que voient les clients restés à l'ancienne version.
 
-### Défauts connus de la 0.12.0
+### Défauts de la 0.12.0 corrigés en 0.13.0
 
-L'audit du 19 novembre 2026 a confirmé quatre défauts de ce protocole. Ils ne sont pas corrigés par ce document.
+L'audit du 19 novembre 2026 avait confirmé quatre défauts du protocole `S1`. `tests/guild_sync_test.lua` échoue si l'un d'eux revient.
 
-1. Un membre qui se connecte reçoit les primes en quelques secondes et les relevés plus de 5 minutes après.
-2. Chaque client redemande et renvoie tous les relevés toutes les 5 minutes, même sans nouveauté.
-3. Un fragment isolé occupe un emplacement de réception pendant 300 secondes ; huit suffisent à bloquer la réception.
-4. Un envoi refusé par le jeu pour une autre raison que la limite de débit est compté comme envoyé.
+1. Un membre qui se connecte recevait les primes en quelques secondes et les relevés plus de 5 minutes après. Il est désormais servi à sa première demande.
+2. Chaque client redemandait et renvoyait tous les relevés toutes les 5 minutes. Au repos, il ne reste que les demandes : une par membre et par cible toutes les 5 minutes.
+3. Un fragment isolé occupait un emplacement de réception pendant 300 secondes. Seule une partie 1 ouvre désormais un transfert, un par expéditeur.
+4. Un envoi refusé par le jeu pour une autre raison que la limite de débit était compté comme envoyé. Tous les codes de retour sont lus.

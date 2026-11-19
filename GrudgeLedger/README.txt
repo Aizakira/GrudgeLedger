@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.12.0
+GRUDGE LEDGER — 0.13.0
+
+Relevés de guilde : un membre qui se connecte reçoit l’équipement, les talents et les statistiques des primes et des fiches de guilde dès sa première demande, au lieu d’attendre plus de 5 minutes. Un seul membre répond, et seulement avec ce qui manque : le canal de guilde ne reste plus saturé. Les primes passent avant les relevés. Tous les membres doivent installer la 0.13.0 pour échanger les relevés ; la 0.12.0 ne les échange pas avec elle. Les primes et les avis restent partagés entre les deux versions.
 
 Primes : « Créée par » identifie le commanditaire. Le nom, le portrait et « Fiche complète » ouvrent le même dossier que le Journal. Les Fiches de guilde proposent aussi cet accès.
 

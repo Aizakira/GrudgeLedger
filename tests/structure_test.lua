@@ -114,9 +114,10 @@ end
 
 -- Rule 2: one door to the network. Addon messages go through the transport file only.
 local doors = {
-    SendAddonMessage = { ["Bounties.lua"] = true },
-    RegisterAddonMessagePrefix = { ["Bounties.lua"] = true },
-    CHAT_MSG_ADDON = { ["Bounties.lua"] = true },
+    SendAddonMessage = { ["Transport.lua"] = true },
+    RegisterAddonMessagePrefix = { ["Transport.lua"] = true },
+    CHAT_MSG_ADDON = { ["Transport.lua"] = true },
+    InChatMessagingLockdown = { ["Transport.lua"] = true },
     -- Visible chat written for the player (party warning) has its own single door.
     SendChatMessage = { ["Display.lua"] = true },
 }

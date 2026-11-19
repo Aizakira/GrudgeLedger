@@ -4,7 +4,7 @@ local GL = GrudgeLedger
 local B = {}
 GL.Bounties = B
 local ML=GL.L or function(s) return s end
-local DAY, GOLD, PREFIX = 86400, 10000, "GLBounty1"
+local DAY, GOLD = 86400, 10000
 local function guid(s)
     return type(s) == "string" and #s <= 32 and s:match("^Player%-%w+%-%w+$")
 end
@@ -366,7 +366,6 @@ function B.Due(o,payer,hunter)
     local due=B.Payment(o,payer,hunter)
     return due
 end
-local queue,queued,active={}, {},nil
 local joined, openTargets, indexedScope
 local reconcileInbox
 local draft,pending,hooked,selectedOrder
@@ -396,17 +395,11 @@ local function changed(s,me)
     else refresh() end
 end
 local function schedule(s,msg)
-    if active~=s then active,queue,queued=s,{},{} end
-    if not queued[msg] then queue[#queue+1]=msg; queued[msg]=true end
+    GL.Transport.Send(s,msg)
 end
 B.GuildScope = scope
 function B.SendJournal(s, message)
     schedule(s, "J;" .. message)
-end
-function B.SendDossier(s,messages)
-    if active==s and #queue+#messages>512 then return false end
-    for _,msg in ipairs(messages) do schedule(s,"J;"..msg) end
-    return true
 end
 -- Per-member cumulative totals survive replay and offline catch-up.
 local function mergeScore(s,actor,target,wins,losses)
@@ -633,7 +626,11 @@ local function receive(msg,sender)
     budget.n=budget.n+1
     if budget.n>45 then return end
     if msg:sub(1,2)=="J;" then
+        -- S1 is the 0.12.0 dossier protocol. Members still on it are ignored on purpose.
         if msg:sub(3,5)=="S1;" then
+            return
+        end
+        if msg:sub(3,5)=="S2;" then
             if sender~=me and GL.SharedDossiers then GL.SharedDossiers.Receive(s,sender,msg:sub(3)) end
             return
         end
@@ -988,8 +985,12 @@ for _,event in ipairs({"MAIL_SHOW","MAIL_INBOX_UPDATE","MAIL_SEND_SUCCESS","MAIL
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 frame:RegisterEvent("GUILD_ROSTER_UPDATE")
-frame:RegisterEvent("CHAT_MSG_ADDON")
-frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
+GL.Transport.OnReceive(function(msg,sender)
+    if not GetGuildRosterInfo or not GetNumGuildMembers then return end
+    sender=GL.Clean(sender,"string")
+    if sender and roster[sender] then receive(GL.Clean(msg,"string"),roster[sender]) end
+end)
+frame:SetScript("OnEvent",function(_,event)
     if event=="MAIL_INBOX_UPDATE" then scanInbox(); return end
     if event=="MAIL_SHOW" then
         scanInbox()
@@ -1031,25 +1032,9 @@ frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
         if MailFrame and MailFrame:IsShown() then showPayment() end
         return
     end
-    if not (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix and C_ChatInfo.SendAddonMessage and C_Timer and C_Timer.NewTicker) then return end
+    if not GL.Transport.Available() then return end
     if event=="PLAYER_LOGIN" then
         joined=nil
-        C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
-        C_Timer.NewTicker(0.5,function()
-            if #queue==0 then return end
-            local s=scope()
-            if s and s==active then
-                local text=queue[1]
-                local ok,result=pcall(C_ChatInfo.SendAddonMessage,PREFIX,text,"GUILD")
-                if not ok or (result~=nil and Enum and Enum.SendAddonMessageResult and result==Enum.SendAddonMessageResult.AddonMessageThrottle) then return end
-                table.remove(queue,1); queued[text]=nil
-            end
-        end)
-    elseif event=="CHAT_MSG_ADDON" then
-        if prefix~=PREFIX or channel~="GUILD" or not GetGuildRosterInfo or not GetNumGuildMembers then return end
-        sender=GL.Clean(sender,"string")
-        if sender and roster[sender] then receive(GL.Clean(msg,"string"),roster[sender]) end
-        return
     end
     refreshRoster()
     join()

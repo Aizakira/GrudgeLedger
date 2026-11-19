@@ -28,11 +28,22 @@ local function client(i,saved)
     for _,p in ipairs(clients) do if p.online then p.m.Fire("GUILD_ROSTER_UPDATE") end end
     return c
 end
+-- Answers may wait a few seconds in a client's queue before their first fragment leaves.
+local function waiting()
+    for _,p in ipairs(clients) do
+        local scope=p.online and p.GL.Bounties.GuildScope()
+        if scope then
+            local urgent,bulk=p.GL.Transport.Pending(scope)
+            if urgent+bulk>0 then return true end
+        end
+    end
+    return false
+end
 local function flush()
     for _=1,400 do
         now=now+1
         for _,p in ipairs(clients) do if p.online then p.tick() end end
-        if #wire==0 then return end
+        if #wire==0 and not waiting() then return end
         local packets=wire; wire={}
         for i=#packets,1,-1 do
             local m=packets[i]
@@ -207,7 +218,7 @@ do
     now=now+301
     a.env.GrudgeLedgerArmory.profiles[identity.guid].updated=now
     a.env.GrudgeLedgerArmory.profiles[identity.guid].stats={HEALTH=3333}
-    a.drop=function(msg)return msg:match("^J;S1;P;[^;]+;[^;]+;2;") end
+    a.drop=function(msg)return msg:match("^J;S2;P;[^;]+;[^;]+;[rt];2;") end
     b.GL.SharedDossiers.Refresh();flush()
     assert(b.GL.ArmoryProfile(identity).stats.HEALTH~=3333)
     a.drop=nil;now=now+301
@@ -224,8 +235,8 @@ do
     assert(b.GL.ArmoryProfile({guid=target}).identity.raceID==2)
     -- Truncated, oversized, unrequested and hostile payloads cannot overwrite the last good snapshot.
     local before=p.gear.chest.id
-    for _,msg in ipairs({"S1;P;"..identity.guid..";8;1;999;x", "S1;P;"..identity.guid..";9;1;1;s8:evilcode",
-        "S1;P;Player-1-unknown;9;1;1;t0:", "S1;P;"..identity.guid..";9;1;1;|Texploit"}) do
+    for _,msg in ipairs({"S2;P;"..identity.guid..";8;r;1;999;x", "S2;P;"..identity.guid..";9;r;1;1;s8:evilcode",
+        "S2;P;Player-1-unknown;9;r;1;1;t0:", "S2;P;"..identity.guid..";9;r;1;1;|Texploit"}) do
         b.m.Fire("CHAT_MSG_ADDON","GLBounty1","J;"..msg,"GUILD",a.name)
     end
     assert(b.GL.ArmoryProfile(identity).gear.chest.id==before)
@@ -291,7 +302,7 @@ do
     for i=1,40 do now=now+1; a.GL.RecordAggression(identity,"confirmed",nil,"social-extra-"..i) end
     now=now+31
     local old={}
-    a.drop=function(msg) if msg:match("^J;S1;P;") then old[#old+1]=msg end; return false end
+    a.drop=function(msg) if msg:match("^J;S2;P;") then old[#old+1]=msg end; return false end
     a.GL.SharedDossiers.Refresh();flush();a.drop=nil
     assert(#b.GL.SharedDossiers.SocialReports(identity.guid)[1].events==32)
     now=now+31; a.GL.SharedDossiers.ShareSocial(false);flush()
@@ -304,7 +315,7 @@ do
     local function packet(score)
         local body="t1:s6:socialt5:s2:atn10:"..now.."s5:scoren"..#tostring(score)..":"..score..
             "s8:relations5:enemys6:eventst0:s5:actors11:Player-1-a9"
-        return "J;S1;P;"..target..";"..(now*1000)..";1;1;"..body
+        return "J;S2;P;"..target..";"..(now*1000)..";t;1;1;"..body
     end
     b.m.Fire("CHAT_MSG_ADDON","GLBounty1",packet(101),"GUILD",a.name)
     assert(#b.GL.SharedDossiers.SocialReports(target)==0)

@@ -3,7 +3,7 @@ local mock=assert(loadfile(TEST_WORK.."/tests/wow_mock.lua"))()
 assert(loadfile(TEST_ROOT.."/Core.lua"))("GrudgeLedger")
 assert(loadfile(TEST_ROOT.."/UITheme.lua"))()
 assert(loadfile(TEST_ROOT.."/UI.lua"))()
-for _,n in ipairs({"Bounties","DossierEquipment","DossierTalentData","DossierTalents","PlayerDossier"}) do assert(loadfile(TEST_ROOT.."/"..n..".lua"))() end
+for _,n in ipairs({"Transport","Bounties","DossierEquipment","DossierTalentData","DossierTalents","PlayerDossier"}) do assert(loadfile(TEST_ROOT.."/"..n..".lua"))() end
 local GL=GrudgeLedger
 GL.InitDB()
 local guid="Player-1-00AB"

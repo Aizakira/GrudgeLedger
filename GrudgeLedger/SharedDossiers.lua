@@ -268,27 +268,122 @@ local function decode(text)
     local data=read(0); assert(pos==#text+1); return data
 end
 local function escape(text) return (text:gsub("[^%w .,:_%-]",function(c)return ("%%%02X"):format(c:byte()) end)) end
-local pending, requested, responded, dirty={}, {}, {}, {}
-local lastPush=0
+-- Protocol S2 (0.13.0). The 0.12.0 protocol S1 is ignored on purpose: members on
+-- different versions do not exchange dossiers (owner decision, 19 November 2026).
+local Transport = GL.Transport
+local PROTOCOL = "S2"
+local FRAGMENT = 180
+-- Freshness travels with each request, in this order, one Unix time per field (0 when unknown).
+local stampKeys = {"identity","gear","trees","stats","level","averageItemLevel","honorableKills","pvpRank",
+    "reputations","battlegrounds","achievements"}
+-- A request costs one message and is answered only with fresher data, so it may repeat every five minutes.
+local REQUEST_INTERVAL = 300
+-- One public answer per target per minute bounds what repeated requests can make us broadcast.
+local ANSWER_INTERVAL = 60
+-- Answers wait 0 to 7 seconds, different for each member, so the first one to start silences the others.
+local ANSWER_SPREAD = 8
+-- An unchanged testimony is broadcast again at most every 30 minutes; changes are pushed within 30 seconds.
+local SOCIAL_REPEAT = 1800
+-- Eight senders may be mid-transfer at once; a transfer silent for two minutes is abandoned.
+local INCOMING = {slots=8, idle=120}
+local requested, answered, socialSent, dirty = {}, {}, {}, {}
+local incoming = Transport.Reassembler(INCOMING)
+local lastPush = 0
 local active
 local function reset(s)
-    if active~=s then active=s; pending,requested,responded,dirty={},{},{},{}; lastPush=0 end
+    if active == s then
+        return
+    end
+    active = s
+    requested = {}
+    answered = {}
+    socialSent = {}
+    dirty = {}
+    incoming = Transport.Reassembler(INCOMING)
+    lastPush = 0
 end
-local function send(s,target,fields)
-    local selected,body={},nil
-    for _,key in ipairs({"social","identity","gear","trees","stats","level","averageItemLevel","honorableKills","pvpRank","reputations","battlegrounds","achievements"}) do
-        if fields[key] then
-            selected[key]=fields[key]
-            local candidate=escape(encode(selected))
-            if #candidate<=46080 then body=candidate else selected[key]=nil end
+local function knownFields(s,target,name)
+    local fields = localFields(target,name)
+    local saved = s.dossiers and s.dossiers[target]
+    for k,e in pairs(saved and saved.fields or {}) do
+        merge(fields,k,e.data,e.at,e.source)
+    end
+    return fields
+end
+local function stampList(fields)
+    local out = {}
+    for i,key in ipairs(stampKeys) do
+        out[i] = fields[key] and fields[key].at or 0
+    end
+    return table.concat(out,",")
+end
+local function parseStamps(text)
+    local out = {}
+    for value in (text..","):gmatch("(%d*),") do
+        if #value < 1 or #value > 10 then
+            return nil
+        end
+        out[#out+1] = tonumber(value)
+    end
+    if #out ~= #stampKeys then
+        return nil
+    end
+    return out
+end
+local function answerDelay(target)
+    local seed = (GL.Safe(UnitGUID,"player") or "")..target
+    local sum = 0
+    for i = 1, #seed do
+        sum = (sum * 31 + seed:byte(i)) % 65521
+    end
+    return sum % ANSWER_SPREAD
+end
+local function socialSignature(report)
+    local copy = {}
+    for k,v in pairs(report) do
+        if k ~= "at" then
+            copy[k] = v
         end
     end
-    if not body then return end
-    s.dossierSeq=math.max((s.dossierSeq or 0)+1,GL.Now()*1000)
-    local total=math.ceil(#body/180)
-    local messages={}
-    for part=1,total do messages[#messages+1]=table.concat({"S1","P",target,s.dossierSeq,part,total,body:sub((part-1)*180+1,part*180)},";") end
-    return B.SendDossier(s,messages)
+    return encode(copy)
+end
+local function noteSocial(target,report)
+    if report then
+        socialSent[target] = {signature=socialSignature(report), at=GL.Now()}
+    end
+end
+local function socialDue(target,report)
+    local last = socialSent[target]
+    if not report then
+        return false
+    end
+    return not last or last.signature ~= socialSignature(report) or GL.Now() - last.at >= SOCIAL_REPEAT
+end
+-- nature "r": an answer carrying public data, which silences other members' identical answers.
+-- nature "t": the sender's own testimony alone.
+local function send(s,target,fields,nature,delay)
+    local selected,body = {},nil
+    for _,key in ipairs({"social",unpack(stampKeys)}) do
+        if fields[key] then
+            selected[key] = fields[key]
+            local candidate = escape(encode(selected))
+            if #candidate <= 46080 then
+                body = candidate
+            else
+                selected[key] = nil
+            end
+        end
+    end
+    if not body then
+        return false
+    end
+    s.dossierSeq = math.max((s.dossierSeq or 0) + 1, GL.Now() * 1000)
+    local parts = Transport.Split(body,FRAGMENT)
+    local messages = {}
+    for part,chunk in ipairs(parts) do
+        messages[part] = table.concat({"J",PROTOCOL,"P",target,s.dossierSeq,nature,part,#parts,chunk},";")
+    end
+    return Transport.SendBatch(s,messages,{key=PROTOCOL..nature..target,delay=delay})
 end
 function S.ShareSocial(enabled)
     local s,me=B.GuildScope()
@@ -306,8 +401,14 @@ function S.Request(target)
     reset(s)
     GL.RequestArmory("guid:"..target,name,target)
     if GL.InspectDossierUnit then GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=target}),target) end
-    if requested[target] and GL.Now()-requested[target]<300 then return end
-    if B.SendDossier(s,{"S1;Q;"..target}) then requested[target]=GL.Now() end
+    local last = requested[target]
+    if last and GL.Now() - last < REQUEST_INTERVAL then
+        return
+    end
+    local message = table.concat({"J",PROTOCOL,"Q",target,stampList(knownFields(s,target,name))},";")
+    if Transport.SendBatch(s,{message}) then
+        requested[target] = GL.Now()
+    end
 end
 function S.Observe(identity)
     local s,name=allowed(identity.guid)
@@ -319,38 +420,41 @@ function S.Observe(identity)
     saved.received,saved.sender=GL.Now(),GL.Safe(UnitGUID,"player")
     S.Request(identity.guid)
 end
-function S.Receive(s,sender,raw)
-    reset(s)
-    local target=raw:match("^S1;Q;(Player%-%w+%-%w+)$")
-    if target then
-        local current,name=allowed(target)
-        if current~=s then return end
-        -- One response per target per five minutes, shared by simultaneous requesters.
-        if responded[target] and GL.Now()-responded[target]<300 then return end
-        local fields=localFields(target,name)
-        local saved=s.dossiers and s.dossiers[target]
-        for k,e in pairs(saved and saved.fields or {}) do merge(fields,k,e.data,e.at,e.source) end
-        -- Only our own social snapshot travels; public observations may be relayed.
-        fields.social=ownSocial(target)
-        if send(s,target,fields) then responded[target]=GL.Now() end
+local function answer(s,target,theirs)
+    local current,name = allowed(target)
+    if current ~= s then
         return
     end
-    local id,part,total,body
-    target,id,part,total,body=raw:match("^S1;P;(Player%-%w+%-%w+);(%d+);(%d+);(%d+);(.*)$")
-    part,total=tonumber(part),tonumber(total)
-    if not target or #id>16 or not part or not total or total<1 or total>256 or part<1 or part>total
-        or #body>180 or allowed(target)~=s or body:find("[^%w%% .,:_%-]") then return end
-    local key=sender..":"..target..":"..id
-    local n=0
-    for k,v in pairs(pending) do if GL.Now()-v.at>300 then pending[k]=nil else n=n+1 end end
-    if not pending[key] then if n>=8 then return end; pending[key]={at=GL.Now(),total=total,parts={},count=0} end
-    local p=pending[key]
-    if p.total~=total then pending[key]=nil; return end
-    if p.parts[part] then if p.parts[part]~=body then pending[key]=nil end; return end
-    p.parts[part]=body; p.count=p.count+1
-    if p.count~=total then return end
-    pending[key]=nil
-    local text=table.concat(p.parts)
+    -- An answer still waiting to leave already serves this requester.
+    if Transport.State(s,PROTOCOL.."r"..target) == "queued" then
+        return
+    end
+    local fields = knownFields(s,target,name)
+    local fresh = {}
+    for i,key in ipairs(stampKeys) do
+        if fields[key] and fields[key].at > theirs[i] then
+            fresh[key] = fields[key]
+        end
+    end
+    -- Only our own social snapshot travels; public observations may be relayed.
+    local social = ownSocial(target)
+    if next(fresh) then
+        local last = answered[target]
+        if last and GL.Now() - last < ANSWER_INTERVAL then
+            return
+        end
+        fresh.social = social
+        if send(s,target,fresh,"r",answerDelay(target)) then
+            answered[target] = GL.Now()
+            noteSocial(target,social)
+        end
+    elseif socialDue(target,social) then
+        if send(s,target,{social=social},"t",answerDelay(target)) then
+            noteSocial(target,social)
+        end
+    end
+end
+local function receiveTransfer(s,sender,target,id,text)
     local ok,data=pcall(decode,(text:gsub("%%(%x%x)",function(h)return string.char(tonumber(h,16)) end)))
     if not ok or type(data)~="table" then return end
     local result={}
@@ -369,16 +473,51 @@ function S.Receive(s,sender,raw)
     end
     if changed then GL.Emit("DOSSIER_UPDATED",target) end
 end
+function S.Receive(s,sender,raw)
+    reset(s)
+    local target,stamps = raw:match("^S2;Q;(Player%-%w+%-%w+);([%d,]+)$")
+    if target then
+        local theirs = parseStamps(stamps)
+        if theirs then
+            answer(s,target,theirs)
+        end
+        return
+    end
+    local id,nature,part,total,body
+    target,id,nature,part,total,body = raw:match("^S2;P;(Player%-%w+%-%w+);(%d+);([rt]);(%d+);(%d+);(.*)$")
+    part = tonumber(part)
+    total = tonumber(total)
+    if not target or #id > 16 or not part or not total or total < 1 or total > 256 or part < 1 or part > total
+        or #body > FRAGMENT or allowed(target) ~= s or body:find("[^%w%% .,:_%-]") then
+        return
+    end
+    -- Another member already answers with public data: our identical answer would only repeat it.
+    if part == 1 and nature == "r" and Transport.Cancel(s,PROTOCOL.."r"..target) then
+        answered[target] = nil
+        socialSent[target] = nil
+    end
+    local text = incoming.Add(sender,id,part,total,body)
+    if text then
+        receiveTransfer(s,sender,target,id,text)
+    end
+end
 function S.Refresh()
     local s=B.GuildScope()
     reset(s)
     if not s then return end
+    -- ponytail: push one changed testimony every 30 seconds at most.
     if GL.Now()-lastPush>=30 then
         for target in pairs(dirty) do
             if allowed(target)~=s then dirty[target]=nil
             else
                 local report=ownSocial(target)
-                if not report or send(s,target,{social=report}) then dirty[target]=nil; lastPush=GL.Now() end
+                if not report then
+                    dirty[target]=nil
+                elseif send(s,target,{social=report},"t") then
+                    dirty[target]=nil
+                    lastPush=GL.Now()
+                    noteSocial(target,report)
+                end
                 break
             end
         end

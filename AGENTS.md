@@ -24,7 +24,7 @@ Today's exceptions are frozen in that test; a list may only shrink.
 
 1. **Dependency direction.** `Core.lua` calls nothing defined in another addon
    file. It emits an event with `GL.Emit`; other modules subscribe with `GL.On`.
-2. **One door to the network.** Only the transport file (`Bounties.lua` today)
+2. **One door to the network.** Only the transport file (`Transport.lua`)
    sends or receives addon messages. Other modules hand it a message.
 3. **One answer for character data.** The value, source, provider and date of
    gear, talents, stats and identity are resolved in one place. No new file reads
