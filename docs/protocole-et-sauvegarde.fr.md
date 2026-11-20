@@ -24,7 +24,7 @@ Le jeu écrit cette table sur le disque au `/reload` et à la déconnexion. Elle
 | `battlegroundArchive` | Fiches retirées par le nettoyage des champs de bataille | `Core.lua` | — |
 | `battlegroundCleanupVersion` | Marqueur de la migration 2 | `Core.lua` | — |
 | `grimoireFontDefaultApplied` | Marqueur de la migration 3 | `Core.lua` | — |
-| `authorAccount` | Identifiant aléatoire du compte, 16 caractères hexadécimaux. Diffusé dans les fiches de guilde | `Core.lua` | — |
+| `authorAccount` | Identifiant aléatoire du compte, 16 caractères hexadécimaux. Jamais diffusé tel quel : depuis la 0.22.0, les fiches de guilde portent une empreinte propre à chaque guilde (SHA-256 de l'identifiant et de la clé de guilde, 16 caractères), qui ne relie pas les personnages d'une guilde à l'autre | `Core.lua`, `GuildProfiles.lua` | — |
 | `journalEdition` | Compteur des fiches de guilde publiées | `GuildProfiles.lua` | — |
 | `bountyGuilds` | Un espace par guilde, par `royaume/guilde`. Détail plus bas | `Bounties.lua`, `GuildProfiles.lua`, `SharedDossiers.lua` | Jamais purgé à ce jour, même après un départ de guilde |
 | `bountyHistory` | Primes passées qui concernent chaque personnage | `Bounties.lua` | — |
@@ -67,6 +67,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `dossiers` | Relevés publics, par cible : `fields` (une entrée par champ, avec `data`, `at`, `source`, `by`, `via` et, pour l'équipement, l'identité et les caractéristiques, `dates`), `received`, `sender`, `senderName`. Une inspection d'une cible sans fiche personnelle y est aussi gardée | 256 cibles, la plus ancienne est évincée |
 | `dossierSeq` | Dernier numéro de transfert de relevé émis | — |
 | `bountyRecords` | Dossier de primes par cible, gardé après l'effacement des événements : `name`, `at` (dernière prime) et `orders` par `auteur:numéro` (`at`, `owner`, `pot` total promis en cuivre, `state`, `endedAt`, `expires`, `quota`, `hunter`, `helpers`, `killedAt`). Chaque membre garde la copie de ce qu'il a vu ; rien n'est transmis | 30 primes par cible, 400 cibles, les plus anciennes sont évincées |
+| `socialWithdrawn` | Pour chaque membre, numéro de son dernier retrait de tous ses témoignages (message `W`) ; un témoignage plus ancien est refusé | Un par membre |
 | `socialReports` | Témoignages reçus, par `auteur:cible` : solde, relation, 32 faits au plus, ou marque de retrait | 256 témoignages |
 
 Le champ `journal` contient lui-même : `cards` (fiches publiées, avec leurs avis), `hidden` (cibles masquées localement), `withdrawn` (fiches retirées et leur secret), `secrets` (secrets des fiches publiées par ce compte), `seq`, `auto` (publication automatique), `retired` (cibles à ne pas republier) et `byTarget` (index reconstruit à l'usage).
@@ -112,6 +113,7 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `J;D;propriétaire;cible;secret` | Retrait d'une fiche ; le secret prouve le droit de retirer |
 | `J;V;clé` | Demande de rejeu d'une fiche |
 | `J;S2;Q;cible;dates` | Demande du relevé public d'une cible. `dates` donne, pour chacun des onze champs publics, la date du relevé déjà détenu (0 s'il manque) |
+| `J;S2;W;numéro` | L'expéditeur retire tous ses témoignages dans cette guilde. Envoyé dès qu'il décoche le partage, puis à chaque connexion tant que la case reste décochée |
 | `J;S2;P;cible;numéro;nature;partie;total;corps` | Fragment d'un relevé. `nature` vaut `r` pour une réponse contenant des données publiques, `t` pour le seul témoignage de l'expéditeur |
 
 ### Types d'événement de prime
@@ -141,7 +143,7 @@ Ordre des dates d'une demande : `identity`, `gear`, `trees`, `stats`, `level`, `
 Échange :
 
 1. Un membre demande chaque cible partagée ou primée, au plus une fois toutes les 5 minutes, en annonçant les dates de ce qu'il détient.
-2. Un détenteur ne répond qu'avec les champs plus récents que ceux annoncés. S'il n'a rien de plus récent, il se tait. Un arrivant qui n'a rien est donc servi à sa première demande.
+2. Un détenteur ne répond qu'avec des relevés publics : fiches Armurerie et inspections. Rien de son carnet personnel n'y figure, ni la date de sa dernière rencontre (audit 0.12.0, problème 8). Il ne répond qu'avec les champs plus récents que ceux annoncés. S'il n'a rien de plus récent, il se tait. Un arrivant qui n'a rien est donc servi à sa première demande.
 3. La réponse attend de 0 à 7 secondes, selon le membre et la cible. Quand un autre membre commence une réponse `r` pour la même cible, une réponse encore en attente est annulée. Les champs qui manqueraient arrivent à la demande suivante.
 4. Le témoignage de l'expéditeur accompagne chaque réponse `r`. Sans données publiques à envoyer, il part seul (`t`) s'il a changé ou s'il n'a pas été diffusé depuis 30 minutes.
 5. Un fragment n'ouvre un transfert que s'il en est la partie 1. Un expéditeur n'a qu'un transfert ouvert à la fois ; les parties doivent arriver dans l'ordre.

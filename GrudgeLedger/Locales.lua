@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Sans rien cocher, seuls vos relevés publics (Armurerie, inspection) répondent à la guilde."] = "Sin marcar nada, solo tus registros públicos (Armería, inspección) responden a la hermandad.",
         ["Vos morts contre ce joueur, en texte pour une IA"] = "Tus muertes contra este jugador, en texto para una IA",
         ["Exporter"] = "Exportar",
         ["Pas vu"] = "No visto",
@@ -1448,6 +1449,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Sans rien cocher, seuls vos relevés publics (Armurerie, inspection) répondent à la guilde."] = "With nothing checked, only your public records (Armory, inspection) answer the guild.",
         ["Vos morts contre ce joueur, en texte pour une IA"] = "Your deaths against this player, as text for an AI",
         ["Exporter"] = "Export",
         ["Pas vu"] = "Not seen",

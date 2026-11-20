@@ -101,6 +101,9 @@ local function ownSocial(target)
 end
 local function receiveSocial(s,sender,target,seq,data)
     if type(data)~="table" or not stamp(data.at) or not seq then return false end
+    -- Nothing older than the author's withdrawal of all testimonies comes back.
+    local withdrawn=s.socialWithdrawn and s.socialWithdrawn[sender]
+    if withdrawn and seq<=withdrawn and data.removed~=1 then return false end
     local report={actor=sender,target=target,seq=seq,at=stamp(data.at),received=GL.Now(),authorName=B.MemberName(sender)}
     if data.removed==1 then report.removed=true
     else
@@ -127,6 +130,19 @@ local function receiveSocial(s,sender,target,seq,data)
     end
     s.socialReports[key]=report
     return true
+end
+-- "J;S2;W;sequence": the sender withdraws all its testimonies in this guild.
+local function withdrawAll(s,sender,seq)
+    s.socialWithdrawn=s.socialWithdrawn or {}
+    if (s.socialWithdrawn[sender] or 0)>=seq then return end
+    s.socialWithdrawn[sender]=seq
+    local changed
+    for _,report in pairs(s.socialReports or {}) do
+        if report.actor==sender and report.seq<seq and not report.removed then
+            report.removed,report.seq,changed=true,seq,true
+        end
+    end
+    if changed then GL.Emit("DOSSIER_UPDATED") end
 end
 function S.SocialReports(target)
     local s=allowed(target)
@@ -214,10 +230,9 @@ local function localFields(target,name)
     end
     local inspected=GL.DossierInspection and GL.DossierInspection(record) or record.inspection
     if inspected then inspectionFields(fields, inspected, me) end
-    local identity={name=name,race=record.raceName,raceID=record.raceID,sex=record.sex,
-        classFile=record.class,faction=record.faction,guild=record.guild}
-    merge(fields,"identity",identity,record.lastSeen,"inspection",me)
-    merge(fields,"level",record.level,record.lastSeen,"inspection",me)
+    -- Audit 0.12.0, problem 8: nothing from the personal journal answers a request. Its race,
+    -- class, level and guild dated by our last sighting told the guild that we know this player
+    -- and when we met them. Only Armory snapshots and inspections are public observations.
     return fields
 end
 local function cache(s,target)
@@ -329,6 +344,8 @@ local SOCIAL_REPEAT = 1800
 -- Eight senders may be mid-transfer at once; a transfer silent for two minutes is abandoned.
 local INCOMING = {slots=8, idle=120}
 local requested, answered, socialSent, dirty = {}, {}, {}, {}
+-- The withdrawal of all testimonies leaves once per session while sharing stays unchecked.
+local withdrawalSent
 local incoming = Transport.Reassembler(INCOMING)
 local lastPush = 0
 local active
@@ -341,6 +358,7 @@ local function reset(s)
     answered = {}
     socialSent = {}
     dirty = {}
+    withdrawalSent = nil
     incoming = Transport.Reassembler(INCOMING)
     lastPush = 0
 end
@@ -427,6 +445,12 @@ local function send(s,target,fields,nature,delay)
     end
     return Transport.SendBatch(s,messages,{key=PROTOCOL..nature..target,delay=delay})
 end
+local function sendWithdrawal(s)
+    s.dossierSeq = math.max((s.dossierSeq or 0) + 1, GL.Now() * 1000)
+    if Transport.SendBatch(s,{table.concat({"J",PROTOCOL,"W",s.dossierSeq},";")}) then
+        withdrawalSent = true
+    end
+end
 function S.ShareSocial(enabled)
     local s,me=B.GuildScope()
     if not s or not me then return end
@@ -434,6 +458,11 @@ function S.ShareSocial(enabled)
     s.shareSocial=s.shareSocial or {}; s.shareSocial[me]=enabled==true
     for _,card in ipairs(GL.GuildProfiles.List()) do dirty[card.target]=true end
     for _,order in pairs(B.List()) do if order.state=="open" then dirty[order.target]=true end end
+    if not enabled then
+        -- Audit 0.12.0, problem 9: one message withdraws everything at once; a logout no longer
+        -- interrupts it. The per-target removals still follow for members on older versions.
+        sendWithdrawal(s)
+    end
     S.Refresh()
     GL.Emit("DOSSIER_UPDATED")
 end
@@ -523,6 +552,13 @@ local function receiveTransfer(s,sender,target,id,text)
 end
 function S.Receive(s,sender,raw)
     reset(s)
+    local withdrawal = raw:match("^S2;W;(%d+)$")
+    if withdrawal then
+        if #withdrawal <= 16 then
+            withdrawAll(s,sender,tonumber(withdrawal))
+        end
+        return
+    end
     local target,stamps = raw:match("^S2;Q;(Player%-%w+%-%w+);([%d,]+)$")
     if target then
         local theirs = parseStamps(stamps)
@@ -550,9 +586,13 @@ function S.Receive(s,sender,raw)
     end
 end
 function S.Refresh()
-    local s=B.GuildScope()
+    local s,me=B.GuildScope()
     reset(s)
     if not s then return end
+    -- Members who were away when sharing was unchecked receive the withdrawal at the next login.
+    if not withdrawalSent and me and s.shareSocial and s.shareSocial[me]==false then
+        sendWithdrawal(s)
+    end
     -- ponytail: push one changed testimony every 30 seconds at most.
     if GL.Now()-lastPush>=30 then
         for target in pairs(dirty) do

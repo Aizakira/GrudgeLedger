@@ -2377,11 +2377,11 @@ showSettings = function()
         settingText(p, L("Champs de bataille et arènes"), 356, 606, 548, 17)
         settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 635, 548, 13, theme.inkMuted)
         f.shareGuild = settingText(p, "", 356, 461, 541, 16)
-        f.shareFights = check("relations", nil, L("Partager mes victoires et morts avec ma guilde"), 493, nil, nil,
+        f.shareFights = check("relations", nil, L("Partager mes victoires et morts avec ma guilde"), 489, nil, nil,
             function(value) GL.Bounties.ShareFights(value); f:SyncControls() end)
-        f.shareDeaths = check("relations", nil, L("Signaler mes morts pour les primes automatiques"), 530, nil, nil,
+        f.shareDeaths = check("relations", nil, L("Signaler mes morts pour les primes automatiques"), 520, nil, nil,
             function(value) GL.Bounties.ShareDeaths(value); f:SyncControls() end)
-        f.shareSocial = check("relations", nil, L("Partager mes faits datés et mon avis de guilde"), 567, nil, nil,
+        f.shareSocial = check("relations", nil, L("Partager mes faits datés et mon avis de guilde"), 551, nil, nil,
             function(value) GL.SharedDossiers.ShareSocial(value); f:SyncControls() end)
         f.shareSocial:SetScript("OnEnter",function(self)
             GameTooltip:SetOwner(self,"ANCHOR_TOP")
@@ -2389,6 +2389,9 @@ showSettings = function()
             GameTooltip:Show()
         end)
         f.shareSocial:SetScript("OnLeave",function() GameTooltip:Hide() end)
+        -- What leaves without any box checked (audit 0.12.0, problem 8).
+        local publicHelp = L("Sans rien cocher, seuls vos relevés publics (Armurerie, inspection) répondent à la guilde.")
+        settingText(p, publicHelp, 356, 582, 548, 12, theme.inkMuted)
         p = f.pages.shortcuts
         check("shortcuts", "quickGestures", L("Afficher les boutons bisou et crachat"), 219)
         for i, entry in ipairs({{media.."GestureKiss", L("Envoyer un baiser · +1")}, {"Interface\\Icons\\Spell_Nature_CorrosiveBreath", L("Cracher · −1")}}) do

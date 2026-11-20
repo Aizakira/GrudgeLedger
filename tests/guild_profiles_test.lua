@@ -92,7 +92,9 @@ for _,p in ipairs(clients) do
     assert(#hist==3 and counts.reliable==1 and counts.ninja==1 and counts.unreliable==1)
     for _,v in ipairs(hist) do
         assert(v.time>0 and #v.account==16 and v.authorName and v.actor)
-        assert(v.account==(v.actor==a.id and a.GL.db.authorAccount or b.GL.db.authorAccount))
+        -- One identifier per account and guild, never the raw account identifier.
+        assert(v.account==(v.actor==a.id and a.g.Account() or b.g.Account()))
+        assert(v.account~=a.GL.db.authorAccount and v.account~=b.GL.db.authorAccount)
     end
 end
 click(other.tags[7]);flush()

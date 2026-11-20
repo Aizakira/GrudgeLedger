@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.21.0
+GRUDGE LEDGER — 0.22.0
+
+Confidentialité : quand rien n’est coché, votre client ne répond plus aux demandes de la guilde qu’avec des relevés publics (Armurerie, inspection) ; rien de votre carnet ne part, ni la date de votre dernière rencontre. Décocher « Partager mes faits datés et mon avis de guilde » retire tous vos témoignages en un seul message, renvoyé à chaque connexion tant que la case reste décochée : quitter le jeu juste après ne laisse plus rien chez les autres. Les fiches de guilde portent un identifiant de compte propre à chaque guilde, qui ne relie plus vos personnages d’une guilde à l’autre ; vos anciens avis gardent l’ancien identifiant.
 
 Fiche sans barre de défilement : la colonne de gauche est fixe, et un onglet trop long se découpe en pages, tournées avec les petites flèches en bas à droite ou la molette. L’export pour une IA devient une ligne « Exporter » sous les combats datés. Habitudes : une vue des douze derniers mois (un carré par jour) et la grille jour × heure, toutes deux à quatre niveaux (1, 2, 3-4, 5 et plus) avec une infobulle sur chaque case. Chaque joueur qui vous frappe pendant votre mort apparaît comme « Vous a tué » ; le coup fatal reste précisé.
 
