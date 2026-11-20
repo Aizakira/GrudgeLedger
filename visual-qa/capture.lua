@@ -287,6 +287,8 @@ local function dossierExample()
     return guid
 end
 function QA.capture(name)
+    -- Only the dossier-photos view has the Avatar Replay Lab's photos.
+    AvatarReplayLabPhotos = nil
     hideWindows()
     records[10].tags = nil
     GL.SetSetting("readableFont", name:find("%-readable") ~= nil)
@@ -392,6 +394,16 @@ function QA.capture(name)
         end
         if name=="dossier-habits" then
             f.scroll:SetVerticalScroll(math.max(0,f.body:GetHeight()-f.scroll:GetHeight()))
+            return f
+        end
+        if name=="dossier-photos" then
+            -- The Avatar Replay Lab's read-only photo access, with synthetic example images.
+            local base="Interface/AddOns/AvatarReplayLab/Studio/example"
+            AvatarReplayLabPhotos={Get=function(g)
+                if g~=guid then return end
+                return {at=qaClock,bust=base.."-buste",poses={recherche=base.."-recherche",combat=base.."-combat"}}
+            end}
+            GL.OpenPlayerDossier(guid,nil,nil,"gear")
             return f
         end
         if name=="dossier-stats" then

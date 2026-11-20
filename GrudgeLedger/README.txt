@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.19.0
+GRUDGE LEDGER — 0.20.0
+
+Photos du studio : si l’addon séparé Avatar Replay Lab est installé et a photographié le joueur, la fiche affiche son buste dans la colonne de gauche. Dans l’onglet Équipement, quand le joueur n’est pas visible, une pose photo remplace la tenue reconstituée ; un clic montre la pose suivante. Sans Avatar Replay Lab, rien ne change.
 
 Talents : l’onglet commence par la spécialisation du joueur et sa répartition (« Spécialisation : Combat farouche (0/31/20) »), puis ses talents décisifs : ceux d’un seul rang, souvent un sort, et ceux des rangées profondes.
 

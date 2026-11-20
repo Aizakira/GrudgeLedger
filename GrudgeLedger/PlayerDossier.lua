@@ -323,6 +323,16 @@ local function drawIdentity(f,d)
     end
     f.nameLabel:SetText(name or unknown)
     GL.PaintBookPortrait(f.portrait,record)
+    -- The studio bust, when the Avatar Replay Lab has photographed this player.
+    local photos=GL.StudioPhotos and GL.StudioPhotos(f.guid)
+    if photos then
+        f.portrait.photo:SetTexture(photos.bust)
+        f.portrait.photo:Show()
+        f.portrait.raceIcon:Hide()
+    else
+        f.portrait.photo:Hide()
+        f.portrait.raceIcon:Show()
+    end
     f.identity:SetText(identityText(d))
     local mode=GL.ContactBountyMode(record)
     f.bounty:SetText(mode=="view" and L("Voir la prime") or L("Créer une prime"))
@@ -965,6 +975,9 @@ local function build()
     f.portrait:SetSize(64,64)
     f.portrait.raceIcon=f.portrait:CreateTexture(nil,"ARTWORK")
     f.portrait.raceIcon:SetAllPoints()
+    f.portrait.photo=f.portrait:CreateTexture(nil,"ARTWORK",nil,1)
+    f.portrait.photo:SetAllPoints()
+    f.portrait.photo:Hide()
     f.portrait.classIcon=f.portrait:CreateTexture(nil,"OVERLAY")
     f.portrait.classIcon:SetSize(16,16)
     f.portrait.classIcon:SetPoint("BOTTOMRIGHT")

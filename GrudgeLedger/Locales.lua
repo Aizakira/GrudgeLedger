@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Photo du studio · %s"] = "Foto del estudio · %s",
         ["Spécialisation : %s (%s)"] = "Especialización: %s (%s)",
         ["Talents décisifs : %s"] = "Talentos clave: %s",
         ["%d morts plus anciennes non incluses."] = "%d muertes más antiguas no incluidas.",
@@ -1416,6 +1417,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Photo du studio · %s"] = "Studio photo · %s",
         ["Spécialisation : %s (%s)"] = "Specialization: %s (%s)",
         ["Talents décisifs : %s"] = "Key talents: %s",
         ["%d morts plus anciennes non incluses."] = "%d older deaths not included.",
