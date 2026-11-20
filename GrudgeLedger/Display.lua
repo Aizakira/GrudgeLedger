@@ -408,21 +408,7 @@ local function makeToast(preview)
     frame.divider:SetPoint("TOPLEFT", 16, -88)
     frame.divider:SetSize(384, 1)
     frame.divider:SetColorTexture(0.48, 0.35, 0.18, 0.6)
-    frame.hint = textLine("GameFontHighlightSmall", 16, 95, 264, 14, 1, 0.65, 0.59, 0.48)
-    frame.help = CreateFrame("Button", nil, frame)
-    frame.help:SetPoint("BOTTOMRIGHT", -10, 5)
-    frame.help:SetSize(124, 18)
-    frame.help.label = frame.help:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.help.label:SetPoint("RIGHT")
-    frame.help.label:SetTextColor(0.94, 0.80, 0.57)
-    frame.help.label:SetText(L("Appeler la guilde"))
-    frame.help:SetScript("OnClick", function(self)
-        local result = {}
-        if self.identity then GL.Emit("CALL_FOR_HELP", self.identity, self.relation, self.bounty, result) end
-        self.label:SetText(result.sent and L("Guilde prévenue") or L("Réessayez dans un instant"))
-    end)
-    frame.help:SetScript("OnShow", function(self) self.label:SetText(L("Appeler la guilde")) end)
-    frame.help:Hide()
+    frame.hint = textLine("GameFontHighlightSmall", 16, 95, 384, 14, 1, 0.65, 0.59, 0.48)
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     frame:SetScript("OnEnter", function(self) self.border:SetColorTexture(0.68, 0.51, 0.28, 1) end)
     frame:SetScript("OnLeave", function(self) self.border:SetColorTexture(0.48, 0.35, 0.18, 1) end)
@@ -531,13 +517,6 @@ alert = function(identity, unit)
     if previewToast and previewToast:IsShown() then previewToast:Hide() end
     frame.key, frame.relation, frame.source, frame.expires = record.key, relation, source, now + 6
     frame.signal, frame.signalAt, frame.sighting, frame.banner = nil, nil, nil, nil
-    -- Call for help: one click tells your guild who and where, even without the automatic watch.
-    if relation ~= "friend" and identity.guid ~= nil and GL.Safe(GetGuildInfo, "player") ~= nil then
-        frame.help:Show()
-    else
-        frame.help:Hide()
-    end
-    frame.help.identity, frame.help.relation, frame.help.bounty = identity, relation, bounty ~= nil
     frame.bounty, frame.bountyIdentity = bounty, bounty and identity or nil
     frame.guildKey, frame.guildBurst = guildKey, burst
     frame.hint:SetText(L(bounty and "Clic : prime  •  clic droit : fermer" or "Clic : fiche  •  clic droit : fermer"))
@@ -594,7 +573,6 @@ local function indirectSignal(guid, source)
     frame.guildKey, frame.guildBurst = inheritedGuildKey(record), nil
     frame.signal, frame.signalAt, frame.expires = signalSources[source], now, now + 6
     frame.sighting, frame.banner = nil, nil
-    frame.help:Hide()
     frame.bounty, frame.bountyIdentity = nil, nil
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[relation])
@@ -620,7 +598,6 @@ local function banner(key, relation, title, name, note, hint, onClick)
     frame.guildKey, frame.guildBurst, frame.signal, frame.signalAt, frame.sighting = nil, nil, nil, nil, nil
     frame.bounty, frame.bountyIdentity = nil, nil
     frame.banner = { title = title, name = name, note = note, onClick = onClick }
-    frame.help:Hide()
     frame.hint:SetText(hint or L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[relation])
     refreshToastText(frame)
@@ -662,7 +639,6 @@ local function guildSighting(target, sight, sameZone)
         frame.guildKey, frame.guildBurst, frame.signal, frame.signalAt, frame.banner = nil, nil, nil, nil, nil
         frame.bounty, frame.bountyIdentity = nil, nil
         frame.sighting, frame.sameZone, frame.expires = sight, sameZone == true, GL.Now() + 10
-        frame.help:Hide()
         frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
         styleToast(frame, styles.enemy)
         refreshToastText(frame, GL.Get(frame.key))
@@ -694,7 +670,6 @@ local function guildSighting(target, sight, sameZone)
     frame.guildKey, frame.guildBurst, frame.signal, frame.signalAt = nil, nil, nil, nil
     frame.bounty, frame.bountyIdentity = nil, nil
     frame.sighting, frame.sameZone, frame.expires, frame.banner = sight, sameZone == true, now + 8, nil
-    frame.help:Hide()
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[frame.relation])
     refreshToastText(frame, record)

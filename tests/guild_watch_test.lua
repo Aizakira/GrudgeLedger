@@ -130,13 +130,16 @@ assert(not c.GL.SharedDossiers.SharingSightings())
 now=now+400
 a.map,c.map=17,1444
 see(c,target,"Sneaky","Rogue")
-local own=assert(c.env.GrudgeLedgerNearbyAlert)
-assert(own:IsShown() and own.help:IsShown(),"the alert offers the call for help")
+-- The call for help is the third quick button, beside the kiss and the spit.
+local helpButton=assert(c.env.GrudgeLedgerGestures and c.env.GrudgeLedgerGestures.buttons.HELP,"the quick bar has the call button")
 local before=#watched
-own.help.scripts.OnClick(own.help,"LeftButton")
+helpButton.scripts.OnClick(helpButton,"LeftButton")
 flush()
 assert(#watched==before+1 and watched[#watched]:find(";1444;h;",1,true),watched[#watched])
-assert(own.help.label:GetText()=="Guilde prévenue")
+-- A second click within ten seconds sends nothing.
+helpButton.scripts.OnClick(helpButton,"LeftButton")
+flush()
+assert(#watched==before+1,"one call every ten seconds")
 local called=a.GL.SharedDossiers.WatchSighting(target)
 assert(called and called.help and called.actor==c.id)
 assert(toast:IsShown() and toast.title:GetText():find("^Appel à l’aide de "),toast.title:GetText())

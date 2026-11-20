@@ -22,6 +22,7 @@ local lastInteraction = setmetatable({}, { __mode = "k" })
 local openingProofs = setmetatable({}, { __mode = "k" })
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false, guildSightings = true,
+    grudgeAggression = 5, grudgeDeath = 5,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
     groupTracking = true, socialTracking = true, tradeTracking = false, minimapAngle = 225, readableFont = false,
     quickGestures = true, detectionLog = true, partyWarnings = false, tagReminders = true, chatBadges = false, compactTooltips = false,
@@ -255,6 +256,15 @@ local function provoked(record)
     return math.min(n, total)
 end
 GL.ProvokedAggressions = provoked
+-- The player chooses how much an aggression and a death weigh (settings, 0 to 10; 5 by default).
+-- A reply to your own attack weighs 1 at most, a victory always repays 1.
+local VICTORY = 1
+local function weights()
+    local settings = GL.db and GL.db.settings or defaults
+    local aggression = type(settings.grudgeAggression) == "number" and settings.grudgeAggression or 5
+    local death = type(settings.grudgeDeath) == "number" and settings.grudgeDeath or 5
+    return aggression, math.min(1, aggression), death
+end
 -- "2 agressions × −5  ·  2 morts × −5": the automatic balance with today's weights.
 function GL.BalanceFormula(record)
     local pvp = type(record) == "table" and record.pvp or {}
@@ -263,14 +273,14 @@ function GL.BalanceFormula(record)
     local function term(n, one, many, weight)
         if n > 0 then terms[#terms + 1] = n .. " " .. L(n > 1 and many or one) .. " × " .. weight end
     end
-    term((pvp.aggressions or 0) - replies, "agression", "agressions", "−5")
-    term(replies, "riposte", "ripostes", "−1")
-    term(pvp.deaths or 0, "mort", "morts", "−5")
+    local aggression, reply, death = weights()
+    term((pvp.aggressions or 0) - replies, "agression", "agressions", "−" .. aggression)
+    term(replies, "riposte", "ripostes", "−" .. reply)
+    term(pvp.deaths or 0, "mort", "morts", "−" .. death)
     term(pvp.kills or 0, "victoire", "victoires", "+1")
     return table.concat(terms, "  ·  ")
 end
 -- What each fact weighs in the automatic balance.
-local AGGRESSION, PROVOKED, DEATH, VICTORY = 5, 1, 5, 1
 function GL.AutomaticBalance(record)
     -- Histories remain authoritative and untouched. Replay only new entries;
     -- normalization/merges discard this session-only subtotal before replaying.
@@ -293,6 +303,7 @@ function GL.AutomaticBalance(record)
     local replies = provoked(record)
     -- An aggression weighs -5 from the first hit, a death -5 more: an aggression that kills is -10.
     -- His reply to an attack you opened weighs only -1.
+    local AGGRESSION, PROVOKED, DEATH = weights()
     local balance = VICTORY * (pvp.kills or 0)
         - DEATH * (pvp.deaths or 0)
         - AGGRESSION * ((pvp.aggressions or 0) - replies)
@@ -673,7 +684,8 @@ local function effectiveRelation(record)
     -- Whoever killed you is an enemy while a whole death is unpaid, suspicious while your victories
     -- repay it, and neutral once repaid; an aggressor stays an enemy.
     if (pvp.deaths or 0) > 0 and (record.reputation or 0) < 0 then
-        return (record.reputation <= -DEATH or aggressor) and "enemy" or "warning", "pvp"
+        local _, _, death = weights()
+        return (record.reputation <= -death or aggressor) and "enemy" or "warning", "pvp"
     end
     local rule = GL.GetGuildRule(record)
     if rule and rule.reaction == "enemy" then return "enemy", "guild" end
@@ -1832,6 +1844,7 @@ local function settingValue(key, value)
         if value ~= value or value == math.huge or value == -math.huge then return nil end
         if key == "alertCooldown" then value = math.max(15, math.min(3600, value))
         elseif key == "iconSize" then value = math.max(12, math.min(40, value))
+        elseif key == "grudgeAggression" or key == "grudgeDeath" then value = math.max(0, math.min(10, math.floor(value + 0.5)))
         elseif key == "readingScale" then value = math.max(0.85, math.min(1.25, value))
         elseif key == "minimapAngle" then value = value % 360 end
     end
@@ -1841,7 +1854,15 @@ function GL.SetSetting(key, value)
     if not GL.db then return false end
     value = settingValue(key, value)
     if value == nil then return false end
+    local previous = GL.db.settings[key]
     GL.db.settings[key] = value
+    -- New weights apply to every automatic balance at once; notes, counters and history are untouched.
+    if (key == "grudgeAggression" or key == "grudgeDeath") and previous ~= value then
+        for _, record in pairs(GL.db.players or {}) do
+            if type(record) == "table" and type(record.pvp) == "table" then refreshReputation(record) end
+        end
+        invalidateJournal()
+    end
     GL.Emit("SETTINGS")
     return true
 end

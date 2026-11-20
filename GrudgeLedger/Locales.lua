@@ -4,6 +4,12 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["−%d de plus"] = "−%d más",
+        ["Victoire : +1. Un agresseur reste ennemi même tué. Riposte : −1."] = "Victoria: +1. Un agresor sigue siendo enemigo aunque lo mates. Respuesta: −1.",
+        ["Prévient votre guilde : le joueur ciblé et votre zone."] = "Avisa a tu hermandad: el jugador seleccionado y tu zona.",
+        ["Guilde prévenue : %s."] = "Hermandad avisada: %s.",
+        ["Appel non envoyé : hors guilde, ou un appel vient de partir. Réessayez dans un instant."] = "Llamada no enviada: sin hermandad, o acaba de salir otra. Inténtalo de nuevo en un momento.",
+        ["Au plus un appel toutes les dix secondes.\nCtrl + glisser : déplacer les boutons."] = "Como máximo una llamada cada diez segundos.\nCtrl + arrastrar: mover los botones.",
         ["Réessayez dans un instant"] = "Inténtalo de nuevo en un momento",
         ["Croisé pour la première fois le %s, %s."] = "Visto por primera vez el %s, %s.",
         ["Croisé pour la première fois le %s."] = "Visto por primera vez el %s.",
@@ -1575,6 +1581,12 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["−%d de plus"] = "−%d more",
+        ["Victoire : +1. Un agresseur reste ennemi même tué. Riposte : −1."] = "Victory: +1. An aggressor stays an enemy even once killed. Reply: −1.",
+        ["Prévient votre guilde : le joueur ciblé et votre zone."] = "Tells your guild: the targeted player and your zone.",
+        ["Guilde prévenue : %s."] = "Guild told: %s.",
+        ["Appel non envoyé : hors guilde, ou un appel vient de partir. Réessayez dans un instant."] = "Call not sent: no guild, or a call just left. Try again in a moment.",
+        ["Au plus un appel toutes les dix secondes.\nCtrl + glisser : déplacer les boutons."] = "At most one call every ten seconds.\nCtrl + drag: move the buttons.",
         ["Réessayez dans un instant"] = "Try again in a moment",
         ["Croisé pour la première fois le %s, %s."] = "First crossed on %s, %s.",
         ["Croisé pour la première fois le %s."] = "First crossed on %s.",

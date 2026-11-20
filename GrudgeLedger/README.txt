@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.31.0
+GRUDGE LEDGER — 0.32.0
+
+Rancune à votre mesure : Réglages → Relations et JcJ, deux curseurs fixent ce que pèsent une agression et une mort, de 0 à 10 (5 et 5 par défaut). Tous les soldes automatiques sont recalculés aussitôt ; notes, compteurs et histoire ne changent pas. Appeler la guilde : le bouton rejoint le bisou et le crachat, au même endroit et dans le même style ; il prévient la guilde du joueur ciblé et de votre zone.
 
 Des histoires, pas seulement des chiffres. Journal : le filtre « Comptes à régler » liste les joueurs qui vous doivent encore quelque chose, la dette la plus lourde en premier ; « Tous les signalés » réunit les joueurs étiquetés ; votre Némésis (celui qui vous a le plus tué) et votre Compagnon (celui avec qui vous avez le plus groupé) portent leur titre. Revanche : une bannière quand vous tuez un joueur qui vous devait quelque chose, puis « Compte réglé » quand la dette tombe à zéro. Appel à l’aide : le bouton « Appeler la guilde » d’une alerte prévient tous les membres, avec le nom et la zone. Côté amis : après quinze minutes de groupe avec un inconnu, l’addon propose de l’ajouter en un clic ; la fiche d’un joueur de votre faction a les boutons Chuchoter et Inviter. Fiche → Relations : « Votre histoire avec lui », un court récit daté, avec un bouton Copier pour le chat ou Discord. Duels : gagnés et perdus sont comptés à part, jamais dans le solde.
 

@@ -40,6 +40,19 @@ local defender = GL.RecordAggression(reply, "confirmed", "Observed", "r1", {open
 assert(defender.reputation == -1 and GL.Relation(defender) == "neutral" and GL.ProvokedAggressions(defender) == 1,
     "a reply to your own attack is not an aggression")
 
+-- 0.32.0: each player chooses the weights; every automatic balance follows at once.
+local tuned = GL.IdentityFromName("Tuned", "Weights", "Player-1-tuned")
+local t = GL.RecordAggression(tuned, "confirmed", "Observed", "tuned-a")
+GL.RecordPvP(tuned, "death", "confirmed", "Direct", "tuned-d")
+assert(t.reputation == -10 and GL.BalanceFormula(t) == "1 agression × −5  ·  1 mort × −5")
+assert(GL.SetSetting("grudgeDeath", 2) and GL.SetSetting("grudgeAggression", 1))
+assert(t.reputation == -3 and GL.BalanceFormula(t) == "1 agression × −1  ·  1 mort × −2", GL.BalanceFormula(t))
+assert(GL.Relation(t) == "enemy", "an aggressor stays an enemy whatever the weights")
+assert(GL.SetSetting("grudgeDeath", 99) and GL.Settings().grudgeDeath == 10, "weights are bounded to 0..10")
+assert(GL.SetSetting("grudgeAggression", -3) and GL.Settings().grudgeAggression == 0)
+assert(t.reputation == -10 and not GL.SetSetting("grudgeDeath", "5"))
+assert(GL.SetSetting("grudgeDeath", 5) and GL.SetSetting("grudgeAggression", 5) and t.reputation == -10)
+
 -- Rebuild a pre-0.4.2 cached score, preserving counters, evidence and notes.
 local legacy = GL.Remember(GL.IdentityFromName("Legacy", "Balance", "Player-1-old-balance"))
 legacy.reaction, legacy.reactionSource, legacy.reputation = "enemy", "emote", -11
