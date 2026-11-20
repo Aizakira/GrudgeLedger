@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Votre solde : %s"] = "Tu saldo: %s",
         ["Veille de guilde"] = "Vigilancia de la hermandad",
         ["M’alerter des repérages"] = "Avisarme de los avistamientos",
         ["Signaler mes repérages"] = "Compartir mis avistamientos",
@@ -1545,6 +1546,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Votre solde : %s"] = "Your balance: %s",
         ["Veille de guilde"] = "Guild watch",
         ["M’alerter des repérages"] = "Alert me of sightings",
         ["Signaler mes repérages"] = "Share my sightings",

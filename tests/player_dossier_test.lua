@@ -64,8 +64,12 @@ assert(f.page=="overview" and o:IsVisible() and not f.body:IsVisible() and not f
 assert(not f.identityScroll and not f.scroll,"no scroll frame on the sheet")
 assert(f.identity:GetText():find("Niv. 29",1,true) and f.identity:GetText():find("Restoration",1,true),f.identity:GetText())
 assert(record.level==19 and record.history[1].combat.opponentLevel==21)
-assert(f.pills[1].label:GetText():find(" · ",1,true) and f.pills[1].note:GetText():find("^votre avis"))
-assert(f.pills[2].label:GetText()=="Aucun avis" and f.pills[2].note:GetText()=="guilde")
+-- Labelled rows: "Vous" with the calculation as its tooltip, then "Guilde".
+assert(f.pills[1].label:GetText():find(" · ",1,true) and f.pills[1].note:GetText()=="Vous")
+assert(f.pills[1].tip and f.pills[1].tip:find("^Votre solde : "),f.pills[1].tip)
+assert(f.pills[2].label:GetText()=="Aucun avis" and f.pills[2].note:GetText()=="Guilde")
+-- The gold frame and the class icon sit on an overlay above the animated head.
+assert(f.portrait.portraitOverlay and f.portrait.portraitRim and f.portrait.portraitOverlay:IsShown())
 local cells={}
 for _,c in ipairs(f.statCells) do if c:IsVisible() then cells[c.label:GetText()]=c.value:GetText() end end
 -- Seven lines: health, power, item level, the three statistics of the class, honorable kills.

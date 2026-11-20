@@ -270,24 +270,26 @@ local function guildOpinion(guid)
     return sum,#reports,kind
 end
 local positiveTags={reliable=true}
--- Your opinion, the guild's, an open bounty, then each tag: {text, kind, note}.
+-- Labelled rows, "Vous", "Guilde", "Prime", then each tag: {text, kind, row label, tooltip}.
 local function verdictItems(d,guid)
     local record,items=d.localRecord,{}
     if record then
         local relation=GL.RelationSource(record)=="guildmates" and "neutral" or GL.Relation(record)
-        items[1]={(relationNames[relation] or unknown).." · "..("%+d"):format(record.reputation or 0),relation,L("votre avis")}
+        local formula=GL.BalanceFormula(record)
+        items[1]={(relationNames[relation] or unknown).." · "..("%+d"):format(record.reputation or 0),relation,L("Vous"),
+            formula~="" and (L("Votre solde : %s"):format(formula)) or nil}
     else
-        items[1]={L("Aucune rencontre"),"neutral",L("votre avis")}
+        items[1]={L("Aucune rencontre"),"neutral",L("Vous")}
     end
     local sum,count,kind=guildOpinion(guid)
     if count>0 then
-        items[2]={relationNames[kind].." · "..("%+d"):format(sum),kind,L("guilde, %d avis"):format(count)}
+        items[2]={relationNames[kind].." · "..("%+d"):format(sum),kind,L("Guilde"),L("%d avis"):format(count)}
     else
-        items[2]={L("Aucun avis"),"neutral",L("guilde")}
+        items[2]={L("Aucun avis"),"neutral",L("Guilde")}
     end
     local order=openBounty(guid)
     if order then
-        items[#items+1]={L("Prime ouverte · %s"):format(bountyAmount(order)),"outline"}
+        items[#items+1]={bountyAmount(order),"outline",L("Prime"),L("Prime ouverte · %s"):format(bountyAmount(order))}
     end
     for _,choice in ipairs(GL.TagChoices or {}) do
         if record and GL.HasTag and GL.HasTag(record,choice[1]) then
@@ -484,10 +486,9 @@ local function drawIdentity(f,d)
         y=y+height
     end
     f.verdictHeading:Hide()
-    -- Pills: your opinion (with its calculation) and the guild's, each with a short note below;
-    -- the bounty and tags flow after.
+    -- One labelled row each for you, the guild and an open bounty; the tags flow after.
+    -- The calculation behind your balance is the tooltip of your pill.
     local items=verdictItems(d,f.guid)
-    local formula=d.localRecord and GL.BalanceFormula(d.localRecord) or ""
     for _,pill in ipairs(f.pills) do
         pill:Hide()
         pill.note:Hide()
@@ -496,10 +497,20 @@ local function drawIdentity(f,d)
     for i,item in ipairs(items) do
         local pill=f.pills[i] or Panels.Pill(f.identityBody)
         if not f.pills[i] then
-            pill.note=Panels.Text(f.identityBody,0,0,COLUMN,11,false,UI.theme.muted)
-            GL.Safe(pill.note.SetMaxLines,pill.note,2)
+            pill.note=Panels.Text(f.identityBody,0,0,46,11,false,UI.theme.brass)
+            GL.Safe(pill.note.SetMaxLines,pill.note,1)
+            GL.Safe(pill.EnableMouse,pill,true)
+            pill:SetScript("OnEnter",function(self)
+                if self.tip and GameTooltip then
+                    GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+                    GameTooltip:SetText(self.tip,1,1,1,1,true)
+                    GameTooltip:Show()
+                end
+            end)
+            pill:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
             f.pills[i]=pill
         end
+        pill.tip=item[4]
         pill:Set(item[1],item[2])
         pill:ClearAllPoints()
         if item[3] then
@@ -507,12 +518,12 @@ local function drawIdentity(f,d)
                 y=y+26
                 x=0
             end
-            pill:SetPoint("TOPLEFT",0,-y)
+            pill:SetPoint("TOPLEFT",48,-y)
             pill.note:ClearAllPoints()
-            pill.note:SetPoint("TOPLEFT",2,-y-24)
-            pill.note:SetText(i==1 and formula~="" and (item[3].." · "..formula:gsub("  ·  "," · ")) or item[3])
+            pill.note:SetPoint("TOPLEFT",0,-y-4)
+            pill.note:SetText(item[3])
             pill.note:Show()
-            y=y+26+math.max(14,(GL.Safe(pill.note.GetStringHeight,pill.note) or 13)+3)
+            y=y+25
         else
             if x+pill:GetWidth()>COLUMN then
                 y=y+26

@@ -359,10 +359,39 @@ local function paintPortrait(row, record, unit, refreshUnit)
     animatedHead(row, record, unit, refreshUnit)
 end
 
+-- The animated head is a child frame: it would cover the row's own textures. The gold frame,
+-- the class icon and the level medallion live on an overlay kept above it (owner report, 0.30.0).
+local function portraitOverlay(row)
+    local overlay = row.portraitOverlay
+    if not overlay then
+        overlay = CreateFrame("Frame", nil, row)
+        row.portraitOverlay = overlay
+        overlay:SetAllPoints(row)
+        local anchor = row.faceAnchor or row.raceIcon
+        if row.portraitRim then
+            GL.Safe(row.portraitRim.SetParent, row.portraitRim, overlay)
+        else
+            row.portraitRim = overlay:CreateTexture(nil, "ARTWORK")
+            row.portraitRim:SetPoint("TOPLEFT", anchor, "TOPLEFT", -3, 3)
+            row.portraitRim:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 3, -3)
+            row.portraitRim:SetTexture(media .. "PortraitBezel")
+        end
+        GL.Safe(row.classIcon.SetParent, row.classIcon, overlay)
+    end
+    local base = row.headshot or row
+    local level = (GL.Safe(base.GetFrameLevel, base) or 1) + 2
+    GL.Safe(overlay.SetFrameLevel, overlay, level)
+    if row.levelBadge then GL.Safe(row.levelBadge.SetFrameLevel, row.levelBadge, level + 1) end
+    overlay:Show()
+    -- Hiding the face (showIf) hides its frame too.
+    row.raceIcon.portraitOverlay = overlay
+    if row.faceAnchor then row.faceAnchor.portraitOverlay = overlay end
+end
 local function identityIcons(row, record)
     row.classIcon:SetDrawLayer("OVERLAY")
     portraitRows[row] = record
     paintPortrait(row, record, portraitUnit(record))
+    portraitOverlay(row)
 end
 
 -- ponytail: the client paints a live texture, not a serializable image. Refresh
@@ -723,6 +752,11 @@ local function moveTo(region, x, y)
 end
 local function showIf(region, visible)
     if visible then region:Show() else region:Hide() end
+    -- A portrait takes its frame, class icon and medallion with it.
+    local overlay = region.portraitOverlay
+    if overlay then
+        if visible then overlay:Show() else overlay:Hide() end
+    end
 end
 -- The four-column texture follows the display order in GL.TagChoices.
 local function journalTags(parent, record, compact)
@@ -2112,6 +2146,7 @@ local function renderDetail()
         ledger.detailSource:SetText("") ledger.detailGuild:SetText("")
         if ledger.headshot then ledger.headshot.active = nil; ledger.headshot:Hide() end
         ledger.raceIcon:Hide() ledger.classIcon:Hide() ledger.detailFaction:Hide()
+        if ledger.portraitOverlay then ledger.portraitOverlay:Hide() end
     else
         ledger.detailIcon:Show()
         local relation, pvp = GL.Relation(record), record.pvp or {}

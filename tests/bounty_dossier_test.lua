@@ -77,7 +77,7 @@ assert(all():find("en 2 h · payée",1,true) and all():find("expirée sans victo
 click(f.tabs.overview)
 -- The overview tile sums the dossier; the identity column shows the guild's opinion as a pill.
 assert(f.overview.tiles[4].value:GetText()=="2 posées · 1 remplies",f.overview.tiles[4].value:GetText())
-assert(f.pills[2].label:GetText()=="Ennemi · -11" and f.pills[2].note:GetText()=="guilde, 1 avis")
+assert(f.pills[2].label:GetText()=="Ennemi · -11" and f.pills[2].note:GetText()=="Guilde" and f.pills[2].tip=="1 avis")
 
 click(f.tabs.relations)
 assert(f.filters.all:IsVisible() and f.filters.mine:IsVisible())
