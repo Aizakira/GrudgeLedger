@@ -5,8 +5,8 @@ local L = GL.L
 local I = {}
 GL.CharacterInsights = I
 
--- ponytail: 20 recent visits, 12 zones and 400 days per character, inside the character history entry.
-local MAX_VISITS, MAX_ZONES, MAX_DAYS = 20, 12, 400
+-- ponytail: 20 recent visits, 40 zones and 400 days per character, inside the character history entry.
+local MAX_VISITS, MAX_ZONES, MAX_DAYS = 20, 40, 400
 -- Two sightings closer than this are the same visit.
 local VISIT_GAP = 600
 local DAY = 86400
@@ -151,7 +151,8 @@ local function openings(record, out)
     end
     if #list > 0 then
         table.sort(list, function(a, b) return a.time < b.time end)
-        out[#out + 1] = {key = "opening", text = L("Il ouvre le combat %d fois sur %d"):format(first, #list), facts = facts(list)}
+        out[#out + 1] = {key = "opening", text = L("Il ouvre le combat %d fois sur %d"):format(first, #list), facts = facts(list),
+            value = ("%d / %d"):format(first, #list), caption = L("ouvre le combat lui-même")}
     end
 end
 local function levels(fights, out)
@@ -168,7 +169,8 @@ local function levels(fights, out)
         local mean = gap / #list
         mean = mean >= 0 and math.floor(mean + .5) or -math.floor(-mean + .5)
         local text = #list == 1 and L("Écart de niveau avec vous : %s (un combat)") or L("Écart de niveau moyen avec vous : %s (%d combats)")
-        out[#out + 1] = {key = "levels", text = text:format(("%+d"):format(mean), #list), facts = facts(list)}
+        out[#out + 1] = {key = "levels", text = text:format(("%+d"):format(mean), #list), facts = facts(list),
+            value = ("%+d"):format(mean), caption = mean >= 0 and L("niveaux de plus que vous, en moyenne") or L("niveaux de moins que vous, en moyenne")}
     end
 end
 -- His spells against you, and the players who hit you during his fights.
@@ -199,12 +201,15 @@ local function reports(guid, fights, out)
         end
     end
     if #spellFights > 0 then
-        out[#out + 1] = {key = "spells", text = L("Ses sorts contre vous : %s"):format((ranked(spells, 3))), facts = facts(spellFights)}
+        local top = ranked(spells, 1):gsub(" %(%d+%)$", "")
+        out[#out + 1] = {key = "spells", text = L("Ses sorts contre vous : %s"):format((ranked(spells, 3))), facts = facts(spellFights),
+            value = top, caption = L("son sort principal contre vous")}
     end
     if #helperFights > 0 then
         local names = ranked(helpers, 2)
         local text = L("Combats avec complices : %d sur %d · %s"):format(#helperFights, reported, names)
-        out[#out + 1] = {key = "helpers", text = text, facts = facts(helperFights)}
+        out[#out + 1] = {key = "helpers", text = text, facts = facts(helperFights),
+            value = ("%d / %d"):format(#helperFights, reported), caption = L("combats avec des complices")}
     end
 end
 local function streak(fights, out)
@@ -221,7 +226,8 @@ local function streak(fights, out)
     end
     if #run >= 2 then
         local text = kind == "kill" and L("Vous l’avez vaincu %d fois de suite") or L("Il vous a tué %d fois de suite")
-        out[#out + 1] = {key = "streak", text = text:format(#run), facts = facts(run)}
+        out[#out + 1] = {key = "streak", text = text:format(#run), facts = facts(run), value = tostring(#run),
+            caption = kind == "kill" and L("victoires de suite contre lui") or L("morts de suite contre lui")}
     end
 end
 local function recent(fights, out)
@@ -232,7 +238,8 @@ local function recent(fights, out)
         end
     end
     if #list >= 2 then
-        out[#out + 1] = {key = "recent", text = L("%d combats ces 7 derniers jours"):format(#list), facts = facts(list)}
+        out[#out + 1] = {key = "recent", text = L("%d combats ces 7 derniers jours"):format(#list), facts = facts(list),
+            value = tostring(#list), caption = L("combats ces 7 derniers jours")}
     end
 end
 
@@ -313,14 +320,16 @@ local function habits(presence, out)
         end
     end
     local text = L("Surtout vu entre %d h et %d h (%d sur %d apparitions)"):format(best, (best + 3) % 24, most, presence.total)
-    out[#out + 1] = {key = "hours", text = text, facts = window}
+    out[#out + 1] = {key = "hours", text = text, facts = window, value = L("%d h – %d h"):format(best, (best + 3) % 24),
+        caption = L("l'heure où il est le plus souvent vu")}
     local count = 0
     for _ in pairs(days) do
         count = count + 1
     end
     if count > 0 then
         local text = count == 1 and L("Vu un jour sur les 14 derniers") or L("Vu %d jours sur les 14 derniers"):format(count)
-        out[#out + 1] = {key = "days", text = text, facts = presence.sightings}
+        out[#out + 1] = {key = "days", text = text, facts = presence.sightings, value = ("%d / 14"):format(count),
+            caption = L("jours où il a été vu, sur deux semaines")}
     end
 end
 
@@ -338,6 +347,18 @@ function I.Facts(record, guid)
     recent(fights, out)
     habits(I.Presence(record, guid or record.guid), out)
     return out
+end
+-- Zones sorted by sightings: {name, count}.
+function I.ZoneList(presence)
+    local list = {}
+    for zone, n in pairs(presence.zones) do
+        list[#list + 1] = {name = zone, count = n}
+    end
+    table.sort(list, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.name < b.name
+    end)
+    return list
 end
 function I.Zones(presence, limit)
     return (ranked(presence.zones, limit or 3))

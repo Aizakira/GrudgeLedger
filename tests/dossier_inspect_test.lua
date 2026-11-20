@@ -28,7 +28,7 @@ GetCurrentRegion=function() return 3 end
 GetLocale=function() return "frFR" end
 GetInventoryItemLink=function(_,id) if ready and id==1 then return link end end
 C_PaperDollInfo={GetInspectItemLevel=function() return 33 end}
-for _,name in ipairs({"Core","UITheme","UI","DossierEquipment","DossierTalentData","DossierTalents","DossierInspect","PlayerDossier"}) do
+for _,name in ipairs({"Core","UITheme","UI","DossierEquipment","DossierTalentData","DossierTalents","DossierInspect","DossierPanels","PlayerDossier"}) do
     assert(loadfile(TEST_ROOT.."/"..name..".lua"))("GrudgeLedger")
 end
 local GL=GrudgeLedger

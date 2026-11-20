@@ -320,6 +320,20 @@ function GL.FightBuildText(event)
 end
 
 -- Short lines for the dossier: only what changed at least once.
+-- Every change after the first observation of each value, newest first: {at, key, value, previous}.
+function H.Changes(guid)
+    local entry = guid and store()[guid]
+    local out, previous = {}, {}
+    for _, change in ipairs(entry and entry.changes or {}) do
+        if previous[change.key] ~= nil then
+            out[#out + 1] = {at = change.at, key = change.key, value = change.value, previous = previous[change.key]}
+        end
+        previous[change.key] = change.value
+    end
+    table.sort(out, function(a, b) return a.at > b.at end)
+    return out
+end
+
 function GL.CharacterEvolution(guid)
     local entry = guid and store()[guid]
     if not entry then

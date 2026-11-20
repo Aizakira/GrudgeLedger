@@ -386,15 +386,26 @@ function QA.capture(name)
             return f
         end
         if name=="dossier-facts" then
-            f.expanded.opening=true
-            GL.OpenPlayerDossier(guid)
-            f.expanded.opening=true
-            f.tabs.overview:Click()
+            -- The first fact card opens the full list with its dated events.
+            f.overview.cards[1]:Click()
             return f
         end
         if name=="dossier-habits" then
-            -- The overview page holding the year view and the weekday-by-hour grid.
-            while not f.yearMap:IsVisible() and f.pageNext:IsShown() and f.pageNext:IsEnabled() do f.pageNext:Click() end
+            -- Thirty zones and many changes (example values) to show lists that turn their own pages.
+            for k=1,30 do GL.CharacterInsights.RecordVisit(guid,qaClock-k*7200,"Zone d’exemple "..k) end
+            f.tabs.habits:Click()
+            return f
+        end
+        if name=="dossier-ally" then
+            -- A player of your own faction never fought: groups, a trade and guild tags (example values).
+            local id=GL.IdentityFromName("Bastien","Griseforge","Player-999-00A11E")
+            id.class,id.className,id.race,id.raceName,id.faction,id.level="WARRIOR","Guerrier","Dwarf","Nain","Alliance",44
+            local ally=GL.Remember(id)
+            ally.faction="Alliance"
+            ally.tags={ninja=true,leaver=true}
+            GL.RecordGroup(id,"qa-group-1","Les Mortemines")
+            GL.RecordGroup(id,"qa-group-2","Les Mortemines")
+            GL.OpenPlayerDossier(id.guid)
             return f
         end
         if name=="dossier-photos" then

@@ -107,13 +107,18 @@ end
 local function find(caption)
     return eachRow(function(r) return r.caption:GetText()==caption end)
 end
+-- The overview is one page: the first facts as cards, the full list one click away.
+local o=f.overview
+assert(o:IsVisible() and not f.body:IsVisible() and not f.pageNext:IsShown(),"the overview needs no page turning")
+assert(o.cards[1]:IsShown() and o.cards[1].value:GetText()=="2 / 3" and o.cards[1].caption:GetText()=="ouvre le combat lui-même")
+assert(o.factsLink:GetText()=="Tous les faits (8)",o.factsLink:GetText())
+click(o.cards[1])
+assert(f.factsMode and f.body:IsVisible() and not o:IsVisible())
 local row=assert(find("Il ouvre le combat 2 fois sur 3"))
-assert(row.amount:GetText()=="Faits (3)")
+assert(row.amount:GetText()=="Masquer","the card opens its own facts")
 local before=#rows()
 click(row)
-assert(#rows()==before+3 and find("Il ouvre le combat 2 fois sur 3").amount:GetText()=="Masquer","the facts open under the sentence")
-click(find("Il ouvre le combat 2 fois sur 3"))
-assert(#rows()==before)
+assert(#rows()==before-3 and find("Il ouvre le combat 2 fois sur 3").amount:GetText()=="Faits (3)","the facts close")
 click(find("Vous l’avez vaincu 2 fois de suite"))
 local detail=eachRow(function(r)
     return r.amount:GetText()=="Détail" and r.caption:GetText():find("Vous l'avez vaincu",1,true)
@@ -122,35 +127,38 @@ assert(detail,"a fight fact opens its fight detail")
 click(detail)
 assert(GrudgeLedgerCorrections:IsShown())
 GrudgeLedgerCorrections:Hide()
-assert(eachRow(function() return f.heatmap:IsVisible() end),"the presence grid is on a page")
--- Levels, not a shade relative to the busiest cell: one visit is the lightest level.
-local evening=f.heatmap.cells[((math.floor((T0+9*HOUR)/86400)+3)%7)*24+21]
+click(assert(find("Tous les faits")))
+assert(not f.factsMode and o:IsVisible(),"back to the overview")
+-- The twelve-month strip: one square per week.
+local seen=0
+for _,cell in ipairs(o.strip.cells) do seen=seen+(tonumber(cell.detail and cell.detail:match("^(%d+)")) or 0) end
+assert(seen==5,"five visits on the strip: "..seen)
+-- Habits: levels with tooltips, tiles, zones as a list that turns its own pages.
+click(f.tabs.habits)
+local h=f.habits
+assert(h:IsVisible() and h.tiles[1].value:GetText()=="5" and h.tiles[2].value:GetText()=="3")
+local evening=h.grid.cells[((math.floor((T0+9*HOUR)/86400)+3)%7)*24+21]
 assert(evening.count==1 and math.abs(evening.fill.color[4]-.3)<.01,"one visit is level 1")
-assert(f.heatmap.cells[0].count==0 and f.heatmap.cells[0].fill.color[4]<.11)
+assert(h.grid.cells[0].count==0 and h.grid.cells[0].fill.color[4]<.11)
 GameTooltip.SetOwner=function(self,owner) self.owner,self.lines=owner,{} end
 evening.scripts.OnEnter(evening)
 assert(GameTooltip.owner==evening and GameTooltip:GetText():find("de 21 h à 22 h",1,true) and GameTooltip.lines[1]=="1 apparition",GameTooltip:GetText())
 evening.scripts.OnLeave(evening)
--- The year view: one square per day, today in the last column.
-assert(f.yearMap:IsVisible())
-local seen=0
-for _,cell in pairs(f.yearMap.cells) do
-    if cell:IsShown() and cell.count>0 then seen=seen+cell.count end
-end
-assert(seen==5,"five visits over the last twelve months: "..seen)
-assert(all():find("Sur douze mois : 5 apparitions, 3 jours différents",1,true),all())
 -- Five visits in the same hour reach the darkest level.
 for k=1,4 do I.RecordVisit(guid,T0+9*HOUR-k*7*86400,"Elwynn") end
 click(f.tabs.overview)
-eachRow(function() return f.heatmap:IsVisible() end)
+click(f.tabs.habits)
 assert(evening.count==5 and evening.fill.color[4]==1,"five visits are level 4")
-local zones
-for _,r in ipairs(rows()) do
-    if r.caption:GetText():find("^Zones : ") then zones=r.caption:GetText() end
-end
-assert(zones=="Zones : Elwynn (7), Baie (2)",zones)
+assert(h.zones.title:GetText()=="Zones · 2" and h.zones.rows[1].label:GetText()=="Elwynn" and h.zones.rows[1].value:GetText()=="7")
+-- Thirty zones: the list turns its own pages, four lines at a time, without a scroll bar.
+for k=1,30 do I.RecordVisit(guid,T0+60*HOUR+k*HOUR,"Zone "..k) end
+click(f.tabs.overview)
+click(f.tabs.habits)
+assert(h.zones.turner:IsShown() and h.zones.turner.label:GetText():find("^1 / "),"long lists have pages")
+click(h.zones.turner.next)
+assert(h.zones.page==2 and h.zones.rows[1]:IsShown())
 click(f.tabs.combat)
-assert(not f.heatmap:IsVisible())
+assert(not h:IsVisible())
 assert(#GL.errors==0,(GL.errors[1] or {}).text)
 print("PASS character insights: openings, level gap, spells, companions, streak, recent fights, hours, days, zones, "
     .."older journals, visit recording, expandable facts and presence grid")

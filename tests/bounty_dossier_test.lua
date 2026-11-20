@@ -62,7 +62,10 @@ local function eachRow(visit)
 end
 local function all()
     local visible={}
-    eachRow(function(r) visible[#visible+1]=r.caption:GetText().." "..r.amount:GetText() end)
+    eachRow(function(r)
+        local pill=r.pill and r.pill:IsShown() and (r.pill.label:GetText().." ") or ""
+        visible[#visible+1]=r.caption:GetText().." "..pill..r.amount:GetText()
+    end)
     while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
     return table.concat(visible,"\n")
 end
@@ -70,13 +73,14 @@ assert(all():find("Mis à prix 2 fois · 60 PO promis",1,true),all())
 assert(all():find("Tué 1 fois · 1 expirée · contrats honorés 1/1",1,true),all())
 assert(all():find("en 2 h · payée",1,true) and all():find("expirée sans victoire",1,true),all())
 click(f.tabs.overview)
-assert(all():find("Mis à prix 2 fois",1,true) and all():find("Aucune prime ouverte.",1,true),all())
-assert(f.verdict:GetText():find("Guilde : -11 · 1 avis",1,true),f.verdict:GetText())
+-- The overview tile sums the dossier; the identity column shows the guild's opinion as a pill.
+assert(f.overview.tiles[4].value:GetText()=="2 posées · 1 remplies",f.overview.tiles[4].value:GetText())
+assert(f.pills[2].label:GetText()=="Ennemi · -11" and f.pills[2].note:GetText()=="guilde, 1 avis")
 
 click(f.tabs.relations)
 assert(f.filters.all:IsVisible() and f.filters.mine:IsVisible())
-assert(all():find("Ally Member -11 · Ennemi · 0 V / 4 D",1,true),all())
-assert(all():find("Total de la guilde -11 · 1 avis",1,true),all())
+assert(all():find("Ally Member Ennemi · -11 0 V / 4 D",1,true),all())
+assert(all():find("Total de la guilde Ennemi · -11 1 avis",1,true),all())
 assert(all():find("Mise à prix créée",1,true),"old orders stay in the dated timeline")
 click(f.filters.guild)
 assert(not all():find("Mise à prix créée",1,true),"our own orders are not guild testimonies")

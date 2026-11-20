@@ -283,7 +283,12 @@ do
     local dossier=b.env.GrudgeLedgerPlayerDossier
     click(dossier.tabs.relations)
     local rendered={}
-    for _,row in ipairs(dossier.rows) do if row:IsShown() then rendered[#rendered+1]=row.caption:GetText().." "..row.amount:GetText() end end
+    for _,row in ipairs(dossier.rows) do
+        if row:IsShown() then
+            local pill=row.pill and row.pill:IsShown() and (row.pill.label:GetText().." ") or ""
+            rendered[#rendered+1]=row.caption:GetText().." "..pill..row.amount:GetText()
+        end
+    end
     local content=table.concat(rendered,"\n")
     assert(content:find("-11",1,true) and content:find("Member1",1,true) and content:find("Social Target",1,true),content)
     assert(mine.reputation==0 and #mine.history==0 and mine.notes[1].text=="SECRET my note")

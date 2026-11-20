@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.23.0
+GRUDGE LEDGER — 0.24.0
+
+Nouvelle mise en page de la fiche. Colonne de gauche : votre avis, celui de la guilde, la prime et les étiquettes en pastilles de couleur, neuf chiffres clés, « vu il y a 2 h ». Aperçu sur une seule page : quatre tuiles (vous contre lui avec la barre victoires et morts, la guilde, la dernière rencontre de vous et de la guilde, les primes), quatre faits en grand (« Tous les faits » ouvre la liste datée), la présence sur douze mois et le dernier combat. Nouvel onglet Habitudes : grille jour et heure, zones et évolution en listes qui tournent leurs propres pages. Relations : ce que chacun en pense avec une pastille par membre, chronologie groupée par jour avec l’auteur en étiquette. Pour un joueur de votre faction jamais combattu, Combats devient Rencontres (groupes, échanges, signalements). Un nouveau fichier : relancer complètement le jeu.
 
 Corrections : les migrations du carnet sont numérotées et gardent ce qu’elles remplacent (une ancienne mort « probable » garde sa nature d’origine) ; l’onglet Relations de la fiche ne lit plus tout le journal, seulement le joueur affiché.
 

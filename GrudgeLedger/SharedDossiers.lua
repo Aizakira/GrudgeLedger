@@ -144,6 +144,28 @@ local function withdrawAll(s,sender,seq)
     end
     if changed then GL.Emit("DOSSIER_UPDATED") end
 end
+function S.GuildSighting(target)
+    local s,me=allowed(target)
+    if not s then return end
+    me=GL.Safe(UnitGUID,"player")
+    local best
+    local function consider(at,actor)
+        if type(at)=="number" and actor and actor~=me and (not best or at>best.at) then
+            best={at=at,actor=actor}
+        end
+    end
+    for _,report in pairs(s.socialReports or {}) do
+        if report.target==target and not report.removed then
+            for _,e in ipairs(report.events or {}) do consider(e.time,report.actor) end
+        end
+    end
+    local saved=s.dossiers and s.dossiers[target]
+    for _,field in pairs(saved and saved.fields or {}) do
+        if field.source=="inspection" then consider(field.at,field.by) end
+    end
+    if best then best.name=B.MemberName(best.actor) end
+    return best
+end
 function S.SocialReports(target)
     local s=allowed(target)
     local out={}

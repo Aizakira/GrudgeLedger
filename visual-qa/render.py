@@ -441,7 +441,7 @@ def main():
               "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
               "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details", "combat-report", "death-report", "death-export"]
-    views += ["bounty-target", "bounty-contract", "bounty-history", "dossier-overview", "dossier-facts", "dossier-habits", "dossier-combat", "dossier-gear", "dossier-photos", "dossier-stats", "dossier-talents", "dossier-shared", "dossier-relations"]
+    views += ["bounty-target", "bounty-contract", "bounty-history", "dossier-overview", "dossier-facts", "dossier-habits", "dossier-ally", "dossier-combat", "dossier-gear", "dossier-photos", "dossier-stats", "dossier-talents", "dossier-shared", "dossier-relations"]
     views += ["journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small", "guild-profiles"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.

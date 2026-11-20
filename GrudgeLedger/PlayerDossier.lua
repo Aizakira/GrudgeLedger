@@ -235,69 +235,160 @@ end
 local function bountyAmount(order)
     return GL.BountyMoney and GL.BountyMoney(GL.BountyTotal(order)) or unknown
 end
--- Your opinion first, then the guild's total, an open bounty and the tags.
-local function verdictText(d,guid)
-    local record,lines=d.localRecord,{}
-    if record then
-        local relation=relationNames[GL.Relation(record)] or unknown
-        lines[1]=L("Vous : %s · %s"):format(("%+d"):format(record.reputation or 0),relation)
-    else
-        lines[1]=L("Vous : aucune rencontre")
+local Panels=GL.DossierPanels
+-- "il y a 2 h": recent dates read as a distance; older ones as a date.
+local function ago(at)
+    at=tonumber(at)
+    if not at then
+        return nil
     end
+    local delta=GL.Now()-at
+    if delta<60 then
+        return L("à l'instant")
+    elseif delta<3600 then
+        return L("il y a %d min"):format(math.floor(delta/60))
+    elseif delta<86400 then
+        return L("il y a %d h"):format(math.floor(delta/3600))
+    elseif delta<30*86400 then
+        return L("il y a %d j"):format(math.floor(delta/86400))
+    end
+    return GL.Safe(date,"%d/%m/%Y",at) or "?"
+end
+local function guildOpinion(guid)
     local reports=GL.SharedDossiers and guid and GL.SharedDossiers.SocialReports(guid) or {}
     local sum=0
     for _,report in ipairs(reports) do
         sum=sum+(tonumber(report.score) or 0)
     end
-    lines[2]=#reports>0 and L("Guilde : %s · %d avis"):format(("%+d"):format(sum),#reports) or L("Guilde : aucun avis partagé")
+    local kind="neutral"
+    if #reports>0 then
+        kind=sum<=-10 and "enemy" or sum<0 and "warning" or sum>=10 and "friend" or "neutral"
+    end
+    return sum,#reports,kind
+end
+local positiveTags={reliable=true}
+-- Your opinion, the guild's, an open bounty, then each tag: {text, kind, note}.
+local function verdictItems(d,guid)
+    local record,items=d.localRecord,{}
+    if record then
+        local relation=GL.Relation(record)
+        items[1]={(relationNames[relation] or unknown).." · "..("%+d"):format(record.reputation or 0),relation,L("votre avis")}
+    else
+        items[1]={L("Aucune rencontre"),"neutral",L("votre avis")}
+    end
+    local sum,count,kind=guildOpinion(guid)
+    if count>0 then
+        items[2]={relationNames[kind].." · "..("%+d"):format(sum),kind,L("guilde, %d avis"):format(count)}
+    else
+        items[2]={L("Aucun avis"),"neutral",L("guilde")}
+    end
     local order=openBounty(guid)
     if order then
-        lines[#lines+1]=L("Prime ouverte : %s"):format(bountyAmount(order))
+        items[#items+1]={L("Prime ouverte · %s"):format(bountyAmount(order)),"outline"}
     end
-    local tags=record and GL.TagText and GL.TagText(record)
-    if tags then
-        lines[#lines+1]=tags
+    for _,choice in ipairs(GL.TagChoices or {}) do
+        if record and GL.HasTag and GL.HasTag(record,choice[1]) then
+            items[#items+1]={L(choice[2]),positiveTags[choice[1]] and "friend" or "enemy"}
+        end
     end
-    return table.concat(lines,"\n")
+    return items
+end
+local combatKinds={kill=true,death=true,aggression=true}
+local function fights(record)
+    local list={}
+    for _,e in ipairs(object(record and record.history)) do
+        if type(e)=="table" and combatKinds[e.kind] and not e.voided and e.voidReason~="battleground" and type(e.time)=="number" then
+            list[#list+1]=e
+        end
+    end
+    table.sort(list,function(a,b) return a.time>b.time end)
+    return list
+end
+-- A player of your own faction you never fought: met in groups, trades and tags.
+local function allyVariant(d)
+    local faction=d.record.faction or object(d.profile.identity).faction
+    return type(faction)=="string" and faction==GL.Safe(UnitFactionGroup,"player") and #fights(d.localRecord)==0
+end
+-- Groups, trades and members who tagged this player, for the same-faction variant.
+local function encounters(d,guid)
+    local result={groups=0,groupTime=0,trades=0,taggers=0,events={}}
+    for _,e in ipairs(object(d.localRecord and d.localRecord.history)) do
+        if type(e)=="table" and not e.voided and (e.kind=="grouped" or e.kind=="group") then
+            result.groups=result.groups+1
+            result.groupTime=result.groupTime+(GL.GroupDuration and GL.GroupDuration(e) or 0)
+            result.events[#result.events+1]=e
+        elseif type(e)=="table" and not e.voided and e.kind=="trade" then
+            result.trades=result.trades+1
+            result.lastTrade=math.max(result.lastTrade or 0,e.time or 0)
+            result.events[#result.events+1]=e
+        end
+    end
+    local G,me=GL.GuildProfiles,GL.Safe(UnitGUID,"player")
+    local card=G and guid and G.ForTarget(guid)
+    local seen={}
+    for _,e in ipairs(card and G.View(card) or {}) do
+        if e.on and e.actor~=me and not seen[e.actor] then
+            seen[e.actor]=true
+            result.taggers=result.taggers+1
+        end
+    end
+    table.sort(result.events,function(a,b) return (a.time or 0)>(b.time or 0) end)
+    return result
 end
 local powers={"MANA","ENERGY","RAGE","FOCUS","RUNICPOWER"}
-local function keyFigures(d)
+-- Nine figures: health, power, armour; item level, stamina, main attribute; then critical
+-- strike and the PvP record, or for the same-faction variant groups, trades and reports.
+local function keyFigures(d,ally,met)
     local stats,power=d.stats,"MANA"
     for i=#powers,1,-1 do
         if stats[powers[i]] then
             power=powers[i]
         end
     end
-    return {
+    local main,best="AGILITY",-1
+    for _,key in ipairs({"STRENGTH","AGILITY","INTELLECT"}) do
+        local value=tonumber(stats[key])
+        if value and value>best then
+            main,best=key,value
+        end
+    end
+    local figures={
         {statValue("HEALTH",stats.HEALTH),statNames.HEALTH},
         {statValue(power,stats[power]),statNames[power]},
         {statValue("ARMOR",stats.ARMOR),statNames.ARMOR},
         {valueOf(d.itemLevel),L("Niv. objet")},
-        {valueOf(d.profile.pvpRank),L("Rang JcJ")},
-        {valueOf(d.profile.honorableKills),L("Vict. hon.")},
+        {statValue("STAMINA",stats.STAMINA),statNames.STAMINA},
+        {statValue(main,stats[main]),statNames[main]},
     }
+    if ally then
+        figures[7]={tostring(met.groups),L("Groupes")}
+        figures[8]={tostring(met.trades),L("Échanges")}
+        figures[9]={tostring(met.taggers),L("Signalements")}
+    else
+        figures[7]={statValue("CRITICALSTRIKE",stats.CRITICALSTRIKE),L("Critique")}
+        figures[8]={valueOf(d.profile.pvpRank),L("Rang JcJ")}
+        figures[9]={valueOf(d.profile.honorableKills),L("Vict. hon.")}
+    end
+    return figures
 end
 local function seenText(d)
     local record,lines=d.record,{}
     local at=record.lastSeen or record.lastEncounterAt
     if at then
         local zone=text(record.lastZone) or text(record.lastEncounterZone)
-        lines[1]=L("Vu le %s"):format(timestamp(at))..(zone and (" · "..zone) or "")
+        lines[1]=L("Vu %s"):format(ago(at))..(zone and (" · "..zone) or "")
     else
         lines[1]=L("Pas encore croisé")
     end
     local readings={}
     local inspectedAt=d.live.gearAt or d.live.statsAt or d.live.talentsAt
     if inspectedAt then
-        readings[#readings+1]=L("inspection %s"):format(timestamp(inspectedAt))
+        readings[#readings+1]=L("inspection du %s"):format(GL.Safe(date,"%d/%m",inspectedAt) or "?")
     end
     if d.archivedAt>0 then
-        readings[#readings+1]=L("Armurerie %s"):format(timestamp(d.archivedAt))
+        readings[#readings+1]=L("Armurerie du %s"):format(GL.Safe(date,"%d/%m",math.floor(d.archivedAt)) or "?")
     end
     lines[#lines+1]=#readings>0 and L("Relevés : %s"):format(table.concat(readings," · ")) or L("Aucun relevé chargé")
-    if not next(d.archive) then
-        lines[#lines+1]=L("Le compagnon lit le Journal à la déconnexion ou au /reload. Après l’import, /reload affiche le relevé.")
-    end
     return table.concat(lines,"\n")
 end
 local function keyCell(f,i)
@@ -306,7 +397,7 @@ local function keyCell(f,i)
         return c
     end
     c=CreateFrame("Frame",nil,f.identityBody)
-    c:SetSize(78,44)
+    c:SetSize(78,40)
     c.value=UI.label(c,"","large",0,0,78)
     c.label=UI.label(c,"",nil,0,-23,80)
     UI.journalFont(c.label,"GameFontHighlight",11)
@@ -341,41 +432,69 @@ local function drawIdentity(f,d)
     else
         f.bounty:Hide()
     end
+    local ally=allyVariant(d)
+    local met=encounters(d,f.guid)
     local y=0
     local function place(region,height)
         region:ClearAllPoints()
         region:SetPoint("TOPLEFT",0,-y)
         y=y+height
     end
-    place(f.verdictHeading,26)
-    f.verdict:SetText(verdictText(d,f.guid))
-    place(f.verdict,f.verdict:GetStringHeight()+14)
-    place(f.keyHeading,26)
-    for i,figure in ipairs(keyFigures(d)) do
+    place(f.verdictHeading,20)
+    -- Pills: your opinion and the guild's each with a short note; the bounty and tags flow after.
+    local items=verdictItems(d,f.guid)
+    for _,pill in ipairs(f.pills) do
+        pill:Hide()
+        pill.note:Hide()
+    end
+    local x=0
+    for i,item in ipairs(items) do
+        local pill=f.pills[i] or Panels.Pill(f.identityBody)
+        if not f.pills[i] then
+            pill.note=Panels.Text(f.identityBody,0,0,150,11,false,UI.theme.muted)
+            f.pills[i]=pill
+        end
+        pill:Set(item[1],item[2])
+        pill:ClearAllPoints()
+        if item[3] then
+            if x>0 then
+                y=y+26
+                x=0
+            end
+            pill:SetPoint("TOPLEFT",0,-y)
+            pill.note:ClearAllPoints()
+            pill.note:SetPoint("TOPLEFT",pill:GetWidth()+8,-y-4)
+            pill.note:SetText(item[3])
+            pill.note:Show()
+            y=y+26
+        else
+            if x+pill:GetWidth()>243 then
+                y=y+26
+                x=0
+            end
+            pill:SetPoint("TOPLEFT",x,-y)
+            x=x+pill:GetWidth()+6
+        end
+    end
+    if x>0 then
+        y=y+26
+    end
+    y=y+6
+    place(f.keyHeading,20)
+    for i,figure in ipairs(keyFigures(d,ally,met)) do
         local c=keyCell(f,i)
         c:ClearAllPoints()
-        c:SetPoint("TOPLEFT",((i-1)%3)*82,-(y+math.floor((i-1)/3)*47))
+        c:SetPoint("TOPLEFT",((i-1)%3)*82,-(y+math.floor((i-1)/3)*42))
         c.value:SetText(figure[1] or "—")
         c.value:SetTextColor(unpack(figure[1] and UI.theme.paper or UI.theme.muted))
         c.label:SetText(figure[2])
         c:Show()
     end
-    y=y+2*47+6
+    y=y+3*42+4
     f.observed:SetText(seenText(d))
-    place(f.observed,f.observed:GetStringHeight()+12)
+    place(f.observed,f.observed:GetStringHeight()+8)
 end
 
-local combatKinds={kill=true,death=true,aggression=true}
-local function fights(record)
-    local list={}
-    for _,e in ipairs(object(record and record.history)) do
-        if type(e)=="table" and combatKinds[e.kind] and not e.voided and e.voidReason~="battleground" and type(e.time)=="number" then
-            list[#list+1]=e
-        end
-    end
-    table.sort(list,function(a,b) return a.time>b.time end)
-    return list
-end
 local function fightLine(e)
     local combat=object(e.combat)
     local line=GL.HistoryTitle(e)..(text(e.zone) and e.zone~="?" and (" · "..text(e.zone)) or "")
@@ -436,8 +555,8 @@ local function bountyLine(e)
     end
     return line.." · "..(bountyStates[e.state] or unknown)
 end
--- One row per guild member: their opinion and their fights against the target, then the guild total.
-local function memberRows(f,row)
+-- "Ce que chacun en pense": you first, then each member with a relation pill and their fights.
+local function memberRows(f,row,record)
     local B,S=GL.Bounties,GL.SharedDossiers
     local members,me={},GL.Safe(UnitGUID,"player")
     local function member(id)
@@ -453,6 +572,14 @@ local function memberRows(f,row)
         member(id).fights=fights
     end
     members[me]=nil
+    if record then
+        local p=GL.ContactMatchup(record)
+        local relation=GL.Relation(record)
+        local mine=(relationNames[relation] or unknown).." · "..("%+d"):format(record.reputation or 0)
+        row(L("Vous"),score(p.kills,p.deaths),nil,nil,nil,{pill={mine,relation}})
+    else
+        row(L("Vous"),nil,nil,nil,nil,{pill={L("Aucune rencontre"),"neutral"}})
+    end
     local list={}
     for _,m in pairs(members) do
         m.label=UI.plain(B and B.MemberName(m.id) or m.name or L("Membre de guilde"))
@@ -464,66 +591,62 @@ local function memberRows(f,row)
         end
         return a.label<b.label
     end)
-    local sum,count=0,0
     for _,m in ipairs(list) do
-        local parts={L("sans avis")}
-        if m.score then
-            parts[1]=("%+d"):format(m.score).." · "..(relationNames[m.relation] or unknown)
-            sum,count=sum+m.score,count+1
-        end
-        if m.fights then
-            parts[2]=score(m.fights[1],m.fights[2])
-        end
-        row(m.label,table.concat(parts," · "))
+        local pill=m.score and {(relationNames[m.relation] or unknown).." · "..("%+d"):format(m.score),m.relation} or {L("Sans avis"),"neutral"}
+        row(m.label,m.fights and score(m.fights[1],m.fights[2]) or "",nil,nil,nil,{pill=pill})
     end
-    if #list==0 then
-        row(L("Aucun historique ni solde partagé par les autres membres."))
-    end
+    local sum,count,kind=guildOpinion(f.guid)
     if count>0 then
-        row(L("Total de la guilde"),L("%s · %d avis"):format(("%+d"):format(sum),count))
+        row(L("Total de la guilde"),L("%d avis"):format(count),nil,nil,nil,{pill={relationNames[kind].." · "..("%+d"):format(sum),kind}})
+    elseif #list==0 then
+        row(L("Aucun historique ni solde partagé par les autres membres."))
     end
 end
 local filters={{"mine","Moi",58},{"guild","Guilde",92},{"all","Tout",58}}
+local function firstName(name)
+    return (tostring(name or ""):match("^(%S+)") or name)
+end
+local function dayLabel(at)
+    local key=GL.CharacterInsights and GL.CharacterInsights.DayKey
+    if key and key(at)==key(GL.Now()) then
+        return L("Aujourd’hui")
+    elseif key and key(at)==key(GL.Now()-86400) then
+        return L("Hier")
+    end
+    return GL.Safe(date,"%d/%m/%Y",at) or "?"
+end
 local function relationsPage(f,record,row)
     local B,G,S=GL.Bounties,GL.GuildProfiles,GL.SharedDossiers
     local me,filter=GL.Safe(UnitGUID,"player"),f.relationFilter or "all"
     local timeline={}
-    local function add(at,description,source,mine)
+    local function add(at,description,author,mine,event)
         if filter=="all" or (filter=="mine")==(mine==true) then
-            timeline[#timeline+1]={at=tonumber(at) or 0,description=description,source=source,seq=#timeline+1}
+            timeline[#timeline+1]={at=tonumber(at) or 0,description=description,author=mine and L("Vous") or firstName(author),
+                mine=mine,seq=#timeline+1,event=event}
         end
     end
-    row(L("Votre avis"),nil,true)
-    if record then
-        row(L("Votre carnet"),("%+d"):format(record.reputation or 0).." · "..(relationNames[GL.Relation(record)] or unknown))
-        if GL.TagText and GL.TagText(record) then
-            row(GL.TagText(record))
+    row(L("Ce que chacun en pense"),L("Avis · contre lui"),true)
+    memberRows(f,row,record)
+    -- Audit 0.12.0, problem 11: only this record's events, not the whole journal sorted.
+    for _,item in ipairs(record and GL.RecordEvents(record) or {}) do
+        local e=item.event
+        local description=GL.HistoryTitle(e)
+        if e.text then
+            description=description.."\n"..UI.plain(e.text)
         end
-        -- Audit 0.12.0, problem 11: only this record's events, not the whole journal sorted.
-        for _,item in ipairs(GL.RecordEvents(record)) do
-            local e=item.event
-            local description=GL.HistoryTitle(e)
-            if e.text then
-                description=description.."\n"..UI.plain(e.text)
-            end
-            if e.zone and e.zone~="?" then
-                description=description.." · "..UI.plain(e.zone)
-            end
-            if e.voided then
-                description=description.." · "..L("Annulé · exclu")
-            end
-            add(e.time,description,L("Votre journal").." · "..UI.plain(e.actorName or L("Auteur inconnu")),true)
+        if e.zone and e.zone~="?" then
+            description=description.." · "..UI.plain(e.zone)
         end
-    else
-        row(L("Aucune rencontre personnelle enregistrée."))
+        if e.voided then
+            description=description.." · "..L("Annulé · exclu")
+        end
+        add(e.time,description,nil,true,e)
     end
-    row(L("Avis de la guilde"),nil,true)
-    memberRows(f,row)
     for _,report in ipairs(S and S.SocialReports(f.guid) or {}) do
         local author=UI.plain(B.MemberName(report.actor) or report.authorName or L("Membre de guilde"))
         for _,e in ipairs(report.events) do
             local title=GL.HistoryTitle(e,author,f.nameLabel:GetText())..(e.zone and (" · "..UI.plain(e.zone)) or "")
-            add(e.time,title,L("Témoignage de %s"):format(author),report.actor==me)
+            add(e.time,title,author,report.actor==me)
         end
     end
     local seen,tagNames={},{}
@@ -537,13 +660,13 @@ local function relationsPage(f,record,row)
                 if not seen[key] then
                     seen[key]=true
                     local change=(e.on and L("Étiquette ajoutée : ") or L("Étiquette retirée : "))..(tagNames[e.tag] or unknown)
-                    add(e.time,change,L("Avis de %s"):format(UI.plain(e.authorName)),e.actor==me)
+                    add(e.time,change,UI.plain(e.authorName),e.actor==me)
                 end
             end
         end
     end
     for _,order in ipairs(bountyDossier(f.guid).orders) do
-        local author=L("Créée par %s"):format(UI.plain(B.MemberName(order.owner) or L("Membre de guilde")))
+        local author=UI.plain(B.MemberName(order.owner) or L("Membre de guilde"))
         add(order.at,L("Mise à prix créée"),author,order.owner==me)
         if order.endedAt then
             add(order.endedAt,L("Fin de la mise à prix"),author,order.owner==me)
@@ -555,15 +678,23 @@ local function relationsPage(f,record,row)
         end
         return a.seq>b.seq
     end)
-    row(L("Interactions datées"),nil,true)
-    row(L("Les témoignages restent attribués à leur auteur ; ils ne modifient pas votre avis."))
+    row(L("Chronologie"),nil,true)
     if #timeline==0 then
         row(L("Aucune interaction datée disponible."))
     end
+    -- Grouped by day; each line names its author in a small chip instead of repeating it in text.
+    local lastDay
     for _,entry in ipairs(timeline) do
-        row(timestamp(entry.at).." · "..entry.source.."\n"..entry.description)
+        local day=dayLabel(entry.at)
+        if day~=lastDay then
+            lastDay=day
+            row(day,nil,nil,nil,nil,{small=true})
+        end
+        local e=entry.event
+        local open=e and combatKinds[e.kind] and function() GL.InspectEvent(record,e) end
+        row(entry.description,open and L("Détail") or nil,nil,open,nil,{time=GL.Safe(date,"%H:%M",entry.at),chip={entry.author,entry.mine}})
     end
-    row(L("Le partage des faits et avis se règle dans Réglages > Relations. Les notes restent privées."))
+    row(L("Les témoignages restent signés ; ils ne changent pas votre avis."),nil,nil,nil,nil,{small=true})
 end
 local MAX_FACTS=10
 local function factRow(record,row,fact)
@@ -696,141 +827,263 @@ local function paintHeatmap(m,presence)
         paintLevel(cell.fill,cell.count)
     end
 end
--- The last twelve months, one square per day, weeks as columns (Monday at the top).
-local WEEKS=53
-local function yearMap(parent)
-    local m=CreateFrame("Frame",nil,parent)
-    m:SetSize(506,14+7*9+20)
-    m.cells,m.months={},{}
-    for _,day in ipairs({1,3,5}) do
-        smallLabel(m,L(dayNames[day]),0,-14-(day-1)*9,32)
-    end
-    for week=0,WEEKS-1 do
-        for day=1,7 do
-            local cell=gridCell(m,8,8)
-            cell:SetPoint("TOPLEFT",36+week*9,-14-(day-1)*9)
-            m.cells[week*7+day]=cell
-        end
-    end
-    for i=1,12 do
-        m.months[i]=smallLabel(m,"",0,0,40)
-    end
-    legend(m,-14-7*9-4)
-    m:Hide()
-    return m
-end
-local function paintYear(m,presence)
+-- Weekly squares for the twelve-month strip, oldest first, from per-day sightings.
+local function weeks(presence)
     local now=GL.Now()
-    local today=GL.Safe(date,"*t",now)
-    local weekday=type(today)=="table" and today.wday and (today.wday+5)%7+1 or (math.floor(now/86400)+3)%7+1
-    local noon=type(today)=="table" and today.hour and now-((today.hour-12)*3600+(today.min or 0)*60+(today.sec or 0)) or now
-    local seen,total,lastMonth,labels=0,0,nil,0
-    for _,label in ipairs(m.months) do
-        label:Hide()
+    local out={}
+    local dayKey=GL.CharacterInsights and GL.CharacterInsights.DayKey or function(at) return math.floor(at/86400) end
+    for i=1,52 do
+        local count,first,last=0,nil,nil
+        for back=0,6 do
+            local daysAgo=(52-i)*7+back
+            local at=now-daysAgo*86400
+            count=count+(presence.days[dayKey(at)] or 0)
+            first=at
+            last=last or at
+        end
+        local t=GL.Safe(date,"*t",first)
+        out[i]={count=count,title=(GL.Safe(date,"%d/%m",first) or "?").." – "..(GL.Safe(date,"%d/%m",last) or "?"),
+            detail=sightings(count),month=type(t)=="table" and t.month or nil,
+            monthName=type(t)=="table" and t.month and L(monthNames[t.month]) or nil}
     end
-    for week=0,WEEKS-1 do
-        for day=1,7 do
-            local cell=m.cells[week*7+day]
-            local ago=(WEEKS-1-week)*7+(weekday-day)
-            if ago<0 then
-                cell:Hide()
-            else
-                local at=noon-ago*86400
-                cell.count=presence.days[GL.CharacterInsights.DayKey(at)] or 0
-                cell.title=GL.Safe(date,"%d/%m/%Y",at) or "?"
-                paintLevel(cell.fill,cell.count)
-                cell:Show()
-                seen=seen+(cell.count>0 and 1 or 0)
-                total=total+cell.count
-                local t=day==1 and GL.Safe(date,"*t",at)
-                if type(t)=="table" and t.month~=lastMonth then
-                    lastMonth=t.month
-                    labels=labels+1
-                    local label=m.months[labels]
-                    if label then
-                        label:ClearAllPoints()
-                        label:SetPoint("TOPLEFT",36+week*9,0)
-                        label:SetText(L(monthNames[t.month]))
-                        label:Show()
-                    end
+    return out
+end
+local function buildOverview(f)
+    local o=CreateFrame("Frame",nil,f)
+    o:SetPoint("TOPLEFT",352,-225)
+    o:SetSize(520,408)
+    o.tiles={}
+    for i=1,4 do
+        local tile=Panels.Tile(o,124,82)
+        tile:SetPoint("TOPLEFT",(i-1)*132,0)
+        o.tiles[i]=tile
+    end
+    o.bar=Panels.Bar(o.tiles[1],104)
+    o.bar:SetPoint("TOPLEFT",10,-56)
+    o.factsTitle=Panels.Text(o,0,-96,300,16,true,UI.theme.red)
+    o.factsLink=Panels.Link(o,320,-98,200,function()
+        f.factsMode,f.pageNumber=true,1
+        draw(f)
+    end)
+    o.cards={}
+    for i=1,4 do
+        local card=Panels.FactCard(o,256,54)
+        card:SetPoint("TOPLEFT",((i-1)%2)*264,-120-math.floor((i-1)/2)*62)
+        card:SetScript("OnClick",function(self)
+            f.factsMode,f.pageNumber=true,1
+            f.expanded[self.key]=true
+            draw(f)
+        end)
+        o.cards[i]=card
+    end
+    o.noFacts=Panels.Text(o,0,-126,520,13,false,UI.theme.inkMuted)
+    o.presenceTitle=Panels.Text(o,0,-254,300,16,true,UI.theme.red)
+    o.presenceLink=Panels.Link(o,320,-256,200,function()
+        f.page,f.pageNumber="habits",1
+        draw(f)
+    end)
+    o.strip=Panels.YearStrip(o,520)
+    o.strip:SetPoint("TOPLEFT",0,-276)
+    o.rule=o:CreateTexture(nil,"BACKGROUND")
+    o.rule:SetPoint("TOPLEFT",0,-326)
+    o.rule:SetSize(520,1)
+    o.rule:SetColorTexture(.45,.28,.11,.35)
+    o.lastCaption=Panels.Text(o,0,-338,110,11,false,UI.theme.inkMuted)
+    o.lastText=Panels.Text(o,110,-336,330,12)
+    o.lastLink=Panels.Link(o,450,-336,70,nil)
+    o:Hide()
+    return o
+end
+local function setTile(tile,caption,value,detail,small)
+    tile.caption:SetText(caption)
+    UI.journalFont(tile.value,"GameFontNormalLarge",small and 12 or 17)
+    tile.value:SetText(value or "—")
+    tile.detail:SetText(detail or "")
+end
+local function lastSightings(d,guid)
+    local record=d.localRecord
+    local mine=record and (record.lastEncounterAt or record.lastSeen)
+    local guild=GL.SharedDossiers and guid and GL.SharedDossiers.GuildSighting(guid)
+    local you=mine and L("Vous : %s"):format(ago(mine)) or L("Vous : jamais")
+    local others=guild and L("Guilde : %s, %s"):format(ago(guild.at),UI.plain(guild.name or L("Membre de guilde"))) or L("Guilde : jamais")
+    return you,others
+end
+-- The overview fits one page: four tiles, four facts, the year strip and the latest event.
+local function paintOverview(f,d)
+    local o,record=f.overview,d.localRecord
+    local ally=allyVariant(d)
+    local you,others=lastSightings(d,f.guid)
+    if ally then
+        local met=encounters(d,f.guid)
+        local hours=math.floor(met.groupTime/3600)
+        local together=met.groupTime>0 and L("%d h %02d au total"):format(hours,math.floor(met.groupTime/60)%60)
+        setTile(o.tiles[1],L("En groupe avec vous"),L("%d fois"):format(met.groups),together)
+        setTile(o.tiles[2],L("Signalé par"),L("%d membres"):format(met.taggers),record and GL.HasTag and GL.HasTag(record) and L("et vous") or nil)
+        setTile(o.tiles[4],L("Échanges"),tostring(met.trades),met.lastTrade and L("le dernier le %s"):format(GL.Safe(date,"%d/%m",met.lastTrade) or "?"))
+        o.bar:Hide()
+    else
+        local p=record and GL.ContactMatchup(d.record) or {kills=0,deaths=0}
+        setTile(o.tiles[1],L("Vous contre lui"),score(p.kills,p.deaths))
+        o.bar:Set(p.kills,p.deaths)
+        o.bar:Show()
+        local wins,losses,members=0,0,0
+        if inGuild(f) then
+            wins,losses=GL.Bounties.GuildFights(f.guid)
+            local scope=GL.Bounties.GuildScope()
+            local me=GL.Safe(UnitGUID,"player")
+            for member in pairs(scope and scope.scores and scope.scores[f.guid] or {}) do
+                if member~=me then
+                    members=members+1
                 end
             end
         end
+        setTile(o.tiles[2],L("La guilde"),score(wins,losses),L("%d membres"):format(members))
+        local order,dossier=openBounty(f.guid),bountyDossier(f.guid)
+        local value=order and L("Ouverte · %s"):format(bountyAmount(order))
+            or dossier.count>0 and L("%d posées · %d remplies"):format(dossier.count,dossier.completed or 0) or L("Aucune")
+        setTile(o.tiles[4],L("Primes"),value,dossier.count>0 and L("%s promis"):format(gold(dossier.promised)),true)
     end
-    return seen,total
-end
--- Weekday by hour, darker where the player was seen more often, then the usual zones.
-local function habitsSection(f,d,row,block)
+    setTile(o.tiles[3],L("Dernière rencontre"),you,others,true)
+    -- Four facts in large type; the full list with its dated events is one click away.
     local I=GL.CharacterInsights
-    local presence=I and d.localRecord and I.Presence(d.localRecord,f.guid)
-    row(L("Habitudes"),nil,true)
-    if not presence or presence.total==0 then
-        row(L("Aucune apparition enregistrée."))
-        return
+    local list=I and record and I.Facts(record,f.guid) or {}
+    o.factsTitle:SetText(L("À savoir"))
+    o.factsLink:SetText(L("Tous les faits (%d)"):format(#list))
+    o.factsLink:SetShown(#list>0)
+    o.noFacts:SetText(L("Pas encore assez de faits datés pour en tirer des habitudes."))
+    o.noFacts:SetShown(#list==0)
+    for i,card in ipairs(o.cards) do
+        local item=list[i]
+        card:SetShown(item~=nil)
+        if item then
+            card.key=item.key
+            card.value:SetText(item.value or "")
+            card.caption:SetText(item.caption or item.text)
+        end
     end
-    -- The year first: when you meet this player, friend or foe; then the usual hours.
-    local days,count=paintYear(f.yearMap,presence)
-    row(L("Sur douze mois : %d apparitions, %d jours différents"):format(count,days))
-    block(f.yearMap,f.yearMap:GetHeight()+8)
-    row(L("Jour et heure"))
-    paintHeatmap(f.heatmap,presence)
-    block(f.heatmap,f.heatmap:GetHeight()+8)
-    local zones=text(I.Zones(presence,3))
-    if zones then
-        row(L("Zones : %s"):format(zones))
+    o.presenceTitle:SetText(L("Présence sur douze mois"))
+    o.presenceLink:SetText(L("Voir les habitudes"))
+    local presence=I and record and I.Presence(record,f.guid) or {days={},total=0}
+    o.strip:Set(weeks(presence),paintLevel)
+    local event=ally and encounters(d,f.guid).events[1] or fights(record)[1]
+    o.lastCaption:SetText(ally and L("Dernier fait") or L("Dernier combat"))
+    if event then
+        local zone=text(event.zone) and event.zone~="?" and (" · "..text(event.zone)) or ""
+        local combat=object(event.combat)
+        local levels=combat.opponentLevel and combat.playerLevel and L(" · lui %s, vous %s"):format(combat.opponentLevel,combat.playerLevel) or ""
+        o.lastText:SetText((GL.Safe(date,"%d/%m",event.time) or "?").." · "..GL.HistoryTitle(event)..zone..levels)
+        o.lastLink:SetText(L("Détail"))
+        o.lastLink:SetScript("OnClick",function() GL.InspectEvent(record,event) end)
+        o.lastLink:SetShown(combatKinds[event.kind]==true)
+    else
+        o.lastText:SetText(L("Aucun pour l’instant."))
+        o.lastLink:Hide()
     end
 end
-local function overviewPage(f,d,row,block)
-    local record=d.localRecord
+-- The facts list: every sentence, each opening its dated events, then back to the overview.
+local function factsPage(f,d,row)
+    row(L("Tous les faits"),L("Retour à l’aperçu"),true,function()
+        f.factsMode,f.pageNumber=false,1
+        draw(f)
+    end)
     insightsSection(f,d,row)
-    row(L("Dernière rencontre"),nil,true)
-    local event=fights(record)[1]
-    local met=record and (record.lastEncounterAt or record.lastSeen)
-    if met then
-        local zone=record.lastEncounterAt and text(record.lastEncounterZone) or text(record.lastZone)
-        row(timestamp(met)..(zone and (" · "..zone) or ""))
-    elseif not event then
-        row(L("Aucune rencontre personnelle enregistrée."))
+end
+local changeLabels={level=L("Niveau : de %s à %s"),ilvl=L("Niveau d’objet : de %s à %s")}
+local function changeText(c)
+    if changeLabels[c.key] then
+        return changeLabels[c.key]:format(tostring(c.previous),tostring(c.value))
+    elseif c.key=="spec" then
+        return L("Spécialisation : %s"):format(tostring(c.value))
+    elseif c.key=="guild" then
+        return L("Guilde : %s"):format(UI.plain(tostring(c.value)))
     end
-    if event then
-        row(L("Dernier combat · %s"):format(timestamp(event.time)).."\n"..fightLine(event),L("Détail"),nil,function()
-            GL.InspectEvent(record,event)
-        end)
-    end
-    row(L("Bilan des combats"),nil,true)
-    if record then
-        local p=GL.ContactMatchup(d.record)
-        row(L("Vous"),score(p.kills,p.deaths))
-    else
-        row(L("Vous"),L("aucun combat"))
-    end
-    if inGuild(f) then
-        local scope=GL.Bounties.GuildScope()
-        local members=scope and scope.scores and scope.scores[f.guid] or {}
-        for _,member in ipairs(sortedKeys(members)) do
-            row(UI.plain(GL.Bounties.MemberName(member) or L("Membre de guilde")),score(members[member][1],members[member][2]))
+    local slot=c.key:match("^gear:(.+)$")
+    for _,s in ipairs(slots) do
+        if s[1]==slot then
+            return L("Pièce changée : %s"):format(L(s[2]))
         end
-        row(L("Total de la guilde"),score(GL.Bounties.GuildFights(f.guid)))
     end
-    habitsSection(f,d,row,block)
-    row(L("Primes"),nil,true)
-    local order=openBounty(f.guid)
-    if order then
-        row(L("Prime ouverte"),bountyAmount(order))
-    else
-        row(L("Aucune prime ouverte."))
+    return L("Pièce changée")
+end
+local function buildHabits(f)
+    local h=CreateFrame("Frame",nil,f)
+    h:SetPoint("TOPLEFT",352,-225)
+    h:SetSize(520,408)
+    h.tiles={}
+    for i=1,3 do
+        local tile=Panels.Tile(h,168,58)
+        tile:SetPoint("TOPLEFT",(i-1)*176,0)
+        h.tiles[i]=tile
     end
-    local dossier=bountyDossier(f.guid)
-    if dossier.count>0 then
-        row(bountySummary(dossier))
+    h.gridTitle=Panels.Text(h,0,-70,300,16,true,UI.theme.red)
+    h.grid=heatmap(h)
+    h.grid:ClearAllPoints()
+    h.grid:SetPoint("TOPLEFT",0,-92)
+    h.zones=Panels.ListBlock(h,254,4)
+    h.zones:SetPoint("TOPLEFT",0,-236)
+    h.changes=Panels.ListBlock(h,254,4)
+    h.changes:SetPoint("TOPLEFT",266,-236)
+    h:Hide()
+    return h
+end
+local function paintHabits(f,d)
+    local h,record=f.habits,d.localRecord
+    local I=GL.CharacterInsights
+    local presence=I and record and I.Presence(record,f.guid) or {days={},grid={},zones={},total=0,max=0}
+    local total,days=0,0
+    for _,week in ipairs(weeks(presence)) do
+        total=total+week.count
     end
-    row(L("Évolution"),nil,true)
-    local lines=f.guid and GL.CharacterEvolution and GL.CharacterEvolution(f.guid) or {}
-    if #lines==0 then
-        row(L("Aucun changement relevé pour l’instant."))
+    for back=0,363 do
+        if (presence.days[I and I.DayKey(GL.Now()-back*86400) or 0] or 0)>0 then
+            days=days+1
+        end
     end
-    for _,line in ipairs(lines) do
-        row(line)
+    local zones=I and I.ZoneList(presence) or {}
+    setTile(h.tiles[1],L("Apparitions, 12 mois"),tostring(total))
+    setTile(h.tiles[2],L("Jours différents"),tostring(days))
+    setTile(h.tiles[3],L("Zone principale"),zones[1] and text(zones[1].name) or "—",nil,true)
+    h.gridTitle:SetText(L("Jour et heure"))
+    paintHeatmap(h.grid,presence)
+    h.grid:Show()
+    local items={}
+    for _,zone in ipairs(zones) do
+        items[#items+1]={text=text(zone.name) or "?",value=tostring(zone.count),share=zone.count/math.max(1,zones[1].count)}
+    end
+    h.zones:Set(L("Zones · %d"):format(#zones),items,L("Aucune zone notée pour l’instant."))
+    local changes={}
+    for _,c in ipairs(f.guid and GL.CharacterHistory and GL.CharacterHistory.Changes(f.guid) or {}) do
+        changes[#changes+1]={text=changeText(c),value=GL.Safe(date,"%d/%m",c.at) or "?"}
+    end
+    h.changes:Set(L("Évolution · %d"):format(#changes),changes,L("Aucun changement relevé pour l’instant."))
+end
+-- Groups, trades and tags of a player of your own faction, newest first.
+local function encountersPage(f,d,row)
+    local met=encounters(d,f.guid)
+    row(L("Vos rencontres"),nil,true)
+    if #met.events==0 then
+        row(L("Aucun groupe ni échange enregistré."))
+    end
+    for _,e in ipairs(met.events) do
+        local zone=text(e.zone) and e.zone~="?" and (" · "..text(e.zone)) or ""
+        row(GL.HistoryTitle(e)..zone,nil,nil,nil,nil,{time=GL.Safe(date,"%d/%m",e.time),chip={L("Vous"),true}})
+    end
+    row(L("Signalements de la guilde"),nil,true)
+    local G=GL.GuildProfiles
+    local card=G and f.guid and G.ForTarget(f.guid)
+    local tagNames={}
+    for _,choice in ipairs(G and G.choices or {}) do
+        tagNames[choice[1]]=L(choice[2])
+    end
+    local shown=0
+    for _,e in ipairs(card and G.View(card) or {}) do
+        if e.on then
+            shown=shown+1
+            row(tagNames[e.tag] or unknown,nil,nil,nil,nil,{time=GL.Safe(date,"%d/%m",e.time),chip={firstName(UI.plain(e.authorName)),false}})
+        end
+    end
+    if shown==0 then
+        row(L("Aucun membre n’a étiqueté ce joueur."))
     end
 end
 local MAX_FIGHTS=15
@@ -931,7 +1184,7 @@ local function statsPage(d,row)
     end
 end
 local function sourceText(f,d)
-    if f.page=="overview" then
+    if f.page=="overview" or f.page=="habits" then
         return L("Votre journal, la guilde et les derniers relevés")
     end
     if f.page=="relations" then
@@ -991,6 +1244,25 @@ draw=function(f)
     else
         f.statsToggle:Hide()
     end
+    -- Same format for everyone; for a player of your faction never fought, Combats reads Encounters.
+    local ally=allyVariant(d)
+    f.tabs.combat:SetText(ally and L("Rencontres") or L("Combats"))
+    local overview=f.page=="overview" and not f.factsMode
+    f.overview:SetShown(overview)
+    if overview then
+        paintOverview(f,d)
+    end
+    f.habits:SetShown(f.page=="habits")
+    if f.page=="habits" then
+        paintHabits(f,d)
+    end
+    if overview or f.page=="habits" then
+        f.equipment:Hide()
+        f.talents:Hide()
+        f.body:Hide()
+        showPager(f,0)
+        return
+    end
     local gear,talents=f.page=="gear" and not f.gearStats,f.page=="talents"
     if gear then
         f.equipment:Show()
@@ -1011,18 +1283,15 @@ draw=function(f)
     end
     f.body:Show()
     local specs={}
-    local function row(label,amount,heading,onClick,indent)
-        specs[#specs+1]={label=label,amount=amount,heading=heading,onClick=onClick,indent=indent}
+    local function row(label,amount,heading,onClick,indent,extra)
+        specs[#specs+1]={label=label,amount=amount,heading=heading,onClick=onClick,indent=indent,extra=extra}
     end
-    local function block(region,h)
-        specs[#specs+1]={region=region,h=h}
-    end
-    f.heatmap:Hide()
-    f.yearMap:Hide()
     if f.page=="relations" then
         relationsPage(f,d.localRecord,row)
     elseif f.page=="overview" then
-        overviewPage(f,d,row,block)
+        factsPage(f,d,row)
+    elseif f.page=="combat" and ally then
+        encountersPage(f,d,row)
     elseif f.page=="combat" then
         combatPage(f,d,row)
     else
@@ -1053,18 +1322,47 @@ local function rowFrame(f,count)
 end
 local function fillRow(r,s)
     local label,amount,heading,onClick,indent=s.label,s.amount,s.heading,s.onClick,s.indent
+    local extra=s.extra or {}
     r:EnableMouse(onClick~=nil)
     r:SetScript("OnClick",onClick)
+    local left=indent and 27 or 7
+    -- A time, then the author's chip, then the text.
+    if extra.time then
+        r.time=r.time or Panels.Text(r,7,-6,44,11,false,UI.theme.inkMuted)
+        r.time:SetText(extra.time)
+        r.time:Show()
+        left=54
+    elseif r.time then
+        r.time:Hide()
+    end
+    if extra.chip then
+        r.chip=r.chip or Panels.Pill(r)
+        r.chip:Set(extra.chip[1] or "?",extra.chip[2] and "mine" or "member")
+        r.chip:ClearAllPoints()
+        r.chip:SetPoint("TOPLEFT",left,-3)
+        left=left+math.max(r.chip:GetWidth(),52)+8
+    elseif r.chip then
+        r.chip:Hide()
+    end
+    if extra.pill then
+        r.pill=r.pill or Panels.Pill(r)
+        r.pill:Set(extra.pill[1],extra.pill[2])
+        r.pill:ClearAllPoints()
+        r.pill:SetPoint("TOPLEFT",250,-3)
+    elseif r.pill then
+        r.pill:Hide()
+    end
     r.caption:ClearAllPoints()
-    r.caption:SetPoint("TOPLEFT",indent and 27 or 7,-4)
+    r.caption:SetPoint("TOPLEFT",left,-4)
     -- A clickable row has a short action on the right ("Détail", "Faits (3)"): give the text more room.
-    r.caption:SetWidth((amount and (onClick and 400 or 292) or 500)-(indent and 20 or 0))
-    UI.journalFont(r.caption,heading and "GameFontNormalLarge" or "GameFontHighlight",heading and 17 or 13)
-    r.caption:SetTextColor(unpack(heading and UI.theme.red or indent and UI.theme.inkMuted or UI.theme.ink))
+    local width=(amount and (onClick and 400 or 292) or 500)-(left-7)
+    r.caption:SetWidth(extra.pill and 236 or width)
+    UI.journalFont(r.caption,heading and "GameFontNormalLarge" or "GameFontHighlight",heading and 17 or extra.small and 11 or 13)
+    r.caption:SetTextColor(unpack(heading and UI.theme.red or (indent or extra.small) and UI.theme.inkMuted or UI.theme.ink))
     r.amount:SetTextColor(unpack(onClick and UI.theme.red or UI.theme.ink))
     r.caption:SetText(label)
     r.amount:SetText(amount or "")
-    local h=math.max(heading and 35 or 26,r.caption:GetStringHeight()+10,r.amount:GetStringHeight()+10)
+    local h=math.max(heading and 35 or extra.small and 22 or 26,r.caption:GetStringHeight()+10,r.amount:GetStringHeight()+10)
     r:SetSize(514,h)
     return h
 end
@@ -1132,7 +1430,7 @@ local function turnPage(f,step)
         draw(f)
     end
 end
-local tabs={{"overview","Aperçu"},{"combat","Combats"},{"relations","Relations"},{"gear","Équipement"},{"talents","Talents"}}
+local tabs={{"overview","Aperçu"},{"combat","Combats"},{"habits","Habitudes"},{"relations","Relations"},{"gear","Équipement"},{"talents","Talents"}}
 local function build()
     local f=UI.bookWindow("GrudgeLedgerPlayerDossier","Grudge Ledger")
     GL.SetupBookNavigation(f,"ledger")
@@ -1166,12 +1464,10 @@ local function build()
     f.identityBody=CreateFrame("Frame",nil,f)
     f.identityBody:SetPoint("TOPLEFT",40,-284)
     f.identityBody:SetSize(247,318)
-    f.verdictHeading=UI.label(f.identityBody,L("Verdict"),"large",0,0,243)
-    f.verdictHeading:SetTextColor(unpack(UI.theme.brass))
-    f.verdict=UI.label(f.identityBody,"",nil,0,0,243)
-    f.verdict:SetTextColor(unpack(UI.theme.paper))
-    f.keyHeading=UI.label(f.identityBody,L("Chiffres clés"),"large",0,0,243)
-    f.keyHeading:SetTextColor(unpack(UI.theme.brass))
+    f.verdictHeading=Panels.Text(f.identityBody,0,0,243,12,true,UI.theme.brass)
+    f.verdictHeading:SetText(L("Verdict"))
+    f.keyHeading=Panels.Text(f.identityBody,0,0,243,12,true,UI.theme.brass)
+    f.keyHeading:SetText(L("Chiffres clés"))
     f.observed=UI.label(f.identityBody,"",nil,0,0,243)
     f.observed:SetTextColor(unpack(UI.theme.muted))
     f.bounty=UI.button(f,"",40,-612,247,function() GL.OpenContactBounty(f.guid) end)
@@ -1188,11 +1484,11 @@ local function build()
     f.armoryLink:Hide()
     f.armoryLink:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
     f.armoryLink:SetScript("OnEditFocusLost",function(self) self:Hide() end)
-    f.tabs,f.rows,f.statCells={},{},{}
+    f.tabs,f.rows,f.statCells,f.pills={},{},{},{}
     for i,s in ipairs(tabs) do
         local key=s[1]
-        f.tabs[key]=UI.button(f,L(s[2]),352+(i-1)*110,-156,105,function()
-            f.page,f.pageNumber=key,1
+        f.tabs[key]=UI.button(f,L(s[2]),352+(i-1)*90,-156,86,function()
+            f.page,f.pageNumber,f.factsMode=key,1,false
             draw(f)
         end,true,true)
     end
@@ -1206,8 +1502,8 @@ local function build()
     f.body:SetSize(520,408)
     GL.Safe(f.body.EnableMouseWheel,f.body,true)
     f.body:SetScript("OnMouseWheel",function(_,delta) turnPage(f,delta>0 and -1 or 1) end)
-    f.heatmap=heatmap(f.body)
-    f.yearMap=yearMap(f.body)
+    f.overview=buildOverview(f)
+    f.habits=buildHabits(f)
     f.expanded={}
     f.equipment=CreateFrame("Frame",nil,f)
     f.equipment:SetPoint("TOPLEFT",359,-229)
@@ -1256,7 +1552,7 @@ function GL.OpenPlayerDossier(id,onReturn,knownName,page)
     frame.armoryLink:Hide()
     frame.key,frame.guid,frame.onReturn,frame.knownName=key,guid,onReturn,knownName
     frame.page=frame.tabs[page] and page or "overview"
-    frame.pageNumber,frame.gearStats,frame.relationFilter,frame.expanded=1,false,"all",{}
+    frame.pageNumber,frame.gearStats,frame.relationFilter,frame.expanded,frame.factsMode=1,false,"all",{},false
     if GL.InspectDossierUnit then
         GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=guid}),guid)
     end
