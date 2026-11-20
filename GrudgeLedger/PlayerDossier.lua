@@ -103,8 +103,8 @@ local function itemDetails(item)
 end
 local relationNames={friend=L("Ami"),warning=L("Méfiance"),enemy=L("Ennemi"),neutral=L("Neutre")}
 local frame
--- Assigned below; the expandable facts redraw the sheet.
-local draw
+-- Assigned below; the expandable facts and the page arrows redraw the sheet.
+local draw,paginate,showPager
 local function armoryURL(fullName)
     local region=GL.ArmoryRegion()
     if not region or type(fullName)~="string" or not fullName:find(" ",1,true) then return end
@@ -363,7 +363,6 @@ local function drawIdentity(f,d)
     y=y+2*47+6
     f.observed:SetText(seenText(d))
     place(f.observed,f.observed:GetStringHeight()+12)
-    f.identityBody:SetHeight(math.max(f.identityScroll:GetHeight(),y))
 end
 
 local combatKinds={kill=true,death=true,aggression=true}
@@ -559,16 +558,10 @@ local function relationsPage(f,record,row)
     end)
     row(L("Interactions datées"),nil,true)
     row(L("Les témoignages restent attribués à leur auteur ; ils ne modifient pas votre avis."))
-    local offset=math.min(f.historyOffset or 0,math.max(0,math.ceil(#timeline/40)-1)*40)
-    f.historyOffset=offset
-    f.historyPrev:SetEnabled(offset>0)
-    f.historyNext:SetEnabled(offset+40<#timeline)
-    f.historyCount:SetText(("%d–%d / %d"):format(#timeline>0 and offset+1 or 0,math.min(offset+40,#timeline),#timeline))
     if #timeline==0 then
         row(L("Aucune interaction datée disponible."))
     end
-    for i=offset+1,math.min(offset+40,#timeline) do
-        local entry=timeline[i]
+    for _,entry in ipairs(timeline) do
         row(timestamp(entry.at).." · "..entry.source.."\n"..entry.description)
     end
     row(L("Le partage des faits et avis se règle dans Réglages > Relations. Les notes restent privées."))
@@ -611,38 +604,161 @@ local function insightsSection(f,d,row)
     end
 end
 local dayNames={"Lun","Mar","Mer","Jeu","Ven","Sam","Dim"}
+local fullDays={"Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"}
+local monthNames={"janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."}
+-- Four levels instead of a shade relative to the busiest cell: a player met every Friday
+-- evening no longer turns the whole grid pale. 1, 2, 3 to 4, 5 and more.
+local LEVELS={1,2,3,5}
+local function level(n)
+    local result=0
+    for i,threshold in ipairs(LEVELS) do
+        if n>=threshold then
+            result=i
+        end
+    end
+    return result
+end
+local function paintLevel(texture,n)
+    local l=level(n)
+    if l==0 then
+        texture:SetColorTexture(.45,.28,.11,.10)
+    else
+        texture:SetColorTexture(.55,.08,.05,({.3,.5,.75,1})[l])
+    end
+end
+local function sightings(n)
+    if n==0 then
+        return L("Pas vu")
+    end
+    return n==1 and L("1 apparition") or L("%d apparitions"):format(n)
+end
+local function showTip(self)
+    GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+    GameTooltip:SetText(self.title)
+    GameTooltip:AddLine(sightings(self.count),1,1,1)
+    GameTooltip:Show()
+end
+local function hideTip()
+    GameTooltip:Hide()
+end
+local function gridCell(parent,w,h)
+    local cell=CreateFrame("Button",nil,parent)
+    cell:SetSize(w,h)
+    cell.fill=cell:CreateTexture(nil,"ARTWORK")
+    cell.fill:SetAllPoints()
+    cell:SetScript("OnEnter",showTip)
+    cell:SetScript("OnLeave",hideTip)
+    cell.count=0
+    return cell
+end
+local function smallLabel(parent,value,x,y,w)
+    local label=UI.label(parent,value,nil,x,y,w)
+    UI.journalFont(label,"GameFontHighlight",10)
+    label:SetTextColor(unpack(UI.theme.inkMuted))
+    return label
+end
+-- Legend under a grid: "1  2  3-4  5+" with their colours.
+local function legend(parent,y)
+    local x=36
+    smallLabel(parent,L("Apparitions :"),0,y,80)
+    x=x+50
+    for i,value in ipairs({"1","2","3-4","5+"}) do
+        local swatch=parent:CreateTexture(nil,"ARTWORK")
+        swatch:SetSize(10,10)
+        swatch:SetPoint("TOPLEFT",x,y-1)
+        paintLevel(swatch,LEVELS[i])
+        smallLabel(parent,value,x+13,y,30)
+        x=x+46
+    end
+end
 local function heatmap(parent)
     local m=CreateFrame("Frame",nil,parent)
-    m:SetSize(500,7*14+20)
+    m:SetSize(500,7*14+36)
     m.cells={}
     for day=1,7 do
-        local label=UI.label(m,L(dayNames[day]),nil,0,-(day-1)*14,32)
-        UI.journalFont(label,"GameFontHighlight",10)
-        label:SetTextColor(unpack(UI.theme.inkMuted))
+        smallLabel(m,L(dayNames[day]),0,-(day-1)*14,32)
         for hour=0,23 do
-            local cell=m:CreateTexture(nil,"ARTWORK")
-            cell:SetSize(17,12)
+            local cell=gridCell(m,17,12)
             cell:SetPoint("TOPLEFT",36+hour*19,-(day-1)*14-1)
+            cell.title=L("%s, de %d h à %d h"):format(L(fullDays[day]),hour,(hour+1)%24)
             m.cells[(day-1)*24+hour]=cell
         end
     end
     for _,hour in ipairs({0,6,12,18,23}) do
-        local label=UI.label(m,L("%d h"):format(hour),nil,34+hour*19,-7*14-3,40)
-        UI.journalFont(label,"GameFontHighlight",10)
-        label:SetTextColor(unpack(UI.theme.inkMuted))
+        smallLabel(m,L("%d h"):format(hour),34+hour*19,-7*14-3,40)
     end
+    legend(m,-7*14-19)
     m:Hide()
     return m
 end
 local function paintHeatmap(m,presence)
     for key,cell in pairs(m.cells) do
-        local n=presence.grid[key] or 0
-        if n==0 then
-            cell:SetColorTexture(.45,.28,.11,.08)
-        else
-            cell:SetColorTexture(.55,.08,.05,.3+.7*n/math.max(1,presence.max))
+        cell.count=presence.grid[key] or 0
+        paintLevel(cell.fill,cell.count)
+    end
+end
+-- The last twelve months, one square per day, weeks as columns (Monday at the top).
+local WEEKS=53
+local function yearMap(parent)
+    local m=CreateFrame("Frame",nil,parent)
+    m:SetSize(506,14+7*9+20)
+    m.cells,m.months={},{}
+    for _,day in ipairs({1,3,5}) do
+        smallLabel(m,L(dayNames[day]),0,-14-(day-1)*9,32)
+    end
+    for week=0,WEEKS-1 do
+        for day=1,7 do
+            local cell=gridCell(m,8,8)
+            cell:SetPoint("TOPLEFT",36+week*9,-14-(day-1)*9)
+            m.cells[week*7+day]=cell
         end
     end
+    for i=1,12 do
+        m.months[i]=smallLabel(m,"",0,0,40)
+    end
+    legend(m,-14-7*9-4)
+    m:Hide()
+    return m
+end
+local function paintYear(m,presence)
+    local now=GL.Now()
+    local today=GL.Safe(date,"*t",now)
+    local weekday=type(today)=="table" and today.wday and (today.wday+5)%7+1 or (math.floor(now/86400)+3)%7+1
+    local noon=type(today)=="table" and today.hour and now-((today.hour-12)*3600+(today.min or 0)*60+(today.sec or 0)) or now
+    local seen,total,lastMonth,labels=0,0,nil,0
+    for _,label in ipairs(m.months) do
+        label:Hide()
+    end
+    for week=0,WEEKS-1 do
+        for day=1,7 do
+            local cell=m.cells[week*7+day]
+            local ago=(WEEKS-1-week)*7+(weekday-day)
+            if ago<0 then
+                cell:Hide()
+            else
+                local at=noon-ago*86400
+                cell.count=presence.days[GL.CharacterInsights.DayKey(at)] or 0
+                cell.title=GL.Safe(date,"%d/%m/%Y",at) or "?"
+                paintLevel(cell.fill,cell.count)
+                cell:Show()
+                seen=seen+(cell.count>0 and 1 or 0)
+                total=total+cell.count
+                local t=day==1 and GL.Safe(date,"*t",at)
+                if type(t)=="table" and t.month~=lastMonth then
+                    lastMonth=t.month
+                    labels=labels+1
+                    local label=m.months[labels]
+                    if label then
+                        label:ClearAllPoints()
+                        label:SetPoint("TOPLEFT",36+week*9,0)
+                        label:SetText(L(monthNames[t.month]))
+                        label:Show()
+                    end
+                end
+            end
+        end
+    end
+    return seen,total
 end
 -- Weekday by hour, darker where the player was seen more often, then the usual zones.
 local function habitsSection(f,d,row,block)
@@ -653,8 +769,13 @@ local function habitsSection(f,d,row,block)
         row(L("Aucune apparition enregistrée."))
         return
     end
+    -- The year first: when you meet this player, friend or foe; then the usual hours.
+    local days,count=paintYear(f.yearMap,presence)
+    row(L("Sur douze mois : %d apparitions, %d jours différents"):format(count,days))
+    block(f.yearMap,f.yearMap:GetHeight()+8)
+    row(L("Jour et heure"))
     paintHeatmap(f.heatmap,presence)
-    block(f.heatmap,f.heatmap:GetHeight()+6)
+    block(f.heatmap,f.heatmap:GetHeight()+8)
     local zones=text(I.Zones(presence,3))
     if zones then
         row(L("Zones : %s"):format(zones))
@@ -728,6 +849,12 @@ local function combatPage(f,d,row)
         end
         if #list>MAX_FIGHTS then
             row(L("%d combats plus anciens dans l’Histoire du journal."):format(#list-MAX_FIGHTS))
+        end
+        -- Same action style as "Détail": a quiet line rather than a large button.
+        if GL.DeathReport and #GL.DeathReport.Deaths(f.guid)>0 then
+            row(L("Vos morts contre ce joueur, en texte pour une IA"),L("Exporter"),nil,function()
+                GL.DeathReport.ShowExport(f.guid)
+            end)
         end
     else
         row(L("Aucune rencontre personnelle enregistrée."))
@@ -852,7 +979,7 @@ draw=function(f)
     for key,b in pairs(f.filters) do
         UI.selectButton(b,(f.relationFilter or "all")==key)
     end
-    for _,control in ipairs({f.historyPrev,f.historyNext,f.historyCount,f.filters.mine,f.filters.guild,f.filters.all}) do
+    for _,control in ipairs({f.filters.mine,f.filters.guild,f.filters.all}) do
         if f.page=="relations" then
             control:Show()
         else
@@ -865,11 +992,6 @@ draw=function(f)
     else
         f.statsToggle:Hide()
     end
-    if f.page=="combat" and GL.DeathReport and #GL.DeathReport.Deaths(f.guid)>0 then
-        f.exportDeaths:Show()
-    else
-        f.exportDeaths:Hide()
-    end
     local gear,talents=f.page=="gear" and not f.gearStats,f.page=="talents"
     if gear then
         f.equipment:Show()
@@ -878,62 +1000,26 @@ draw=function(f)
         f.equipment:Hide()
     end
     if talents then
-        f.talentScroll:Show()
-        local h=GL.DrawDossierTalents(f.talents,d.record,d.profile)
-        f.talents:SetHeight(math.max(f.talentScroll:GetHeight(),h))
-        f.talentScroll:SetVerticalScroll(0)
+        f.talents:Show()
+        GL.DrawDossierTalents(f.talents,d.record,d.profile)
     else
-        f.talentScroll:Hide()
+        f.talents:Hide()
     end
     if gear or talents then
-        f.scroll:Hide()
+        f.body:Hide()
+        showPager(f,0)
         return
     end
-    f.scroll:Show()
-    local count,height=0,0
+    f.body:Show()
+    local specs={}
     local function row(label,amount,heading,onClick,indent)
-        count=count+1
-        local r=f.rows[count]
-        if not r then
-            r=CreateFrame("Button",nil,f.body)
-            f.rows[count]=r
-            r.caption=UI.label(r,"",nil,7,-4,510)
-            r.amount=UI.label(r,"",nil,308,-4,198)
-            r.amount:SetJustifyH("RIGHT")
-            r.rule=r:CreateTexture(nil,"BACKGROUND")
-            r.rule:SetPoint("BOTTOMLEFT")
-            r.rule:SetPoint("BOTTOMRIGHT")
-            r.rule:SetHeight(1)
-            r.rule:SetColorTexture(.45,.28,.11,.21)
-            r.hover=r:CreateTexture(nil,"HIGHLIGHT")
-            r.hover:SetAllPoints()
-            r.hover:SetColorTexture(.45,.28,.11,.12)
-        end
-        r:EnableMouse(onClick~=nil)
-        r:SetScript("OnClick",onClick)
-        r.caption:ClearAllPoints()
-        r.caption:SetPoint("TOPLEFT",indent and 27 or 7,-4)
-        -- A clickable row has a short action on the right ("Détail", "Faits (3)"): give the text more room.
-        r.caption:SetWidth((amount and (onClick and 400 or 292) or 500)-(indent and 20 or 0))
-        UI.journalFont(r.caption,heading and "GameFontNormalLarge" or "GameFontHighlight",heading and 17 or 13)
-        r.caption:SetTextColor(unpack(heading and UI.theme.red or indent and UI.theme.inkMuted or UI.theme.ink))
-        r.amount:SetTextColor(unpack(onClick and UI.theme.red or UI.theme.ink))
-        r.caption:SetText(label)
-        r.amount:SetText(amount or "")
-        local h=math.max(heading and 35 or 26,r.caption:GetStringHeight()+10,r.amount:GetStringHeight()+10)
-        r:ClearAllPoints()
-        r:SetPoint("TOPLEFT",0,-height)
-        r:SetSize(514,h)
-        r:Show()
-        height=height+h
+        specs[#specs+1]={label=label,amount=amount,heading=heading,onClick=onClick,indent=indent}
     end
     local function block(region,h)
-        region:ClearAllPoints()
-        region:SetPoint("TOPLEFT",7,-height)
-        region:Show()
-        height=height+h
+        specs[#specs+1]={region=region,h=h}
     end
     f.heatmap:Hide()
+    f.yearMap:Hide()
     if f.page=="relations" then
         relationsPage(f,d.localRecord,row)
     elseif f.page=="overview" then
@@ -943,20 +1029,109 @@ draw=function(f)
     else
         statsPage(d,row)
     end
-    for i=count+1,#f.rows do
-        f.rows[i]:Hide()
-    end
-    f.body:SetHeight(math.max(f.scroll:GetHeight(),height))
+    paginate(f,specs)
 end
 
-local function scrollArea(f,x,y,w,h)
-    local scroll=CreateFrame("ScrollFrame",nil,f,"UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT",x,y)
-    scroll:SetSize(w,h)
-    local body=CreateFrame("Frame",nil,scroll)
-    body:SetSize(w,h)
-    scroll:SetScrollChild(body)
-    return scroll,body
+-- One row of a page: caption, optional amount or action on the right, a thin rule below.
+local function rowFrame(f,count)
+    local r=f.rows[count]
+    if not r then
+        r=CreateFrame("Button",nil,f.body)
+        f.rows[count]=r
+        r.caption=UI.label(r,"",nil,7,-4,510)
+        r.amount=UI.label(r,"",nil,308,-4,198)
+        r.amount:SetJustifyH("RIGHT")
+        r.rule=r:CreateTexture(nil,"BACKGROUND")
+        r.rule:SetPoint("BOTTOMLEFT")
+        r.rule:SetPoint("BOTTOMRIGHT")
+        r.rule:SetHeight(1)
+        r.rule:SetColorTexture(.45,.28,.11,.21)
+        r.hover=r:CreateTexture(nil,"HIGHLIGHT")
+        r.hover:SetAllPoints()
+        r.hover:SetColorTexture(.45,.28,.11,.12)
+    end
+    return r
+end
+local function fillRow(r,s)
+    local label,amount,heading,onClick,indent=s.label,s.amount,s.heading,s.onClick,s.indent
+    r:EnableMouse(onClick~=nil)
+    r:SetScript("OnClick",onClick)
+    r.caption:ClearAllPoints()
+    r.caption:SetPoint("TOPLEFT",indent and 27 or 7,-4)
+    -- A clickable row has a short action on the right ("Détail", "Faits (3)"): give the text more room.
+    r.caption:SetWidth((amount and (onClick and 400 or 292) or 500)-(indent and 20 or 0))
+    UI.journalFont(r.caption,heading and "GameFontNormalLarge" or "GameFontHighlight",heading and 17 or 13)
+    r.caption:SetTextColor(unpack(heading and UI.theme.red or indent and UI.theme.inkMuted or UI.theme.ink))
+    r.amount:SetTextColor(unpack(onClick and UI.theme.red or UI.theme.ink))
+    r.caption:SetText(label)
+    r.amount:SetText(amount or "")
+    local h=math.max(heading and 35 or 26,r.caption:GetStringHeight()+10,r.amount:GetStringHeight()+10)
+    r:SetSize(514,h)
+    return h
+end
+-- No scroll bar: rows fill the page, the rest goes on the next pages. A heading never ends a
+-- page alone. Small arrows at the bottom right, or the mouse wheel, turn the pages.
+paginate=function(f,specs)
+    local limit,count=f.body:GetHeight(),0
+    for _,s in ipairs(specs) do
+        if not s.region then
+            count=count+1
+            s.frame=rowFrame(f,count)
+            s.h=fillRow(s.frame,s)
+        end
+    end
+    local pages,used={{}},0
+    for i,s in ipairs(specs) do
+        local need=s.h+(s.heading and specs[i+1] and specs[i+1].h or 0)
+        if #pages[#pages]>0 and used+need>limit then
+            pages[#pages+1]={}
+            used=0
+        end
+        local page=pages[#pages]
+        page[#page+1]=s
+        used=used+s.h
+    end
+    for _,r in ipairs(f.rows) do
+        r:Hide()
+    end
+    for _,s in ipairs(specs) do
+        if s.region then
+            s.region:Hide()
+        end
+    end
+    f.pageNumber=math.max(1,math.min(f.pageNumber or 1,#pages))
+    local y=0
+    for _,s in ipairs(pages[f.pageNumber]) do
+        local region=s.frame or s.region
+        region:ClearAllPoints()
+        region:SetPoint("TOPLEFT",s.region and 7 or 0,-y)
+        region:Show()
+        y=y+s.h
+    end
+    showPager(f,#pages)
+end
+showPager=function(f,total)
+    f.pageCount=total
+    local shown=total>1
+    for _,control in ipairs({f.pagePrev,f.pageNext,f.pageLabel}) do
+        if shown then
+            control:Show()
+        else
+            control:Hide()
+        end
+    end
+    if shown then
+        f.pageLabel:SetText(("%d / %d"):format(f.pageNumber,total))
+        f.pagePrev:SetEnabled(f.pageNumber>1)
+        f.pageNext:SetEnabled(f.pageNumber<total)
+    end
+end
+local function turnPage(f,step)
+    local target=(f.pageNumber or 1)+step
+    if f.pageCount and target>=1 and target<=f.pageCount then
+        f.pageNumber=target
+        draw(f)
+    end
 end
 local tabs={{"overview","Aperçu"},{"combat","Combats"},{"relations","Relations"},{"gear","Équipement"},{"talents","Talents"}}
 local function build()
@@ -988,8 +1163,10 @@ local function build()
     f.identity:SetPoint("TOPLEFT",f.nameLabel,"BOTTOMLEFT",0,-4)
     UI.journalFont(f.identity,"GameFontHighlight",11)
     GL.Safe(f.identity.SetMaxLines,f.identity,4)
-    f.identityScroll,f.identityBody=scrollArea(f,40,-284,247,318)
-    f.identityScroll.scrollBarHideable=true
+    -- The identity column is fixed: verdict, six figures and the last sighting fit without scrolling.
+    f.identityBody=CreateFrame("Frame",nil,f)
+    f.identityBody:SetPoint("TOPLEFT",40,-284)
+    f.identityBody:SetSize(247,318)
     f.verdictHeading=UI.label(f.identityBody,L("Verdict"),"large",0,0,243)
     f.verdictHeading:SetTextColor(unpack(UI.theme.brass))
     f.verdict=UI.label(f.identityBody,"",nil,0,0,243)
@@ -1016,8 +1193,7 @@ local function build()
     for i,s in ipairs(tabs) do
         local key=s[1]
         f.tabs[key]=UI.button(f,L(s[2]),352+(i-1)*110,-156,105,function()
-            f.page=key
-            f.scroll:SetVerticalScroll(0)
+            f.page,f.pageNumber=key,1
             draw(f)
         end,true,true)
     end
@@ -1026,47 +1202,39 @@ local function build()
     f.ilvl=UI.label(f,"",nil,669,-196,222)
     f.ilvl:SetJustifyH("RIGHT")
     f.ilvl:SetTextColor(unpack(UI.theme.ink))
-    f.scroll,f.body=scrollArea(f,352,-225,520,408)
+    f.body=CreateFrame("Frame",nil,f)
+    f.body:SetPoint("TOPLEFT",352,-225)
+    f.body:SetSize(520,408)
+    GL.Safe(f.body.EnableMouseWheel,f.body,true)
+    f.body:SetScript("OnMouseWheel",function(_,delta) turnPage(f,delta>0 and -1 or 1) end)
     f.heatmap=heatmap(f.body)
+    f.yearMap=yearMap(f.body)
     f.expanded={}
     f.equipment=CreateFrame("Frame",nil,f)
     f.equipment:SetPoint("TOPLEFT",359,-229)
     f.equipment:SetSize(515,398)
-    f.talentScroll,f.talents=scrollArea(f,352,-225,529,403)
-    f.talentScroll.scrollBarHideable=true
+    f.talents=CreateFrame("Frame",nil,f)
+    f.talents:SetPoint("TOPLEFT",352,-225)
+    f.talents:SetSize(529,403)
     f.statsToggle=UI.button(f,"",352,-645,230,function()
-        f.gearStats=not f.gearStats
-        f.scroll:SetVerticalScroll(0)
+        f.gearStats,f.pageNumber=not f.gearStats,1
         draw(f)
     end,nil,true)
-    f.exportDeaths=UI.button(f,L("Exporter mes morts contre lui"),352,-645,260,function()
-        GL.DeathReport.ShowExport(f.guid)
-    end,nil,true)
-    f.historyPrev=UI.button(f,L("Précédent"),352,-645,130,function()
-        f.historyOffset=math.max(0,(f.historyOffset or 0)-40)
-        f.scroll:SetVerticalScroll(0)
-        draw(f)
-    end,nil,true)
-    f.historyNext=UI.button(f,L("Suivant"),758,-645,130,function()
-        f.historyOffset=(f.historyOffset or 0)+40
-        f.scroll:SetVerticalScroll(0)
-        draw(f)
-    end,nil,true)
+    f.pagePrev=UI.button(f,"‹",770,-645,30,function() turnPage(f,-1) end,nil,true)
+    f.pageNext=UI.button(f,"›",860,-645,30,function() turnPage(f,1) end,nil,true)
+    f.pageLabel=UI.label(f,"",nil,802,-652,56)
+    f.pageLabel:SetJustifyH("CENTER")
+    f.pageLabel:SetTextColor(unpack(UI.theme.inkMuted))
     f.filters={}
     local x=671
     for _,s in ipairs(filters) do
         local key=s[1]
         f.filters[key]=UI.button(f,L(s[2]),x,-190,s[3],function()
-            f.relationFilter=key
-            f.historyOffset=0
-            f.scroll:SetVerticalScroll(0)
+            f.relationFilter,f.pageNumber=key,1
             draw(f)
         end,true,true)
         x=x+s[3]+3
     end
-    f.historyCount=UI.label(f,"",nil,493,-652,252)
-    f.historyCount:SetJustifyH("CENTER")
-    f.historyCount:SetTextColor(unpack(UI.theme.inkMuted))
     return f
 end
 -- page: optional tab to open; the sheet opens on the overview by default.
@@ -1089,9 +1257,7 @@ function GL.OpenPlayerDossier(id,onReturn,knownName,page)
     frame.armoryLink:Hide()
     frame.key,frame.guid,frame.onReturn,frame.knownName=key,guid,onReturn,knownName
     frame.page=frame.tabs[page] and page or "overview"
-    frame.historyOffset,frame.gearStats,frame.relationFilter,frame.expanded=0,false,"all",{}
-    frame.scroll:SetVerticalScroll(0)
-    frame.identityScroll:SetVerticalScroll(0)
+    frame.pageNumber,frame.gearStats,frame.relationFilter,frame.expanded=1,false,"all",{}
     if GL.InspectDossierUnit then
         GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=guid}),guid)
     end

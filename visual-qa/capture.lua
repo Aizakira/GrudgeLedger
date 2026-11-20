@@ -393,7 +393,8 @@ function QA.capture(name)
             return f
         end
         if name=="dossier-habits" then
-            f.scroll:SetVerticalScroll(math.max(0,f.body:GetHeight()-f.scroll:GetHeight()))
+            -- The overview page holding the year view and the weekday-by-hour grid.
+            while not f.yearMap:IsVisible() and f.pageNext:IsShown() and f.pageNext:IsEnabled() do f.pageNext:Click() end
             return f
         end
         if name=="dossier-photos" then

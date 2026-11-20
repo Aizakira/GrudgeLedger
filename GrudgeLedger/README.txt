@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.20.0
+GRUDGE LEDGER — 0.21.0
+
+Fiche sans barre de défilement : la colonne de gauche est fixe, et un onglet trop long se découpe en pages, tournées avec les petites flèches en bas à droite ou la molette. L’export pour une IA devient une ligne « Exporter » sous les combats datés. Habitudes : une vue des douze derniers mois (un carré par jour) et la grille jour × heure, toutes deux à quatre niveaux (1, 2, 3-4, 5 et plus) avec une infobulle sur chaque case. Chaque joueur qui vous frappe pendant votre mort apparaît comme « Vous a tué » ; le coup fatal reste précisé.
 
 Photos du studio : si l’addon séparé Avatar Replay Lab est installé et a photographié le joueur, la fiche affiche son buste dans la colonne de gauche. Dans l’onglet Équipement, quand le joueur n’est pas visible, une pose photo remplace la tenue reconstituée ; un clic montre la pose suivante. Sans Avatar Replay Lab, rien ne change.
 

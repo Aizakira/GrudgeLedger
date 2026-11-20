@@ -39,15 +39,28 @@ local returned=false
 assert(GL.OpenPlayerDossier(guid,function() returned=true end))
 local f=GrudgeLedgerPlayerDossier
 local function click(b) b.scripts.OnClick(b,"LeftButton") end
+-- The sheet has pages instead of a scroll bar: walk them all, from the first.
+local function eachRow(visit)
+    while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
+    repeat
+        for _,r in ipairs(f.rows) do
+            if r:IsVisible() and visit(r) then return r end
+        end
+        local more=f.pageNext:IsShown() and f.pageNext:IsEnabled()
+        if more then click(f.pageNext) end
+    until not more
+end
 local function all()
     local visible={}
-    for _,r in ipairs(f.rows) do if r:IsVisible() then visible[#visible+1]=r.caption:GetText().." "..r.amount:GetText() end end
+    eachRow(function(r) visible[#visible+1]=r.caption:GetText().." "..r.amount:GetText() end)
+    while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
     return table.concat(visible,"\n")
 end
 assert(f:IsShown() and f.navigation.ledger.active and f.nameLabel:GetText()==record.fullName)
 -- The sheet opens on the overview. The identity column keeps the highest known level, the verdict
 -- and six key figures on every tab; the other statistics moved to the Equipment tab.
-assert(f.page=="overview" and f.scroll:IsVisible() and not f.equipment:IsVisible())
+assert(f.page=="overview" and f.body:IsVisible() and not f.equipment:IsVisible())
+assert(not f.identityScroll and not f.scroll,"no scroll frame on the sheet")
 assert(f.identity:GetText():find("Niv. 29",1,true) and f.identity:GetText():find("(Restoration)",1,true),f.identity:GetText())
 assert(record.level==19 and record.history[1].combat.opponentLevel==21)
 assert(f.verdict:GetText():find("Vous : ",1,true) and f.verdict:GetText():find("Guilde : aucun avis partagé",1,true))
@@ -64,19 +77,19 @@ assert(GrudgeLedgerCorrections and GrudgeLedgerCorrections:IsShown(),"the fight 
 GrudgeLedgerCorrections:Hide()
 click(f.tabs.gear)
 local eq=f.equipment.equipment
-assert(f.equipment:IsVisible() and not f.scroll:IsVisible() and #eq.buttons==19)
+assert(f.equipment:IsVisible() and not f.body:IsVisible() and #eq.buttons==19)
 local b=eq.buttons[4]
 assert(b.itemName=="Woven mantle" and b.item==cape and not b:GetScript("OnClick"))
 local details=b.itemDetails(b.item)
 for _,s in ipairs({"31","Endurance","Enchanted: +2 Nature","Wind dance","Long description","42","50000"}) do assert(details:find(s,1,true),s) end
 assert(eq.buttons[14].itemName=="Same ID, other variant")
 click(f.statsToggle)
-assert(not f.equipment:IsVisible() and f.scroll:IsVisible())
+assert(not f.equipment:IsVisible() and f.body:IsVisible())
 assert(all():find("Agilité 99",1,true) and all():find("Coup critique 5,6 %",1,true) and all():find("Dégâts 11 – 22",1,true),all())
 click(f.statsToggle)
-assert(f.equipment:IsVisible() and not f.scroll:IsVisible())
+assert(f.equipment:IsVisible() and not f.body:IsVisible())
 click(f.tabs.talents)
-assert(not f.equipment:IsVisible() and f.talents:IsVisible() and not f.scroll:IsVisible() and not f.statsToggle:IsVisible())
+assert(not f.equipment:IsVisible() and f.talents:IsVisible() and not f.body:IsVisible() and not f.statsToggle:IsVisible())
 click(f.tabs.combat)
 assert(all():find("396",1,true) and all():find("Rang JcJ 0",1,true) and all():find("Account champion (compte)",1,true))
 assert(all():find("Arathi 3 parties · 2 V / 1 D",1,true))
@@ -86,13 +99,15 @@ assert(all():find("Niveaux : lui 21 · vous 20",1,true),"dated fights are listed
 assert(not f.tabs.reputation and not f.tabs.pvp,"the Factions tab is gone")
 GL.AddNote(id,"My private note")
 click(f.tabs.relations)
-assert(f.historyPrev:IsVisible() and not f.historyPrev:IsEnabled())
 assert(all():find("Votre carnet",1,true) and all():find("Votre journal",1,true))
 assert(all():find("My private note",1,true) and all():find(GL.HistoryTitle(record.history[1]),1,true),all())
 for i=1,45 do GL.AddNote(id,"Page note "..i) end
-assert(f.historyNext:IsEnabled())
-click(f.historyNext); assert(f.historyOffset==40 and f.historyPrev:IsEnabled())
-click(f.tabs.combat); assert(not f.historyPrev:IsVisible())
+-- 45 more notes: the timeline continues on further pages, turned by the arrows or the wheel.
+assert(f.pageNext:IsShown() and f.pageNext:IsEnabled() and not f.pagePrev:IsEnabled() and f.pageLabel:GetText():find("^1 / "))
+click(f.pageNext); assert(f.pageNumber==2 and f.pagePrev:IsEnabled())
+f.body.scripts.OnMouseWheel(f.body,1); assert(f.pageNumber==1,"the wheel turns the pages back")
+assert(all():find("Page note 1\n",1,true) or all():find("Page note 1 ",1,true),"every note is on some page")
+click(f.tabs.combat); assert(f.pageNumber==1)
 click(f.back)
 assert(returned and not f:IsShown())
 -- Guild-only targets and missing archive rows must never create a personal journal entry.

@@ -479,11 +479,12 @@ local function eventTitle(event)
         end
     end
     if event.kind == "trade" then return L("Échange terminé") end
+    -- Everyone who hit you during your death killed you, as in the scores; the killing blow is a detail.
     if event.kind == "death" then
-        if event.evidence == "Le familier de ce joueur vous a porté le coup fatal." then return L("Coup fatal de son familier") end
-        if event.killingBlow or event.evidence == "Dégâts létaux explicitement attribués à ce joueur." then return L("A porté le coup fatal") end
-        if event.killingBlow == false or event.evidence == "Participation à l’attaque ayant causé votre mort." then return L("A participé à votre mort") end
-        return L("Mort en combat")
+        if event.evidence == "Le familier de ce joueur vous a porté le coup fatal." then return L("Vous a tué · coup fatal de son familier") end
+        if event.killingBlow or event.evidence == "Dégâts létaux explicitement attribués à ce joueur." then return L("Vous a tué · coup fatal") end
+        if event.killingBlow == false or event.evidence == "Participation à l’attaque ayant causé votre mort." then return L("Vous a tué · avec d'autres joueurs") end
+        return L("Vous a tué")
     end
     if event.kind == "kill" then return L("Vous l'avez vaincu") end
     if event.kind == "aggression" then return L("Vous a infligé des dégâts") end
@@ -1690,7 +1691,7 @@ function GL.HistoryTitle(e, actor, target)
     actor,target=plain(actor),plain(target)
     if e.kind=="kill" then return L("%s a vaincu %s"):format(actor,target) end
     if e.kind=="death" then
-        return (e.killingBlow==1 and L("%s a été tué par %s") or L("%s est mort dans un combat contre %s")):format(actor,target)
+        return L("%s a été tué par %s"):format(actor,target)
     end
     if e.kind=="aggression" then return L("%s a subi des dégâts de %s"):format(actor,target) end
     if e.kind=="reputation" then return L("%s a modifié son avis sur %s"):format(actor,target).." · "..string.format("%+d",e.delta or 0) end

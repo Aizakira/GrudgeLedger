@@ -5,8 +5,8 @@ local L = GL.L
 local I = {}
 GL.CharacterInsights = I
 
--- ponytail: 20 recent visits and 12 zones per character, inside the character history entry.
-local MAX_VISITS, MAX_ZONES = 20, 12
+-- ponytail: 20 recent visits, 12 zones and 400 days per character, inside the character history entry.
+local MAX_VISITS, MAX_ZONES, MAX_DAYS = 20, 12, 400
 -- Two sightings closer than this are the same visit.
 local VISIT_GAP = 600
 local DAY = 86400
@@ -23,6 +23,28 @@ end
 local function cell(at)
     local day, hour = clock(at)
     return (day - 1) * 24 + hour
+end
+-- A calendar day in the player's local time: year * 1000 + day of the year.
+function I.DayKey(at)
+    local t = GL.Safe(date, "*t", at)
+    if type(t) == "table" and t.year and t.yday then
+        return t.year * 1000 + t.yday
+    end
+    return math.floor(at / DAY)
+end
+local function countDay(days, at)
+    local key = I.DayKey(at)
+    days[key] = (days[key] or 0) + 1
+    local count, oldest = 0, nil
+    for k in pairs(days) do
+        count = count + 1
+        if not oldest or k < oldest then
+            oldest = k
+        end
+    end
+    if count > MAX_DAYS then
+        days[oldest] = nil
+    end
 end
 
 local function presenceFor(guid, create)
@@ -55,11 +77,13 @@ function I.RecordVisit(guid, at, zone)
     end
     local p = presenceFor(guid, true)
     local last = p.visits[#p.visits]
-    if last and at - last.at < VISIT_GAP then
+    if last and math.abs(at - last.at) < VISIT_GAP then
         return
     end
     local key = cell(at)
     p.hours[key] = (p.hours[key] or 0) + 1
+    p.days = p.days or {}
+    countDay(p.days, at)
     if type(zone) == "string" and zone ~= "" and zone ~= "?" then
         countZone(p.zones, zone)
     else
@@ -215,9 +239,18 @@ end
 -- Sightings: the recorded visits, plus the dated journal events from before visits were recorded.
 function I.Presence(record, guid)
     local p = guid and presenceFor(guid, false)
-    local grid, zones, sightings, total = {}, {}, {}, 0
+    local grid, zones, sightings, total, days = {}, {}, {}, 0, {}
     for key, n in pairs(p and p.hours or {}) do
         grid[key], total = n, total + n
+    end
+    for key, n in pairs(p and p.days or {}) do
+        days[key] = n
+    end
+    -- Visits recorded before days were counted (0.17 to 0.20) still give their day.
+    if p and not p.days then
+        for _, v in ipairs(p.visits or {}) do
+            days[I.DayKey(v.at)] = (days[I.DayKey(v.at)] or 0) + 1
+        end
     end
     for zone, n in pairs(p and p.zones or {}) do
         zones[zone] = n
@@ -237,6 +270,7 @@ function I.Presence(record, guid)
         if not last or e.time - last >= VISIT_GAP then
             local key = cell(e.time)
             grid[key], total = (grid[key] or 0) + 1, total + 1
+            days[I.DayKey(e.time)] = (days[I.DayKey(e.time)] or 0) + 1
             if type(e.zone) == "string" and e.zone ~= "?" then
                 zones[e.zone] = (zones[e.zone] or 0) + 1
             end
@@ -249,7 +283,7 @@ function I.Presence(record, guid)
     for _, n in pairs(grid) do
         max = math.max(max, n)
     end
-    return {grid = grid, max = max, total = total, zones = zones, sightings = sightings}
+    return {grid = grid, max = max, total = total, zones = zones, sightings = sightings, days = days}
 end
 -- The three-hour window with the most sightings, and the days seen over the last two weeks.
 local function habits(presence, out)

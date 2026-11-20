@@ -49,11 +49,21 @@ B.MemberName=function(id) return id=="Player-1-ally" and "Ally Member" or member
 local function click(b) b.scripts.OnClick(b,"LeftButton") end
 assert(GL.OpenPlayerDossier(target,nil,"Wanted Rogue","combat"))
 local f=GrudgeLedgerPlayerDossier
+-- The sheet has pages instead of a scroll bar: walk them all, from the first.
+local function eachRow(visit)
+    while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
+    repeat
+        for _,r in ipairs(f.rows) do
+            if r:IsVisible() and visit(r) then return r end
+        end
+        local more=f.pageNext:IsShown() and f.pageNext:IsEnabled()
+        if more then click(f.pageNext) end
+    until not more
+end
 local function all()
     local visible={}
-    for _,row in ipairs(f.rows) do
-        if row:IsVisible() then visible[#visible+1]=row.caption:GetText().." "..row.amount:GetText() end
-    end
+    eachRow(function(r) visible[#visible+1]=r.caption:GetText().." "..r.amount:GetText() end)
+    while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
     return table.concat(visible,"\n")
 end
 assert(all():find("Mis à prix 2 fois · 60 PO promis",1,true),all())

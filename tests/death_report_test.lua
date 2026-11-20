@@ -61,14 +61,20 @@ detail:Hide()
 local function click(b) b.scripts.OnClick(b,"LeftButton") end
 assert(GL.OpenPlayerDossier(guid,nil,nil,"combat"))
 local f=GrudgeLedgerPlayerDossier
-assert(f.exportDeaths:IsVisible())
-click(f.exportDeaths)
+-- The export is a quiet row action under the dated fights, not a large button.
+local export
+for _,r in ipairs(f.rows) do
+    if r:IsVisible() and r.amount:GetText()=="Exporter" then export=r end
+end
+assert(export and export.caption:GetText():find("pour une IA",1,true))
+click(export)
 local w=GrudgeLedgerDeathExport
 assert(w:IsShown() and w.box:GetText()==D.Export(guid) and w.box.highlighted==w.box:GetText() and w.box.focus)
 w:Hide()
-click(f.tabs.overview)
-assert(not f.exportDeaths:IsVisible())
-assert(GL.OpenPlayerDossier("Player-9-00EE",nil,"Nobody","combat") and not f.exportDeaths:IsVisible(),"no button without deaths")
+assert(GL.OpenPlayerDossier("Player-9-00EE",nil,"Nobody","combat"))
+for _,r in ipairs(f.rows) do
+    assert(not (r:IsVisible() and r.amount:GetText()=="Exporter"),"no export without deaths")
+end
 GL.ShowJournal("summary")
 assert(GrudgeLedgerJournal.exportDeaths:IsShown())
 GL.ShowJournal("history")

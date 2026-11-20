@@ -81,17 +81,31 @@ assert(#saved.visits==5 and saved.zones.Baie==2)
 local function click(b) b.scripts.OnClick(b,"LeftButton") end
 assert(GL.OpenPlayerDossier(guid))
 local f=GrudgeLedgerPlayerDossier
+-- The sheet has pages instead of a scroll bar: walk them all, from the first.
+local function eachRow(visit)
+    while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
+    repeat
+        for _,r in ipairs(f.rows) do
+            if r:IsVisible() and visit(r) then return r end
+        end
+        local more=f.pageNext:IsShown() and f.pageNext:IsEnabled()
+        if more then click(f.pageNext) end
+    until not more
+end
+local function all()
+    local visible={}
+    eachRow(function(r) visible[#visible+1]=r.caption:GetText().." "..r.amount:GetText() end)
+    while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
+    return table.concat(visible,"\n")
+end
 local function rows()
     local visible={}
-    for _,r in ipairs(f.rows) do
-        if r:IsVisible() then visible[#visible+1]=r end
-    end
+    eachRow(function(r) visible[#visible+1]=r end)
     return visible
 end
+-- Leaves the sheet on the page that holds the row, so it can be clicked.
 local function find(caption)
-    for _,r in ipairs(rows()) do
-        if r.caption:GetText()==caption then return r end
-    end
+    return eachRow(function(r) return r.caption:GetText()==caption end)
 end
 local row=assert(find("Il ouvre le combat 2 fois sur 3"))
 assert(row.amount:GetText()=="Faits (3)")
@@ -101,23 +115,40 @@ assert(#rows()==before+3 and find("Il ouvre le combat 2 fois sur 3").amount:GetT
 click(find("Il ouvre le combat 2 fois sur 3"))
 assert(#rows()==before)
 click(find("Vous l’avez vaincu 2 fois de suite"))
-local detail
-for _,r in ipairs(rows()) do
-    if r.amount:GetText()=="Détail" and r.caption:GetText():find("Vous l'avez vaincu",1,true) then detail=r end
-end
+local detail=eachRow(function(r)
+    return r.amount:GetText()=="Détail" and r.caption:GetText():find("Vous l'avez vaincu",1,true)
+end)
 assert(detail,"a fight fact opens its fight detail")
 click(detail)
 assert(GrudgeLedgerCorrections:IsShown())
 GrudgeLedgerCorrections:Hide()
-assert(f.heatmap:IsVisible())
+assert(eachRow(function() return f.heatmap:IsVisible() end),"the presence grid is on a page")
+-- Levels, not a shade relative to the busiest cell: one visit is the lightest level.
 local evening=f.heatmap.cells[((math.floor((T0+9*HOUR)/86400)+3)%7)*24+21]
-assert(evening.color[4]>.9,"the busiest cell is the darkest")
-assert(f.heatmap.cells[0].color[4]<.1)
+assert(evening.count==1 and math.abs(evening.fill.color[4]-.3)<.01,"one visit is level 1")
+assert(f.heatmap.cells[0].count==0 and f.heatmap.cells[0].fill.color[4]<.11)
+GameTooltip.SetOwner=function(self,owner) self.owner,self.lines=owner,{} end
+evening.scripts.OnEnter(evening)
+assert(GameTooltip.owner==evening and GameTooltip:GetText():find("de 21 h à 22 h",1,true) and GameTooltip.lines[1]=="1 apparition",GameTooltip:GetText())
+evening.scripts.OnLeave(evening)
+-- The year view: one square per day, today in the last column.
+assert(f.yearMap:IsVisible())
+local seen=0
+for _,cell in pairs(f.yearMap.cells) do
+    if cell:IsShown() and cell.count>0 then seen=seen+cell.count end
+end
+assert(seen==5,"five visits over the last twelve months: "..seen)
+assert(all():find("Sur douze mois : 5 apparitions, 3 jours différents",1,true),all())
+-- Five visits in the same hour reach the darkest level.
+for k=1,4 do I.RecordVisit(guid,T0+9*HOUR-k*7*86400,"Elwynn") end
+click(f.tabs.overview)
+eachRow(function() return f.heatmap:IsVisible() end)
+assert(evening.count==5 and evening.fill.color[4]==1,"five visits are level 4")
 local zones
 for _,r in ipairs(rows()) do
     if r.caption:GetText():find("^Zones : ") then zones=r.caption:GetText() end
 end
-assert(zones=="Zones : Elwynn (3), Baie (2)",zones)
+assert(zones=="Zones : Elwynn (7), Baie (2)",zones)
 click(f.tabs.combat)
 assert(not f.heatmap:IsVisible())
 assert(#GL.errors==0,(GL.errors[1] or {}).text)
