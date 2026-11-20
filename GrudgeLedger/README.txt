@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.18.0
+GRUDGE LEDGER — 0.19.0
+
+Talents : l’onglet commence par la spécialisation du joueur et sa répartition (« Spécialisation : Combat farouche (0/31/20) »), puis ses talents décisifs : ceux d’un seul rang, souvent un sort, et ceux des rangées profondes.
 
 Rapport de mort : le détail d’une mort indique la durée du combat, votre vie au début, le nombre d’adversaires, les dégâts reçus par joueur et par sort, et le coup fatal. Les soins, les contrôles et les auras ne sont pas relevés. Votre propre spécialisation est maintenant gardée dans le build de chaque combat. Bilan → « Exporter mes morts pour une IA » (et Fiche → Combats → « Exporter mes morts contre lui ») prépare un texte sélectionné à copier dans Claude ou ChatGPT : vos dix dernières morts, les builds et les dégâts reçus, sans aucun nom de joueur. Un nouveau fichier : relancer complètement le jeu après la mise à jour.
 

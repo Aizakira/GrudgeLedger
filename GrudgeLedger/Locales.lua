@@ -4,6 +4,8 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Spécialisation : %s (%s)"] = "Especialización: %s (%s)",
+        ["Talents décisifs : %s"] = "Talentos clave: %s",
         ["%d morts plus anciennes non incluses."] = "%d muertes más antiguas no incluidas.",
         ["Aucun dégât reçu dans le déroulé enregistré."] = "No hay daño recibido en el desarrollo registrado.",
         ["Aucun déroulé enregistré pour ce combat."] = "No hay desarrollo registrado para este combate.",
@@ -1414,6 +1416,8 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Spécialisation : %s (%s)"] = "Specialization: %s (%s)",
+        ["Talents décisifs : %s"] = "Key talents: %s",
         ["%d morts plus anciennes non incluses."] = "%d older deaths not included.",
         ["Aucun dégât reçu dans le déroulé enregistré."] = "No damage received in the recorded log.",
         ["Aucun déroulé enregistré pour ce combat."] = "No blow-by-blow recorded for this fight.",
