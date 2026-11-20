@@ -794,6 +794,36 @@ test("a stranger marked after the group still gets that group", function()
     assert(late.groupCount == 0, "after six hours the group is forgotten")
 end)
 
+-- 0.31.0: the friendly side. A long group with a stranger offers to add them; duels are remembered.
+test("a good group with a stranger offers to add them, once", function()
+    local offers = {}
+    GL.On("COMPANION_SUGGESTION", function(identity, seconds) offers[#offers + 1] = { identity, seconds } end)
+    unitData.party1 = opponent("goodgroup") groupSize = 2
+    T.ScanGroup()
+    now = now + 600 T.ScanGroup()
+    groupSize = 0 unitData.party1 = nil T.ScanGroup()
+    assert(#offers == 0, "ten minutes is too short")
+    unitData.party1 = opponent("goodgroup") groupSize = 2 T.ScanGroup()
+    now = now + 400 T.ScanGroup()
+    groupSize = 0 unitData.party1 = nil T.ScanGroup() T.ScanGroup()
+    assert(#offers == 1 and offers[1][1].guid == "Player-1-goodgroup" and offers[1][2] >= 900, #offers)
+    local record = GL.AdjustReputation(offers[1][1], 1, "Groupe apprécié", "manual")
+    assert(GL.Relation(record) == "friend" and record.groupCount == 1, "accepting keeps the group")
+end)
+test("duels are remembered apart from the grudge balance", function()
+    DUEL_WINNER_KNOCKOUT = "%1$s a triomphé de %2$s en duel"
+    DUEL_WINNER_RETREAT = "%2$s a fui devant %1$s en duel"
+    unitData.target = { guid = "Player-1-duelist", name = "Rival", surname = "Amical", isPlayer = true }
+    T.HandleEvent("CHAT_MSG_SYSTEM", "Testeur Exemple a triomphé de Rival Amical en duel")
+    local record = GL.Get("guid:Player-1-duelist")
+    assert(record and record.duels.wins == 1 and record.duels.losses == 0 and record.reputation == 0)
+    T.HandleEvent("CHAT_MSG_SYSTEM", "Testeur Exemple a fui devant Rival Amical en duel")
+    assert(record.duels.losses == 1 and record.pvp.kills == 0 and record.pvp.deaths == 0)
+    T.HandleEvent("CHAT_MSG_SYSTEM", "Autre Joueur a triomphé de Encore Autre en duel")
+    assert(record.duels.wins == 1 and record.duels.losses == 1, "other people's duels are ignored")
+    DUEL_WINNER_KNOCKOUT, DUEL_WINNER_RETREAT = nil, nil
+end)
+
 test("untracked but identified roster members do not preserve departed friends", function()
     unitData.party1 = opponent("companion") groupSize = 2
     local record = GL.SetReaction(GL.Identity("party1"), "friend")

@@ -122,6 +122,35 @@ a.GL.SharedDossiers.Receive(scope,b.id,"S2;V;"..target..";1444;x;Bad;Zone")
 a.GL.SharedDossiers.Receive(scope,b.id,"S2;V;not-a-player;1444;e;Bad;Zone")
 a.GL.SharedDossiers.Receive(scope,b.id,"S2;V;"..target..";1444;e;Bad|cff;Zone")
 assert(a.GL.SharedDossiers.WatchSighting(target).name=="Sneaky Rogue","malformed reports change nothing")
+-- Call for help: C never opted into the automatic watch, sees the enemy and clicks "Appeler la guilde".
+-- Every member is alerted, wherever they are.
+assert(a.GL.SetSetting("guildSightings",true))
+c.GL.RecordAggression(c.GL.IdentityFromName("Sneaky","Rogue",target),"confirmed",nil,"help-attack")
+assert(not c.GL.SharedDossiers.SharingSightings())
+now=now+400
+a.map,c.map=17,1444
+see(c,target,"Sneaky","Rogue")
+local own=assert(c.env.GrudgeLedgerNearbyAlert)
+assert(own:IsShown() and own.help:IsShown(),"the alert offers the call for help")
+local before=#watched
+own.help.scripts.OnClick(own.help,"LeftButton")
+flush()
+assert(#watched==before+1 and watched[#watched]:find(";1444;h;",1,true),watched[#watched])
+assert(own.help.label:GetText()=="Guilde prévenue")
+local called=a.GL.SharedDossiers.WatchSighting(target)
+assert(called and called.help and called.actor==c.id)
+assert(toast:IsShown() and toast.title:GetText():find("^Appel à l’aide de "),toast.title:GetText())
+
+-- The revenge moment: A kills the player who owed them.
+toast:Hide()
+local owed=a.GL.Debt(a.GL.Get("guid:"..target))
+assert(owed==5,owed)
+a.GL.RecordPvP(a.GL.IdentityFromName("Sneaky","Rogue",target),"kill","confirmed","Direct","revenge-kill")
+assert(toast:IsShown() and toast.title:GetText()=="Revanche" and toast.note:GetText()=="Dette de 5 ramenée à 4.",toast.note:GetText())
+for i=1,4 do
+    a.GL.RecordPvP(a.GL.IdentityFromName("Sneaky","Rogue",target),"kill","confirmed","Direct","revenge-kill-"..i)
+end
+assert(toast.title:GetText()=="Compte réglé" and toast.note:GetText()=="Sa dette de 1 est effacée.",toast.note:GetText())
 for _,p in ipairs(clients) do assert(#p.GL.errors==0,p.GL.errors[1] and p.GL.errors[1].text) end
 print("PASS guild watch: opt-in sending, one report per player per two minutes, alert for your enemies anywhere, "
-    .."warning for a guildmate's enemy in your zone, nothing saved in the journal, alert switch, malformed reports ignored")
+    .."warning for a guildmate's enemy in your zone, nothing saved in the journal, alert switch, malformed reports ignored, call for help reaches everyone, revenge and settled banners")

@@ -127,10 +127,17 @@ local function alertTitle(record, relation)
 end
 
 local function refreshToastText(frame, record)
+    if frame.banner then
+        frame.title:SetText(frame.banner.title)
+        frame.name:SetText(frame.banner.name)
+        frame.note:SetText(frame.banner.note)
+        return
+    end
     if frame.sighting then
         local sight = frame.sighting
         local age = math.max(0, GL.Now() - sight.at)
-        frame.title:SetText(L("Repéré par la guilde · %s"):format(sight.bounty and L("Prime") or L(styles[frame.relation].label)))
+        frame.title:SetText(sight.help and L("Appel à l’aide de %s"):format(sight.member or L("Membre de guilde"))
+            or L("Repéré par la guilde · %s"):format(sight.bounty and L("Prime") or L(styles[frame.relation].label)))
         frame.name:SetText(record and (record.fullName or record.name) or sight.name ~= "" and sight.name or L("Joueur connu"))
         local who = L("Vu par %s · %s"):format(sight.member or L("Membre de guilde"), sight.zone ~= "" and sight.zone or L("lieu inconnu"))
         frame.note:SetText(who .. "\n" .. (age < 5 and L("à l'instant") or L("il y a %d s"):format(age))
@@ -159,6 +166,10 @@ end
 local function validateToast()
     if not toast or not toast:IsShown() then return end
     if GL.IsPvPInstance() then toast:Hide() return end
+    if toast.banner then
+        if GL.Now() >= toast.expires then toast:Hide() end
+        return
+    end
     if toast.sighting then
         if GL.Now() >= toast.expires or not GL.Settings().guildSightings then
             toast:Hide()
@@ -397,7 +408,20 @@ local function makeToast(preview)
     frame.divider:SetPoint("TOPLEFT", 16, -88)
     frame.divider:SetSize(384, 1)
     frame.divider:SetColorTexture(0.48, 0.35, 0.18, 0.6)
-    frame.hint = textLine("GameFontHighlightSmall", 16, 95, 384, 14, 1, 0.65, 0.59, 0.48)
+    frame.hint = textLine("GameFontHighlightSmall", 16, 95, 264, 14, 1, 0.65, 0.59, 0.48)
+    frame.help = CreateFrame("Button", nil, frame)
+    frame.help:SetPoint("BOTTOMRIGHT", -10, 5)
+    frame.help:SetSize(124, 18)
+    frame.help.label = frame.help:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.help.label:SetPoint("RIGHT")
+    frame.help.label:SetTextColor(0.94, 0.80, 0.57)
+    frame.help.label:SetText(L("Appeler la guilde"))
+    frame.help:SetScript("OnClick", function(self)
+        if self.identity then GL.Emit("CALL_FOR_HELP", self.identity, self.relation, self.bounty) end
+        self.label:SetText(L("Guilde prévenue"))
+    end)
+    frame.help:SetScript("OnShow", function(self) self.label:SetText(L("Appeler la guilde")) end)
+    frame.help:Hide()
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     frame:SetScript("OnEnter", function(self) self.border:SetColorTexture(0.68, 0.51, 0.28, 1) end)
     frame:SetScript("OnLeave", function(self) self.border:SetColorTexture(0.48, 0.35, 0.18, 1) end)
@@ -405,7 +429,8 @@ local function makeToast(preview)
         local key = self.key
         self:Hide()
         if button == "LeftButton" then
-            if self.bounty and GL.OpenBounties then GL.OpenBounties(self.bounty.target)
+            if self.banner and self.banner.onClick then self.banner.onClick()
+            elseif self.bounty and GL.OpenBounties then GL.OpenBounties(self.bounty.target)
             elseif self.sighting and key and GL.OpenPlayerDossier then
                 -- A player the guild spotted may not be in your journal: open the sheet directly.
                 GL.OpenPlayerDossier(key:match("^guid:(.+)$") or key, nil, self.sighting.name)
@@ -504,7 +529,14 @@ alert = function(identity, unit)
     local frame = makeToast()
     if previewToast and previewToast:IsShown() then previewToast:Hide() end
     frame.key, frame.relation, frame.source, frame.expires = record.key, relation, source, now + 6
-    frame.signal, frame.signalAt, frame.sighting = nil, nil, nil
+    frame.signal, frame.signalAt, frame.sighting, frame.banner = nil, nil, nil, nil
+    -- Call for help: one click tells your guild who and where, even without the automatic watch.
+    if relation ~= "friend" and identity.guid ~= nil and GL.Safe(GetGuildInfo, "player") ~= nil then
+        frame.help:Show()
+    else
+        frame.help:Hide()
+    end
+    frame.help.identity, frame.help.relation, frame.help.bounty = identity, relation, bounty ~= nil
     frame.bounty, frame.bountyIdentity = bounty, bounty and identity or nil
     frame.guildKey, frame.guildBurst = guildKey, burst
     frame.hint:SetText(L(bounty and "Clic : prime  •  clic droit : fermer" or "Clic : fiche  •  clic droit : fermer"))
@@ -560,7 +592,8 @@ local function indirectSignal(guid, source)
     frame.key, frame.relation, frame.source = record.key, relation, GL.RelationSource(record)
     frame.guildKey, frame.guildBurst = inheritedGuildKey(record), nil
     frame.signal, frame.signalAt, frame.expires = signalSources[source], now, now + 6
-    frame.sighting = nil
+    frame.sighting, frame.banner = nil, nil
+    frame.help:Hide()
     frame.bounty, frame.bountyIdentity = nil, nil
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[relation])
@@ -577,10 +610,66 @@ end
 -- Guild watch: a guildmate just saw a player. Alert when that player matters to you (your enemy,
 -- suspicious, a bounty target, disliked by the guild), or when a guildmate's enemy is in your zone.
 local watchAlerts = {}
+-- A moment of your story, shown like an alert: revenge taken, a score settled, a good group.
+local function banner(key, relation, title, name, note, hint, onClick)
+    if GL.IsPvPInstance() then return end
+    if previewToast and previewToast:IsShown() then previewToast:Hide() end
+    local frame = makeToast()
+    frame.key, frame.relation, frame.source, frame.expires = key, relation, "banner", GL.Now() + 8
+    frame.guildKey, frame.guildBurst, frame.signal, frame.signalAt, frame.sighting = nil, nil, nil, nil, nil
+    frame.bounty, frame.bountyIdentity = nil, nil
+    frame.banner = { title = title, name = name, note = note, onClick = onClick }
+    frame.help:Hide()
+    frame.hint:SetText(hint or L("Clic : fiche  •  clic droit : fermer"))
+    styleToast(frame, styles[relation])
+    refreshToastText(frame)
+    frame:Show()
+    return frame
+end
+GL.On("REVENGE", function(record, before, after)
+    if not GL.Settings().enemyAlerts or type(record) ~= "table" then return end
+    local settled = after <= 0
+    local note = settled and L("Sa dette de %d est effacée."):format(before)
+        or L("Dette de %d ramenée à %d."):format(before, after)
+    banner(record.key, settled and "friend" or "enemy", settled and L("Compte réglé") or L("Revanche"),
+        record.fullName or record.name or L("Joueur connu"), note)
+    local sounds = SOUNDKIT or {}
+    local sound = sounds.UI_QUEST_ROLLING_FORWARD_01 or sounds.IG_QUEST_LIST_COMPLETE or sounds.IG_QUEST_LOG_OPEN
+    if sound and GL.Settings().sounds then GL.Safe(PlaySound, sound, "Master") end
+end)
+GL.ShowStoryBanner = banner
+-- After a good group with a player who is not in your book: one click adds them as a friend.
+GL.On("COMPANION_SUGGESTION", function(identity, seconds)
+    if not GL.Settings().friendAlerts or type(identity) ~= "table" or GL.Get(identity) then return end
+    local name = identity.fullName or (identity.name and (identity.name .. (identity.surname and (" " .. identity.surname) or "")))
+    banner(identity.key, "friend", L("Bon groupe"), name or L("Joueur connu"),
+        L("%d min en groupe avec vous."):format(math.floor((seconds or 0) / 60)),
+        L("Clic : l’ajouter en ami  •  clic droit : fermer"), function()
+            GL.AdjustReputation(identity, 1, "Groupe apprécié", "manual")
+        end)
+end)
+
 local function guildSighting(target, sight, sameZone)
     local settings = GL.Settings()
     if not settings.guildSightings or not settings.enemyAlerts or GL.IsPvPInstance() then return end
     if type(target) ~= "string" or type(sight) ~= "table" then return end
+    -- A call for help is an explicit request: it reaches every member, wherever they are.
+    if sight.help then
+        if previewToast and previewToast:IsShown() then previewToast:Hide() end
+        local frame = makeToast()
+        frame.key, frame.relation, frame.source = "guid:" .. target, "enemy", "watch"
+        frame.guildKey, frame.guildBurst, frame.signal, frame.signalAt, frame.banner = nil, nil, nil, nil, nil
+        frame.bounty, frame.bountyIdentity = nil, nil
+        frame.sighting, frame.sameZone, frame.expires = sight, sameZone == true, GL.Now() + 10
+        frame.help:Hide()
+        frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
+        styleToast(frame, styles.enemy)
+        refreshToastText(frame, GL.Get(frame.key))
+        frame:Show()
+        local sound = alertSound("enemy")
+        if sound and settings.sounds then GL.Safe(PlaySound, sound, "Master") end
+        return
+    end
     local identity = { guid = target, key = "guid:" .. target }
     local record = GL.Get(identity.key)
     local relation = GL.Relation(record or identity)
@@ -603,7 +692,8 @@ local function guildSighting(target, sight, sameZone)
     if bounty then frame.relation = "enemy" end
     frame.guildKey, frame.guildBurst, frame.signal, frame.signalAt = nil, nil, nil, nil
     frame.bounty, frame.bountyIdentity = nil, nil
-    frame.sighting, frame.sameZone, frame.expires = sight, sameZone == true, now + 8
+    frame.sighting, frame.sameZone, frame.expires, frame.banner = sight, sameZone == true, now + 8, nil
+    frame.help:Hide()
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[frame.relation])
     refreshToastText(frame, record)

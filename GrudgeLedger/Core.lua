@@ -1170,6 +1170,7 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat, rep
         end
     end
     local field = pvpFields[kind][confidence]
+    local owed = kind == "kill" and GL.Debt(record) or 0
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
     local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, killingBlow = killingBlow,
@@ -1177,6 +1178,8 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat, rep
     -- Listeners attach the build of both players at this moment to the event.
     GL.Emit("FIGHT_RECORDED", record, event)
     GL.Emit("CHANGED", record)
+    -- The revenge moment: you just killed a player who owed you.
+    if owed > 0 then GL.Emit("REVENGE", record, owed, GL.Debt(record)) end
     return record, event
 end
 function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
@@ -1290,6 +1293,19 @@ function GL.RecordGroup(identity, sessionId, zone)
     return record
 end
 
+-- A duel is a friendly fight: kept in the history and in two counters, never in the balance.
+function GL.RecordDuel(identity, won)
+    if GL.IsPvPInstance() or type(won) ~= "boolean" then return nil end
+    local record = GL.Remember(identity)
+    if not record then return nil end
+    record.duels = type(record.duels) == "table" and record.duels or { wins = 0, losses = 0 }
+    local field = won and "wins" or "losses"
+    record.duels[field] = (tonumber(record.duels[field]) or 0) + 1
+    history(record, "duel", { won = won })
+    GL.Emit("CHANGED", record)
+    return record
+end
+
 function GL.RecordTrade(identity, summary)
     if not GL.Settings().tradeTracking or GL.IsPvPInstance() then return end
     local record = GL.Get(identity)
@@ -1364,20 +1380,51 @@ local function recordText(record, notes, past)
     end
     return table.concat(parts, "\n")
 end
+-- What a player still owes you: they killed or attacked you and your balance with them is negative.
+-- Your own Friend choice forgives it.
+function GL.Debt(record)
+    local pvp = type(record) == "table" and record.pvp or {}
+    local score = type(record) == "table" and record.reputation or 0
+    if score >= 0 or (pvp.deaths or 0) + (pvp.aggressions or 0) == 0 or GL.Relation(record) == "friend" then return 0 end
+    return -score
+end
+-- Two titles that tell a story: your nemesis killed you most (twice at least); your best companion
+-- grouped with you most (three times at least) and is not an enemy. Returns their record keys.
+function GL.Titles()
+    local nemesis, companion
+    for _, record in pairs(GL.db and GL.db.players or {}) do
+        local deaths, groups = record.pvp and record.pvp.deaths or 0, record.groupCount or 0
+        if deaths >= 2 and (not nemesis or deaths > nemesis.pvp.deaths
+            or deaths == nemesis.pvp.deaths and (record.reputation or 0) < (nemesis.reputation or 0)) then
+            nemesis = record
+        end
+        local relation = groups >= 3 and GL.Relation(record)
+        if relation and relation ~= "enemy" and relation ~= "warning" and (not companion or groups > companion.groupCount
+            or groups == companion.groupCount and record.key < companion.key) then
+            companion = record
+        end
+    end
+    return nemesis and nemesis.key, companion and companion.key
+end
 function GL.SearchPlayers(options)
     options = type(options) == "table" and options or {}
     local result, words = {}, queryWords(options.query)
+    local debts = options.relation == "debt"
     for _, record in pairs(GL.db and GL.db.players or {}) do
         local faction = record.faction or "unknown"
         if (not GL.IsGroupOnly(record) or record.key == options.selectedKey)
-            and (not options.relation or options.relation == "all" or GL.Relation(record) == options.relation)
+            and (not options.relation or options.relation == "all" or (debts and GL.Debt(record) > 0)
+                or (not debts and GL.Relation(record) == options.relation))
             and (not options.faction or options.faction == "all" or faction == options.faction)
             and (not options.notesOnly or #record.notes > 0)
-            and (not options.tag or options.tag == "all" or (GL.HasTag and GL.HasTag(record, options.tag)))
+            and (not options.tag or options.tag == "all" or (GL.HasTag
+                and GL.HasTag(record, options.tag ~= "any" and options.tag or nil)))
             and (#words == 0 or matchesWords(recordText(record, true, true), words)) then result[#result + 1] = record end
     end
     local sort = listSorts[options.sort] and options.sort or "recent"
     local function value(record)
+        -- Accounts to settle: the heaviest debt first, whatever the usual order.
+        if debts then return GL.Debt(record) end
         if sort == "name" then return (record.fullName or record.name or record.key):lower() end
         if sort == "reputation" then return record.reputation or 0 end
         if sort == "kills" or sort == "deaths" then return record.pvp[sort] or 0 end

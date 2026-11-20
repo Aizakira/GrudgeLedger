@@ -561,6 +561,24 @@ local function relaySighting(identity,relation,bounty)
     end
 end
 GL.On("THREAT_SEEN",relaySighting)
+-- "Appeler la guilde" on an alert: an explicit request, sent even when the automatic watch is off.
+-- Still at most one call every ten seconds.
+GL.On("CALL_FOR_HELP",function(identity)
+    local s,me=B.GuildScope()
+    local guid=type(identity)=="table" and identity.guid
+    if not s or not me or type(guid)~="string" or #guid>32 or not guid:match("^Player%-%w+%-%w+$") or GL.IsPvPInstance() then return end
+    local now=GL.Now()
+    if now-watchLast<WATCH_PAUSE then return end
+    local record=GL.Get(identity)
+    local name=record and record.fullName or identity.fullName
+        or (identity.name and (identity.name..(identity.surname and (" "..identity.surname) or "")))
+    name=type(name)=="string" and name:sub(1,48) or ""
+    local message=table.concat({"J",PROTOCOL,"V",guid,playerMap(),"h",ascii(name),ascii(GL.Where():sub(1,48))},";")
+    if #message<=250 then
+        Transport.Send(s,message)
+        watchSent[guid],watchLast=now,now
+    end
+end)
 local function receiveSighting(s,sender,target,map,code,name,zone)
     local now,count,oldest=GL.Now(),0,nil
     for guid,sight in pairs(sightings) do
@@ -572,7 +590,7 @@ local function receiveSighting(s,sender,target,map,code,name,zone)
         end
     end
     if count>=WATCH_KEPT and oldest then sightings[oldest]=nil end
-    local sight={at=now,actor=sender,map=map,relation=code=="w" and "warning" or "enemy",bounty=code=="b",
+    local sight={at=now,actor=sender,map=map,relation=code=="w" and "warning" or "enemy",bounty=code=="b",help=code=="h",
         name=unescape(name):sub(1,48),zone=unescape(zone):sub(1,48),member=B.MemberName(sender)}
     sightings[target]=sight
     GL.Emit("GUILD_SIGHTING",target,sight,map>0 and map==playerMap())
@@ -697,7 +715,7 @@ function S.Receive(s,sender,raw)
         end
         return
     end
-    local seen,map,code,name,zone = raw:match("^S2;V;(Player%-%w+%-%w+);(%d+);([ewb]);([A-Za-z0-9%% .,:_%-]*);([A-Za-z0-9%% .,:_%-]*)$")
+    local seen,map,code,name,zone = raw:match("^S2;V;(Player%-%w+%-%w+);(%d+);([ewbh]);([A-Za-z0-9%% .,:_%-]*);([A-Za-z0-9%% .,:_%-]*)$")
     if seen then
         if #seen <= 32 and #map <= 8 and #name <= 144 and #zone <= 144 then
             receiveSighting(s,sender,seen,tonumber(map),code,name,zone)

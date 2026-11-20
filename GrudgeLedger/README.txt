@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.30.1
+GRUDGE LEDGER — 0.31.0
+
+Des histoires, pas seulement des chiffres. Journal : le filtre « Comptes à régler » liste les joueurs qui vous doivent encore quelque chose, la dette la plus lourde en premier ; « Tous les signalés » réunit les joueurs étiquetés ; votre Némésis (celui qui vous a le plus tué) et votre Compagnon (celui avec qui vous avez le plus groupé) portent leur titre. Revanche : une bannière quand vous tuez un joueur qui vous devait quelque chose, puis « Compte réglé » quand la dette tombe à zéro. Appel à l’aide : le bouton « Appeler la guilde » d’une alerte prévient tous les membres, avec le nom et la zone. Côté amis : après quinze minutes de groupe avec un inconnu, l’addon propose de l’ajouter en un clic ; la fiche d’un joueur de votre faction a les boutons Chuchoter et Inviter. Fiche → Relations : « Votre histoire avec lui », un court récit daté, avec un bouton Copier pour le chat ou Discord. Duels : gagnés et perdus sont comptés à part, jamais dans le solde.
 
 Portraits : le cadre doré, l’icône de classe et le médaillon de niveau s’affichent maintenant au-dessus du visage animé, partout (Journal, fiche, primes). Fiche : les avis se lisent en lignes « Vous », « Guilde », « Prime » ; le calcul de votre solde apparaît au survol de votre pastille et dans Combats.
 

@@ -290,9 +290,19 @@ function D.ShowExport(guid)
         w.box:SetScript("OnEscapePressed", function() w:Hide() end)
         w.close = UI.button(w, L("Fermer"), 28, -412, 120, function() w:Hide() end, true, true)
     end
+    window.title:SetText(L("Exporter mes morts"))
     window.box:SetText(text)
     window:Show()
     window.box:SetFocus()
     window.box:HighlightText()
     return window
+end
+-- The same copy window for any text of the book (a player's story, for the guild chat or Discord).
+function D.ShowText(title, text)
+    local w = D.ShowExport(nil)
+    w.title:SetText(title)
+    w.box:SetText(text)
+    w.box:SetFocus()
+    w.box:HighlightText()
+    return w
 end

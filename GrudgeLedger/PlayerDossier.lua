@@ -276,7 +276,9 @@ local function verdictItems(d,guid)
     if record then
         local relation=GL.RelationSource(record)=="guildmates" and "neutral" or GL.Relation(record)
         local formula=GL.BalanceFormula(record)
-        items[1]={(relationNames[relation] or unknown).." · "..("%+d"):format(record.reputation or 0),relation,L("Vous"),
+        local nemesisKey,companionKey=GL.Titles()
+        local name=record.key==nemesisKey and L("Némésis") or record.key==companionKey and L("Compagnon") or relationNames[relation] or unknown
+        items[1]={name.." · "..("%+d"):format(record.reputation or 0),relation,L("Vous"),
             formula~="" and (L("Votre solde : %s"):format(formula)) or nil}
     else
         items[1]={L("Aucune rencontre"),"neutral",L("Vous")}
@@ -479,6 +481,10 @@ local function drawIdentity(f,d)
     end
     local ally=allyVariant(d)
     local met=encounters(d,f.guid)
+    local sameFaction=(d.record.faction or object(d.profile.identity).faction)==GL.Safe(UnitFactionGroup,"player")
+    f.contactName=sameFaction and not mode and name or nil
+    f.whisper:SetShown(f.contactName~=nil)
+    f.invite:SetShown(f.contactName~=nil)
     local y=0
     local function place(region,height)
         region:ClearAllPoints()
@@ -685,6 +691,16 @@ local function relationsPage(f,record,row)
         if filter=="all" or (filter=="mine")==(mine==true) then
             timeline[#timeline+1]={at=tonumber(at) or 0,description=description,author=mine and L("Vous") or firstName(author),
                 mine=mine,seq=#timeline+1,event=event}
+        end
+    end
+    local story=GL.CharacterInsights and record and GL.CharacterInsights.Story(record) or {}
+    if #story>0 then
+        local name=f.nameLabel:GetText() or ""
+        row(L("Votre histoire avec lui"),L("Copier"),true,function()
+            GL.DeathReport.ShowText(L("Votre histoire avec %s"):format(name),name.."\n"..table.concat(story,"\n"))
+        end)
+        for _,line in ipairs(story) do
+            row(line)
         end
     end
     row(L("Ce que chacun en pense"),L("Avis · contre lui"),true)
@@ -1019,7 +1035,8 @@ local function paintOverview(f,d)
     o.factsTitle:SetText(L("À savoir"))
     o.factsLink:SetText(L("Tous les faits (%d)"):format(#list))
     o.factsLink:SetShown(#list>0)
-    o.noFacts:SetText(L("Pas encore assez de faits datés pour en tirer des habitudes."))
+    local story=I and record and I.Story(record) or {}
+    o.noFacts:SetText(#story>0 and table.concat(story,"\n") or L("Pas encore assez de faits datés pour en tirer des habitudes."))
     o.noFacts:SetShown(#list==0)
     for i,card in ipairs(o.cards) do
         local item=list[i]
@@ -1142,6 +1159,10 @@ local function encountersPage(f,d,row)
         row(L("Croisé %d fois · dernière fois : %s"):format(math.max(seen,1),place),nil,nil,nil,nil,
             {time=r.lastEncounterAt and GL.Safe(date,"%d/%m",r.lastEncounterAt) or nil,chip={L("Vous"),true}})
     end
+    local duels=object(r and r.duels)
+    if (duels.wins or 0)+(duels.losses or 0)>0 then
+        row(L("Duels"),L("%d gagnés · %d perdus"):format(duels.wins or 0,duels.losses or 0))
+    end
     if #met.events==0 then
         row(L("Aucun groupe ni échange enregistré."))
     end
@@ -1182,6 +1203,10 @@ local function combatPage(f,d,row)
             row(L("Solde %+d = %s"):format(record.reputation or 0,formula))
         end
         row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
+        local duels=object(record.duels)
+        if (duels.wins or 0)+(duels.losses or 0)>0 then
+            row(L("Duels"),L("%d gagnés · %d perdus"):format(duels.wins or 0,duels.losses or 0))
+        end
         for i=1,math.min(MAX_FIGHTS,#list) do
             local fight=list[i]
             row(timestamp(fight.at).." · "..fightText(fight),L("Détail"),nil,function() GL.InspectEvent(record,fight.main) end)
@@ -1566,6 +1591,13 @@ local function build()
     UI.journalFont(f.observed,"GameFontHighlight",11)
     f.observed:SetTextColor(unpack(UI.theme.muted))
     f.bounty=UI.button(f,"",38,-612,168,function() GL.OpenContactBounty(f.guid) end)
+    f.whisper=UI.button(f,L("Chuchoter"),38,-612,82,function()
+        if f.contactName then GL.Safe(ChatFrame_SendTell,f.contactName) end
+    end)
+    f.invite=UI.button(f,L("Inviter"),124,-612,82,function()
+        local invite=C_PartyInfo and C_PartyInfo.InviteUnit or InviteUnit
+        if f.contactName then GL.Safe(invite,f.contactName) end
+    end)
     f.armoryButton=UI.button(f,L("Lien Armurerie"),38,-643,168,function()
         f.armoryLink:SetText(f.armoryURL)
         f.armoryLink:Show()

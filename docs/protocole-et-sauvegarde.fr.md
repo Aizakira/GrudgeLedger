@@ -47,6 +47,7 @@ Chaque entrée de `players` regroupe quatre familles de champs.
 | --- | --- |
 | Identité | `key`, `guid`, `name`, `surname`, `fullName`, `class`, `className`, `race`, `raceName`, `raceID`, `sex`, `faction`, `level`, `guild`, `realm`, `guildSeenAt` |
 | Avis | `reaction`, `reactionSource`, `reputation`, `tags`, `tagHistory`, `notes` |
+| Duels | `duels` (`wins`, `losses`), depuis la 0.31.0 : comptés à part, jamais dans le solde. Chaque duel ajoute un événement `duel` (`won`) à `history` |
 | Faits | `history`, `pvp` (victoires, morts, agressions), `groupCount`, `encounters`, `firstSeen`, `lastSeen`, `lastEncounterAt`, `lastDirectEncounterAt` |
 | Relevés | `inspection` (équipement, talents et caractéristiques vus en jeu, chacun avec sa date), `armorySnapshot` (copie du relevé Web importé) |
 
@@ -116,7 +117,7 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `J;D;propriétaire;cible;secret` | Retrait d'une fiche ; le secret prouve le droit de retirer |
 | `J;V;clé` | Demande de rejeu d'une fiche |
 | `J;S2;Q;cible;dates` | Demande du relevé public d'une cible. `dates` donne, pour chacun des onze champs publics, la date du relevé déjà détenu (0 s'il manque) |
-| `J;S2;V;cible;carte;relation;nom;zone` | Veille de guilde (0.30.0). L'expéditeur voit `cible` en ce moment. `carte` est l'identifiant de sa carte (0 si inconnu), `relation` vaut `e` (ennemi), `w` (méfiance) ou `b` (cible de prime), `nom` et `zone` sont échappés et limités à 48 caractères. Envoyé seulement si `shareSightings` est coché, au plus une fois par cible toutes les deux minutes et une fois toutes les dix secondes en tout ; pas renvoyé si un membre vient de signaler la même cible dans la même carte |
+| `J;S2;V;cible;carte;relation;nom;zone` | Veille de guilde (0.30.0). L'expéditeur voit `cible` en ce moment. `carte` est l'identifiant de sa carte (0 si inconnu), `relation` vaut `e` (ennemi), `w` (méfiance), `b` (cible de prime) ou `h` (appel à l'aide, 0.31.0 : envoyé par le bouton « Appeler la guilde » d'une alerte, même sans `shareSightings`, et affiché chez tous les membres), `nom` et `zone` sont échappés et limités à 48 caractères. Envoyé seulement si `shareSightings` est coché, au plus une fois par cible toutes les deux minutes et une fois toutes les dix secondes en tout ; pas renvoyé si un membre vient de signaler la même cible dans la même carte |
 | `J;S2;W;numéro` | L'expéditeur retire tous ses témoignages dans cette guilde. Envoyé dès qu'il décoche le partage, puis à chaque connexion tant que la case reste décochée |
 | `J;S2;P;cible;numéro;nature;partie;total;corps` | Fragment d'un relevé. `nature` vaut `r` pour une réponse contenant des données publiques, `t` pour le seul témoignage de l'expéditeur |
 

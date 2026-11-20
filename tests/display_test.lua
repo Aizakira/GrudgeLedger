@@ -627,13 +627,14 @@ GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k1")
 GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k2")
 local debtMarker = markerFor(debtPlate)
 assert(GL.Get(debt).reputation == -4 and debtMarker.shown and debtMarker.children[2].texture:find("RelationWarning"))
-assert(toast.shown and toast.relation == "warning", "partial repayment must keep a visible danger alert")
+-- 0.31.0: a victory over a player who owed you is a revenge moment; the danger marker stays.
+assert(toast.shown and toast.banner and toast.title.text == "Revanche", "a victory over a debtor is a revenge moment")
 for i=3,11 do GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k" .. i) end
 local repaidSounds = #sounds
 assert(GL.Get(debt).reputation == 0 and debtMarker.shown and debtMarker.children[2].texture:find("RelationNeutral"))
-assert(not toast.shown and not debtMarker.children[3])
+assert(toast.shown and toast.title.text == "Compte réglé" and not debtMarker.children[3])
 D.Refresh()
-assert(#sounds == repaidSounds and not toast.shown, "repaid debt becomes a silent neutral marker")
+assert(#sounds == repaidSounds and toast.banner, "the repaid debt leaves a neutral marker and no new alert")
 
 C_NamePlate = nil
 D.Refresh()

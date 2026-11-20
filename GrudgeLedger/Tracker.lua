@@ -1041,6 +1041,34 @@ function T.OnCombatLog(...)
     end
 end
 
+-- "%1$s has defeated %2$s in a duel" in the client's language: who won, who lost.
+local function duelPattern(template)
+    if type(template) ~= "string" then return nil end
+    local winnerFirst = (template:find("%%1%$s", 1) or 0) <= (template:find("%%2%$s", 1) or 0)
+    local pattern = template:gsub("([%^%$%(%)%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%d%%%$s", "(.+)"):gsub("%%s", "(.+)")
+    return "^" .. pattern .. "$", winnerFirst
+end
+function T.OnSystemMessage(message)
+    -- Not enabled(): that pauses PvP inference during the duel, and the result arrives right then.
+    if not GL.db or not GL.Settings().pvpTracking or type(message) ~= "string" or GL.IsPvPInstance() then return end
+    for _, template in ipairs({ DUEL_WINNER_KNOCKOUT, DUEL_WINNER_RETREAT }) do
+        local pattern, winnerFirst = duelPattern(template)
+        local first, second
+        if pattern then first, second = message:match(pattern) end
+        if first and second then
+            local winner, loser = winnerFirst and first or second, winnerFirst and second or first
+            local mine = GL.Clean(GL.Safe(UnitName, "player"), "string")
+            local identity = GL.Identity("target")
+            local other = identity and identity.name
+            if mine and other and ((winner:find(mine, 1, true) and loser:find(other, 1, true))
+                or (loser:find(mine, 1, true) and winner:find(other, 1, true))) then
+                GL.RecordDuel(identity, winner:find(mine, 1, true) ~= nil)
+            end
+            return
+        end
+    end
+end
+
 local groupTimers = {}
 -- Group members not yet in your book, for this session only (never saved): if you add one within
 -- six hours, for instance by marking them Friend after the dungeon, the group counts for them.
@@ -1150,7 +1178,18 @@ function T.ScanGroup()
     end
     for i = 1, size > 0 and (raid and math.min(size, 40) or 4) or 0 do
         local identity = GL.Identity((raid and "raid" or "party") .. i)
-        if identity and strangers[identity.key] then strangers[identity.key].current = true end
+        local stranger = identity and strangers[identity.key]
+        if stranger then
+            stranger.current, stranger.last = true, now
+        end
+    end
+    -- A good group with a stranger who just left: offer once to add them to your book.
+    for _, stranger in pairs(strangers) do
+        local together = (stranger.last or stranger.at) - stranger.at
+        if not stranger.current and not stranger.suggested and together >= 900 then
+            stranger.suggested = true
+            GL.Emit("COMPANION_SUGGESTION", stranger.identity, together)
+        end
     end
     stopGroupTime(now, online)
 end
@@ -1252,6 +1291,7 @@ function T.HandleEvent(event, ...)
         else
             killingBlow(arg, second, nil, "Le jeu vous attribue le coup fatal (PARTY_KILL).", true)
         end
+    elseif event == "CHAT_MSG_SYSTEM" then T.OnSystemMessage(GL.Clean(arg, "string"))
     elseif event == "PLAYER_PVP_KILLS_CHANGED" then T.OnHonorCount()
     elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then T.OnHonorMessage(arg, (select(11, ...))) -- field 12 is the sender, never the victim
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then T.OnCombatLog() end
@@ -1266,7 +1306,7 @@ GL.On("READY", function()
         "UNIT_CONNECTION", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
         "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UPDATE_MOUSEOVER_UNIT",
         "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_TARGET", "UNIT_FLAGS", "UNIT_HEALTH", "UNIT_NAME_UPDATE", "PLAYER_GUILD_UPDATE",
-        "PLAYER_PVP_KILLS_CHANGED", "CHAT_MSG_COMBAT_HONOR_GAIN", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED", "DUEL_INBOUNDS", "DUEL_OUTOFBOUNDS", "DUEL_FINISHED",
+        "PLAYER_PVP_KILLS_CHANGED", "CHAT_MSG_COMBAT_HONOR_GAIN", "CHAT_MSG_SYSTEM", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED", "DUEL_INBOUNDS", "DUEL_OUTOFBOUNDS", "DUEL_FINISHED",
     }
     T.nativeKillEvent = pcall(frame.RegisterEvent, frame, "PARTY_KILL")
     for _, event in ipairs(events) do pcall(frame.RegisterEvent, frame, event) end

@@ -334,6 +334,55 @@ local function habits(presence, out)
     end
 end
 
+-- "Your story with them": a few dated sentences from your own journal, friends and enemies alike.
+function I.Story(record)
+    local out = {}
+    if type(record) ~= "table" then return out end
+    local function day(at) return GL.Safe(date, "%d/%m/%Y", at) or "?" end
+    local first, zone
+    for _, e in ipairs(record.history or {}) do
+        if type(e) == "table" and type(e.time) == "number" and (not first or e.time < first) then
+            first, zone = e.time, type(e.zone) == "string" and e.zone ~= "?" and e.zone or nil
+        end
+    end
+    first = math.min(first or math.huge, tonumber(record.firstSeen) or math.huge)
+    if first < math.huge then
+        out[#out + 1] = zone and L("Croisé pour la première fois le %s, %s."):format(day(first), zone)
+            or L("Croisé pour la première fois le %s."):format(day(first))
+    end
+    local groups = tonumber(record.groupCount) or 0
+    if groups > 0 then
+        local seconds = 0
+        for _, e in ipairs(record.history or {}) do
+            if type(e) == "table" and e.kind == "grouped" and GL.GroupDuration then seconds = seconds + GL.GroupDuration(e) end
+        end
+        local line = groups == 1 and L("Un groupe ensemble") or L("%d groupes ensemble"):format(groups)
+        if seconds >= 60 then
+            line = line .. " · " .. L("%d h %02d au total"):format(math.floor(seconds / 3600), math.floor(seconds / 60) % 60)
+        end
+        out[#out + 1] = line .. "."
+    end
+    local duels = type(record.duels) == "table" and record.duels or {}
+    if (duels.wins or 0) + (duels.losses or 0) > 0 then
+        out[#out + 1] = L("Duels : %d gagnés, %d perdus."):format(duels.wins or 0, duels.losses or 0)
+    end
+    local pvp = record.pvp or {}
+    if (pvp.deaths or 0) + (pvp.kills or 0) > 0 then
+        out[#out + 1] = L("Il vous a tué %d fois ; vous l’avez vaincu %d fois."):format(pvp.deaths or 0, pvp.kills or 0)
+    end
+    local fights = GL.Fights(record)
+    if fights[1] and GL.FightTitle then
+        out[#out + 1] = L("Dernier combat le %s : %s."):format(day(fights[1].at), GL.FightTitle(fights[1]))
+    end
+    local debt = GL.Debt(record)
+    if debt > 0 then
+        out[#out + 1] = L("Il vous doit encore %d."):format(debt)
+    elseif (pvp.deaths or 0) > 0 then
+        out[#out + 1] = L("Compte réglé.")
+    end
+    return out
+end
+
 -- The facts shown under "À savoir", most telling first.
 function I.Facts(record, guid)
     local out = {}

@@ -2153,7 +2153,9 @@ local function renderDetail()
         ledger.detailTitle:SetText(plain(record.fullName or record.name or record.key))
         ledger.detailIcon:SetTexture(media .. relationIcons[relation])
         local source = GL.RelationSource(record)
-        ledger.detailStatus:SetText(relationNames[relation])
+        local nemesisKey, companionKey = GL.Titles()
+        ledger.detailStatus:SetText(record.key == nemesisKey and L("Némésis") or record.key == companionKey and L("Compagnon")
+            or relationNames[relation])
         ledger.detailSource:SetText(({ manual = L("Avis personnel"), emote = L("Avis issu de vos gestes"), pvp = L("Avis issu du PvP"), guild = L("Avis hérité de la guilde"), automatic = L("Avis automatique"), neutral = L("Aucun avis") })[source] or L("Avis automatique"))
         ledger.detailStatus:SetTextColor(unpack(inkColors[relation]))
         local faction, race, class = identityLabels(record)
@@ -2656,12 +2658,12 @@ local function buildLedger()
         arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
         return opener, choices
     end
-    f.relationFilter, f.filters = filterMenu(36, { { L("Tous les avis"), "all" }, { L("Amis"), "friend" }, { L("Méfiance"), "warning" },
-        { L("Ennemis"), "enemy" }, { L("Neutres"), "neutral" } }, function(value) filter = value end)
+    f.relationFilter, f.filters = filterMenu(36, { { L("Tous les avis"), "all" }, { L("Comptes à régler"), "debt" }, { L("Amis"), "friend" },
+        { L("Méfiance"), "warning" }, { L("Ennemis"), "enemy" }, { L("Neutres"), "neutral" } }, function(value) filter = value end)
     f.factionFilter, f.factions = filterMenu(173, { { L("Toutes factions"), "all" }, { L("Alliance"), "Alliance" },
         { L("Horde"), "Horde" }, { L("Inconnue"), "unknown" } }, function(value) factionFilter = value end)
     if GL.TagChoices then
-        local options = { { L("Toutes les étiquettes"), "all" } }
+        local options = { { L("Toutes les étiquettes"), "all" }, { L("Tous les signalés"), "any" } }
         for _, entry in ipairs(GL.TagChoices) do options[#options + 1] = { L(entry[2]), entry[1] } end
         f.tagFilter, f.tagFilters = filterMenu(36, options, function(value) tagFilter = value end, 293, 147)
         f.sharedProfiles = button(f, L("Fiches de guilde"), 187, -293, 120, function()
@@ -3027,6 +3029,7 @@ refresh = function(focusSelected)
         ledger.detailScroll.page = 1
         ledger.toolsMenu:Hide()
     end
+    local nemesisKey, companionKey = GL.Titles()
     for i, row in ipairs(ledger.rows) do
         local record = i <= ledger.pageSize and records[offset + i]
         if record then
@@ -3035,7 +3038,9 @@ refresh = function(focusSelected)
             local color = colors[relation]
             row.name:SetText(plain(record.fullName or record.name or record.key))
             row.name:SetTextColor(color[1], color[2], color[3])
-            row.relation:SetText(relationNames[relation])
+            -- Your nemesis and your best companion wear their title instead of the plain relation.
+            local title = record.key == nemesisKey and L("Némésis") or record.key == companionKey and L("Compagnon")
+            row.relation:SetText(title or relationNames[relation])
             row.relation:SetTextColor(color[1], color[2], color[3])
             if relationIcons[relation] then
                 row.relationIcon:SetTexture(media .. relationIcons[relation])
@@ -3088,7 +3093,7 @@ refresh = function(focusSelected)
     for value, control in pairs(ledger.factions) do
         UI.selectButton(control, value == factionFilter)
     end
-    ledger.relationFilter:SetText(filter == "all" and L("Tous les avis") or relationNames[filter])
+    ledger.relationFilter:SetText(filter == "all" and L("Tous les avis") or filter == "debt" and L("Comptes à régler") or relationNames[filter])
     ledger.factionFilter:SetText(factionNames[factionFilter] or (factionFilter == "unknown" and L("Inconnue") or L("Toutes factions")))
     for value, control in pairs(ledger.tagFilters or {}) do
         UI.selectButton(control, value == tagFilter)

@@ -58,6 +58,25 @@ assert(recent and recent.value == "3", recent and recent.value)
 print("PASS fight grouping: one aggression per fight, a death or victory ends it, voided events leave it, "
     .. "one title per fight, weekly count of whole fights")
 
+-- "Your story with them": dated sentences, friends and enemies alike, and what is still owed.
+GL.RecordDuel(id, true)
+local story = table.concat(GL.CharacterInsights.Story(r), " | ")
+assert(story:find("Croisé pour la première fois le ", 1, true) and story:find("Duels : 1 gagnés, 0 perdus.", 1, true), story)
+assert(story:find("Il vous a tué 1 fois ; vous l’avez vaincu 0 fois.", 1, true), story)
+assert(story:find("Il vous doit encore " .. GL.Debt(r) .. ".", 1, true) and GL.Debt(r) > 0, story)
+-- Accounts to settle: only players who still owe you, the heaviest debt first.
+local light = GL.IdentityFromName("Light", "Debt", "Player-1-light")
+GL.RecordPvP(light, "death", "confirmed", "Direct", "light-d")
+local paid = GL.IdentityFromName("Paid", "Back", "Player-1-paid")
+GL.RecordPvP(paid, "death", "confirmed", "Direct", "paid-d")
+for i = 1, 5 do GL.RecordPvP(paid, "kill", "confirmed", "Direct", "paid-k" .. i) end
+local debts = GL.SearchPlayers({ relation = "debt" })
+assert(#debts == 2 and debts[1] == r and debts[2] == GL.Get(light), #debts)
+-- Titles: the nemesis killed you at least twice.
+GL.RecordPvP(light, "death", "confirmed", "Direct", "light-d2")
+local nemesis = GL.Titles()
+assert(nemesis == GL.Get(light).key, tostring(nemesis))
+
 -- Zones on the Habits tab: most crossings first, never the order of the visits.
 local zones = GL.CharacterInsights.ZoneList({ zones = { ["Tanaris"] = 2, ["Feralas"] = 7, ["Desolace"] = 2, ["Azshara"] = 1 } })
 assert(zones[1].name == "Feralas" and zones[2].name == "Desolace" and zones[3].name == "Tanaris" and zones[4].name == "Azshara")
