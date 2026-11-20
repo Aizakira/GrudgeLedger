@@ -10,6 +10,12 @@ local function closeTip(button)
     button.waitingForItem=nil
     if GameTooltip and GameTooltip.GetOwner and GameTooltip:GetOwner() == button then GameTooltip:Hide() end
 end
+-- A piece seen well before the latest snapshot may have been replaced since: say when it was seen.
+local function addSeenLine(button)
+    if button.seenAt then
+        GameTooltip:AddLine(L("Vu le %s, avant le dernier relevé."):format(date("%d/%m/%Y %H:%M",button.seenAt)),.95,.75,.35,true)
+    end
+end
 local function openTip(button)
     if not GameTooltip then return end
     GameTooltip:SetOwner(button, "ANCHOR_CURSOR")
@@ -18,6 +24,7 @@ local function openTip(button)
     if link and GameTooltip.SetHyperlink then
         GameTooltip:SetHyperlink(link)
         GameTooltip:AddLine(L("Maj + clic pour insérer dans la discussion."),.75,.75,.75)
+        addSeenLine(button)
         GameTooltip:Show()
         return
     end
@@ -28,6 +35,7 @@ local function openTip(button)
             GameTooltip:AddLine(line, 1, 1, 1, true)
         end
         GameTooltip:AddLine(L("Relevé Armurerie · lien en jeu indisponible."),.75,.75,.75,true)
+        addSeenLine(button)
     else
         GameTooltip:AddLine(button.hasVariant and L("Détails de l’objet indisponibles.")
             or L("Aucune pièce publiée pour cet emplacement."), 1, 1, 1, true)
@@ -71,6 +79,32 @@ local function slotButton(parent, slot, index)
     return b
 end
 
+-- Optional photos from the Avatar Replay Lab studio (a separate addon). Nothing is read when it
+-- is not installed; its read-only function returns the bust and the poses of a player.
+function GL.StudioPhotos(guid)
+    local api = type(AvatarReplayLabPhotos) == "table" and AvatarReplayLabPhotos
+    if not api or type(api.Get) ~= "function" or type(guid) ~= "string" then
+        return
+    end
+    local ok, photos = pcall(api.Get, guid)
+    if ok and type(photos) == "table" and type(photos.bust) == "string" and type(photos.poses) == "table" then
+        return photos
+    end
+end
+-- Pose shown on the equipment stage: the studio's own order when it gives one (its poses change
+-- between versions, "menace" replaced "recherche"), else this order; a click shows the next one.
+local POSE_ORDER = {"menace", "recherche", "combat", "amical", "vaincu", "moqueur"}
+local function poseList(photos)
+    local list, seen = {}, {}
+    local order = type(photos.order) == "table" and photos.order or POSE_ORDER
+    for _, name in ipairs(order) do
+        if type(name) == "string" and not seen[name] and type(photos.poses[name]) == "string" then
+            list[#list + 1], seen[name] = name, true
+        end
+    end
+    return list
+end
+
 local function clearModel(view)
     if view.modelUnit and view.model.ClearModel then view.model:ClearModel() end
     view.modelUnit,view.modelGUID=nil,nil
@@ -98,12 +132,27 @@ local function applyOutfit(view)
     end
 end
 
+-- Three levels: the live model when the player is visible, then the studio photos, then the
+-- standard model of the race wearing the recorded gear.
 local function layoutBody(view)
     local live=view.modelGUID~=nil
-    local outfit=not live and view.previewReady
+    local poses=not live and view.photos and poseList(view.photos) or {}
+    local photo=poses[(view.photoIndex-1)%math.max(1,#poses)+1]
+    local outfit=not live and not photo and view.previewReady
     view.preview:SetAlpha(outfit and 1 or 0)
-    if live or outfit then view.face:Hide() else view.face:Show() end
+    if live or outfit or photo then view.face:Hide() else view.face:Show() end
+    if photo then
+        view.photo:SetTexture(view.photos.poses[photo])
+        view.photo:Show()
+        view.photoButton:Show()
+    else
+        view.photo:Hide()
+        view.photoButton:Hide()
+    end
     local caption=live and L("Modèle en jeu") or outfit and L("Tenue reconstituée") or L("Portrait")
+    if photo then
+        caption=L("Photo du studio · %s"):format(GL.Safe(date,"%d/%m/%Y",view.photos.at) or "?")
+    end
     view.caption:SetText(caption)
     view.stage:Show()
     local rail=math.floor(view.w*.32)
@@ -164,6 +213,18 @@ local function build(parent,slots)
     view.face.classIcon=view.face:CreateTexture(nil,"OVERLAY")
     view.face.classIcon:SetSize(16,16)
     view.face.classIcon:SetPoint("BOTTOMRIGHT")
+    -- A studio photo is a 1:2 transparent cutout; a click on it shows the next pose.
+    view.photo=view.stage:CreateTexture(nil,"ARTWORK")
+    view.photo:SetPoint("BOTTOM",view.stage,"BOTTOM",0,24)
+    view.photo:Hide()
+    view.photoButton=CreateFrame("Button",nil,view.stage)
+    view.photoButton:SetAllPoints(view.photo)
+    view.photoButton:SetScript("OnClick",function()
+        view.photoIndex=view.photoIndex+1
+        layoutBody(view)
+    end)
+    view.photoButton:Hide()
+    view.photoIndex=1
     view.caption=oneLine(view.stage,11,UI.theme.ink)
     view.caption:SetPoint("BOTTOM",view.stage,"BOTTOM",0,8)
     view.caption:SetJustifyH("CENTER")
@@ -270,7 +331,11 @@ end
 function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetails)
     local view=parent.equipment or build(parent,slots)
     parent.equipment=view
+    if view.record~=record then
+        view.photoIndex=1
+    end
     view.record=record
+    view.photos=record and GL.StudioPhotos(record.guid)
     local w,h=parent:GetWidth(),parent:GetHeight()
     local rowHeight=math.min(45,math.floor((h-6)/9))
     view.w,view.h,view.rowHeight,view.rail=w,h,rowHeight,nil
@@ -282,7 +347,12 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
     view.caption:SetWidth(stageWidth-4)
     local faceSize=math.min(96,stageWidth-4,stageHeight-28)
     view.face:SetSize(faceSize,faceSize)
+    local photoHeight=stageHeight-30
+    view.photo:SetSize(photoHeight/2,photoHeight)
     GL.PaintBookPortrait(view.face,record)
+    -- Pieces older than the snapshot by more than an hour are marked, not hidden.
+    local pieceDates=type(profile.dates)=="table" and profile.dates.gear or {}
+    local snapshotAt=tonumber(profile.gearAt)
     local variantKeys={}
     if type(profile.gear)=="table" then
         for key in pairs(profile.gear) do
@@ -309,7 +379,9 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
         local icon=link and GL.Safe(C_Item and C_Item.GetItemIconByID or GetItemIcon,link) or (b.item and tonumber(item.icon))
         local texture=(icon and icon>0 and icon) or b.emptyIcon
         if texture then b.icon:SetTexture(texture) else b.icon:SetColorTexture(unpack(UI.theme.panel)) end
-        b.icon:SetAlpha((link or b.item or not texture) and 1 or .45)
+        local seen=not link and key and tonumber(pieceDates[key])
+        b.seenAt=seen and snapshotAt and snapshotAt-seen>3600 and seen or nil
+        b.icon:SetAlpha(((link or b.item or not texture) and 1 or .45)*(b.seenAt and .7 or 1))
         b.title:SetText(b.itemName or "—")
     end
     dressPreview(view,profile.identity)

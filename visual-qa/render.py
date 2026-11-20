@@ -207,6 +207,10 @@ def actual_texture(path):
         icon=CACHE / (path+".jpg")
         return Image.open(icon).convert("RGBA") if icon.is_file() else None
     parts = path.replace("\\", "/").split("/")
+    # Studio photos of the separate Avatar Replay Lab: synthetic stand-ins, never real captures.
+    if "AvatarReplayLab" in parts:
+        p = BASE / "fixtures" / "studio" / (parts[-1] + ".png")
+        return Image.open(p).convert("RGBA") if p.is_file() else None
     if "GrudgeLedger" in parts:
         p = ADDON.joinpath(*parts[parts.index("GrudgeLedger") + 1:])
         if not p.suffix: p = p.with_suffix(".tga")
@@ -352,6 +356,14 @@ def render(name, frames, root):
             if rect[2]>rect[0] and rect[3]>rect[1]: layer.alpha_composite(textlayer.crop(rect),(rect[0],rect[1]))
             if natural > h+3 and not r.get("maxLines") and r["kind"] == "FontString":
                 issues.append({"kind":"text_height", "id":r["id"], "text":r["text"][:110], "natural":round(natural,1),"available":round(h,1)})
+            # A wrapping text taller than its box leaves the box (owner report: a long spell name in a fact card).
+            parent_id = r.get("parent")
+            if r["kind"] == "FontString" and wrapping and not r.get("maxLines") and parent_id and parent_id != root                     and lay.frames[parent_id]["kind"] == "Button":
+                rx,ry,rw,rh = lay.resolve(r["id"])
+                px,py,pw,ph = lay.resolve(parent_id)
+                if ph > 0 and ry + natural/region_scale > py + ph + 3:
+                    issues.append({"kind":"text_outside_frame","id":r["id"],"text":r["text"][:110],
+                                   "bottom":round(ry + natural/region_scale - py,1),"frame_height":round(ph,1)})
         clip = lay.clip(r["id"],root)
         if name.startswith("minimap"): clip=(rb[0]-40,rb[1]-40,rb[0]+rb[2]+40,rb[1]+rb[3]+40)
         clip = (max(0,round(clip[0]+offsetx)),max(0,round(clip[1]+offsety)),min(canvas.width,round(clip[2]+offsetx)),min(canvas.height,round(clip[3]+offsety)))
@@ -436,8 +448,8 @@ def main():
               "honor-races", "honor-classes", "honor-zones", "honor-subzones", "honor-initiative",
               "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
               "guild-exceptions", "guild-rankings-largeprint-small",
-              "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details", "combat-report"]
-    views += ["bounty-target", "bounty-contract", "bounty-history", "dossier-gear", "dossier-talents", "dossier-pvp", "dossier-reputation", "dossier-shared"]
+              "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details", "combat-report", "death-report", "death-export"]
+    views += ["bounty-target", "bounty-contract", "bounty-history", "dossier-overview", "dossier-facts", "dossier-habits", "dossier-ally", "dossier-combat", "dossier-gear", "dossier-photos", "dossier-stats", "dossier-talents", "dossier-shared", "dossier-relations"]
     views += ["journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small", "guild-profiles"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.

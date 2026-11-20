@@ -39,6 +39,33 @@ contribution externe sans son accord explicite.
 
 Les règles actives sont consultables dans [Repository rules](https://github.com/Aizakira/GrudgeLedger/rules).
 
+## Règles de structure
+
+Cinq règles gardent l'addon modulaire pendant qu'il grandit. Le contrôle
+`tests/structure_test.lua` les vérifie à chaque lancement des tests ; s'il échoue,
+on corrige le code, pas le contrôle. Le texte de référence est dans
+[AGENTS.md](AGENTS.md).
+
+1. **Sens des dépendances.** Le cœur (`Core.lua`) n'appelle aucun autre fichier.
+   Il émet un événement ; les autres modules s'y abonnent.
+2. **Une seule porte vers le réseau.** Un seul fichier envoie et reçoit les
+   messages de guilde.
+3. **Une seule réponse pour les données d'un personnage.** Valeur, source,
+   fournisseur et date se décident à un seul endroit.
+4. **Code lisible.** Une instruction par ligne, des noms explicites, des lignes
+   de 160 caractères au plus.
+5. **Un seul document de référence.** Toute donnée sauvegardée et tout message de
+   guilde figurent dans [docs/protocole-et-sauvegarde.fr.md](docs/protocole-et-sauvegarde.fr.md).
+
+Les écarts d'aujourd'hui sont figés dans le contrôle : leur liste peut seulement
+raccourcir. Un module s'extrait quand une correction en a besoin, pas dans un
+chantier séparé.
+
+Un changement est terminé quand un petit test échoue si le défaut revient, que
+tous les tests passent, et qu'une recette courte en jeu a été faite par le
+propriétaire. Un changement réseau demande en plus un scénario à plusieurs
+clients. Un test simulé ne vaut pas une validation en jeu.
+
 ## Versions
 
 Utiliser une seule branche de référence, `main`, et un dossier installable, `GrudgeLedger/`. Incrémenter le numéro majeur.mineur.correctif dans le TOC à chaque diffusion. Le tag Git est `v<version>`. Le canal Alpha se règle sur GitHub (préversion) et CurseForge (Alpha). Après validation du commit, `python tools/package_addon.py` produit le ZIP commun aux deux plateformes à partir des fichiers suivis.

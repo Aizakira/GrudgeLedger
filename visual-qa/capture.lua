@@ -245,6 +245,24 @@ local function dossierExample()
     local id=GL.IdentityFromName("Isabeau","Clairfeuille",guid)
     id.class,id.className,id.race,id.raceName,id.faction,id.level="DRUID","Druide","NightElf","Elfe de la nuit","Alliance",41
     GL.Remember(id)
+    -- Two dated fights with both levels, so the overview and the Combats tab have content.
+    GL.RecordPvP(id,"kill","confirmed","fixture","qa-dossier-kill",{opponentLevel=41,playerLevel=40})
+    GL.RecordPvP(id,"death","confirmed","fixture","qa-dossier-death",{opponentLevel=41,playerLevel=39})
+    -- Example habits: openings, one fight report and visits over a week (example values).
+    local record=GL.Get("guid:"..guid)
+    local me,hour=UnitGUID("player"),3600
+    for i,opener in ipairs({"opponent","opponent","player","opponent"}) do
+        record.history[#record.history+1]={kind="opening",time=qaClock-i*30*hour,opener=opener,actorGUID=me,zone="Hurlevent"}
+    end
+    for _,e in ipairs(record.history) do
+        if e.kind=="death" then
+            e.report={live={{src=guid,dst=me,spell="Mot de l'ombre : Douleur",amount=80,at=1},{src=guid,dst=me,spell="Mot de l'ombre : Douleur",amount=75,at=2},
+                {src=guid,dst=me,spell="Racines enchevêtrées",at=3},{src="Player-999-00QAHELP",dst=me,from="Aldric Brisefer",spell="Frappe",amount=40,at=4}}}
+        end
+    end
+    for i,shift in ipairs({-7*24+9,-6*24+10,-5*24+9,-4*24+8,-3*24+9,-2*24+10,-2*24+2,-24+9,-24+11,-3}) do
+        GL.CharacterInsights.RecordVisit(guid,qaClock+shift*hour,i%3==0 and "Strangleronce" or "Forêt d’Elwynn")
+    end
     local p={level=41,updated=qaClock,averageItemLevel=37,identity={classFile="DRUID"},gear={},
         stats={HEALTH=1933,MANA=1894,STRENGTH=70,AGILITY=108,STAMINA=143,INTELLECT=84,CRITICALSTRIKE="6 %"},
         trees={{id="feral-combat",name="Combat farouche",points=8,
@@ -269,6 +287,8 @@ local function dossierExample()
     return guid
 end
 function QA.capture(name)
+    -- Only the dossier-photos view has the Avatar Replay Lab's photos.
+    AvatarReplayLabPhotos = nil
     hideWindows()
     records[10].tags = nil
     GL.SetSetting("readableFont", name:find("%-readable") ~= nil)
@@ -322,12 +342,85 @@ function QA.capture(name)
             end
             return GL.OpenBounties(opponent.guid,"view")
         end
+        if name:find("^dossier%-") then
+            -- Two archived contracts, older than the guild event log (example values).
+            local scope=GL.Bounties.GuildScope()
+            local hunter,day=records[4].guid,86400
+            scope.bountyRecords={[guid]={name="Isabeau Clairfeuille",at=qaClock-12*day,orders={
+                ["Player-1-qa:1"]={at=qaClock-45*day,owner=hunter,pot=600000,state="paid",endedAt=qaClock-45*day+7200,
+                    expires=qaClock-38*day,quota=1,hunter=hunter,helpers="Player-1-qa-helper",killedAt=qaClock-45*day+7200},
+                ["Player-1-qa:2"]={at=qaClock-12*day,owner=hunter,pot=250000,state="open",expires=qaClock-5*day,quota=1}}}}
+        end
+        if name=="dossier-relations" then
+            GL.GuildProfiles.Publish(GL.Get("guid:"..guid))
+            local scope=GL.Bounties.GuildScope()
+            scope.socialReports={qa={actor=records[4].guid,target=guid,seq=1,at=qaClock,received=qaClock,
+                authorName="Célestine Longuebrise",score=-11,relation="enemy",events={
+                    {kind="death",time=qaClock-1800,killingBlow=1,zone="Vallée de Strangleronce"},
+                    {kind="aggression",time=qaClock-1840,zone="Vallée de Strangleronce"}}}}
+        end
         assert(GL.OpenPlayerDossier(guid))
         local f=GrudgeLedgerPlayerDossier
-        if name=="dossier-shared" then
-            GrudgeLedgerArmory.profiles[guid].sharedSource="Player-1-qa-source"
-            GrudgeLedgerArmory.profiles[guid].sharedName="Célestine Longuebrise"
+        if name=="dossier-gear" then
+            -- A character seen over a week: level, guild and two pieces changed (example values).
+            local day=86400
+            GL.db.characterHistory=GL.db.characterHistory or {}
+            GL.db.characterHistory[guid]={seen=1794391200,state={},stateAt={},changes={
+                {at=1794391200-7*day,key="level",value=36},{at=1794391200,key="level",value=41},
+                {at=1794391200-7*day,key="guild",value="Les Sentinelles"},{at=1794391200-2*day,key="guild",value="Cercle d'Elune"},
+                {at=1794391200-7*day,key="gear:head",value=100},{at=1794391200-day,key="gear:head",value=101},
+                {at=1794391200-7*day,key="gear:chest",value=200},{at=1794391200,key="gear:chest",value=201}}}
             GL.OpenPlayerDossier(guid)
+        end
+        if name=="dossier-shared" then
+            -- A colleague's inspection, relayed by another member; the helmet was seen three days earlier.
+            local profile=GrudgeLedgerArmory.profiles[guid]
+            local at=1794391200
+            profile.gearAt=at
+            profile.provenance={gear={source="inspection",by="Player-1-qa-source",via="Player-1-qa-relay",at=at}}
+            profile.dates={gear={head=at-3*86400}}
+            local names={["Player-1-qa-source"]="Célestine Longuebrise",["Player-1-qa-relay"]="Aubin Clairval"}
+            local memberName=GL.Bounties.MemberName
+            GL.Bounties.MemberName=function(id) return names[id] or memberName(id) end
+            GL.OpenPlayerDossier(guid,nil,nil,"gear")
+            return f
+        end
+        if name=="dossier-facts" then
+            -- The first fact card opens the full list with its dated events.
+            f.overview.cards[1]:Click()
+            return f
+        end
+        if name=="dossier-habits" then
+            -- Thirty zones and many changes (example values) to show lists that turn their own pages.
+            for k=1,30 do GL.CharacterInsights.RecordVisit(guid,qaClock-k*7200,"Zone d’exemple "..k) end
+            f.tabs.habits:Click()
+            return f
+        end
+        if name=="dossier-ally" then
+            -- A player of your own faction never fought: groups, a trade and guild tags (example values).
+            local id=GL.IdentityFromName("Bastien","Griseforge","Player-999-00A11E")
+            id.class,id.className,id.race,id.raceName,id.faction,id.level="WARRIOR","Guerrier","Dwarf","Nain","Alliance",44
+            local ally=GL.Remember(id)
+            ally.faction="Alliance"
+            ally.tags={ninja=true,leaver=true}
+            GL.RecordGroup(id,"qa-group-1","Les Mortemines")
+            GL.RecordGroup(id,"qa-group-2","Les Mortemines")
+            GL.OpenPlayerDossier(id.guid)
+            return f
+        end
+        if name=="dossier-photos" then
+            -- The Avatar Replay Lab's read-only photo access, with synthetic example images.
+            local base="Interface/AddOns/AvatarReplayLab/Studio/example"
+            AvatarReplayLabPhotos={Get=function(g)
+                if g~=guid then return end
+                return {at=qaClock,bust=base.."-buste",poses={recherche=base.."-recherche",combat=base.."-combat"}}
+            end}
+            GL.OpenPlayerDossier(guid,nil,nil,"gear")
+            return f
+        end
+        if name=="dossier-stats" then
+            f.tabs.gear:Click()
+            f.statsToggle:Click()
             return f
         end
         f.tabs[name:sub(9)]:Click()
@@ -435,12 +528,35 @@ function QA.capture(name)
                 {kind="SWING_DAMAGE", at=103, src="Creature-1-wolf", from="Loup gris", dst=row.event.actorGUID, amount=58},
             }}
         end
+        if name == "kill-details" then
+            -- Both builds as recorded at the fight (example values).
+            row.event.build = {
+                opponent = {level=41, spec="31/0/20", specName="Restauration", ilvl=37, stats={HEALTH=1933}, at=1794391200, source="inspection"},
+                me = {level=40, ilvl=35, stats={HEALTH=1760}},
+            }
+        end
         local details = row.details
         details:Click()
         if name == "combat-report" then row.event.report = nil end
         if name == "kill-details" then assert(GrudgeLedgerCorrections.event.kind == "kill") end
         if name == "correction-voided" then GrudgeLedgerCorrections.confirm:Click() details:Click() end
         return GrudgeLedgerCorrections
+    elseif name == "death-report" or name == "death-export" then
+        -- The example druid's death: its blow-by-blow and both builds (example values).
+        local guid = dossierExample()
+        local contact = GL.Get("guid:" .. guid)
+        local death
+        for _, e in ipairs(contact.history) do
+            if e.kind == "death" then death = e end
+        end
+        death.combat.healthPct, death.combat.opponents = 92, 2
+        death.build = {opponent = {level=41, spec="0/31/20", specName="Combat farouche", ilvl=37, stats={HEALTH=1933, ARMOR=1650}},
+            me = {level=39, spec="0/5/31", specName="Givre", ilvl=33, stats={HEALTH=1480, MANA=2100, ARMOR=610}, gear={head=4387, chest=10021}}}
+        if name == "death-report" then
+            GL.InspectEvent(contact, death)
+            return GrudgeLedgerCorrections
+        end
+        return GL.DeathReport.ShowExport()
     elseif name == "diagnostic" then SlashCmdList.GRUDGELEDGER("debug") return GrudgeLedgerDiagnostic
     elseif name == "minimap" or name == "minimap-large" then
         Minimap:SetSize(name == "minimap" and 160 or 260, name == "minimap" and 160 or 260)

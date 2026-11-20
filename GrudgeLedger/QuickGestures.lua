@@ -18,7 +18,7 @@ end
 GL.On("READY", function()
     if bar then position() update() return end
     bar = CreateFrame("Frame", "GrudgeLedgerGestures", UIParent)
-    bar:SetSize(88, 40)
+    bar:SetSize(136, 40)
     bar:SetFrameStrata("MEDIUM")
     bar:SetMovable(true)
     bar:SetClampedToScreen(true)
@@ -26,6 +26,8 @@ GL.On("READY", function()
     for i, action in ipairs({
         { "KISS", "Bisou", "Interface\\AddOns\\GrudgeLedger\\Media\\GestureKiss", "Geste amical : +1 sur le joueur ciblé." },
         { "SPIT", "Crachat", "Interface\\Icons\\Spell_Nature_CorrosiveBreath", "Geste négatif : −1 sur le joueur ciblé." },
+        -- Placeholder icon until the dedicated artwork, in the style of the kiss, is drawn.
+        { "HELP", "Appeler la guilde", "Interface\\Icons\\INV_Misc_Horn_01", "Prévient votre guilde : le joueur ciblé et votre zone." },
     }) do
         local token = action[1]
         local b = CreateFrame("Button", nil, bar)
@@ -43,6 +45,15 @@ GL.On("READY", function()
         b:SetScript("OnClick", function(self)
             if self.dragged then self.dragged = nil return end
             if GL.Safe(IsControlKeyDown) then return end
+            if token == "HELP" then
+                local identity = GL.Identity("target")
+                local result = {}
+                if identity then GL.Emit("CALL_FOR_HELP", identity, nil, nil, result) end
+                GL.Print(result.sent and L("Guilde prévenue : %s."):format(identity.fullName:gsub("|", "||"))
+                    or identity and L("Appel non envoyé : hors guilde, ou un appel vient de partir. Réessayez dans un instant.")
+                    or L("Sélectionnez un joueur."))
+                return
+            end
             GL.SendGesture(token)
         end)
         b:SetScript("OnDragStart", function(self)
@@ -71,7 +82,8 @@ GL.On("READY", function()
             if token == "SPIT" then
                 GameTooltip:AddLine(L("Le /spit natif peut rester un crachat au sol : le jeu décide du texte reçu, même avec une cible."), 1, 0.75, 0.4, true)
             end
-            GameTooltip:AddLine(L("Même avis au plus une fois par 30 s.\nCtrl + glisser : déplacer les deux boutons."), 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(token == "HELP" and L("Au plus un appel toutes les dix secondes.\nCtrl + glisser : déplacer les boutons.")
+                or L("Même avis au plus une fois par 30 s.\nCtrl + glisser : déplacer les deux boutons."), 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
         end)
         b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)

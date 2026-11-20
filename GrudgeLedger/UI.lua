@@ -359,10 +359,39 @@ local function paintPortrait(row, record, unit, refreshUnit)
     animatedHead(row, record, unit, refreshUnit)
 end
 
+-- The animated head is a child frame: it would cover the row's own textures. The gold frame,
+-- the class icon and the level medallion live on an overlay kept above it (owner report, 0.30.0).
+local function portraitOverlay(row)
+    local overlay = row.portraitOverlay
+    if not overlay then
+        overlay = CreateFrame("Frame", nil, row)
+        row.portraitOverlay = overlay
+        overlay:SetAllPoints(row)
+        local anchor = row.faceAnchor or row.raceIcon
+        if row.portraitRim then
+            GL.Safe(row.portraitRim.SetParent, row.portraitRim, overlay)
+        else
+            row.portraitRim = overlay:CreateTexture(nil, "ARTWORK")
+            row.portraitRim:SetPoint("TOPLEFT", anchor, "TOPLEFT", -3, 3)
+            row.portraitRim:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 3, -3)
+            row.portraitRim:SetTexture(media .. "PortraitBezel")
+        end
+        GL.Safe(row.classIcon.SetParent, row.classIcon, overlay)
+    end
+    local base = row.headshot or row
+    local level = (GL.Safe(base.GetFrameLevel, base) or 1) + 2
+    GL.Safe(overlay.SetFrameLevel, overlay, level)
+    if row.levelBadge then GL.Safe(row.levelBadge.SetFrameLevel, row.levelBadge, level + 1) end
+    overlay:Show()
+    -- Hiding the face (showIf) hides its frame too.
+    row.raceIcon.portraitOverlay = overlay
+    if row.faceAnchor then row.faceAnchor.portraitOverlay = overlay end
+end
 local function identityIcons(row, record)
     row.classIcon:SetDrawLayer("OVERLAY")
     portraitRows[row] = record
     paintPortrait(row, record, portraitUnit(record))
+    portraitOverlay(row)
 end
 
 -- ponytail: the client paints a live texture, not a serializable image. Refresh
@@ -479,11 +508,12 @@ local function eventTitle(event)
         end
     end
     if event.kind == "trade" then return L("Échange terminé") end
+    -- Everyone who hit you during your death killed you, as in the scores; the killing blow is a detail.
     if event.kind == "death" then
-        if event.evidence == "Le familier de ce joueur vous a porté le coup fatal." then return L("Coup fatal de son familier") end
-        if event.killingBlow or event.evidence == "Dégâts létaux explicitement attribués à ce joueur." then return L("A porté le coup fatal") end
-        if event.killingBlow == false or event.evidence == "Participation à l’attaque ayant causé votre mort." then return L("A participé à votre mort") end
-        return L("Mort en combat")
+        if event.evidence == "Le familier de ce joueur vous a porté le coup fatal." then return L("Vous a tué · coup fatal de son familier") end
+        if event.killingBlow or event.evidence == "Dégâts létaux explicitement attribués à ce joueur." then return L("Vous a tué · coup fatal") end
+        if event.killingBlow == false or event.evidence == "Participation à l’attaque ayant causé votre mort." then return L("Vous a tué · avec d'autres joueurs") end
+        return L("Vous a tué")
     end
     if event.kind == "kill" then return L("Vous l'avez vaincu") end
     if event.kind == "aggression" then return L("Vous a infligé des dégâts") end
@@ -722,6 +752,11 @@ local function moveTo(region, x, y)
 end
 local function showIf(region, visible)
     if visible then region:Show() else region:Hide() end
+    -- A portrait takes its frame, class icon and medallion with it.
+    local overlay = region.portraitOverlay
+    if overlay then
+        if visible then overlay:Show() else overlay:Hide() end
+    end
 end
 -- The four-column texture follows the display order in GL.TagChoices.
 local function journalTags(parent, record, compact)
@@ -1210,6 +1245,7 @@ local function refreshJournal()
     f.heading:SetText(({ summary = L("Votre tableau d’honneur"), history = L("La chronique de vos rencontres"), story = L("Votre récit de campagne"), year = L("Une année de rencontres") })[f.mode])
     f.subtitle:SetText(scope .. " · " .. period)
     showIf(f.copyAnnual, annual)
+    showIf(f.exportDeaths, f.mode == "summary")
     if not annual then f.cardCopy:Hide() end
     local stats
     if not history then
@@ -1369,9 +1405,7 @@ local function refreshJournal()
         if stats.honorAwards > 0 then story[#story + 1] = honorDetail(stats) end
         story[#story + 1] = ""
         story[#story + 1] = subdued(L("Ce récit résume vos archives, pas l'ensemble de votre carrière. Champs de bataille et rapports annulés sont exclus."))
-        f.storyText:SetText(table.concat(story, "\n"))
-        f.storyBody:SetHeight(math.max(405, f.storyText:GetStringHeight() + 12))
-        f.storyScroll:SetVerticalScroll(math.min(f.storyScroll:GetVerticalScroll() or 0, math.max(0, f.storyBody:GetHeight() - f.storyScroll:GetHeight())))
+        f.storyPages:SetText(table.concat(story, "\n"), true)
     else
         local events = GL.JournalEvents(options)
         f.offset = math.min(f.offset, math.max(0, math.floor((#events - 1) / #f.rows) * #f.rows))
@@ -1449,6 +1483,10 @@ function GL.ShowJournal(mode)
             f.query, f.kind, f.period, f.scope, f.offset = "", "all", "all", "character", 0 f.search:SetText("") refreshJournal()
         end)
         f.help = label(f, "", nil, 36, -608, 256) f.help:SetTextColor(unpack(theme.muted)) f.help:SetHeight(46) journalFont(f.help, "GameFontHighlightSmall", 12)
+        -- Recent deaths as plain text for an AI assistant, without player names.
+        f.exportDeaths = button(f, L("Exporter mes morts pour une IA"), 36, -628, 256, function()
+            GL.DeathReport.ShowExport()
+        end)
         f.heading = label(f, "", "large", 372, -165, 532) f.heading:SetTextColor(unpack(theme.ink))
         journalFont(f.heading, "GameFontNormalLarge", 21)
         f.subtitle = label(f, "", nil, 372, -194, 532) f.subtitle:SetTextColor(unpack(theme.inkMuted))
@@ -1556,10 +1594,11 @@ function GL.ShowJournal(mode)
         f.breakdownPrevious = button(f.breakdown, "<", 808, -598, 42, function() f.breakdownOffset = math.max(0, f.breakdownOffset - #f.breakdownRows) refreshJournal() end, nil, true)
         f.breakdownNext = button(f.breakdown, ">", 862, -598, 42, function() f.breakdownOffset = f.breakdownOffset + #f.breakdownRows refreshJournal() end, nil, true)
         f.coverage = label(f.summary, "", nil, 356, -645, 548) f.coverage:SetTextColor(unpack(theme.inkMuted)) journalFont(f.coverage, "GameFontHighlightSmall", 12) f.coverage:SetHeight(17)
-        f.storyScroll = CreateFrame("ScrollFrame", nil, f.story, "UIPanelScrollFrameTemplate") f.storyScroll:SetPoint("TOPLEFT", 356, -221) f.storyScroll:SetSize(536, 405)
-        f.storyBody = CreateFrame("Frame", nil, f.storyScroll) f.storyBody:SetSize(531, 405)
-        f.storyText = label(f.storyBody, "", nil, 0, 0, 521) journalFont(f.storyText, "QuestFont_Large", 15) f.storyText:SetTextColor(unpack(theme.ink)) f.storyText:SetSpacing(5)
-        f.storyScroll:SetScrollChild(f.storyBody)
+        f.storyPages = UI.textPages(f.story, 536, 405)
+        f.storyPages:SetPoint("TOPLEFT", 356, -221)
+        f.storyText = f.storyPages.body
+        journalFont(f.storyText, "QuestFont_Large", 15)
+        f.storyText:SetSpacing(5)
         local annual = CreateFrame("Frame", nil, f)
         annual:SetPoint("TOPLEFT", 356, -213) annual:SetSize(548, 435)
         f.annual, annual.metrics, annual.recaps = annual, {}, {}
@@ -1679,6 +1718,36 @@ local function eventAction(e)
     return eventTitle(e) .. delta
 end
 
+-- One fight in one line: "Agression » Vous a tué · coup fatal » Vaincu avec votre groupe".
+function GL.FightTitle(fight)
+    local parts = {}
+    if fight.aggressions > 0 and fight.main and fight.main.kind ~= "aggression" then parts[1] = L("Agression") end
+    for _, e in ipairs(fight.events) do
+        if e.kind == "kill" and type(e.combat) == "table" and e.combat.assist then
+            parts[#parts + 1] = L("Vaincu avec votre groupe")
+        elseif e.kind ~= "aggression" then
+            parts[#parts + 1] = eventTitle(e)
+        end
+    end
+    if #parts == 0 then return L("Escarmouche sans mort · il vous a agressé") end
+    return table.concat(parts, " » ")
+end
+
+-- Reuse journal wording for personal facts; shared facts name both participants.
+function GL.HistoryTitle(e, actor, target)
+    if not actor then return eventAction(e) end
+    actor,target=plain(actor),plain(target)
+    if e.kind=="kill" then return L("%s a vaincu %s"):format(actor,target) end
+    if e.kind=="death" then
+        return L("%s a été tué par %s"):format(actor,target)
+    end
+    if e.kind=="aggression" then return L("%s a subi des dégâts de %s"):format(actor,target) end
+    if e.kind=="reputation" then return L("%s a modifié son avis sur %s"):format(actor,target).." · "..string.format("%+d",e.delta or 0) end
+    if e.kind=="reaction" then return L("%s a classé %s"):format(actor,target).." · "..(relationNames[e.reaction] or L("Automatique")) end
+    if e.kind=="trade" then return L("Échange entre %s et %s"):format(actor,target) end
+    return L("%s a partagé un groupe avec %s"):format(actor,target)
+end
+
 local function eventReason(e)
     if e.kind == "honor" then
         return honorRecipient(e) .. "\n" .. L("Le jeu annonce votre gain d’honneur. Plusieurs joueurs peuvent recevoir de l’honneur pour le même combat.")
@@ -1712,6 +1781,15 @@ local function renderCombatReport(f)
         if guid and guid == opponent then return f.who:GetText() end
         return plain(name or L("Source inconnue"))
     end
+    -- Both players' builds as recorded at the fight, before the blow-by-blow.
+    local build = GL.FightBuildText and GL.FightBuildText(e)
+    -- A death adds its report: damage by source and spell, killing blow, length of the fight.
+    local death = GL.DeathReport and GL.DeathReport.Text(e, opponent, f.who:GetText())
+    local tabs = report ~= nil and (e.kind == "kill" or e.kind == "death")
+    local view = tabs and (f.view or "summary") or "all"
+    local summary, blows = {}, {}
+    if build and view ~= "summary" then text[#text+1] = build end
+    if death then summary[#summary+1] = death end
     local dealt, received, others
     if rows and #rows > 0 then
         local lines = {}
@@ -1739,23 +1817,48 @@ local function renderCombatReport(f)
                     plain(action or L("Sort non identifié")), detail)
             end
         end
-        text[#text+1] = L("Dégâts observés") .. "\n" .. L("Infligés à l’adversaire") .. "  " .. (dealt or "—")
+        summary[#summary+1] = L("Dégâts observés") .. "\n" .. L("Infligés à l’adversaire") .. "  " .. (dealt or "—")
             .. "     ·     " .. L("Reçus de l’adversaire") .. "  " .. (received or "—")
             .. "\n" .. L("Reçus d’autres sources") .. "  " .. (others or "—")
-        if f.source == "live" and report.clipped then text[#text+1] = L("Seules les 64 dernières actions sont conservées.") end
-        text[#text+1] = #lines > 0 and table.concat(lines, "\n") or L("Aucun échange direct relevé.")
+        if f.source == "live" and report.clipped then blows[#blows+1] = L("Seules les 64 dernières actions sont conservées.") end
+        blows[#blows+1] = #lines > 0 and table.concat(lines, "\n") or L("Aucun échange direct relevé.")
     elseif e.kind == "kill" or e.kind == "death" then
-        text[#text+1] = L("Aucun relevé de dégâts disponible pour ce combat.")
+        summary[#summary+1] = L("Aucun relevé de dégâts disponible pour ce combat.")
     end
-    if f.evidenceText ~= "" then text[#text+1] = f.evidenceText end
-    f.proof:SetText(table.concat(text, "\n\n"))
-    f.body:SetHeight(math.max(f.scroll:GetHeight(), f.proof:GetStringHeight() + 8))
-    f.scroll:SetVerticalScroll(0)
+    if view == "summary" then
+        text = #summary > 0 and summary or { build or L("Aucun relevé de dégâts disponible pour ce combat.") }
+    elseif view == "builds" then
+        text = { build or L("Aucun build relevé pour ce combat.") }
+    elseif view == "proof" then
+        text = blows
+        if f.evidenceText ~= "" then text[#text+1] = f.evidenceText end
+    else
+        for _, part in ipairs(summary) do text[#text+1] = part end
+        for _, part in ipairs(blows) do text[#text+1] = part end
+        if f.evidenceText ~= "" then text[#text+1] = f.evidenceText end
+    end
+    -- Sub-tabs, and the blow-by-blow controls on the Preuves tab only.
+    local proof = view == "proof"
+    for key, b in pairs(f.views) do
+        showIf(b, tabs)
+        UI.selectButton(b, view == key)
+    end
+    showIf(f.section, not tabs)
+    showIf(f.all, proof) showIf(f.pair, proof)
+    showIf(f.otherSource, proof and report and report.live and report.recap)
+    f.scroll:ClearAllPoints()
+    f.scroll:SetPoint("TOPLEFT", 26, proof and -280 or -242)
+    f.scroll:SetHeight(tabs and (proof and 166 or 204) or 77)
+    f.scroll:SetText(table.concat(text, "\n\n"))
     UI.selectButton(f.pair, f.pairOnly) UI.selectButton(f.all, not f.pairOnly)
     f.otherSource:SetText(f.source == "live" and L("Voir les derniers coups reçus") or L("Voir les actions observées"))
     f.section:SetText(rows and (f.source == "recap" and L("Derniers coups reçus") or L("Actions observées")) or L("Pourquoi cet événement ?"))
 end
 
+-- The player dossier opens the same fight detail as the journal history.
+function GL.InspectEvent(record, e)
+    return inspectEvent(record, e)
+end
 inspectEvent = function(record, e)
     if not e or not record and e.kind ~= "honor" then return end
     if not correctionWindow then
@@ -1778,21 +1881,31 @@ inspectEvent = function(record, e)
         f.who = field(98, -122, 463, 28, 16)
         f.where = field(98, -156, 463, 45, 13)
         f.section = field(26, -209, 301, 26, 17)
-        f.otherSource = button(f, "", 329, -207, 229, function()
+        f.otherSource = button(f, "", 300, -241, 258, function()
             f.source = f.source == "live" and "recap" or "live"
             renderCombatReport(f)
         end, nil, true)
-        f.all = button(f, L("Tous les intervenants"), 26, -241, 205, function()
+        f.all = button(f, L("Tous les intervenants"), 26, -241, 150, function()
             f.pairOnly = false renderCombatReport(f)
         end, true, true)
-        f.pair = button(f, L("Nos échanges"), 239, -241, 166, function()
+        f.pair = button(f, L("Nos échanges"), 180, -241, 116, function()
             f.pairOnly = true renderCombatReport(f)
         end, true, true)
-        f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-        f.scroll:SetPoint("TOPLEFT", 26, -242) f.scroll:SetSize(510, 77)
-        local body = CreateFrame("Frame", nil, f.scroll) body:SetSize(500, 77)
-        f.proof = label(body, "", nil, 0, 0, 498) f.proof:SetTextColor(unpack(theme.ink))
-        f.scroll:SetScrollChild(body) f.body = body
+        -- A fight with a damage report reads in three sub-tabs instead of one long text.
+        f.views = {}
+        local vx = 26
+        for _, view in ipairs({ { "summary", L("Résumé"), 104 }, { "builds", L("Builds"), 90 }, { "proof", L("Preuves"), 100 } }) do
+            local key = view[1]
+            f.views[key] = button(f, view[2], vx, -207, view[3], function()
+                f.view = key
+                renderCombatReport(f)
+            end, true, true)
+            vx = vx + view[3] + 4
+        end
+        -- Pages instead of a scroll bar.
+        f.scroll = UI.textPages(f, 532, 77)
+        f.scroll:SetPoint("TOPLEFT", 26, -242)
+        f.proof = f.scroll.body
         f.effect = field(26, -334, 532, 49, 13)
         f.keep = button(f, L("Fermer"), 24, -396, 105, function() f:Hide() end, true, true)
         UI.selectButton(f.keep, true)
@@ -1807,11 +1920,7 @@ inspectEvent = function(record, e)
     local report = isCombat and e.report
     f.source, f.pairOnly = report and report.live and "live" or "recap", false
     f:SetHeight(report and 575 or 447)
-    f.scroll:ClearAllPoints()
-    f.scroll:SetPoint("TOPLEFT", 26, report and -280 or -242)
-    f.scroll:SetHeight(report and 166 or 77)
-    showIf(f.otherSource, report and report.live and report.recap)
-    showIf(f.all, report) showIf(f.pair, report)
+    f.view = "summary"
     f.title:SetText(isCombat and L("Détail du combat") or pvpNames[e.kind] and L("Vérifier cet événement") or L("Détails de la rencontre"))
     f.action:SetText(eventAction(e))
     if record then identityIcons(f, record) else portraitRows[f] = nil end
@@ -1844,7 +1953,8 @@ local function showDiagnostic(private)
         local f = window("GrudgeLedgerDiagnostic", L("Grudge Ledger — Diagnostic"), 660, 500)
         diagnosticWindow = f
         f.privacy = label(f, "", nil, 18, -54, 620)
-        f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+        f.scroll = CreateFrame("ScrollFrame", nil, f)
+        UI.wheelScroll(f.scroll)
         f.scroll:SetPoint("TOPLEFT", 22, -91)
         f.scroll:SetSize(590, 315)
         f.edit = CreateFrame("EditBox", nil, f.scroll)
@@ -2036,13 +2146,16 @@ local function renderDetail()
         ledger.detailSource:SetText("") ledger.detailGuild:SetText("")
         if ledger.headshot then ledger.headshot.active = nil; ledger.headshot:Hide() end
         ledger.raceIcon:Hide() ledger.classIcon:Hide() ledger.detailFaction:Hide()
+        if ledger.portraitOverlay then ledger.portraitOverlay:Hide() end
     else
         ledger.detailIcon:Show()
         local relation, pvp = GL.Relation(record), record.pvp or {}
         ledger.detailTitle:SetText(plain(record.fullName or record.name or record.key))
         ledger.detailIcon:SetTexture(media .. relationIcons[relation])
         local source = GL.RelationSource(record)
-        ledger.detailStatus:SetText(relationNames[relation])
+        local nemesisKey, companionKey = GL.Titles()
+        ledger.detailStatus:SetText(record.key == nemesisKey and L("Némésis") or record.key == companionKey and L("Compagnon")
+            or relationNames[relation])
         ledger.detailSource:SetText(({ manual = L("Avis personnel"), emote = L("Avis issu de vos gestes"), pvp = L("Avis issu du PvP"), guild = L("Avis hérité de la guilde"), automatic = L("Avis automatique"), neutral = L("Aucun avis") })[source] or L("Avis automatique"))
         ledger.detailStatus:SetTextColor(unpack(inkColors[relation]))
         local faction, race, class = identityLabels(record)
@@ -2071,8 +2184,9 @@ local function renderDetail()
             local deaths = (pvp.deaths or 0)
             local wins = (pvp.kills or 0)
             local hits = (pvp.aggressions or 0)
-            local formula = counted(deaths, "mort") .. " × −10  +  " .. counted(wins, "victoire")
-            if hits > 0 then formula = formula .. "  −  " .. counted(hits, "agression") end
+            -- The calculation in full, with today's weights: "2 agressions × −5 · 2 morts × −5 = −20".
+            local formula = GL.BalanceFormula(record)
+            if formula == "" then formula = counted(wins, "victoire") .. " × +1" end
             if gestures ~= 0 then
                 formula = (L("Combats %+.0f   ·   Gestes %+.0f")):format(raw, gestures)
             else
@@ -2153,10 +2267,8 @@ local function renderDetail()
             editor:Show()
         end
     end
-    ledger.detailText:SetText(table.concat(lines, "\n"))
     ledger.detailText:SetSpacing(GL.Settings().compactMode and 2 or 4)
-    ledger.detailBody:SetHeight(math.max(ledger.detailScroll:GetHeight(), ledger.detailText:GetStringHeight() + 12))
-    ledger.detailScroll:SetVerticalScroll(math.min(ledger.detailScroll:GetVerticalScroll(), math.max(0, ledger.detailBody:GetHeight() - ledger.detailScroll:GetHeight())))
+    ledger.detailScroll:SetText(table.concat(lines, "\n"), true)
 end
 
 local function enableRecognition()
@@ -2310,6 +2422,20 @@ showSettings = function()
         check("alerts", "enemyAlerts", L("Signaler une menace"), 251, 268)
         check("alerts", "sounds", L("Jouer un son"), 285, 268)
         check("alerts", "indirectAlerts", L("Signaux indirects de menace"), 318, 268)
+        -- Guild watch: receive on by default; sending reveals your zone, so it is opt-in.
+        settingText(p, L("Veille de guilde"), 356, 478, 275, 16)
+        check("alerts", "guildSightings", L("M’alerter des repérages"), 501, 270)
+        f.shareSightings = check("alerts", nil, L("Signaler mes repérages"), 501, 270, 638,
+            function(value)
+                GL.SharedDossiers.ShareSightings(value)
+                f:SyncControls()
+            end)
+        f.shareSightings:SetScript("OnEnter",function(self)
+            GameTooltip:SetOwner(self,"ANCHOR_TOP")
+            GameTooltip:AddLine(L("Envoie à votre guilde le nom du joueur et la zone où vous le voyez, au plus une fois toutes les deux minutes par joueur. Désactivé par défaut."),1,1,1,true)
+            GameTooltip:Show()
+        end)
+        f.shareSightings:SetScript("OnLeave",function() GameTooltip:Hide() end)
         range(p, "alertCooldown", L("Délai des menaces"), 356, 350, 261, 15, 3600, 15, delayText)
         settingText(p, L("Tester au-dessus du chat"), 638, 213, 275, 17)
         for i, entry in ipairs({{"enemy", L("Aperçu d’une menace")}, {"friend", L("Aperçu d’un ami")}}) do
@@ -2335,19 +2461,28 @@ showSettings = function()
         check("relations", "groupTracking", L("Compter les groupes avec mes contacts"), 267)
         check("relations", "tradeTracking", L("Consigner les échanges réussis avec mes contacts"), 299)
         settingText(p, L("Comment évolue une rancune ?"), 356, 340, 544, 18)
-        for i, rule in ipairs({{L("Il vous tue"),"−10"}, {L("Il vous agresse"),"−1"}, {L("Vous le vainquez"),"+1"}}) do
-            local x = 358+(i-1)*183
-            settingText(p, rule[1], x, 372, 178, 15)
-            settingText(p, rule[2], x, 396, 170, 19)
-        end
-        settingText(p, L("Les victoires compensent la dette de PvP. Seul un avis positif peut créer une amitié."), 356, 425, 548, 14)
-        settingText(p, L("Champs de bataille et arènes"), 356, 579, 548, 17)
-        settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 609, 548, 13, theme.inkMuted)
+        -- Each player sets their own weights; the balances are recomputed at once.
+        range(p, "grudgeAggression", L("Il vous agresse"), 356, 366, 261, 0, 10, 1, function(value) return "−" .. value end)
+        range(p, "grudgeDeath", L("Il vous tue"), 638, 366, 261, 0, 10, 1, function(value) return L("−%d de plus"):format(value) end)
+        settingText(p, L("Victoire : +1. Un agresseur reste ennemi même tué. Riposte : −1."), 356, 425, 548, 14)
+        settingText(p, L("Champs de bataille et arènes"), 356, 606, 548, 17)
+        settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 635, 548, 13, theme.inkMuted)
         f.shareGuild = settingText(p, "", 356, 461, 541, 16)
-        f.shareFights = check("relations", nil, L("Partager mes victoires et morts avec ma guilde"), 493, nil, nil,
+        f.shareFights = check("relations", nil, L("Partager mes victoires et morts avec ma guilde"), 489, nil, nil,
             function(value) GL.Bounties.ShareFights(value); f:SyncControls() end)
-        f.shareDeaths = check("relations", nil, L("Signaler mes morts pour les primes automatiques"), 530, nil, nil,
+        f.shareDeaths = check("relations", nil, L("Signaler mes morts pour les primes automatiques"), 520, nil, nil,
             function(value) GL.Bounties.ShareDeaths(value); f:SyncControls() end)
+        f.shareSocial = check("relations", nil, L("Partager mes faits datés et mon avis de guilde"), 551, nil, nil,
+            function(value) GL.SharedDossiers.ShareSocial(value); f:SyncControls() end)
+        f.shareSocial:SetScript("OnEnter",function(self)
+            GameTooltip:SetOwner(self,"ANCHOR_TOP")
+            GameTooltip:AddLine(L("Partage votre solde, votre relation et jusqu’à 32 faits récents par personnage publié ou mis à prix. Les notes et motifs libres restent privés."),1,1,1,true)
+            GameTooltip:Show()
+        end)
+        f.shareSocial:SetScript("OnLeave",function() GameTooltip:Hide() end)
+        -- What leaves without any box checked (audit 0.12.0, problem 8).
+        local publicHelp = L("Sans rien cocher, seuls vos relevés publics (Armurerie, inspection) répondent à la guilde.")
+        settingText(p, publicHelp, 356, 582, 548, 12, theme.inkMuted)
         p = f.pages.shortcuts
         check("shortcuts", "quickGestures", L("Afficher les boutons bisou et crachat"), 219)
         for i, entry in ipairs({{media.."GestureKiss", L("Envoyer un baiser · +1")}, {"Interface\\Icons\\Spell_Nature_CorrosiveBreath", L("Cracher · −1")}}) do
@@ -2389,6 +2524,10 @@ showSettings = function()
             if GL.Bounties and GL.Bounties.Sharing then fights, deaths = GL.Bounties.Sharing() end
             self.shareFights:SetChecked(fights == true); self.shareDeaths:SetChecked(deaths == true)
             self.shareFights:SetEnabled(guild ~= nil and GL.Bounties ~= nil); self.shareDeaths:SetEnabled(guild ~= nil and GL.Bounties ~= nil)
+            self.shareSocial:SetChecked(GL.SharedDossiers and GL.SharedDossiers.SharingSocial() or false)
+            self.shareSocial:SetEnabled(guild ~= nil and GL.SharedDossiers ~= nil)
+            self.shareSightings:SetChecked(GL.SharedDossiers and GL.SharedDossiers.SharingSightings() or false)
+            self.shareSightings:SetEnabled(guild ~= nil and GL.SharedDossiers ~= nil)
             self.shareGuild:SetText(guild and L("Partage avec %s"):format(UI.plain(guild)) or L("Partage de guilde · hors guilde"))
             self.readingLabel:SetText(L("Lecture : %d %%"):format(math.floor(settings.readingScale*100 + .5)))
             for key, slider in pairs(self.sliders) do slider:Sync(settings[key]) end
@@ -2517,12 +2656,12 @@ local function buildLedger()
         arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
         return opener, choices
     end
-    f.relationFilter, f.filters = filterMenu(36, { { L("Tous les avis"), "all" }, { L("Amis"), "friend" }, { L("Méfiance"), "warning" },
-        { L("Ennemis"), "enemy" }, { L("Neutres"), "neutral" } }, function(value) filter = value end)
+    f.relationFilter, f.filters = filterMenu(36, { { L("Tous les avis"), "all" }, { L("Comptes à régler"), "debt" }, { L("Amis"), "friend" },
+        { L("Méfiance"), "warning" }, { L("Ennemis"), "enemy" }, { L("Neutres"), "neutral" } }, function(value) filter = value end)
     f.factionFilter, f.factions = filterMenu(173, { { L("Toutes factions"), "all" }, { L("Alliance"), "Alliance" },
         { L("Horde"), "Horde" }, { L("Inconnue"), "unknown" } }, function(value) factionFilter = value end)
     if GL.TagChoices then
-        local options = { { L("Toutes les étiquettes"), "all" } }
+        local options = { { L("Toutes les étiquettes"), "all" }, { L("Tous les signalés"), "any" } }
         for _, entry in ipairs(GL.TagChoices) do options[#options + 1] = { L(entry[2]), entry[1] } end
         f.tagFilter, f.tagFilters = filterMenu(36, options, function(value) tagFilter = value end, 293, 147)
         f.sharedProfiles = button(f, L("Fiches de guilde"), 187, -293, 120, function()
@@ -2596,7 +2735,7 @@ local function buildLedger()
         row.relation:SetHeight(18)
         GL.Safe(row.relation.SetWordWrap, row.relation, false)
         GL.Safe(row.relation.SetMaxLines, row.relation, 1)
-        row:SetScript("OnClick", function(self) closeMenu() selectedKey = self.key f.detailScroll:SetVerticalScroll(0) refresh() end)
+        row:SetScript("OnClick", function(self) closeMenu() selectedKey = self.key f.detailScroll.page = 1 refresh() end)
         row:SetScript("OnEnter", function(self)
             local record = self.key and GL.Get(self.key)
             if not record or not GameTooltip then return end
@@ -2744,7 +2883,7 @@ local function buildLedger()
     for i, entry in ipairs({ { "summary", L("Synthèse") }, { "history", L("Histoire") }, { "notes", L("Notes") }, { "matchup", L("Face-à-face") } }) do
         local key = entry[1]
         f.detailTabs[key] = button(f, entry[2], 354 + (i - 1) * 112, -234, 108, function()
-            f.detailTab = key f.detailScroll:SetVerticalScroll(0) renderDetail()
+            f.detailTab = key f.detailScroll.page = 1 renderDetail()
         end, true, true)
     end
     f.detailTabs.dossier = button(f, L("Armurerie"), 802, -234, 111, dossier, true, true)
@@ -2772,9 +2911,9 @@ local function buildLedger()
     f.formula:SetTextColor(unpack(theme.ink)) f.formula:SetJustifyH("CENTER") f.formula:SetHeight(22)
     f.scoreContext = label(f.balancePanel, "", nil, 6, -151, 546)
     journalFont(f.scoreContext, "GameFontHighlightSmall", 11, true) f.scoreContext:SetTextColor(unpack(theme.inkMuted)) f.scoreContext:SetJustifyH("CENTER") f.scoreContext:SetHeight(17)
-    f.detailScroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    -- Pages instead of a scroll bar.
+    f.detailScroll = UI.textPages(f, 544, 230)
     f.detailScroll:SetPoint("TOPLEFT", 356, -379)
-    f.detailScroll:SetSize(544, 190)
     f.matchupHistory = button(f, L("Voir les combats dans l’histoire"), 356, -619, 293, function()
         f.detailTab, f.historyPage.kind, f.historyPage.offset = "history", "matchup", 0
         renderDetail()
@@ -2817,13 +2956,10 @@ local function buildLedger()
     p.prev = button(p, L("Précédent"), 61, -337, 124, function() p.offset = math.max(0, p.offset - #p.rows) renderDetail() end, nil, true)
     p.next = button(p, L("Suivant"), 373, -337, 124, function() p.offset = p.offset + #p.rows renderDetail() end, nil, true)
     p:HookScript("OnHide", function() p.menu:Hide() end)
-    f.detailBody = CreateFrame("Frame", nil, f.detailScroll)
-    f.detailBody:SetSize(539, 210)
-    f.detailText = label(f.detailBody, "", nil, 0, 0, 529)
+    f.detailBody = f.detailScroll
+    f.detailText = f.detailScroll.body
     journalFont(f.detailText, "QuestFont_Large", 15)
-    f.detailText:SetTextColor(unpack(theme.ink))
     f.detailText:SetSpacing(4)
-    f.detailScroll:SetScrollChild(f.detailBody)
     local hint = label(f, L("Votre choix personnel reste prioritaire."), nil, 356, -632, 181)
     f.hint = hint
     journalFont(hint, "GameFontHighlightSmall", 12, true)
@@ -2888,9 +3024,10 @@ refresh = function(focusSelected)
     elseif not selectionIndex or selectionIndex <= offset or selectionIndex > offset + ledger.pageSize then
         selectedKey = records[offset + 1] and records[offset + 1].key
         ledger.detailTab = "summary"
-        ledger.detailScroll:SetVerticalScroll(0)
+        ledger.detailScroll.page = 1
         ledger.toolsMenu:Hide()
     end
+    local nemesisKey, companionKey = GL.Titles()
     for i, row in ipairs(ledger.rows) do
         local record = i <= ledger.pageSize and records[offset + i]
         if record then
@@ -2899,7 +3036,9 @@ refresh = function(focusSelected)
             local color = colors[relation]
             row.name:SetText(plain(record.fullName or record.name or record.key))
             row.name:SetTextColor(color[1], color[2], color[3])
-            row.relation:SetText(relationNames[relation])
+            -- Your nemesis and your best companion wear their title instead of the plain relation.
+            local title = record.key == nemesisKey and L("Némésis") or record.key == companionKey and L("Compagnon")
+            row.relation:SetText(title or relationNames[relation])
             row.relation:SetTextColor(color[1], color[2], color[3])
             if relationIcons[relation] then
                 row.relationIcon:SetTexture(media .. relationIcons[relation])
@@ -2952,7 +3091,7 @@ refresh = function(focusSelected)
     for value, control in pairs(ledger.factions) do
         UI.selectButton(control, value == factionFilter)
     end
-    ledger.relationFilter:SetText(filter == "all" and L("Tous les avis") or relationNames[filter])
+    ledger.relationFilter:SetText(filter == "all" and L("Tous les avis") or filter == "debt" and L("Comptes à régler") or relationNames[filter])
     ledger.factionFilter:SetText(factionNames[factionFilter] or (factionFilter == "unknown" and L("Inconnue") or L("Toutes factions")))
     for value, control in pairs(ledger.tagFilters or {}) do
         UI.selectButton(control, value == tagFilter)
@@ -2981,7 +3120,7 @@ function GL.ShowLedger(key)
         ledger.query, ledger.detailTab = "", "summary"
         ledger.historyPage.kind, ledger.historyPage.offset = "all", 0
         ledger.search:SetText("")
-        ledger.detailScroll:SetVerticalScroll(0)
+        ledger.detailScroll.page = 1
     end
     showBook(ledger)
     refresh(true)
@@ -3052,7 +3191,8 @@ noteEditor = function()
     f.total = label(f, "", nil, 42, -293, 76) f.total:SetTextColor(unpack(theme.ink)) f.total:SetJustifyH("CENTER")
     f.noteInfo = label(f, "", nil, 176, -70, 376)
     journalFont(f.noteInfo, "GameFontNormalLarge", 16) f.noteInfo:SetTextColor(unpack(theme.ink))
-    local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", nil, f)
+    UI.wheelScroll(scroll)
     f.scroll = scroll
     scroll:SetPoint("TOPLEFT", 176, -105) scroll:SetSize(354, 148)
     f.edit = CreateFrame("EditBox", nil, scroll)

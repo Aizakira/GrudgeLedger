@@ -95,12 +95,12 @@ assert(f.mode == "history" and f.period == "year" and f.kind == "pvp" and f.scop
 click(f.reset)
 click(f.tabs.story)
 assert(f.story:IsShown() and not f.summary:IsShown() and not f.history:IsShown())
-assert(f.storyText:GetText():find("remporté 1 victoire", 1, true), "story must use the selected character, not account totals")
+assert(f.storyPages.fullText:find("remporté 1 victoire", 1, true), "story must use the selected character, not account totals")
 click(f.scopeButton)
-assert(f.storyText:GetText():find("remporté 2 victoires et subi 2 morts", 1, true))
-f.storyScroll:SetVerticalScroll(100000)
+assert(f.storyPages.fullText:find("remporté 2 victoires et subi 2 morts", 1, true))
+f.storyPages.page = 99
 click(f.periodButtons.week)
-assert(f.storyScroll:GetVerticalScroll() <= math.max(0, f.storyBody:GetHeight() - f.storyScroll:GetHeight()))
+assert(f.storyPages.page <= #f.storyPages.pages, "the story stays on an existing page")
 click(f.scopeButton) click(f.scopeButton) click(f.periodButtons.all)
 
 click(f.tabs.history)
@@ -162,10 +162,10 @@ assert(ledger.historyPage.kind == "matchup" and ledger.historyPage.total:GetText
 assert(ledger.historyPage.rows[1].event.eventId == "own-kill" and ledger.historyPage.rows[2].event.eventId == "own-death")
 GL.ShowLedger(rb.key)
 click(ledger.detailTabs.matchup)
-assert(ledger.detailText:GetText():find("Aucune victoire ni défaite", 1, true) and not ledger.matchupHistory:IsEnabled())
+assert(ledger.detailScroll.fullText:find("Aucune victoire ni défaite", 1, true) and not ledger.matchupHistory:IsEnabled())
 local _, probableLoss = GL.RecordPvP(b, "death", "confirmed", "fixture", "uncertain")
 assert(ledger.metrics.deaths.value:GetText() == "1" and not ledger.metrics.deaths.probable)
-assert(ledger.detailText:GetText():find("Derniers résultats", 1, true) and ledger.matchupHistory:IsEnabled())
+assert(ledger.detailScroll.fullText:find("Derniers résultats", 1, true) and ledger.matchupHistory:IsEnabled())
 local upgrade = {}
 for field, value in pairs(probableLoss) do upgrade[field] = value end
 upgrade.confidence = "confirmed"
@@ -191,7 +191,7 @@ do
     local m = GL.ContactMatchup(contact)
     assert(m.kills == 2 and m.deaths == 2 and m.run == 2 and m.lastKind == "kill")
     assert(m.recent[1] == last and #m.recent == 4 and m.closeDeaths.eventId == "second" and m.comeback.eventId == "revenge")
-    assert(GL.AutomaticBalance(contact) == balance and balance == -18)
+    assert(GL.AutomaticBalance(contact) == balance and balance == -8)
     assert(GL.VoidPvP(contact, last))
     assert(GL.ContactMatchup(contact).run == 1, "correcting an event takes effect on the next read")
 end
@@ -340,7 +340,7 @@ do
     local row = ledger.historyPage.rows[1]
     assert(row.event == revenge)
     click(row.details)
-    assert(GrudgeLedgerCorrections.proof:GetText():find("Revanche", 1, true))
+    assert(GrudgeLedgerCorrections.scroll.fullText:find("Revanche", 1, true))
     local report = GrudgeLedgerCorrections
     assert(report.proof:GetText():find("Aucun relevé de dégâts", 1, true))
     click(report.keep)
@@ -350,14 +350,19 @@ do
         {kind="SWING_DAMAGE", at=12, src="Creature-1-wolf", from="Loup gris", dst=revenge.actorGUID, amount=12},
     }, recap={{kind="SWING_DAMAGE", at=12, src=opponent.guid, dst=revenge.actorGUID, amount=32}}}
     click(row.details)
-    local function shows(s) return report.proof:GetText():find(s, 1, true) end
-    assert(shows("Infligés à l’adversaire  81") and shows("Reçus de l’adversaire  32") and shows("Reçus d’autres sources  12"))
+    local function shows(s) return report.scroll.fullText:find(s, 1, true) end
+    -- Three sub-tabs: the summary first, then builds and the blow-by-blow evidence.
+    assert(report.views.summary:IsShown() and shows("Infligés à l’adversaire  81") and shows("Reçus de l’adversaire  32")
+        and shows("Reçus d’autres sources  12") and not report.all:IsShown())
+    click(report.views.proof)
     assert(shows("+2 s   Loup gris") and shows("Éclair") and report.otherSource:IsShown())
     click(report.pair)
     assert(not shows("Loup gris") and shows("Éclair"))
     click(report.otherSource)
-    assert(report.section:GetText() == "Derniers coups reçus" and shows("Reçus de l’adversaire  32"))
-    assert(shows("Infligés à l’adversaire  —") and not shows("Éclair"))
+    assert(report.otherSource:GetText() == "Voir les actions observées" and not shows("Éclair"))
+    click(report.views.summary)
+    assert(shows("Reçus de l’adversaire  32") and shows("Infligés à l’adversaire  —"))
+    click(report.views.proof)
     click(report.otherSource) click(report.all)
     assert(shows("Loup gris"))
 end

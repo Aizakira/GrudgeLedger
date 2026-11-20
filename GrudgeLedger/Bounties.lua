@@ -4,7 +4,7 @@ local GL = GrudgeLedger
 local B = {}
 GL.Bounties = B
 local ML=GL.L or function(s) return s end
-local DAY, GOLD, PREFIX = 86400, 10000, "GLBounty1"
+local DAY, GOLD = 86400, 10000
 local function guid(s)
     return type(s) == "string" and #s <= 32 and s:match("^Player%-%w+%-%w+$")
 end
@@ -300,7 +300,7 @@ local function remember(orders,me)
                 GL.Print(ML("Prime remplacée pour %s. Consultez le contrat retenu dans votre historique."):format(o.name))
             elseif w and not o.supersededBy and (not previous or not previous.winner) and GL.Print then
                 if me==o.owner then
-                    GL.Print(ML("Prime accomplie : %s."):format(o.name).." "..(o.state=="paid" and ML("Aucun versement en attente.") or ML("Consultez les parts dans Primes → Mon historique.")))
+                    GL.Print(ML("Prime accomplie : %s."):format(o.name).." "..(o.state=="paid" and ML("Aucun versement en attente.") or ML("Consultez les parts dans Primes » Mon historique.")))
                 elseif w.actor==me then GL.Print(ML("Prime accomplie : %s."):format(o.name)) end
             end
         elseif history[id] and history[id].state=="superseded" then history[id]=nil end
@@ -324,6 +324,91 @@ function B.History()
         return result,expires
     end
     return GL.db and GL.db.bountyHistory and GL.db.bountyHistory[GL.Safe(UnitGUID,"player")] or {}
+end
+-- A compact record per target, so the sheet keeps its bounty dossier after the
+-- 38-day rotation of guild events. Each member keeps the copy of what they saw.
+local MAX_RECORD_ORDERS, MAX_RECORD_TARGETS = 30, 400
+local function compact(o)
+    local total=0
+    for _,amount in pairs(o.pot) do
+        total=total+amount
+    end
+    local w=o.winner
+    return {at=o.at,owner=o.owner,pot=total,state=o.state,endedAt=o.endedAt,expires=o.expires,quota=o.quota,
+        hunter=w and w.actor,helpers=w and w.detail~="" and w.detail or nil,killedAt=w and w.time}
+end
+local function trim(map,limit,date)
+    local keys={}
+    for key in pairs(map) do
+        keys[#keys+1]=key
+    end
+    if #keys<=limit then
+        return
+    end
+    table.sort(keys,function(a,b) return date(map[a])>date(map[b]) end)
+    for i=limit+1,#keys do
+        map[keys[i]]=nil
+    end
+end
+local function archive(s,orders)
+    s.bountyRecords=s.bountyRecords or {}
+    local records=s.bountyRecords
+    for id,o in pairs(orders) do
+        local r=records[o.target]
+        if o.supersededBy then
+            if r then
+                r.orders[id]=nil
+            end
+        elseif not o.archived and guid(o.target) then
+            r=r or {orders={}}
+            r.name,r.at=o.name,math.max(r.at or 0,o.at)
+            r.orders[id]=compact(o)
+            records[o.target]=r
+            trim(r.orders,MAX_RECORD_ORDERS,function(c) return c.at end)
+        end
+    end
+    trim(records,MAX_RECORD_TARGETS,function(r) return r.at or 0 end)
+end
+-- The bounty dossier of one target: live orders first, then what was archived.
+function B.TargetRecord(target)
+    local s=scope()
+    local result={orders={},count=0,promised=0,killed=0,expired=0,withdrawn=0,completed=0,honored=0}
+    if not s or not guid(target) then
+        return result
+    end
+    local entries={}
+    local saved=s.bountyRecords and s.bountyRecords[target]
+    for id,c in pairs(saved and saved.orders or {}) do
+        entries[id]=c
+    end
+    for id,o in pairs(view(s)) do
+        if o.target==target and not o.archived then
+            entries[id]=not o.supersededBy and compact(o) or nil
+        end
+    end
+    for id,c in pairs(entries) do
+        local e={id=id}
+        for k,v in pairs(c) do
+            e[k]=v
+        end
+        if e.state=="open" and e.expires and GL.Now()>e.expires then
+            e.state="expired"
+        end
+        result.orders[#result.orders+1]=e
+        result.count,result.promised=result.count+1,result.promised+(e.pot or 0)
+        if e.hunter then
+            result.killed=result.killed+1
+        end
+        if e.state=="expired" or e.state=="withdrawn" then
+            result[e.state]=result[e.state]+1
+        end
+        if e.state=="paid" or e.state=="sent" or e.state=="fulfilled" then
+            result.completed=result.completed+1
+            result.honored=result.honored+(e.state=="paid" and 1 or 0)
+        end
+    end
+    table.sort(result.orders,function(a,b) return a.at>b.at end)
+    return result
 end
 function B.List()
     local s=scope()
@@ -366,7 +451,6 @@ function B.Due(o,payer,hunter)
     local due=B.Payment(o,payer,hunter)
     return due
 end
-local queue,queued,active={}, {},nil
 local joined, openTargets, indexedScope
 local reconcileInbox
 local draft,pending,hooked,selectedOrder
@@ -378,6 +462,7 @@ local function changed(s,me)
         if scope()~=s then return end
         local orders=view(s)
         remember(orders,me)
+        archive(s,orders)
         local uncertain=s.mailUncertain and s.mailUncertain[me]
         if uncertain and uncertain.offset then
             local o=orders[uncertain.id] or GL.db.bountyHistory[me][uncertain.id]
@@ -396,17 +481,11 @@ local function changed(s,me)
     else refresh() end
 end
 local function schedule(s,msg)
-    if active~=s then active,queue,queued=s,{},{} end
-    if not queued[msg] then queue[#queue+1]=msg; queued[msg]=true end
+    GL.Transport.Send(s,msg)
 end
 B.GuildScope = scope
 function B.SendJournal(s, message)
     schedule(s, "J;" .. message)
-end
-function B.SendDossier(s,messages)
-    if active==s and #queue+#messages>512 then return false end
-    for _,msg in ipairs(messages) do schedule(s,"J;"..msg) end
-    return true
 end
 -- Per-member cumulative totals survive replay and offline catch-up.
 local function mergeScore(s,actor,target,wins,losses)
@@ -633,7 +712,11 @@ local function receive(msg,sender)
     budget.n=budget.n+1
     if budget.n>45 then return end
     if msg:sub(1,2)=="J;" then
+        -- S1 is the 0.12.0 dossier protocol. Members still on it are ignored on purpose.
         if msg:sub(3,5)=="S1;" then
+            return
+        end
+        if msg:sub(3,5)=="S2;" then
             if sender~=me and GL.SharedDossiers then GL.SharedDossiers.Receive(s,sender,msg:sub(3)) end
             return
         end
@@ -961,7 +1044,9 @@ end
 local function join()
     local s,me=scope()
     if s and (not lastPrune or GL.Now()-lastPrune>=3600) then
-        remember(view(s,true),me)
+        local everything=view(s,true)
+        remember(everything,me)
+        archive(s,everything)
         for k,raw in pairs(s.events) do
             local e=unpackEvent(raw)
             -- Keep the recipient's own receipts available to payers who return after rotation.
@@ -988,8 +1073,12 @@ for _,event in ipairs({"MAIL_SHOW","MAIL_INBOX_UPDATE","MAIL_SEND_SUCCESS","MAIL
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 frame:RegisterEvent("GUILD_ROSTER_UPDATE")
-frame:RegisterEvent("CHAT_MSG_ADDON")
-frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
+GL.Transport.OnReceive(function(msg,sender)
+    if not GetGuildRosterInfo or not GetNumGuildMembers then return end
+    sender=GL.Clean(sender,"string")
+    if sender and roster[sender] then receive(GL.Clean(msg,"string"),roster[sender]) end
+end)
+frame:SetScript("OnEvent",function(_,event)
     if event=="MAIL_INBOX_UPDATE" then scanInbox(); return end
     if event=="MAIL_SHOW" then
         scanInbox()
@@ -1031,25 +1120,9 @@ frame:SetScript("OnEvent",function(_,event,prefix,msg,channel,sender)
         if MailFrame and MailFrame:IsShown() then showPayment() end
         return
     end
-    if not (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix and C_ChatInfo.SendAddonMessage and C_Timer and C_Timer.NewTicker) then return end
+    if not GL.Transport.Available() then return end
     if event=="PLAYER_LOGIN" then
         joined=nil
-        C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
-        C_Timer.NewTicker(0.5,function()
-            if #queue==0 then return end
-            local s=scope()
-            if s and s==active then
-                local text=queue[1]
-                local ok,result=pcall(C_ChatInfo.SendAddonMessage,PREFIX,text,"GUILD")
-                if not ok or (result~=nil and Enum and Enum.SendAddonMessageResult and result==Enum.SendAddonMessageResult.AddonMessageThrottle) then return end
-                table.remove(queue,1); queued[text]=nil
-            end
-        end)
-    elseif event=="CHAT_MSG_ADDON" then
-        if prefix~=PREFIX or channel~="GUILD" or not GetGuildRosterInfo or not GetNumGuildMembers then return end
-        sender=GL.Clean(sender,"string")
-        if sender and roster[sender] then receive(GL.Clean(msg,"string"),roster[sender]) end
-        return
     end
     refreshRoster()
     join()

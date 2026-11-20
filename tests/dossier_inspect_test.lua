@@ -28,7 +28,7 @@ GetCurrentRegion=function() return 3 end
 GetLocale=function() return "frFR" end
 GetInventoryItemLink=function(_,id) if ready and id==1 then return link end end
 C_PaperDollInfo={GetInspectItemLevel=function() return 33 end}
-for _,name in ipairs({"Core","UITheme","UI","DossierEquipment","DossierTalentData","DossierTalents","DossierInspect","PlayerDossier"}) do
+for _,name in ipairs({"Core","UITheme","UI","DossierEquipment","DossierTalentData","DossierTalents","DossierInspect","DossierPanels","PlayerDossier"}) do
     assert(loadfile(TEST_ROOT.."/"..name..".lua"))("GrudgeLedger")
 end
 local GL=GrudgeLedger
@@ -46,11 +46,15 @@ GL.VisiblePortraitUnit=function(record)
     if UnitGUID("target")==record.guid then return "target" end
 end
 local identity=GL.Identity("target")
+-- Without a journal entry, the snapshot goes to the guild dossier (saved) instead of being lost.
+local handedOver
+GL.On("DOSSIER_INSPECTED",function(target,snapshot) handedOver={target=target,snapshot=snapshot} end)
 GL.InspectDossierUnit("target",guid)
 assert(requests==1 and not GL.Get(identity),"precombat capture must not create contacts")
+assert(handedOver and handedOver.target==guid and handedOver.snapshot.stats.HEALTH==1933,"inspection handed to the guild dossier")
 local record=GL.RecordPvP(identity,"death","confirmed","fixture","hit")
 assert(record.inspection.stats.HEALTH==1933 and record.inspection.stats.MANA==1894 and not record.inspection.stats.ARMOR)
-assert(GL.OpenPlayerDossier(guid))
+assert(GL.OpenPlayerDossier(guid,nil,nil,"gear"))
 local f=GrudgeLedgerPlayerDossier
 assert(f.source:GetText():find("Inspection en cours",1,true))
 assert(f.armoryURL=="https://worldofwarcraft.blizzard.com/fr-fr/forever/eu/armory/character/aqua-water")
@@ -72,18 +76,18 @@ head:GetScript("OnClick")(head,"LeftButton")
 assert(inserted==link,"native item variant must survive")
 mock.units.target=nil
 advance(30)
-assert(requests==2 and GL.OpenPlayerDossier(guid) and head.itemName=="Heaume")
+assert(requests==2 and GL.OpenPlayerDossier(guid,nil,nil,"gear") and head.itemName=="Heaume")
 local other="Player-9-00EF"
 mock.units.target={name="Other",surname="Player",guid=other}
 CanInspect=function() return false end
-assert(GL.OpenPlayerDossier(other))
+assert(GL.OpenPlayerDossier(other,nil,nil,"gear"))
 assert(not GL.Get("guid:"..other) and head.inspectedLink==link,"visible cached links work without inspect permission")
 mock.units.target=nil
-assert(GL.OpenPlayerDossier("Player-9-0010") and not head.inspectedLink)
+assert(GL.OpenPlayerDossier("Player-9-0010",nil,nil,"gear") and not head.inspectedLink)
 assert(not f.source:GetText():find("en cours",1,true),"unreachable players must not be shown as loading")
 -- A new website snapshot supersedes an older inspection.
 GrudgeLedgerArmory={items={{name="Armory helm"}},profiles={[guid]={gear={head=1},updated=1794455000000}}}
-assert(GL.OpenPlayerDossier(guid) and not head.inspectedLink and head.itemName=="Armory helm")
+assert(GL.OpenPlayerDossier(guid,nil,nil,"gear") and not head.inspectedLink and head.itemName=="Armory helm")
 -- A GUID-only kill starts an inspect while visible. A reused nameplate must never fill its victim's page.
 local late="Player-9-000A"
 mock.units.target={name="Late",surname="Arrival",guid=late}

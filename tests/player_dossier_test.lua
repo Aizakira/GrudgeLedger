@@ -3,7 +3,7 @@ local mock=assert(loadfile(TEST_WORK.."/tests/wow_mock.lua"))()
 assert(loadfile(TEST_ROOT.."/Core.lua"))("GrudgeLedger")
 assert(loadfile(TEST_ROOT.."/UITheme.lua"))()
 assert(loadfile(TEST_ROOT.."/UI.lua"))()
-for _,n in ipairs({"Bounties","DossierEquipment","DossierTalentData","DossierTalents","PlayerDossier"}) do assert(loadfile(TEST_ROOT.."/"..n..".lua"))() end
+for _,n in ipairs({"Tags","Transport","Bounties","DossierEquipment","DossierTalentData","DossierTalents","DossierPanels","PlayerDossier"}) do assert(loadfile(TEST_ROOT.."/"..n..".lua"))() end
 local GL=GrudgeLedger
 GL.InitDB()
 local guid="Player-1-00AB"
@@ -39,35 +39,90 @@ local returned=false
 assert(GL.OpenPlayerDossier(guid,function() returned=true end))
 local f=GrudgeLedgerPlayerDossier
 local function click(b) b.scripts.OnClick(b,"LeftButton") end
+-- The sheet has pages instead of a scroll bar: walk them all, from the first.
+local function eachRow(visit)
+    while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
+    repeat
+        for _,r in ipairs(f.rows) do
+            if r:IsVisible() and visit(r) then return r end
+        end
+        local more=f.pageNext:IsShown() and f.pageNext:IsEnabled()
+        if more then click(f.pageNext) end
+    until not more
+end
 local function all()
     local visible={}
-    for _,r in ipairs(f.rows) do if r:IsVisible() then visible[#visible+1]=r.caption:GetText().." "..r.amount:GetText() end end
+    eachRow(function(r) visible[#visible+1]=r.caption:GetText().." "..r.amount:GetText() end)
+    while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
     return table.concat(visible,"\n")
 end
 assert(f:IsShown() and f.navigation.ledger.active and f.nameLabel:GetText()==record.fullName)
-local summary=f.observed:GetText()
-assert(summary:find("Niveau Armurerie : 29",1,true))
-assert(summary:find("Niveau adverse au combat : 21",1,true) and summary:find("Votre niveau au combat : 20",1,true))
+-- The sheet opens on the overview, one page of tiles and cards. The identity column keeps the
+-- highest known level, the verdict as pills and nine key figures on every tab.
+local o=f.overview
+assert(f.page=="overview" and o:IsVisible() and not f.body:IsVisible() and not f.equipment:IsVisible())
+assert(not f.identityScroll and not f.scroll,"no scroll frame on the sheet")
+assert(f.identity:GetText():find("Niv. 29",1,true) and f.identity:GetText():find("Restoration",1,true),f.identity:GetText())
 assert(record.level==19 and record.history[1].combat.opponentLevel==21)
+-- Labelled rows: "Vous" with the calculation as its tooltip, then "Guilde".
+assert(f.pills[1].label:GetText():find(" · ",1,true) and f.pills[1].note:GetText()=="Vous")
+assert(f.pills[1].tip and f.pills[1].tip:find("^Votre solde : "),f.pills[1].tip)
+assert(f.pills[2].label:GetText()=="Aucun avis" and f.pills[2].note:GetText()=="Guilde")
+-- The gold frame and the class icon sit on an overlay above the animated head.
+assert(f.portrait.portraitOverlay and f.portrait.portraitRim and f.portrait.portraitOverlay:IsShown())
 local cells={}
 for _,c in ipairs(f.statCells) do if c:IsVisible() then cells[c.label:GetText()]=c.value:GetText() end end
-assert(cells.Vie=="1721" and cells["Agilité"]=="99" and cells["Coup critique"]=="5,6 %" and cells["Dégâts"]=="11 – 22")
+-- Seven lines: health, power, item level, the three statistics of the class, honorable kills.
+local shown=0
+for _ in pairs(cells) do shown=shown+1 end
+assert(shown==7 and cells.Vie=="1721" and cells.Mana=="—" and cells["Niv. objet"]=="24" and cells["Vict. honorables"]=="396")
+assert(cells.Critique=="5,6 %",cells.Critique)
+-- Tiles: you against them, the guild, the last encounter, bounties.
+assert(o.tiles[1].value:GetText()=="1 V / 0 D" and o.tiles[2].value:GetText()=="3 V / 5 D" and o.tiles[2].detail:GetText()=="1 membres")
+assert(o.tiles[3].value:GetText():find("^Vous : ") and o.tiles[4].value:GetText()=="Aucune")
+assert(o.lastText:GetText():find("lui 21, vous 20",1,true),o.lastText:GetText())
+-- The last fight opens the same detail as the journal history.
+click(o.lastLink)
+assert(GrudgeLedgerCorrections and GrudgeLedgerCorrections:IsShown(),"the fight detail opens from the sheet")
+GrudgeLedgerCorrections:Hide()
+click(f.tabs.gear)
 local eq=f.equipment.equipment
-assert(f.equipment:IsVisible() and not f.scroll:IsVisible() and #eq.buttons==19)
+assert(f.equipment:IsVisible() and not f.body:IsVisible() and #eq.buttons==19)
 local b=eq.buttons[4]
 assert(b.itemName=="Woven mantle" and b.item==cape and not b:GetScript("OnClick"))
 local details=b.itemDetails(b.item)
 for _,s in ipairs({"31","Endurance","Enchanted: +2 Nature","Wind dance","Long description","42","50000"}) do assert(details:find(s,1,true),s) end
 assert(eq.buttons[14].itemName=="Same ID, other variant")
+click(f.statsToggle)
+assert(not f.equipment:IsVisible() and f.body:IsVisible())
+assert(all():find("Agilité 99",1,true) and all():find("Coup critique 5,6 %",1,true) and all():find("Dégâts 11 – 22",1,true),all())
+click(f.statsToggle)
+assert(f.equipment:IsVisible() and not f.body:IsVisible())
 click(f.tabs.talents)
-assert(not f.equipment:IsVisible() and f.talents:IsVisible() and not f.scroll:IsVisible())
-click(f.tabs.pvp)
+assert(not f.equipment:IsVisible() and f.talents:IsVisible() and not f.body:IsVisible() and not f.statsToggle:IsVisible())
+click(f.tabs.combat)
+-- Four sub-tabs: you, the guild, bounties, the Armory.
+assert(f.combatTabs.you:IsVisible() and f.combatTab=="you")
+assert(all():find("1 / 0",1,true) and all():find("Niveaux : lui 21 · vous 20",1,true),"dated fights are listed with both levels")
+click(f.combatTabs.guild)
+assert(all():find("3 / 5",1,true))
+assert(all():find("Guild Victim 1 V / 3 D",1,true),"guild member deaths remain separate from personal history")
+click(f.combatTabs.armory)
 assert(all():find("396",1,true) and all():find("Rang JcJ 0",1,true) and all():find("Account champion (compte)",1,true))
 assert(all():find("Arathi 3 parties · 2 V / 1 D",1,true))
-assert(all():find("1 / 0",1,true) and all():find("3 / 5",1,true))
-assert(all():find("Guild Victim 1 V / 3 D",1,true),"guild member deaths remain separate from personal history")
-click(f.tabs.reputation)
-assert(all():find("Forge Amical · 1200 / 6000",1,true) and not all():find("Arathi",1,true))
+click(f.combatTabs.you)
+assert(not f.tabs.reputation and not f.tabs.pvp,"the Factions tab is gone")
+GL.AddNote(id,"My private note")
+click(f.tabs.relations)
+assert(all():find("Ce que chacun en pense",1,true) and all():find("Vous 1 V / 0 D",1,true),all())
+assert(all():find("My private note",1,true) and all():find(GL.HistoryTitle(record.history[1]),1,true),all())
+for i=1,45 do GL.AddNote(id,"Page note "..i) end
+-- 45 more notes: the timeline continues on further pages, turned by the arrows or the wheel.
+assert(f.pageNext:IsShown() and f.pageNext:IsEnabled() and not f.pagePrev:IsEnabled() and f.pageLabel:GetText():find("^1 / "))
+click(f.pageNext); assert(f.pageNumber==2 and f.pagePrev:IsEnabled())
+f.body.scripts.OnMouseWheel(f.body,1); assert(f.pageNumber==1,"the wheel turns the pages back")
+assert(all():find("Page note 1\n",1,true) or all():find("Page note 1 ",1,true),"every note is on some page")
+click(f.tabs.combat); assert(f.pageNumber==1)
 click(f.back)
 assert(returned and not f:IsShown())
 -- Guild-only targets and missing archive rows must never create a personal journal entry.
@@ -75,15 +130,18 @@ mock.units.player.guild=nil
 local other="Player-42-000B"
 assert(GL.OpenPlayerDossier(other,nil,"Other | captain"))
 assert(f.nameLabel:GetText()=="Other || captain" and not GL.Get("guid:"..other))
-assert(not eq.buttons[4].item and not f.statCells[1]:IsShown() and not f.observed:GetText():find("21",1,true))
+click(f.tabs.gear)
+assert(not eq.buttons[4].item and f.statCells[1].value:GetText()=="—" and f.pills[1].label:GetText()=="Aucune rencontre")
 GrudgeLedgerArmory.profiles[other]={identity={name="Public name",class="Hunter",race="Orc",faction="Horde",guild="Archive guild"},gear={back=999}}
 assert(GL.OpenPlayerDossier(other))
-assert(f.nameLabel:GetText()=="Public name" and f.identity:GetText():find("Orc · Hunter · Horde",1,true))
+click(f.tabs.gear)
+assert(f.nameLabel:GetText()=="Public name" and f.identity:GetText():find("Hunter",1,true) and f.identity:GetText():find("Orc · Horde",1,true))
+assert(f.identity:GetText():find("<Archive guild>",1,true))
 assert(eq.buttons[4].hasVariant and not eq.buttons[4].item)
 local known=0
 GL.OpenContactBounty=function(g) assert(g==other); known=known+1 end
 click(f.bounty); assert(known==1)
-click(f.tabs.pvp)
+click(f.tabs.combat)
 assert(all():find("Aucune rencontre personnelle enregistrée",1,true))
 assert(not GL.OpenPlayerDossier("|Tbad"))
 -- A same-faction chat contact has no unit token or GUID. Exercise the Journal
@@ -100,6 +158,7 @@ GL.Settings().guideSeen=true
 GL.ShowLedger(named.key)
 assert(GrudgeLedgerWindow.detailIdentity:GetText():find("Gnome",1,true))
 click(GrudgeLedgerWindow.detailTabs.dossier)
+click(f.tabs.gear)
 assert(f:IsShown() and f.nameLabel:GetText()=="Named Friend" and eq.buttons[4].itemName=="Woven mantle")
 assert(GL.Relation(named)=="enemy" and named.armorySnapshot.gear.back.name=="Woven mantle")
 local broken={}
@@ -110,7 +169,9 @@ assert(GL.ArmoryProfile(named,true)==named.armorySnapshot and GL.ArmoryItem(name
 GrudgeLedgerArmory.profiles["eu:"..named.key]={alias=named.key,region="eu",characterHex="2a",updated=101,gear={}}
 assert(GL.ArmoryProfile(named)==named.armorySnapshot)
 GrudgeLedgerArmory=nil
-assert(GL.OpenPlayerDossier(named.key) and f.statCells[1].value:GetText()=="123" and eq.buttons[4].itemName=="Woven mantle")
+assert(GL.OpenPlayerDossier(named.key) and f.statCells[1].value:GetText()=="123")
+click(f.tabs.gear)
+assert(eq.buttons[4].itemName=="Woven mantle")
 assert(GL.ArmoryProfile(named).trees[1].points==2)
 GetCurrentRegion=function() return 1 end
 assert(not GL.ArmoryProfile(named))
@@ -121,4 +182,34 @@ assert(GL.Relation(promoted)=="enemy" and not GL.ArmoryProfile(promoted))
 assert(GL.OpenPlayerDossier("Player-42-00CA",nil,"Guild Contact"))
 assert(GL.db.armoryRequests["guid:Player-42-00CA|guild contact"]==GL.Now())
 assert(not GL.Get("guid:Player-42-00CA"),"requesting a guild dossier must not add it to the journal")
-print("PASS dossier: exact item variants, canonical slots, long effects, talents, provenance, private vs guild scores, guild-only identity and return")
+-- Same format for a player of your faction you never fought: groups, trades and tags.
+local friendId=GL.IdentityFromName("Same","Faction","Player-1-00F7")
+friendId.faction="Alliance"
+local ally=GL.Remember(friendId)
+ally.faction="Alliance"
+assert(GL.ToggleTag(friendId,"ninja"))
+GL.RecordGroup(friendId,"same-place","Mortemines")
+assert(GL.OpenPlayerDossier(friendId.guid))
+assert(f.tabs.combat:GetText()=="Rencontres","Combats reads Encounters for your own faction")
+assert(f.overview.tiles[1].caption:GetText()=="En groupe avec vous" and f.overview.tiles[1].value:GetText()=="1 fois")
+local tagged
+for _,pill in ipairs(f.pills) do if pill:IsShown() and pill.label:GetText()=="Butin ninja" then tagged=true end end
+assert(tagged,"tags are pills in the identity column")
+local figures={}
+for _,c in ipairs(f.statCells) do if c:IsVisible() then figures[c.label:GetText()]=c.value:GetText() end end
+assert(figures.Groupes=="1" and figures["Échanges"]=="0")
+click(f.tabs.combat)
+assert(all():find("Vos rencontres",1,true) and all():find("Signalements de la guilde",1,true),all())
+-- Key figures follow the class: a priest shows Intelligence and Spirit, a warrior Strength.
+local priest=GL.Remember(GL.IdentityFromName("Shadow","Priest","Player-42-00C1"))
+priest.class="PRIEST"
+assert(GL.OpenPlayerDossier(priest.guid))
+local labels={}
+for _,c in ipairs(f.statCells) do if c:IsVisible() then labels[c.label:GetText()]=true end end
+assert(labels.Intelligence and labels.Esprit and not labels.Force,"priest figures")
+priest.class="WARRIOR"
+assert(GL.OpenPlayerDossier(priest.guid))
+labels={}
+for _,c in ipairs(f.statCells) do if c:IsVisible() then labels[c.label:GetText()]=true end end
+assert(labels.Force and labels.Armure and not labels.Esprit,"warrior figures")
+print("PASS dossier: overview first, fixed identity column with verdict and key figures, combats tab, stats in equipment, exact item variants, canonical slots, long effects, talents, provenance, private vs guild scores, guild-only identity and return")

@@ -25,7 +25,7 @@ local function drag(frame, x, y)
     frame:GetScript("OnDragStop")(frame)
     at(frame, x, y)
 end
-for _, file in ipairs({"Core", "UITheme", "UI", "Bounties", "DossierEquipment", "PlayerDossier", "BountyUI"}) do
+for _, file in ipairs({"Core", "UITheme", "UI", "Transport", "Bounties", "DossierEquipment", "DossierPanels", "PlayerDossier", "BountyUI"}) do
     assert(loadfile(TEST_ROOT .. "/" .. file .. ".lua"))("GrudgeLedger")
 end
 local GL = GrudgeLedger

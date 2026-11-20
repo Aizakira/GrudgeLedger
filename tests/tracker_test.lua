@@ -258,6 +258,40 @@ test("secret hostility and secret combat-log identity skipped", function()
     assert(count() == 0)
 end)
 
+-- Owner report: a kill with a groupmate was not counted, nor a groupmate avenging your death.
+local function groupWith(mate)
+    unitData.party1, groupSize = mate, 2
+    IsInGroup = function() return true end
+end
+test("a groupmate's killing blow on a player you fought is your victory", function()
+    local e = start(opponent("grouped-kill"))
+    cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
+    local mate = { guid = "Player-1-mate", name = "Compagnon", surname = "Groupe", isPlayer = true }
+    groupWith(mate)
+    cle("PARTY_KILL", mate, e)
+    local record = GL.Get("guid:" .. e.guid)
+    local kill = record.history[#record.history]
+    assert(record.pvp.kills == 1 and kill.kind == "kill" and kill.combat.assist == "Compagnon")
+    assert(#GL.Fights(record) == 1 and GL.Fights(record)[1].kills == 1, "the blow and the victory are one fight")
+    cle("PARTY_KILL", mate, opponent("stranger"))
+    assert(total("kills") == 1, "a groupmate's kill of a player you never fought is not yours")
+    IsInGroup = nil
+end)
+test("a groupmate who avenges your death wins the same fight", function()
+    local e = start(opponent("avenged"))
+    cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
+    T.HandleEvent("PARTY_KILL", e.guid, unitData.player.guid)
+    now = now + 20
+    local mate = { guid = "Player-1-mate", name = "Compagnon", surname = "Groupe", isPlayer = true }
+    groupWith(mate)
+    cle("PARTY_KILL", mate, e)
+    local record = GL.Get("guid:" .. e.guid)
+    assert(record.pvp.deaths == 1 and record.pvp.kills == 1, tostring(record.pvp.deaths) .. "/" .. tostring(record.pvp.kills))
+    local fights = GL.Fights(record)
+    assert(#fights == 1 and fights[1].main.kind == "death" and fights[1].aggressions == 1)
+    IsInGroup = nil
+end)
+
 test("confirmed kill requires personal source and player victim", function()
     local e = opponent("known")
     cle("PARTY_KILL", opponent("other"), e)
@@ -742,6 +776,54 @@ test("unrated group members do not enter the journal but can be marked during a 
     assert(record.groupCount == 1, "marking the current companion starts one remembered session")
 end)
 
+-- Owner report: a dungeon with a stranger, marked Friend afterwards, showed no group.
+test("a stranger marked after the group still gets that group", function()
+    unitData.party1 = opponent("dungeon") groupSize = 2
+    local identity = GL.Identity("party1")
+    T.ScanGroup()
+    groupSize = 0 unitData.party1 = nil T.ScanGroup()
+    assert(GL.Get(identity) == nil, "the stranger is not added to the book")
+    local record = GL.SetReaction(identity, "friend")
+    assert(record.groupCount == 1 and record.history[#record.history].kind == "grouped")
+    unitData.party1 = opponent("dungeon") groupSize = 2 T.ScanGroup()
+    assert(record.groupCount == 2, "grouping again later is a new session")
+    unitData.party1 = opponent("late") groupSize = 2 T.ScanGroup()
+    groupSize = 0 unitData.party1 = nil T.ScanGroup()
+    now = now + 7 * 3600
+    local late = GL.SetReaction(GL.IdentityFromName("Alex", "late", "Player-1-late"), "friend")
+    assert(late.groupCount == 0, "after six hours the group is forgotten")
+end)
+
+-- 0.31.0: the friendly side. A long group with a stranger offers to add them; duels are remembered.
+test("a good group with a stranger offers to add them, once", function()
+    local offers = {}
+    GL.On("COMPANION_SUGGESTION", function(identity, seconds) offers[#offers + 1] = { identity, seconds } end)
+    unitData.party1 = opponent("goodgroup") groupSize = 2
+    T.ScanGroup()
+    now = now + 600 T.ScanGroup()
+    groupSize = 0 unitData.party1 = nil T.ScanGroup()
+    assert(#offers == 0, "ten minutes is too short")
+    unitData.party1 = opponent("goodgroup") groupSize = 2 T.ScanGroup()
+    now = now + 400 T.ScanGroup()
+    groupSize = 0 unitData.party1 = nil T.ScanGroup() T.ScanGroup()
+    assert(#offers == 1 and offers[1][1].guid == "Player-1-goodgroup" and offers[1][2] >= 900, #offers)
+    local record = GL.AdjustReputation(offers[1][1], 1, "Groupe apprécié", "manual")
+    assert(GL.Relation(record) == "friend" and record.groupCount == 1, "accepting keeps the group")
+end)
+test("duels are remembered apart from the grudge balance", function()
+    DUEL_WINNER_KNOCKOUT = "%1$s a triomphé de %2$s en duel"
+    DUEL_WINNER_RETREAT = "%2$s a fui devant %1$s en duel"
+    unitData.target = { guid = "Player-1-duelist", name = "Rival", surname = "Amical", isPlayer = true }
+    T.HandleEvent("CHAT_MSG_SYSTEM", "Testeur Exemple a triomphé de Rival Amical en duel")
+    local record = GL.Get("guid:Player-1-duelist")
+    assert(record and record.duels.wins == 1 and record.duels.losses == 0 and record.reputation == 0)
+    T.HandleEvent("CHAT_MSG_SYSTEM", "Testeur Exemple a fui devant Rival Amical en duel")
+    assert(record.duels.losses == 1 and record.pvp.kills == 0 and record.pvp.deaths == 0)
+    T.HandleEvent("CHAT_MSG_SYSTEM", "Autre Joueur a triomphé de Encore Autre en duel")
+    assert(record.duels.wins == 1 and record.duels.losses == 1, "other people's duels are ignored")
+    DUEL_WINNER_KNOCKOUT, DUEL_WINNER_RETREAT = nil, nil
+end)
+
 test("untracked but identified roster members do not preserve departed friends", function()
     unitData.party1 = opponent("companion") groupSize = 2
     local record = GL.SetReaction(GL.Identity("party1"), "friend")
@@ -846,6 +928,11 @@ test("explicit hostile damage is confirmed once per encounter", function()
     assert(total("aggressions") == 1)
     T.HandleEvent("PLAYER_REGEN_ENABLED")
     now = now + 5
+    cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
+    assert(total("aggressions") == 1, "a new blow within two minutes is the same fight")
+    T.HandleEvent("PLAYER_REGEN_ENABLED")
+    now = now + 130
+    T.HandleEvent("PLAYER_REGEN_DISABLED")
     cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
     assert(total("aggressions") == 2)
 end)
@@ -1484,7 +1571,7 @@ test("manual opinions override fatal inference but guild friendship does not", f
     end
     fixture() start() local automatic = GL.SetReaction(GL.Identity("target"), "neutral")
     T.HandleEvent("PLAYER_DEAD")
-    assert(GL.Relation(automatic) == "enemy" and automatic.reputation == -10)
+    assert(GL.Relation(automatic) == "enemy" and automatic.reputation == -5)
     fixture() start() local id = GL.Identity("target") id.guild, id.realm = "Friendly Guild", "Forever"
     GL.Remember(id) GL.SetGuildReaction(id, "friend")
     T.HandleEvent("PLAYER_DEAD")

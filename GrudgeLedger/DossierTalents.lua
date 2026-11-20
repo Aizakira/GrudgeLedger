@@ -173,6 +173,21 @@ function GL.DrawDossierTalents(parent,record,profile)
         parent.talentSurface:SetColorTexture(.11,.09,.08)
         parent.talentBackground:SetVertexColor(.49,.49,.49)
     end
+    if not parent.talentSummary then
+        parent.talentSummary=UI.label(parent,"",nil,6,-4,width-12)
+        UI.journalFont(parent.talentSummary,"GameFontHighlight",13)
+        parent.talentSummary:SetTextColor(unpack(UI.theme.ink))
+        GL.Safe(parent.talentSummary.SetMaxLines,parent.talentSummary,2)
+    end
+    -- The trees speak for themselves; the specialization is written in the identity column.
+    local summary=nil
+    parent.talentSummary:SetText(summary or "")
+    -- The trees start below the summary when there is one.
+    local top=summary and 40 or 0
+    for _,texture in ipairs({parent.talentSurface,parent.talentBackground}) do
+        texture:ClearAllPoints()
+        texture:SetPoint("TOPLEFT",0,-top)
+    end
     for _,button in ipairs(parent.talentButtons) do hideTip(button); button:Hide() end
     for _,t in ipairs(parent.talentLabels) do t:Hide() end
     for _,line in ipairs(parent.talentLines) do line:Hide() end
@@ -198,13 +213,13 @@ function GL.DrawDossierTalents(parent,record,profile)
             local name=L(d.fr)
             local points=branch and branch.points or (known and 0)
             local left=(i-1)*bw
-            if i>1 then line(left,3,1,336) end
+            if i>1 then line(left,top+3,1,336) end
             labels=labels+1
-            caption(parent,labels,name.."\n"..(points and (points.." pts") or "—"),left+2,5,bw-4)
+            caption(parent,labels,name.."\n"..(points and (points.." pts") or "—"),left+2,top+5,bw-4)
             local positions={}
             for _,node in ipairs(d.nodes) do
                 local x=left+math.floor((bw-4*35)/2)+35*node[3]
-                local y=51+42*node[4]
+                local y=top+51+42*node[4]
                 n=n+1
                 local button=drawNode(parent,n,x,y,node,ranked[node[1]],known)
                 positions[node[1]]={x=x+16,y=y+16,node=node,button=button}
@@ -227,11 +242,14 @@ function GL.DrawDossierTalents(parent,record,profile)
                 end
             end
         end
-        height=349
-        labels=labels+1
-        caption(parent,labels,known and L("En couleur : points investis. En gris : talent non appris.")
-            or L("Répartition incomplète ou non publiée. Les rangs inconnus sont indiqués au survol."),5,height,width-10,true)
-        height=height+39
+        height=top+349
+        -- The summary replaces the colour legend once the distribution is known.
+        if not (summary and known) then
+            labels=labels+1
+            caption(parent,labels,known and L("En couleur : points investis. En gris : talent non appris.")
+                or L("Répartition incomplète ou non publiée. Les rangs inconnus sont indiqués au survol."),5,height,width-10,true)
+            height=height+39
+        end
     end
     if #extras>0 then
         labels=labels+1

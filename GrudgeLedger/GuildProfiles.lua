@@ -12,6 +12,28 @@ known.unreliable=true
 
 local function guid(s) return type(s)=="string" and #s<=32 and s:match("^Player%-%w+%-%w+$") end
 local function hex(s,n) return type(s)=="string" and #s==n and s:match("^[0-9a-f]+$") end
+-- One vote per account, but an identifier of its own in each guild: the same account in two
+-- guilds can no longer be linked through its cards (audit 0.12.0, step D).
+-- The guild key (realm/name) as 16 hex digits, the form the digest accepts.
+local function guildHex(key)
+    local a,b=7,131
+    for i=1,#key do
+        a=(a*31+key:byte(i))%4294967291
+        b=(b*37+key:byte(i))%4294967279
+    end
+    return ("%08x%08x"):format(a,b)
+end
+local function guildAccount(s,account)
+    if not hex(account,16) or type(s.guildKey)~="string" or not GL.RevocationDigest then return end
+    local digest=GL.RevocationDigest(account..guildHex(s.guildKey))
+    return digest and digest:sub(1,16)
+end
+-- This account's identifier in the current guild.
+function G.Account()
+    local s=B.GuildScope()
+    local _,_,account=GL.Author()
+    return s and guildAccount(s,account)
+end
 local function title(s) return type(s)=="string" and #s>0 and #s<=64 and not s:find("[;|%c]") end
 local function positive(s,max)
     local n=tonumber(s)
@@ -141,6 +163,7 @@ function G.Publish(record)
     local s,me=B.GuildScope()
     if not s or not record or not guid(record.guid) or not title(record.fullName) then return end
     local actor,author,account=GL.Author()
+    account=guildAccount(s,account)
     if actor~=me or not hex(account,16) then return end
     local j=state(s)
     local existing=find(s,record.guid)
@@ -230,6 +253,7 @@ function G.SetTag(c,tag,on)
     local s,me=current(c)
     if not s or state(s).hidden[c.target] or not known[tag] or type(on)~="boolean" then return end
     local actor,name,account=GL.Author()
+    account=guildAccount(s,account)
     if actor~=me or not hex(account,16) then return end
     local _,_,latest=G.View(c)
     local old=latest[me..":"..tag]

@@ -63,7 +63,7 @@ local book = GrudgeLedgerWindow
 click(book.detailTabs.history) click(book.historyPage.options.trade)
 assert(book.historyPage.rows[2].title:GetText() == "Échange terminé" and book.historyPage.rows[2].hint:GetText():find("Étoffe",1,true))
 click(book.historyPage.rows[2].details)
-assert(GrudgeLedgerCorrections.proof:GetText():find("Donné : 1 po 2 pa 3 pc",1,true))
+assert(GrudgeLedgerCorrections.scroll.fullText:find("Donné : 1 po 2 pa 3 pc",1,true))
 local oldactor = units.player.guid
 units.player.guid = "Player-7-another"
 assert(#GL.JournalEvents({kind="trade",scope="character"}) == 0)

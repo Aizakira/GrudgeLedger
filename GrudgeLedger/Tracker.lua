@@ -300,7 +300,17 @@ local function combatSnapshot(f, identity, viaPet, credit)
     return snapshot
 end
 
-local function creditKill(identity, confidence, evidence, native)
+-- The name of a member of your party or raid, or nil.
+local function groupmate(guid)
+    if not GL.Safe(IsInGroup) then return nil end
+    local prefix = GL.Safe(IsInRaid) and "raid" or "party"
+    for i = 1, math.min(GL.Clean(GL.Safe(GetNumGroupMembers), "number") or 0, 40) do
+        if GL.Safe(UnitGUID, prefix .. i) == guid then return GL.Clean(GL.Safe(UnitName, prefix .. i), "string") or "?" end
+    end
+    return nil
+end
+
+local function creditKill(identity, confidence, evidence, native, assist)
     if not enabled() or not identity then return end
     local key = identity.guid or identity.key
     local now, previous = GL.Now(), recentCredits[key] or (identity.alias and recentCredits[identity.alias])
@@ -319,6 +329,10 @@ local function creditKill(identity, confidence, evidence, native)
         if confidence == "confirmed" and previous.observed and not previous.event.voided then
             previous.observed, previous.event.evidence = nil, evidence
         end
+        if assist and not previous.event.voided then
+            previous.event.combat = previous.event.combat or {}
+            previous.event.combat.assist = assist
+        end
         if native then previous.nativeAt = now end
         return
     end
@@ -329,7 +343,12 @@ local function creditKill(identity, confidence, evidence, native)
         end
     end
     observeOpponent(f, identity.guid)
-    local record, event = GL.RecordPvP(identity, "kill", "confirmed", evidence, nextID("kill"), combatSnapshot(f, identity, nil, true), combatReport(logFight, key))
+    local snapshot = combatSnapshot(f, identity, nil, true)
+    if assist then
+        snapshot = snapshot or {}
+        snapshot.assist = assist
+    end
+    local record, event = GL.RecordPvP(identity, "kill", "confirmed", evidence, nextID("kill"), snapshot, combatReport(logFight, key))
     if event then
         if logFight and logFight.logCount then
             logFight.logCuts = logFight.logCuts or {}
@@ -352,6 +371,12 @@ local function killingBlow(src, dst, name, evidence, native)
         if src:match("^Player%-%w") then
             local f, previous = combatSession(), recentCredits[dst]
             local enemy = f and f.enemies["guid:" .. dst]
+            -- A groupmate's killing blow on a player you fought is your victory too, even just after your death.
+            local mate = groupmate(src)
+            if mate and (enemy or GL.FoughtRecently("guid:" .. dst)) then
+                creditKill(identityForGUID(dst, name), "confirmed", "Coup fatal d’un membre de votre groupe.", native, mate)
+                return
+            end
             if enemy then enemy.otherKiller = true end
             local age = previous and GL.Now() - previous.at
             -- A later fight against the same GUID need not concern the death we
@@ -1016,9 +1041,59 @@ function T.OnCombatLog(...)
     end
 end
 
+-- "%1$s has defeated %2$s in a duel" in the client's language: who won, who lost.
+local function duelPattern(template)
+    if type(template) ~= "string" then return nil end
+    local winnerFirst = (template:find("%%1%$s", 1) or 0) <= (template:find("%%2%$s", 1) or 0)
+    local pattern = template:gsub("([%^%$%(%)%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%d%%%$s", "(.+)"):gsub("%%s", "(.+)")
+    return "^" .. pattern .. "$", winnerFirst
+end
+function T.OnSystemMessage(message)
+    -- Not enabled(): that pauses PvP inference during the duel, and the result arrives right then.
+    if not GL.db or not GL.Settings().pvpTracking or type(message) ~= "string" or GL.IsPvPInstance() then return end
+    for _, template in ipairs({ DUEL_WINNER_KNOCKOUT, DUEL_WINNER_RETREAT }) do
+        local pattern, winnerFirst = duelPattern(template)
+        local first, second
+        if pattern then first, second = message:match(pattern) end
+        if first and second then
+            local winner, loser = winnerFirst and first or second, winnerFirst and second or first
+            local mine = GL.Clean(GL.Safe(UnitName, "player"), "string")
+            local identity = GL.Identity("target")
+            local other = identity and identity.name
+            -- The message names each duellist in full; compare whole names or whole first names.
+            local function is(text, name)
+                return text == name or text:match("^(%S+)") == name
+            end
+            if mine and other and ((is(winner, mine) and is(loser, other)) or (is(loser, mine) and is(winner, other))) then
+                GL.RecordDuel(identity, is(winner, mine))
+            end
+            return
+        end
+    end
+end
+
 local groupTimers = {}
+-- Group members not yet in your book, for this session only (never saved): if you add one within
+-- six hours, for instance by marking them Friend after the dungeon, the group counts for them.
+local strangers = {}
+local function adoptStranger(record)
+    local stranger = strangers[record.key]
+    if not stranger then return end
+    strangers[record.key] = nil
+    local me, state = playerGUID(), GL.db.tracker
+    if not me or GL.Now() - stranger.at > 6 * 3600 or not GL.Settings().groupTracking or type(state) ~= "table"
+        or type(state.groups) ~= "table" or type(state.serial) ~= "number" then return end
+    state.serial = state.serial + 1
+    local id = me .. ":group:" .. state.serial
+    if GL.RecordGroup(stranger.identity, id, stranger.zone) and type(state.groups[me]) == "table" and stranger.current then
+        state.groups[me][record.key] = id
+    end
+end
 GL.On("CHANGED", function(record, reason)
-    if reason ~= "deleted" then return end
+    if reason ~= "deleted" then
+        if type(record) == "table" and record.key then adoptStranger(record) end
+        return
+    end
     local groups = type(GL.db.tracker) == "table" and GL.db.tracker.groups
     for _, members in pairs(type(groups) == "table" and groups or {}) do
         if type(members) == "table" and members[record.key] then
@@ -1067,6 +1142,15 @@ function T.ScanGroup()
                 local record = GL.Get(identity)
                 local id = previous[identity.key] or (record and previous[record.key])
                 record = GL.RecordSeen(identity)
+                if not record and identity.guid then
+                    -- Keep the same entry from scan to scan: it carries the time spent together.
+                    local known = strangers[identity.key]
+                    if known then
+                        known.current = true
+                    else
+                        strangers[identity.key] = { identity = identity, zone = GL.Where(), at = now, current = true }
+                    end
+                end
                 if record then
                     if not id then
                         state.serial = state.serial + 1
@@ -1096,6 +1180,28 @@ function T.ScanGroup()
         for key, id in pairs(previous) do if not current[key] then current[key] = id end end
     end
     state.groups[me] = current
+    for _, stranger in pairs(strangers) do
+        stranger.was, stranger.current = stranger.current, nil
+    end
+    for i = 1, size > 0 and (raid and math.min(size, 40) or 4) or 0 do
+        local identity = GL.Identity((raid and "raid" or "party") .. i)
+        local stranger = identity and strangers[identity.key]
+        if stranger then
+            -- Time between two scans where they were present both times; gaps between groups do not count.
+            if stranger.was and stranger.last then
+                stranger.together = (stranger.together or 0) + math.max(0, now - stranger.last)
+            end
+            stranger.current, stranger.last = true, now
+        end
+    end
+    -- A good group with a stranger who just left: offer once to add them to your book.
+    for _, stranger in pairs(strangers) do
+        local together = stranger.together or 0
+        if not stranger.current and not stranger.suggested and together >= 900 then
+            stranger.suggested = true
+            GL.Emit("COMPANION_SUGGESTION", stranger.identity, together)
+        end
+    end
     stopGroupTime(now, online)
 end
 
@@ -1196,6 +1302,7 @@ function T.HandleEvent(event, ...)
         else
             killingBlow(arg, second, nil, "Le jeu vous attribue le coup fatal (PARTY_KILL).", true)
         end
+    elseif event == "CHAT_MSG_SYSTEM" then T.OnSystemMessage(GL.Clean(arg, "string"))
     elseif event == "PLAYER_PVP_KILLS_CHANGED" then T.OnHonorCount()
     elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then T.OnHonorMessage(arg, (select(11, ...))) -- field 12 is the sender, never the victim
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then T.OnCombatLog() end
@@ -1210,7 +1317,7 @@ GL.On("READY", function()
         "UNIT_CONNECTION", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
         "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UPDATE_MOUSEOVER_UNIT",
         "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_TARGET", "UNIT_FLAGS", "UNIT_HEALTH", "UNIT_NAME_UPDATE", "PLAYER_GUILD_UPDATE",
-        "PLAYER_PVP_KILLS_CHANGED", "CHAT_MSG_COMBAT_HONOR_GAIN", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED", "DUEL_INBOUNDS", "DUEL_OUTOFBOUNDS", "DUEL_FINISHED",
+        "PLAYER_PVP_KILLS_CHANGED", "CHAT_MSG_COMBAT_HONOR_GAIN", "CHAT_MSG_SYSTEM", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED", "DUEL_INBOUNDS", "DUEL_OUTOFBOUNDS", "DUEL_FINISHED",
     }
     T.nativeKillEvent = pcall(frame.RegisterEvent, frame, "PARTY_KILL")
     for _, event in ipairs(events) do pcall(frame.RegisterEvent, frame, event) end

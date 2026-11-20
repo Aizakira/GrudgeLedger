@@ -45,7 +45,7 @@ settings.classic:GetScript("OnClick")(settings.classic)
 assert(settings.classic.active and f.wordmark:IsShown() and not f.title:IsShown() and note.edit.fontObject == "ChatFontNormal")
 assert(select(2, f.rows[1].name:GetFont()) == 16)
 assert(select(2, f.detailText:GetFont()) == 15 and select(2, note.edit:GetFont()) == 15)
-local draft, text, color = note.edit:GetText(), f.detailText:GetText(), {f.detailText:GetTextColor()}
+local draft, text, color = note.edit:GetText(), f.detailScroll.fullText, {f.detailText:GetTextColor()}
 local readableHeight = note.edit:GetHeight()
 local function choose(value)
     local control = value and settings.classic or settings.grimoire
@@ -88,9 +88,9 @@ assert(note.edit:GetHeight() > readableHeight, "wrapped text is measured again i
 f.detailScroll:SetVerticalScroll(100000)
 note.scroll:SetVerticalScroll(100000)
 choose(true)
-assert(f.detailScroll:GetVerticalScroll() <= math.max(0, f.detailBody:GetHeight() - f.detailScroll:GetHeight()))
+assert(f.detailScroll.page >= 1 and f.detailScroll.page <= #f.detailScroll.pages, "the journal detail stays on an existing page")
 assert(note.scroll:GetVerticalScroll() <= math.max(0, note.edit:GetHeight() - note.scroll:GetHeight()))
-assert(f.detailText:GetText() == text and note.edit:GetText() == draft, "switching fonts must not lose text or drafts")
+assert(f.detailScroll.fullText == text and note.edit:GetText() == draft, "switching fonts must not lose text or drafts")
 assert(f.detailText.color[1] == color[1] and f.detailText.color[2] == color[2] and f.detailText:GetSpacing() == 4,
     "paper ink and line spacing survive font inheritance changes")
 assert(f.rows[1].name.color[2] > f.rows[1].name.color[1], "friend name keeps its green ink")

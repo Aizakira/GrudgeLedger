@@ -21,7 +21,8 @@ local socialTotals = setmetatable({}, { __mode = "k" })
 local lastInteraction = setmetatable({}, { __mode = "k" })
 local openingProofs = setmetatable({}, { __mode = "k" })
 local defaults = {
-    markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false,
+    markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false, guildSightings = true,
+    grudgeAggression = 5, grudgeDeath = 5,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
     groupTracking = true, socialTracking = true, tradeTracking = false, minimapAngle = 225, readableFont = false,
     quickGestures = true, detectionLog = true, partyWarnings = false, tagReminders = true, chatBadges = false, compactTooltips = false,
@@ -235,6 +236,51 @@ end
 local function scoreRelation(score)
     return score > 0 and "friend" or score <= -10 and "enemy" or score < 0 and "warning" or "neutral"
 end
+-- Aggressions you provoked: the fight's opening shows that you hit first, so his damage was a reply.
+local provokedCache = setmetatable({}, { __mode = "k" })
+local function isReply(e)
+    local combat = type(e) == "table" and e.kind == "aggression" and not e.voided and e.voidReason ~= "battleground" and e.combat
+    return type(combat) == "table" and combat.opener == "player"
+end
+local function provoked(record)
+    local events, total = record.history or {}, record.pvp and record.pvp.aggressions or 0
+    local cached, count = provokedCache[record], #events
+    -- New events are appended: only the tail is read. Any other change (correction, merge) rereads all.
+    local same = cached and cached.total <= total and cached.count <= count
+        and cached.first == events[1] and cached.last == events[cached.count]
+    if same and cached.count == count and cached.total == total then return math.min(cached.n, total) end
+    local n, from = 0, 1
+    if same then n, from = cached.n, cached.count + 1 end
+    for i = from, count do if isReply(events[i]) then n = n + 1 end end
+    provokedCache[record] = { count = count, total = total, n = n, first = events[1], last = events[count] }
+    return math.min(n, total)
+end
+GL.ProvokedAggressions = provoked
+-- The player chooses how much an aggression and a death weigh (settings, 0 to 10; 5 by default).
+-- A reply to your own attack weighs 1 at most, a victory always repays 1.
+local VICTORY = 1
+local function weights()
+    local settings = GL.db and GL.db.settings or defaults
+    local aggression = type(settings.grudgeAggression) == "number" and settings.grudgeAggression or 5
+    local death = type(settings.grudgeDeath) == "number" and settings.grudgeDeath or 5
+    return aggression, math.min(1, aggression), death
+end
+-- "2 agressions × −5  ·  2 morts × −5": the automatic balance with today's weights.
+function GL.BalanceFormula(record)
+    local pvp = type(record) == "table" and record.pvp or {}
+    local replies = type(record) == "table" and provoked(record) or 0
+    local terms = {}
+    local function term(n, one, many, weight)
+        if n > 0 then terms[#terms + 1] = n .. " " .. L(n > 1 and many or one) .. " × " .. weight end
+    end
+    local aggression, reply, death = weights()
+    term((pvp.aggressions or 0) - replies, "agression", "agressions", "−" .. aggression)
+    term(replies, "riposte", "ripostes", "−" .. reply)
+    term(pvp.deaths or 0, "mort", "morts", "−" .. death)
+    term(pvp.kills or 0, "victoire", "victoires", "+1")
+    return table.concat(terms, "  ·  ")
+end
+-- What each fact weighs in the automatic balance.
 function GL.AutomaticBalance(record)
     -- Histories remain authoritative and untouched. Replay only new entries;
     -- normalization/merges discard this session-only subtotal before replaying.
@@ -254,11 +300,16 @@ function GL.AutomaticBalance(record)
     end
     cached.total, cached.count = social, #events
     local pvp = record.pvp
-    local balance = (pvp.kills or 0)
-        - 10 * (pvp.deaths or 0)
-        - (pvp.aggressions or 0)
-    -- Friendly gestures cannot conceal an unsettled attack; victories repay one
-    -- point at a time but cannot by themselves make an opponent a friend.
+    local replies = provoked(record)
+    -- An aggression weighs -5 from the first hit, a death -5 more: an aggression that kills is -10.
+    -- His reply to an attack you opened weighs only -1.
+    local AGGRESSION, PROVOKED, DEATH = weights()
+    local balance = VICTORY * (pvp.kills or 0)
+        - DEATH * (pvp.deaths or 0)
+        - AGGRESSION * ((pvp.aggressions or 0) - replies)
+        - PROVOKED * replies
+    -- Friendly gestures cannot conceal an unsettled attack; victories repay one point at a
+    -- time but cannot make an opponent a friend, and an aggressor stays an enemy (below).
     local score = balance < 0 and math.min(0, social) + balance
         or social < 0 and math.min(0, social + balance) or social
     return math.max(-100, math.min(100, score)), balance, social
@@ -613,20 +664,37 @@ function GL.RecordSeen(identity, visible)
     end
     return record
 end
+-- Guildmates' opinion of players, set by the guild sharing module: {relation, score, count, tags}.
+-- It applies only when you have no relation of your own with the player.
+local guildOpinions = {}
+function GL.SetGuildOpinions(map)
+    guildOpinions = type(map) == "table" and map or {}
+    invalidateJournal()
+end
+function GL.GuildOpinion(guid)
+    return type(guid) == "string" and guildOpinions[guid] or nil
+end
 local function effectiveRelation(record)
     if not record then return "neutral", "neutral" end
     local opinion = record.reaction == "friend" or record.reaction == "enemy" or record.reaction == "neutral" or record.reaction == "warning"
     if opinion and record.reactionSource ~= "emote" and record.reactionSource ~= "automatic" then return record.reaction, "manual" end
     local pvp = record.pvp or {}
+    -- An aggressor stays in the grudge book even after you kill him; a reply to your attack does not count.
+    local aggressor = (pvp.aggressions or 0) - provoked(record) > 0
+    -- Whoever killed you is an enemy while a whole death is unpaid, suspicious while your victories
+    -- repay it, and neutral once repaid; an aggressor stays an enemy.
     if (pvp.deaths or 0) > 0 and (record.reputation or 0) < 0 then
-        return (record.reputation <= -10 or (pvp.aggressions or 0) > 0) and "enemy" or "warning", "pvp"
+        local _, _, death = weights()
+        return (record.reputation <= -death or aggressor) and "enemy" or "warning", "pvp"
     end
     local rule = GL.GetGuildRule(record)
     if rule and rule.reaction == "enemy" then return "enemy", "guild" end
-    if (pvp.aggressions or 0) > 0 and (record.reputation or 0) < 0 then return "enemy", "pvp" end
+    if aggressor then return "enemy", "pvp" end
     if opinion and record.reactionSource == "emote" then return record.reaction, "emote" end
     if rule then return rule.reaction, "guild" end
     if opinion then return record.reaction, "automatic" end
+    local guildmates = record.guid and guildOpinions[record.guid]
+    if guildmates and guildmates.relation ~= "neutral" then return guildmates.relation, "guildmates" end
     return "neutral", "neutral"
 end
 function GL.Relation(record) local relation = effectiveRelation(record) return relation end
@@ -1015,6 +1083,73 @@ function GL.KillOpeningCategory(record, event)
     if opening.hadGrudge == false then return "initiatedKillsNoGrudge" end
     return "unknownOpeningKills"
 end
+-- One fight: the blows, deaths and victories of one encounter with a player. Events less than two
+-- minutes apart belong to the same fight; a death or a victory ends it, except a victory of your
+-- group within a minute of your death (he is avenged in the same fight).
+local FIGHT_GAP, AVENGE_GAP = 120, 60
+local fightKinds = { aggression = true, kill = true, death = true }
+local function fightEvent(e)
+    return type(e) == "table" and fightKinds[e.kind] and not e.voided and e.voidReason ~= "battleground" and type(e.time) == "number"
+end
+local function joins(fight, e)
+    if not fight or e.time - fight.last > FIGHT_GAP then return false end
+    if not fight.ended then return true end
+    return fight.ended == "death" and e.kind == "kill" and e.time - fight.last <= AVENGE_GAP
+end
+-- Newest first. Each fight: at, last, events (oldest first), kills, deaths, aggressions, main.
+function GL.Fights(record)
+    local list, arrival = {}, {}
+    for i, e in ipairs(type(record) == "table" and record.history or {}) do
+        if fightEvent(e) then
+            list[#list + 1] = e
+            arrival[e] = i
+        end
+    end
+    -- Events of the same second keep their order of arrival (table.sort alone is not stable).
+    table.sort(list, function(a, b)
+        if a.time ~= b.time then return a.time < b.time end
+        return arrival[a] < arrival[b]
+    end)
+    local fights, current = {}, nil
+    for _, e in ipairs(list) do
+        if not joins(current, e) then
+            current = { at = e.time, events = {}, kills = 0, deaths = 0, aggressions = 0 }
+            fights[#fights + 1] = current
+        end
+        current.events[#current.events + 1] = e
+        current.last = e.time
+        if e.kind == "kill" then
+            current.kills, current.ended = current.kills + 1, "kill"
+        elseif e.kind == "death" then
+            current.deaths, current.ended = current.deaths + 1, "death"
+        else
+            current.aggressions = current.aggressions + 1
+        end
+    end
+    local out = {}
+    for i = #fights, 1, -1 do
+        local fight = fights[i]
+        for _, kind in ipairs({ "death", "kill", "aggression" }) do
+            for _, e in ipairs(fight.events) do
+                if not fight.main and e.kind == kind then fight.main = e end
+            end
+        end
+        out[#out + 1] = fight
+    end
+    return out
+end
+-- Whether you fought this player in the last two minutes (an opening counts).
+function GL.FoughtRecently(identity)
+    local record, now = GL.Get(identity), GL.Now()
+    local history = record and record.history or {}
+    for i = #history, 1, -1 do
+        local e = history[i]
+        if (fightEvent(e) or type(e) == "table" and e.kind == "opening" and type(e.time) == "number") then
+            return now - e.time >= 0 and now - e.time <= FIGHT_GAP
+        end
+    end
+    return false
+end
 local function combatContext(value)
     if not GL.Clean(value, "table") then return end
     local function integer(field, low, high)
@@ -1025,6 +1160,7 @@ local function combatContext(value)
         healthPct = integer("healthPct", 0, 100), playerLevel = integer("playerLevel", 1, 1000),
         opponentLevel = integer("opponentLevel", 1, 1000), opponents = integer("opponents", 1, 10000),
         pve = GL.Clean(value.pve, "boolean") or nil, pet = GL.Clean(value.pet, "boolean") or nil,
+        assist = cleanName(value.assist),
     }
     if (value.opener == "player" or value.opener == "opponent") and cleanName(value.encounterId) then
         snapshot.opener, snapshot.encounterId = value.opener, value.encounterId
@@ -1053,11 +1189,16 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat, rep
         end
     end
     local field = pvpFields[kind][confidence]
+    local owed = kind == "kill" and GL.Debt(record) or 0
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
     local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, killingBlow = killingBlow,
         combat = withLevels(combatContext(combat), identity, record), report = report })
+    -- Listeners attach the build of both players at this moment to the event.
+    GL.Emit("FIGHT_RECORDED", record, event)
     GL.Emit("CHANGED", record)
+    -- The revenge moment: you just killed a player who owed you.
+    if owed > 0 then GL.Emit("REVENGE", record, owed, GL.Debt(record)) end
     return record, event
 end
 function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
@@ -1068,10 +1209,23 @@ function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     if eventId then
         for _, event in ipairs(record.history) do if event.eventId == eventId then return nil end end
     end
+    -- One aggression per fight: a new blow less than two minutes after his last one, before any
+    -- death or victory, belongs to the same fight and costs nothing more.
+    for i = #record.history, 1, -1 do
+        local e = record.history[i]
+        if fightEvent(e) then
+            local age = GL.Now() - e.time
+            if e.kind == "aggression" and age >= 0 and age <= FIGHT_GAP then return nil end
+            break
+        end
+    end
     local field = pvpFields.aggression[confidence]
     record.pvp[field] = record.pvp[field] + 1
+    -- The event first: its opening tells whether this was a reply to your own attack.
+    local event = history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId,
+        combat = withLevels(combatContext(combat), identity, record) })
     refreshReputation(record)
-    history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId, combat = withLevels(combatContext(combat), identity, record) })
+    GL.Emit("FIGHT_RECORDED", record, event)
     GL.Emit("CHANGED", record)
     return record
 end
@@ -1158,6 +1312,19 @@ function GL.RecordGroup(identity, sessionId, zone)
     return record
 end
 
+-- A duel is a friendly fight: kept in the history and in two counters, never in the balance.
+function GL.RecordDuel(identity, won)
+    if GL.IsPvPInstance() or type(won) ~= "boolean" then return nil end
+    local record = GL.Remember(identity)
+    if not record then return nil end
+    record.duels = type(record.duels) == "table" and record.duels or { wins = 0, losses = 0 }
+    local field = won and "wins" or "losses"
+    record.duels[field] = (tonumber(record.duels[field]) or 0) + 1
+    history(record, "duel", { won = won })
+    GL.Emit("CHANGED", record)
+    return record
+end
+
 function GL.RecordTrade(identity, summary)
     if not GL.Settings().tradeTracking or GL.IsPvPInstance() then return end
     local record = GL.Get(identity)
@@ -1232,20 +1399,51 @@ local function recordText(record, notes, past)
     end
     return table.concat(parts, "\n")
 end
+-- What a player still owes you: they killed or attacked you and your balance with them is negative.
+-- Your own Friend choice forgives it.
+function GL.Debt(record)
+    local pvp = type(record) == "table" and record.pvp or {}
+    local score = type(record) == "table" and record.reputation or 0
+    if score >= 0 or (pvp.deaths or 0) + (pvp.aggressions or 0) == 0 or GL.Relation(record) == "friend" then return 0 end
+    return -score
+end
+-- Two titles that tell a story: your nemesis killed you most (twice at least); your best companion
+-- grouped with you most (three times at least) and is not an enemy. Returns their record keys.
+function GL.Titles()
+    local nemesis, companion
+    for _, record in pairs(GL.db and GL.db.players or {}) do
+        local deaths, groups = record.pvp and record.pvp.deaths or 0, record.groupCount or 0
+        if deaths >= 2 and (not nemesis or deaths > nemesis.pvp.deaths
+            or deaths == nemesis.pvp.deaths and (record.reputation or 0) < (nemesis.reputation or 0)) then
+            nemesis = record
+        end
+        local relation = groups >= 3 and GL.Relation(record)
+        if relation and relation ~= "enemy" and relation ~= "warning" and (not companion or groups > companion.groupCount
+            or groups == companion.groupCount and record.key < companion.key) then
+            companion = record
+        end
+    end
+    return nemesis and nemesis.key, companion and companion.key
+end
 function GL.SearchPlayers(options)
     options = type(options) == "table" and options or {}
     local result, words = {}, queryWords(options.query)
+    local debts = options.relation == "debt"
     for _, record in pairs(GL.db and GL.db.players or {}) do
         local faction = record.faction or "unknown"
         if (not GL.IsGroupOnly(record) or record.key == options.selectedKey)
-            and (not options.relation or options.relation == "all" or GL.Relation(record) == options.relation)
+            and (not options.relation or options.relation == "all" or (debts and GL.Debt(record) > 0)
+                or (not debts and GL.Relation(record) == options.relation))
             and (not options.faction or options.faction == "all" or faction == options.faction)
             and (not options.notesOnly or #record.notes > 0)
-            and (not options.tag or options.tag == "all" or (GL.HasTag and GL.HasTag(record, options.tag)))
+            and (not options.tag or options.tag == "all" or (GL.HasTag
+                and GL.HasTag(record, options.tag ~= "any" and options.tag or nil)))
             and (#words == 0 or matchesWords(recordText(record, true, true), words)) then result[#result + 1] = record end
     end
     local sort = listSorts[options.sort] and options.sort or "recent"
     local function value(record)
+        -- Accounts to settle: the heaviest debt first, whatever the usual order.
+        if debts then return GL.Debt(record) end
         if sort == "name" then return (record.fullName or record.name or record.key):lower() end
         if sort == "reputation" then return record.reputation or 0 end
         if sort == "kills" or sort == "deaths" then return record.pvp[sort] or 0 end
@@ -1254,7 +1452,7 @@ function GL.SearchPlayers(options)
     end
     table.sort(result, function(a, b)
         local av, bv = value(a), value(b)
-        if av ~= bv then if sort == "name" then return av < bv end return av > bv end
+        if av ~= bv then if sort == "name" and not debts then return av < bv end return av > bv end
         return a.key < b.key
     end)
     return result
@@ -1294,6 +1492,29 @@ local function indexedJournal()
     -- The history stays authoritative; no timer or persisted duplicate event log.
     journalIndex = rows
     return rows
+end
+-- The events and notes of one record, newest first, as GL.JournalEvents would list them.
+function GL.RecordEvents(record)
+    local result, now = {}, GL.Now()
+    if type(record) ~= "table" then return result end
+    for index, event in ipairs(record.history or {}) do
+        if type(event) == "table" and (event.kind ~= "honor" or GL.HonorPoints(event)) and eventTime(event) <= now then
+            result[#result + 1] = { event = event, at = eventTime(event), sequence = index }
+        end
+    end
+    for index, note in ipairs(record.notes or {}) do
+        if type(note) == "table" and type(note.text) == "string" and eventTime(note) <= now then
+            result[#result + 1] = { at = eventTime(note), sequence = #(record.history or {}) + index, event = {
+                kind = "note", time = note.time, text = note.text, updatedAt = note.updatedAt,
+                actorGUID = note.actorGUID, actorName = note.actorName, note = note,
+            } }
+        end
+    end
+    table.sort(result, function(a, b)
+        if a.at ~= b.at then return a.at > b.at end
+        return a.sequence > b.sequence
+    end)
+    return result
 end
 local function inScope(author, scope, actor)
     return scope == "all" or scope == "legacy" and not author or scope == "character" and actor and author == actor
@@ -1623,6 +1844,7 @@ local function settingValue(key, value)
         if value ~= value or value == math.huge or value == -math.huge then return nil end
         if key == "alertCooldown" then value = math.max(15, math.min(3600, value))
         elseif key == "iconSize" then value = math.max(12, math.min(40, value))
+        elseif key == "grudgeAggression" or key == "grudgeDeath" then value = math.max(0, math.min(10, math.floor(value + 0.5)))
         elseif key == "readingScale" then value = math.max(0.85, math.min(1.25, value))
         elseif key == "minimapAngle" then value = value % 360 end
     end
@@ -1632,7 +1854,15 @@ function GL.SetSetting(key, value)
     if not GL.db then return false end
     value = settingValue(key, value)
     if value == nil then return false end
+    local previous = GL.db.settings[key]
     GL.db.settings[key] = value
+    -- New weights apply to every automatic balance at once; notes, counters and history are untouched.
+    if (key == "grudgeAggression" or key == "grudgeDeath") and previous ~= value then
+        for _, record in pairs(GL.db.players or {}) do
+            if type(record) == "table" and type(record.pvp) == "table" then refreshReputation(record) end
+        end
+        invalidateJournal()
+    end
     GL.Emit("SETTINGS")
     return true
 end
@@ -1644,6 +1874,13 @@ function GL.InitDB()
     traceLast = {}
     if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end
     GL.db = GrudgeLedgerDB
+    -- Numbered migrations (audit 0.12.0, problem 6). The three older markers count as done:
+    -- 1 schema 2 (probable merged into confirmed), 2 battleground cleanup, 3 grimoire font.
+    GL.db.migrations = type(GL.db.migrations) == "table" and GL.db.migrations or {}
+    local migrations = GL.db.migrations
+    if GL.db.schema == 2 then migrations[1] = migrations[1] or 0 end
+    if GL.db.battlegroundCleanupVersion == 1 then migrations[2] = migrations[2] or 0 end
+    if GL.db.grimoireFontDefaultApplied then migrations[3] = migrations[3] or 0 end
     local migratePvP = GL.db.schema ~= 2
     GL.db.players = type(GL.db.players) == "table" and GL.db.players or {}
     if GL.db.unassignedHonor ~= nil and type(GL.db.unassignedHonor) ~= "table" then
@@ -1675,6 +1912,11 @@ function GL.InitDB()
                 local pvp = record.pvp
                 if type(pvp) == "table" then
                     for old, field in pairs({probableDeaths="deaths", probableKills="kills", probableAggressions="aggressions"}) do
+                        -- Migration 1 keeps the probable counters it merges, so the difference stays readable.
+                        if tonumber(pvp[old]) then
+                            record.migrated1 = record.migrated1 or {}
+                            record.migrated1[old] = (record.migrated1[old] or 0) + tonumber(pvp[old])
+                        end
                         pvp[field] = (tonumber(pvp[field]) or 0) + (tonumber(pvp[old]) or 0)
                         pvp[old] = nil
                     end
@@ -1682,6 +1924,8 @@ function GL.InitDB()
                 local seen = {}
                 for _, event in ipairs(type(record.history) == "table" and record.history or {}) do
                     if type(event) == "table" and event.confidence == "probable" then
+                        -- The event keeps its former nature and evidence: a deduction is never shown as a fact.
+                        event.migrated1 = event.migrated1 or { confidence = "probable", evidence = event.evidence }
                         event.confidence = "confirmed"
                         if event.kind == "death" and type(event.evidence) == "string" and event.evidence:find("Participation probable", 1, true) then
                             event.evidence = "Participation à l’attaque ayant causé votre mort."
@@ -1713,7 +1957,10 @@ function GL.InitDB()
         end
     end
     GL.db.schema = 2
+    migrations[1] = migrations[1] or GL.Now()
     cleanBattlegroundHistory()
+    migrations[2] = migrations[2] or (GL.db.battlegroundCleanupVersion == 1 and GL.Now() or nil)
+    migrations[3] = migrations[3] or (GL.db.grimoireFontDefaultApplied and GL.Now() or nil)
     GL.Emit("READY")
 end
 local boot = CreateFrame("Frame")

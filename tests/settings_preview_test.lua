@@ -9,7 +9,7 @@ local toc=assert(io.open(TEST_ROOT .. "/GrudgeLedger.toc","r"))
 local version=toc:read("*a"):match("## Version: ([^\r\n]+)")
 toc:close()
 GetAddOnMetadata=function(name,key) assert(name=="GrudgeLedger" and key=="Version"); return version end
-for _, module in ipairs({"Core", "Display", "UITheme", "UI","Bounties"}) do
+for _, module in ipairs({"Core", "Display", "UITheme", "UI","Transport","Bounties"}) do
     assert(loadfile(TEST_ROOT .. "/" .. module .. ".lua"))("GrudgeLedger")
 end
 local GL = GrudgeLedger

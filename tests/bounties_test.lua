@@ -23,11 +23,26 @@ local function client(i)
     env.UnitExists=function(u) return u=="party1" end
     env.UnitIsUnit=function() return false end
     env.UnitIsVisible=function() return true end
-    env.CreateFrame=function() return {RegisterEvent=function() end,SetScript=function(_,_,f) c.event=f end} end
+    -- Each frame receives only the events it registered, as in the game.
+    local frames={}
+    env.CreateFrame=function()
+        local frame={events={}}
+        frame.RegisterEvent=function(self,name) self.events[name]=true end
+        frame.SetScript=function(self,_,fn) self.handler=fn end
+        frames[#frames+1]=frame
+        return frame
+    end
+    c.event=function(_,name,...)
+        for _,frame in ipairs(frames) do
+            if frame.events[name] and frame.handler then frame.handler(frame,name,...) end
+        end
+    end
     env.C_Timer={NewTicker=function(_,f) c.tick=f end}
     env.C_ChatInfo={RegisterAddonMessagePrefix=function() end,SendAddonMessage=function(p,t,ch)
         network[#network+1]={i,p,t,ch,c.name};return 0 end}
-    local f=assert(loadfile(TEST_ROOT.."/Bounties.lua"));setfenv(f,env);f()
+    for _,name in ipairs({"Transport.lua","Bounties.lua"}) do
+        local f=assert(loadfile(TEST_ROOT.."/"..name));setfenv(f,env);f()
+    end
     c.env=env;c.b=env.GrudgeLedger.Bounties;c.hook=ev
     c.event(nil,"PLAYER_LOGIN")
     for _,p in ipairs(clients) do if p.online then p.event(nil,"GUILD_ROSTER_UPDATE") end end

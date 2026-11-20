@@ -41,9 +41,9 @@ print("PASS client language selection, language fallback, catalog parity and for
 -- Load a fresh copy of the real TOC for each client. Exercise visible buttons,
 -- runtime data, and a failed command, which dictionary parity alone cannot check.
 local words = {
-    fr = {"À chasser", "Créer la prime", "Tête", "Réputations de factions", "Caractéristiques", "Butin ninja", "Aucun envoi incertain à vérifier."},
-    en = {"To hunt", "Post bounty", "Head", "Faction reputations", "Attributes", "Ninja looting", "No uncertain mail to check."},
-    es = {"Por cazar", "Publicar recompensa", "Cabeza", "Reputación de facciones", "Atributos", "Robo de botín", "No hay envíos pendientes de verificación."},
+    fr = {"À chasser", "Créer la prime", "Tête", "Aperçu", "Chiffres clés", "Butin ninja", "Aucun envoi incertain à vérifier."},
+    en = {"To hunt", "Post bounty", "Head", "Overview", "Key figures", "Ninja looting", "No uncertain mail to check."},
+    es = {"Por cazar", "Publicar recompensa", "Cabeza", "Resumen", "Cifras clave", "Robo de botín", "No hay envíos pendientes de verificación."},
 }
 for locale, lang in pairs({frFR="fr", enUS="en", enGB="en", esES="es", esMX="es", deDE="en"}) do
     local e=setmetatable({}, {__index=_G})
@@ -57,10 +57,10 @@ for locale, lang in pairs({frFR="fr", enUS="en", enGB="en", esES="es", esMX="es"
     local identity=GL.Identity("target")
     assert(GL.ToggleTag(identity,"ninja"))
     assert(GL.TagText(GL.Get(identity))==expected[6],locale.." tags")
-    assert(GL.OpenPlayerDossier(identity.guid))
+    assert(GL.OpenPlayerDossier(identity.guid,nil,nil,"gear"))
     local dossier=e.GrudgeLedgerPlayerDossier
     assert(dossier.equipment.equipment.buttons[1].slotName==expected[3],locale.." item slot")
-    assert(dossier.tabs.reputation:GetText()==expected[4] and dossier.statHeading:GetText()==expected[5],locale.." dossier")
+    assert(dossier.tabs.overview:GetText()==expected[4] and dossier.keyHeading:GetText()==expected[5],locale.." dossier")
     assert(not dossier.bounty:IsShown(),locale.." ally should not offer a bounty")
     e.SlashCmdList.GLBOUNTY(lang=="es" and "correo enviado" or lang=="en" and "mail sent" or "courrier envoye")
     assert(mock.messages[#mock.messages]:find(expected[7],1,true),locale.." mail message: "..mock.messages[#mock.messages])

@@ -70,7 +70,7 @@ for _, value in pairs(only.pvp) do assert(value == 0, "all six counter types mus
 assert(first.voided and first.voidReason == "battleground" and first.time == originalTime and first.eventId == originalID)
 assert(first.evidence == "Original evidence" and first.zone == "Bassin Arathi")
 assert(corrected.history[1].voidedAt == correctionTime and not corrected.history[1].voidReason, "do not reapply a previous correction")
-assert(GL.Get(mixedID) == mixed and mixed.reputation == -12 and GL.Relation(mixed) == "enemy")
+assert(GL.Get(mixedID) == mixed and mixed.reputation == -11 and GL.Relation(mixed) == "enemy")
 assert(mixed.pvp.probableDeaths == nil and mixed.pvp.deaths == 1 and mixed.pvp.aggressions == 1)
 assert(bgDeath.voided and bgDeath.voidReason == "battleground" and not outdoorDeath.voided and #mixed.history == 4)
 assert(GL.Get(noted) == noted and noted.notes[1].text == "Keep my personal note" and noted.reputation == 0)
@@ -78,7 +78,7 @@ assert(GL.Get(manual) == manual and manual.reputation == -10 and manual.reaction
 assert(GL.Get(positive) == positive and positive.reputation == 1 and GL.Relation(positive) == "friend")
 assert(unknown.pvp.deaths == 1 and not unknown.history[1].voided)
 assert(world.pvp.deaths == 1 and not world.history[1].voided, "outdoor Arathi must not match a battleground")
-assert(GL.Get(counters) == counters and counters.pvp.deaths == 1 and counters.reputation == -10)
+assert(GL.Get(counters) == counters and counters.pvp.deaths == 1 and counters.reputation == -5)
 assert(GL.Get(ambiguous) == ambiguous and ambiguous.pvp.deaths == 1 and not ambiguous.history[1].voided)
 assert(GL.GetGuildRule("Match Guild").note == "Keep explicit guild rule")
 for _, stat in ipairs(GL.GuildStatistics()) do
@@ -92,14 +92,14 @@ for _, stat in ipairs(GL.PlayerStatistics("grudge")) do assert(stat.record ~= on
 assert(#GL.PlayerStatistics("probableDeaths") == 0)
 local messageCount = #mock.messages
 GL.InitDB()
-assert(#GL.db.battlegroundArchive == 2 and #mock.messages == messageCount and mixed.reputation == -12)
+assert(#GL.db.battlegroundArchive == 2 and #mock.messages == messageCount and mixed.reputation == -11)
 assert(counters.pvp.deaths == 1 and changes == 0, "reloading must never subtract twice")
 assert(not GL.RecordPvP(mixedID, "death", "confirmed", "Duplicate", "mixed-bg"), "voided evidence still deduplicates")
 
 -- Returning outdoors starts a fresh record instead of resurrecting the match debt.
 zone = "Vallée de Strangleronce"
 local fresh = GL.RecordAggression(onlyID, "confirmed", "New outdoor attack", "fresh-hit")
-assert(fresh ~= only and fresh.reputation == -1 and #fresh.history == 1 and GL.Get(onlyID.alias) == fresh)
+assert(fresh ~= only and fresh.reputation == -5 and #fresh.history == 1 and GL.Get(onlyID.alias) == fresh)
 assert(#only.history == 6 and #GL.db.battlegroundArchive == 2 and changes == 1)
 
 -- Mixed histories explain the exclusion in both journal and correction UI.
