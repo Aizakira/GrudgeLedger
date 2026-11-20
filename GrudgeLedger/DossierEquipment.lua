@@ -6,6 +6,9 @@ local inventorySlots = {"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSl
     "HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot",
     "MainHandSlot","SecondaryHandSlot","RangedSlot"}
 
+-- Inventory slot numbers never changed; the game's lookup only adds the empty-slot picture.
+local slotNumbers = {1, 2, 3, 15, 5, 4, 19, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17, 18}
+
 local function closeTip(button)
     button.waitingForItem=nil
     if GameTooltip and GameTooltip.GetOwner and GameTooltip:GetOwner() == button then GameTooltip:Hide() end
@@ -63,6 +66,7 @@ local function slotButton(parent, slot, index)
     local b=CreateFrame("Button",nil,parent)
     b.slotName=L(slot[2])
     b.slotID,b.emptyIcon=GL.Safe(GetInventorySlotInfo or (C_PaperDollInfo and C_PaperDollInfo.GetInventorySlotInfo),inventorySlots[index])
+    b.slotID=GL.Clean(b.slotID,"number") or slotNumbers[index]
     b.trim=b:CreateTexture(nil,"BACKGROUND")
     b.icon=b:CreateTexture(nil,"ARTWORK")
     b.icon:SetPoint("TOPLEFT",b.trim,"TOPLEFT",1,-1)

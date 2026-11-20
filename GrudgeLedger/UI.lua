@@ -3548,6 +3548,7 @@ local commandAliases = {
     guilds = "guildes", hermandades = "guildes", guild = "guilde", hermandad = "guilde",
     logs = "traces", registros = "traces", ajustes = "settings", opciones = "options",
     markers = "reperage", marcadores = "reperage", diagnostico = "debug", ["diagnóstico"] = "debug",
+    probe = "sonde", sonda = "sonde",
     estadisticas = "stats", ["estadísticas"] = "stats", nota = "note", guia = "guide", ["guía"] = "guide",
     friend = "ami", amigo = "ami", amiga = "ami", amie = "ami", enemy = "ennemi",
     enemigo = "ennemi", enemiga = "ennemi", ennemie = "ennemi", watch = "mefiance",
@@ -3566,6 +3567,8 @@ SlashCmdList.GRUDGELEDGER = function(message)
     elseif command == "debug" then
         showDiagnostic()
     elseif command == "traces" then showDiagnostic(true)
+    elseif command == "sonde" then
+        if GL.ReadingProbe then GL.ReadingProbe() end
     elseif command == "stats" then GL.ShowStatistics("players")
     elseif command == "bilan" then GL.ShowJournal("summary")
     elseif command == "chronique" then GL.ShowJournal("history")

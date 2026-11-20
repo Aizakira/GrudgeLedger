@@ -370,6 +370,44 @@ function QA.capture(name)
         end
         assert(GL.OpenPlayerDossier(guid))
         local f=GrudgeLedgerPlayerDossier
+        if name:find("^dossier%-fresh") or name:find("^dossier%-read") then
+            -- What every user gets with the addon alone: no Armory archive, no studio photo.
+            -- fresh: a killer who struck from out of sight, a minute ago. read: the in-game
+            -- reading succeeded during the fight (example values).
+            local killer="Player-999-00F4E5"
+            if not GL.Get("guid:"..killer) then
+                GetPlayerInfoByGUID=function(id) if id==killer then return "Voleur","ROGUE","Mort-vivant","Scourge",2 end end
+                local id=GL.IdentityFromName("Helvard","Lamenoire",killer)
+                GL.RecordAggression(id,"confirmed","Combat log","qa-fresh-a")
+                GL.RecordPvP(id,"death","confirmed","Combat log","qa-fresh-d")
+                local me=UnitGUID("player")
+                for _,e in ipairs(GL.Get("guid:"..killer).history) do
+                    if e.kind=="death" then
+                        e.report={live={{src=killer,dst=me,spell="Embuscade",amount=412,at=1},
+                            {src=killer,dst=me,spell="Attaque pernicieuse",amount=188,at=2},
+                            {src=killer,dst=me,spell="Éviscération",amount=356,at=4,fatal=true}}}
+                    end
+                end
+            end
+            local fresh=GL.Get("guid:"..killer)
+            fresh.inspection,fresh.level=nil,nil
+            if name:find("^dossier%-read") then
+                fresh.level=38
+                local function item(id,label) return "|cff1eff00|Hitem:"..id.."::::::::38:::::|h["..label.."]|h|r" end
+                fresh.inspection={stats={HEALTH=2140,ENERGY=100,AGILITY=152,STAMINA=118,ARMOR=1240},statsAt=qaClock,
+                    gearAt=qaClock,talentsAt=qaClock,averageItemLevel=34,
+                    gear={[1]=item(10008,"Coiffe d’ombrecuir"),[3]=item(7477,"Spallières en cuir"),[5]=item(2800,"Cotte noire"),
+                        [7]=item(9624,"Jambières de l’embusqué"),[8]=item(9406,"Bottes du rôdeur"),[10]=item(7348,"Gants d’escarmouche"),
+                        [16]=item(2244,"Lame de Krol"),[17]=item(3187,"Dague sacrificielle")},
+                    trees={{id="assassination",name="Assassinat",points=8,talents={{135252,"Malice",5,132277},{135251,"Némésis",3,132122}}},
+                        {id="combat",name="Combat",points=0,talents={}},
+                        {id="subtlety",name="Finesse",points=21,talents={}}}}
+            end
+            GL.OpenPlayerDossier(killer)
+            local page=name:match("^dossier%-%a+%-(%a+)")
+            if page then f.tabs[page]:Click() end
+            return f
+        end
         if name=="dossier-gear" then
             -- A character seen over a week: level, guild and two pieces changed (example values).
             local day=86400

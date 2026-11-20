@@ -557,6 +557,18 @@ function GL.RequestArmory(key, name, guid)
     requests[key .. "|" .. identity.fullName:lower()] = GL.Now()
 end
 
+-- The game knows the class, race and sex of every player it has shown, from the GUID alone: a
+-- killer who struck from out of sight, never targeted, still gets them on his sheet at once.
+local raceFaction = { Human = "Alliance", Dwarf = "Alliance", NightElf = "Alliance", Gnome = "Alliance",
+    Orc = "Horde", Scourge = "Horde", Tauren = "Horde", Troll = "Horde" }
+local function factsFromGUID(guid)
+    if type(GetPlayerInfoByGUID) ~= "function" then return nil end
+    local ok, className, class, raceName, race, sex = pcall(GetPlayerInfoByGUID, guid)
+    if not ok or not cleanName(class) then return nil end
+    return { className = GL.Clean(className), class = GL.Clean(class), raceName = GL.Clean(raceName),
+        race = GL.Clean(race), sex = GL.Clean(sex) }
+end
+
 function GL.Remember(identity, inspect)
     if not GL.db or type(identity) ~= "table" then return nil end
     local clean = GL.IdentityFromName(identity.name, identity.surname, identity.guid)
@@ -587,9 +599,11 @@ function GL.Remember(identity, inspect)
     end
     record.fullName = record.name .. (record.surname and " " .. record.surname or "")
     local previousRace = record.race
+    local known = identity
+    if clean.guid and not record.class and not cleanName(identity.class) then known = factsFromGUID(clean.guid) or identity end
     for _, field in ipairs({ "class", "race" }) do
-        local value = cleanName(identity[field])
-        local name = cleanName(identity[field .. "Name"])
+        local value = cleanName(known[field])
+        local name = cleanName(known[field .. "Name"])
         if value and value ~= record[field] then record[field], record[field .. "Name"] = value, nil end
         if name and (not record[field] or value == record[field]) then record[field .. "Name"] = name end
     end
@@ -598,8 +612,8 @@ function GL.Remember(identity, inspect)
     if record.race and record.race == identity.race and raceID and raceID > 0 and raceID < math.huge and raceID == math.floor(raceID) then
         record.raceID = raceID
     end
-    record.faction = cleanName(identity.faction) or record.faction
-    local sex = GL.Clean(identity.sex, "number")
+    record.faction = cleanName(identity.faction) or record.faction or raceFaction[record.race]
+    local sex = GL.Clean(identity.sex, "number") or GL.Clean(known.sex, "number")
     if sex == 2 or sex == 3 then record.sex = sex end
     record.level = GL.ValidLevel(identity.level) or GL.ValidLevel(record.level)
     local previousGuild, previousRealm = record.guild, record.realm

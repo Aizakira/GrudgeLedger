@@ -375,14 +375,15 @@ local function classToken(d)
 end
 -- Seven lines: health, power, item level, the three statistics of the class, then honorable
 -- kills, or for the same-faction variant groups, trades and reports.
+local classPower={ROGUE="ENERGY",WARRIOR="RAGE",FERAL="ENERGY"}
 local function keyFigures(d,ally,met)
-    local stats,power=d.stats,"MANA"
+    local token=classToken(d)
+    local stats,power=d.stats,classPower[token] or "MANA"
     for i=#powers,1,-1 do
         if stats[powers[i]] then
             power=powers[i]
         end
     end
-    local token=classToken(d)
     local chosen=classStats[token]
     if not chosen then
         local main,best="AGILITY",-1
@@ -411,7 +412,7 @@ local function keyFigures(d,ally,met)
     end
     return figures
 end
-local function seenText(d)
+local function seenText(d,unread)
     local record,lines=d.record,{}
     local at=record.lastSeen or record.lastEncounterAt
     if at then
@@ -428,7 +429,8 @@ local function seenText(d)
     if d.archivedAt>0 then
         readings[#readings+1]=L("Armurerie du %s"):format(GL.Safe(date,"%d/%m",math.floor(d.archivedAt)) or "?")
     end
-    lines[#lines+1]=#readings>0 and L("Relevés : %s"):format(table.concat(readings," · ")) or L("Aucun relevé chargé")
+    lines[#lines+1]=#readings>0 and L("Relevés : %s"):format(table.concat(readings," · "))
+        or unread and L("Aucun relevé : ciblez-le à moins de 30 m, la lecture se fait seule") or L("Aucun relevé chargé")
     return table.concat(lines,"\n")
 end
 local COLUMN=166
@@ -543,9 +545,21 @@ local function drawIdentity(f,d)
         y=y+26
     end
     y=y+4
-    f.keyHeading:SetText(L("Chiffres clés"))
-    place(f.keyHeading,18)
     local figures=keyFigures(d,ally,met)
+    -- The column lists only what was read: a dash says nothing, and when nothing was read at all,
+    -- one sentence on how the reading happens says more than seven dashes.
+    local known={}
+    for _,figure in ipairs(figures) do
+        if figure[1] then
+            known[#known+1]=figure
+        end
+    end
+    figures=known
+    local unread=#figures==0
+    f.keyHeading:SetText(unread and "" or L("Chiffres clés"))
+    if not unread then
+        place(f.keyHeading,18)
+    end
     for i,figure in ipairs(figures) do
         local c=keyCell(f,i)
         c:ClearAllPoints()
@@ -559,7 +573,7 @@ local function drawIdentity(f,d)
         f.statCells[i]:Hide()
     end
     y=y+#figures*18+8
-    f.observed:SetText(seenText(d))
+    f.observed:SetText(seenText(d,unread))
     place(f.observed,f.observed:GetStringHeight()+8)
 end
 
@@ -933,6 +947,37 @@ local function weeks(presence)
     end
     return out
 end
+-- How the last death happened, from the combat log alone: nothing to read on the player and
+-- nothing to wait for. His heaviest spells first, then the total, the length and the killing blow.
+local function deathRecap(record,fight)
+    local event,D=fight and fight.main,GL.DeathReport
+    if not event or event.kind~="death" or not D then
+        return nil
+    end
+    local analysis=D.Analyse(event,record.guid,function() return "" end)
+    local his
+    for _,source in ipairs(analysis.sources) do
+        if source.opponent then
+            his=source
+        end
+    end
+    if not his then
+        return nil
+    end
+    local hits={}
+    for i=1,math.min(4,#his.spellList) do
+        hits[i]=UI.plain(his.spellList[i].name).." "..his.spellList[i].amount
+    end
+    local sums={L("%d dégâts en %d s"):format(his.total,math.max(1,analysis.duration or 1))}
+    if analysis.fatal and analysis.fatal.opponent then
+        sums[#sums+1]=L("coup fatal : %s"):format(UI.plain(analysis.fatal.spell))
+    end
+    local others=#analysis.sources-1
+    if others>0 then
+        sums[#sums+1]=others==1 and L("1 autre source de dégâts") or L("%d autres sources de dégâts"):format(others)
+    end
+    return table.concat(hits," · ").."\n"..table.concat(sums," · ")
+end
 local function buildOverview(f)
     local o=CreateFrame("Frame",nil,f)
     o:SetPoint("TOPLEFT",232,-197)
@@ -962,6 +1007,8 @@ local function buildOverview(f)
         o.cards[i]=card
     end
     o.noFacts=Panels.Text(o,0,-126,640,13,false,UI.theme.inkMuted)
+    o.recapTitle=Panels.Text(o,0,-186,640,14,true,UI.theme.red)
+    o.recap=Panels.Text(o,0,-206,640,12)
     o.presenceTitle=Panels.Text(o,0,-254,300,16,true,UI.theme.red)
     o.presenceLink=Panels.Link(o,440,-256,200,function()
         f.page,f.pageNumber="habits",1
@@ -1047,11 +1094,15 @@ local function paintOverview(f,d)
             card.caption:SetText(item.caption or item.text)
         end
     end
+    -- With one row of facts the second is free: say how the last death happened.
+    local last=not ally and fights(record)[1]
+    local recap=last and #list<=3 and (#list>0 or #story<=3) and deathRecap(record,last)
+    o.recapTitle:SetText(recap and L("Comment il vous a tué") or "")
+    o.recap:SetText(recap or "")
     o.presenceTitle:SetText(L("Présence sur douze mois"))
     o.presenceLink:SetText(L("Voir les habitudes"))
     local presence=I and record and I.Presence(record,f.guid) or {days={},total=0}
     o.strip:Set(weeks(presence),paintLevel)
-    local last=not ally and fights(record)[1]
     local event=ally and encounters(d,f.guid).events[1] or last and last.main
     o.lastCaption:SetText(ally and L("Dernier fait") or L("Dernier combat"))
     if event then

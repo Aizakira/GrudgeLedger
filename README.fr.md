@@ -365,6 +365,7 @@ Quelques commandes facultatives, également utilisables dans une macro :
 /gl settings
 /gl reperage
 /gl debug
+/gl sonde
 ```
 
 Les actions concernent le joueur ciblé. Le [guide complet](GrudgeLedger/README.txt) détaille les classements, les corrections et les sauvegardes.

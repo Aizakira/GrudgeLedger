@@ -1,5 +1,6 @@
 -- Capture what the client can see while the opponent still has a unit token.
 local GL = GrudgeLedger
+local L = GL.L or function(source) return source end
 local recent, order = {}, {}
 local pending, nextRequest = nil, 0
 local events = CreateFrame("Frame")
@@ -12,6 +13,14 @@ local function stateFor(guid)
         recent[guid] = {}
     end
     return recent[guid]
+end
+-- What the addon managed with a watched opponent: the first time each step happened, in seconds
+-- since the watch began. Session only; /gl sonde prints it.
+local function mark(state, step, now, unit)
+    local trace = state.trace
+    if not trace or trace[step] ~= nil then return end
+    trace[step] = now - trace.at
+    if unit then trace.unit = unit end
 end
 
 local function captureStats(unit)
@@ -73,13 +82,18 @@ function GL.InspectDossierUnit(unit, guid, retrySample)
     if not unit then return end
     local now = GL.Now()
     local state = stateFor(guid)
+    mark(state, "token", now, unit)
     local record = GL.Get("guid:" .. guid)
     state.snapshot = state.snapshot or (record and record.inspection) or {}
     local snapshot = state.snapshot
     if record and next(snapshot) then record.inspection = snapshot end
-    if retrySample or not state.statsRead or now - state.statsRead >= 60 then
+    -- A reading that returned nothing (the client hides these values in combat) is tried again two
+    -- seconds later; only a successful one rests for a minute.
+    if retrySample or not state.statsRead or now - state.statsRead >= (state.statsOk and 60 or 2) then
         state.statsRead = now
         local stats = captureStats(unit)
+        state.statsOk = stats ~= nil
+        mark(state, stats and "stats" or "hidden", now)
         if stats then
             snapshot.stats = snapshot.stats or {}
             for key, value in pairs(stats) do snapshot.stats[key] = value end
@@ -114,15 +128,26 @@ function GL.InspectDossierUnit(unit, guid, retrySample)
         return
     end
     state.retryAt = now + 1
-    if (InspectFrame and InspectFrame:IsShown()) or (PlayerSpellsFrame and GL.Safe(PlayerSpellsFrame.IsInspecting, PlayerSpellsFrame))
-        or GL.Safe(CanInspect, unit) ~= true
-        or (CheckInteractDistance and GL.Safe(CheckInteractDistance, unit, 1) == false) then return end
+    -- Forever accepts an inspection when CanInspect says yes or when the player is close: one is
+    -- enough (the Classic clients need both). Requiring both lost every reading beyond 28 yards.
+    -- The distance check is a restricted call in combat on recent clients: it is only made outside.
+    local allowed = GL.Safe(CanInspect, unit) == true
+    local close = CheckInteractDistance ~= nil and GL.Safe(InCombatLockdown) ~= true
+        and GL.Safe(CheckInteractDistance, unit, 1) == true
+    local busy = (InspectFrame and InspectFrame:IsShown())
+        or (PlayerSpellsFrame and GL.Safe(PlayerSpellsFrame.IsInspecting, PlayerSpellsFrame))
+    if busy then return end
+    if not (allowed or close) then
+        mark(state, "far", now)
+        return
+    end
     local request = {guid = guid, unit = unit, state = state}
     pending, nextRequest = request, now + 2
     state.attempts = (state.attempts or 0) + 1
     state.retryAt = now + (state.attempts < 3 and 3 or 30)
     if state.attempts >= 3 then state.attempts = 0 end
     if not pcall(NotifyInspect, unit) then pending = nil; return end
+    mark(state, "asked", now)
     GL.Emit("DOSSIER_UPDATED", guid)
     C_Timer.After(3, function()
         if pending ~= request then return end
@@ -165,7 +190,9 @@ function GL.WatchForInspection(guid, seconds)
     local count = 0
     for _ in pairs(watch) do count = count + 1 end
     if not watch[guid] and count >= WATCH_MAX then return false end
-    watch[guid] = math.max(watch[guid] or 0, GL.Now() + (seconds or WATCH_FIGHT))
+    local state, now = stateFor(guid), GL.Now()
+    if not watch[guid] or not state.trace then state.trace = { at = now } end
+    watch[guid] = math.max(watch[guid] or 0, now + (seconds or WATCH_FIGHT))
     if not watching then
         watching, elapsed = true, 0
         events:SetScript("OnUpdate", function(_, delta)
@@ -186,6 +213,107 @@ GL.On("THREAT_SEEN", function(identity)
     end
 end)
 
+-- /gl sonde: what this client really lets an addon read about the targeted player, and what the
+-- watch managed on the last opponents. Written after features were built on assumptions nobody had
+-- checked in the game; one screenshot settles them.
+local probe
+local function reading(fn, ...)
+    if type(fn) ~= "function" then return L("absent") end
+    local ok, value = pcall(fn, ...)
+    if not ok then return L("absent") end
+    -- A secret value cannot be compared, not even with nil: ask the game first.
+    if issecretvalue then
+        local checked, secret = pcall(issecretvalue, value)
+        if not checked or secret then return L("caché par le jeu") end
+    end
+    if value == nil then return L("absent") end
+    return L("lisible") .. " (" .. tostring(value) .. ")"
+end
+local function answer(value)
+    return value == true and L("oui") or value == false and L("non") or L("sans réponse")
+end
+local function count(list)
+    local total = 0
+    for _ in pairs(list or {}) do total = total + 1 end
+    return total
+end
+local function traceLine(guid, state)
+    local trace, snapshot = state.trace, state.snapshot or {}
+    local record = GL.Get("guid:" .. guid)
+    local name = tostring(record and (record.fullName or record.name) or guid):gsub("|", "||")
+    if not trace.token then return L("Suivi de %s : jamais repéré (ni cible, ni barre de nom, ni survol)"):format(name) end
+    local parts = { L("repéré après %d s (%s)"):format(trace.token, tostring(trace.unit)) }
+    parts[#parts + 1] = trace.stats and L("statistiques après %d s"):format(trace.stats)
+        or trace.hidden and L("statistiques cachées par le jeu") or L("statistiques non lues")
+    if trace.asked then
+        parts[#parts + 1] = L("inspection demandée après %d s"):format(trace.asked)
+        parts[#parts + 1] = trace.answer and L("réponse après %d s"):format(trace.answer) or L("sans réponse")
+    else
+        parts[#parts + 1] = trace.far and L("inspection refusée : trop loin ou interdite") or L("inspection non tentée")
+    end
+    parts[#parts + 1] = L("%d pièces · talents %s"):format(count(snapshot.gear), snapshot.trees and L("lus") or L("absents"))
+    return L("Suivi de %s : %s"):format(name, table.concat(parts, " · "))
+end
+local function probeTarget()
+    local unit = "target"
+    local guid = GL.Clean(GL.Safe(UnitGUID, unit), "string")
+    if not guid or not guid:match("^Player%-") or GL.Safe(UnitIsUnit, unit, "player") == true then
+        GL.Print(L("Sonde : ciblez un autre joueur, puis retapez /gl sonde."))
+        return false
+    end
+    local hostile = GL.Safe(UnitCanAttack, "player", unit) == true
+    local fighting = GL.Safe(InCombatLockdown) == true
+    GL.Print(L("Sonde de lecture · cible %s · vous êtes %s"):format(hostile and L("ennemie") or L("amicale"),
+        fighting and L("en combat") or L("hors combat")))
+    GL.Print(L("Vie maximale : %s · niveau : %s"):format(reading(UnitHealthMax, unit), reading(UnitLevel, unit)))
+    local ids, links = 0, 0
+    for slot = 1, 19 do
+        if GL.Clean(GL.Safe(GetInventoryItemID, unit, slot), "number") then ids = ids + 1 end
+        if type(GL.Safe(GetInventoryItemLink, unit, slot)) == "string" then links = links + 1 end
+    end
+    GL.Print(L("Avant inspection : %d pièces reconnues, %d liens complets"):format(ids, links))
+    local close = CheckInteractDistance and not fighting and GL.Safe(CheckInteractDistance, unit, 1)
+    GL.Print(L("Le jeu autorise l’inspection : %s · à courte portée : %s"):format(answer(GL.Safe(CanInspect, unit)), answer(close)))
+    -- The inspection is asked even when the game says no: the answer, or its absence, is the measurement.
+    probe = { guid = guid, at = GL.Clean(GL.Safe(GetTime), "number") or 0, unit = unit }
+    local asked = NotifyInspect ~= nil and pcall(NotifyInspect, unit)
+    if not asked then GL.Print(L("Inspection : la demande a été refusée par le jeu.")) end
+    local request = probe
+    if C_Timer and C_Timer.After then
+        C_Timer.After(4, function()
+            if probe == request and not request.answered then GL.Print(L("Inspection : aucune réponse en 4 secondes.")) end
+        end)
+    end
+    -- A model set from the player once: does it stay when they leave? Look at the small window.
+    local UI = GL.UITheme
+    if UI and UI.window then
+        local w = GrudgeLedgerProbe or UI.window("GrudgeLedgerProbe", L("Sonde : modèle 3D"), 300, 380)
+        if not w.model then
+            w.model = CreateFrame("PlayerModel", nil, w)
+            w.model:SetPoint("TOPLEFT", 12, -48)
+            w.model:SetPoint("BOTTOMRIGHT", -12, 12)
+            GL.Safe(w.model.SetKeepModelOnHide, w.model, true)
+        end
+        local ok, loaded = pcall(w.model.SetUnit, w.model, unit)
+        w:Show()
+        GL.Print(ok and loaded ~= false and L("Modèle 3D : affiché dans la petite fenêtre. Changez de cible, éloignez-vous : dites-moi s’il reste.")
+            or L("Modèle 3D : le jeu a refusé de l’afficher."))
+    end
+    return true
+end
+function GL.ReadingProbe()
+    local done, shown = probeTarget(), 0
+    for i = #order, 1, -1 do
+        local state = recent[order[i]]
+        if state and state.trace and shown < 3 then
+            shown = shown + 1
+            GL.Print(traceLine(order[i], state))
+        end
+    end
+    if shown == 0 then GL.Print(L("Aucun adversaire suivi depuis le dernier rechargement.")) end
+    return done
+end
+
 function GL.DossierInspection(record)
     local state = recent[record.guid]
     return record.inspection or (state and state.snapshot), pending and pending.guid == record.guid
@@ -205,15 +333,23 @@ GL.On("CHANGED", function(record, reason)
     local state = recent[record.guid]
     if state and state.snapshot and next(state.snapshot) then record.inspection = state.snapshot end
     if record.pvp and ((record.pvp.deaths or 0) > 0 or (record.pvp.kills or 0) > 0 or (record.pvp.aggressions or 0) > 0 or reason == "opening") then
-        GL.InspectDossierUnit(GL.VisiblePortraitUnit(record), record.guid)
         -- A fight just happened: keep trying while it lasts.
         if GL.FoughtRecently and GL.FoughtRecently(record) then GL.WatchForInspection(record.guid) end
+        GL.InspectDossierUnit(GL.VisiblePortraitUnit(record), record.guid)
     end
 end)
 
 events:RegisterEvent("INSPECT_READY")
 events:SetScript("OnEvent", function(_, _, guid)
     guid = GL.Clean(guid, "string")
+    if probe and probe.guid == guid and not probe.answered and GL.Safe(UnitGUID, probe.unit) == guid then
+        probe.answered = true
+        local _, class = GL.Safe(UnitClass, probe.unit)
+        local trees = GL.ReadInspectedTalents and GL.ReadInspectedTalents(class)
+        local delay = (GL.Clean(GL.Safe(GetTime), "number") or probe.at) - probe.at
+        GL.Print(L("Inspection : réponse en %.1f s · %d pièces · talents %s"):format(delay, count((readGear(probe.unit))),
+            trees and L("lus") or L("absents")))
+    end
     if not pending or pending.guid ~= guid then return end
     local request = pending
     local unit = inspectToken(request.unit, guid)
@@ -221,6 +357,7 @@ events:SetScript("OnEvent", function(_, _, guid)
     pending = nil
     local state = request.state
     local snapshot, now = state.snapshot, GL.Now()
+    mark(state, "answer", now)
     local gear, unresolved = readGear(unit)
     if gear and (not unresolved or not snapshot.gear or snapshot.partialGear) then
         if unresolved and snapshot.gear then
