@@ -4,6 +4,15 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Veille de guilde"] = "Vigilancia de la hermandad",
+        ["M’alerter des repérages"] = "Avisarme de los avistamientos",
+        ["Signaler mes repérages"] = "Compartir mis avistamientos",
+        ["Repéré par la guilde · %s"] = "Avistado por la hermandad · %s",
+        ["Prime"] = "Recompensa",
+        ["Vu par %s · %s"] = "Visto por %s · %s",
+        ["il y a %d s"] = "hace %d s",
+        ["dans votre zone"] = "en tu zona",
+        ["Envoie à votre guilde le nom du joueur et la zone où vous le voyez, au plus une fois toutes les deux minutes par joueur. Désactivé par défaut."] = "Envía a tu hermandad el nombre del jugador y la zona donde lo ves, como máximo una vez cada dos minutos por jugador. Desactivado por defecto.",
         ["Résumé"] = "Resumen",
         ["Builds"] = "Builds",
         ["Preuves"] = "Pruebas",
@@ -1536,6 +1545,15 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Veille de guilde"] = "Guild watch",
+        ["M’alerter des repérages"] = "Alert me of sightings",
+        ["Signaler mes repérages"] = "Share my sightings",
+        ["Repéré par la guilde · %s"] = "Spotted by the guild · %s",
+        ["Prime"] = "Bounty",
+        ["Vu par %s · %s"] = "Seen by %s · %s",
+        ["il y a %d s"] = "%d s ago",
+        ["dans votre zone"] = "in your zone",
+        ["Envoie à votre guilde le nom du joueur et la zone où vous le voyez, au plus une fois toutes les deux minutes par joueur. Désactivé par défaut."] = "Sends your guild the player's name and the zone where you see them, at most once every two minutes per player. Off by default.",
         ["Résumé"] = "Summary",
         ["Builds"] = "Builds",
         ["Preuves"] = "Evidence",

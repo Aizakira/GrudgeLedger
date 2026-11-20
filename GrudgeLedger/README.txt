@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.29.1
+GRUDGE LEDGER — 0.30.0
+
+Veille de guilde : quand un membre croise un joueur qu’il tient pour ennemi, une cible de prime ou un joueur mal vu de la guilde, les autres membres reçoivent une alerte « Repéré par la guilde », avec le nom du joueur, le membre qui l’a vu et la zone. Vous êtes alerté si ce joueur compte pour vous (votre ennemi, votre méfiance, une prime ouverte, l’avis de la guilde), ou si l’ennemi d’un collègue se trouve dans votre zone. Rien n’est ajouté à votre journal. Réglages → Alertes → Veille de guilde : « M’alerter des repérages » est coché par défaut ; « Signaler mes repérages » ne l’est pas, car il indique à votre guilde la zone où vous êtes. Au plus un signalement par joueur toutes les deux minutes. Tous les membres doivent avoir cette version.
 
 Correction : la flèche des combats s’affichait comme un rectangle vide (caractère absent de la police) ; elle devient « » ». Le portrait de la fiche est plus grand.
 

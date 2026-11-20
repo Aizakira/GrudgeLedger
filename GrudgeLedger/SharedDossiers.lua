@@ -180,25 +180,29 @@ function S.RefreshOpinions()
     end
     GL.SetGuildOpinions(map)
 end
+-- Guild watch reports received this session (see further down); never saved.
+local sightings = {}
 function S.GuildSighting(target)
-    local s,me=allowed(target)
-    if not s then return end
-    me=GL.Safe(UnitGUID,"player")
+    -- Testimonies and inspections need a guild card or a bounty; a watch report stands alone.
+    local s=allowed(target)
+    local me=GL.Safe(UnitGUID,"player")
     local best
     local function consider(at,actor)
         if type(at)=="number" and actor and actor~=me and (not best or at>best.at) then
             best={at=at,actor=actor}
         end
     end
-    for _,report in pairs(s.socialReports or {}) do
+    for _,report in pairs(s and s.socialReports or {}) do
         if report.target==target and not report.removed then
             for _,e in ipairs(report.events or {}) do consider(e.time,report.actor) end
         end
     end
-    local saved=s.dossiers and s.dossiers[target]
+    local saved=s and s.dossiers and s.dossiers[target]
     for _,field in pairs(saved and saved.fields or {}) do
         if field.source=="inspection" then consider(field.at,field.by) end
     end
+    local watched=sightings[target]
+    if watched then consider(watched.at,watched.actor) end
     if best then best.name=B.MemberName(best.actor) end
     return best
 end
@@ -503,6 +507,82 @@ local function send(s,target,fields,nature,delay)
     end
     return Transport.SendBatch(s,messages,{key=PROTOCOL..nature..target,delay=delay})
 end
+-- Guild watch (0.30.0). "J;S2;V;target;map;relation;name;zone": a member who sees a player they
+-- hold as an enemy, a bounty target or a player the guild dislikes tells the guild where.
+-- Sending is opt-in per character and off by default: it reveals the zone you are in.
+-- Nothing is saved: sightings live for the session only.
+local WATCH_EVERY, WATCH_PAUSE, WATCH_ECHO, WATCH_KEPT = 120, 10, 60, 64
+local watchSent, watchLast = {}, 0
+local watchCodes = {enemy="e", warning="w"}
+local function unescape(text)
+    return (text:gsub("%%(%x%x)", function(hex) return string.char(tonumber(hex, 16)) end))
+end
+-- ASCII letters and digits only, whatever the client's locale says a letter is.
+local function ascii(text)
+    return (text:gsub("[^A-Za-z0-9 .,:_%-]", function(c) return ("%%%02X"):format(c:byte()) end))
+end
+local function playerMap()
+    return GL.Clean(C_Map and GL.Safe(C_Map.GetBestMapForUnit, "player"), "number") or 0
+end
+function S.SharingSightings()
+    local s,me=B.GuildScope()
+    return s and s.shareSightings and s.shareSightings[me]==true or false
+end
+function S.ShareSightings(enabled)
+    local s,me=B.GuildScope()
+    if not s or not me then return end
+    s.shareSightings=s.shareSightings or {}
+    s.shareSightings[me]=enabled==true
+    GL.Emit("DOSSIER_UPDATED")
+end
+-- Called for every enemy, suspicious player or bounty target you see yourself.
+local function relaySighting(identity,relation,bounty)
+    local s,me=B.GuildScope()
+    local guid=type(identity)=="table" and identity.guid
+    local code=bounty and "b" or watchCodes[relation]
+    if not s or not me or not code or type(guid)~="string" or #guid>32 or not guid:match("^Player%-%w+%-%w+$") then return end
+    if not S.SharingSightings() or GL.IsPvPInstance() then return end
+    local now,map=GL.Now(),playerMap()
+    if watchSent[guid] and now-watchSent[guid]<WATCH_EVERY then return end
+    if now-watchLast<WATCH_PAUSE then return end
+    -- A guildmate just reported this player in the same zone: no need to say it twice.
+    local known=sightings[guid]
+    if known and now-known.at<WATCH_ECHO and known.map==map then return end
+    local record=GL.Get(identity)
+    local name=record and record.fullName or identity.fullName
+        or (identity.name and (identity.name..(identity.surname and (" "..identity.surname) or "")))
+    name=type(name)=="string" and name:sub(1,48) or ""
+    local zone=GL.Where():sub(1,48)
+    local message=table.concat({"J",PROTOCOL,"V",guid,map,code,ascii(name),ascii(zone)},";")
+    -- Urgent lane: a sighting is only useful now.
+    if #message<=250 then
+        Transport.Send(s,message)
+        watchSent[guid],watchLast=now,now
+    end
+end
+GL.On("THREAT_SEEN",relaySighting)
+local function receiveSighting(s,sender,target,map,code,name,zone)
+    local now,count,oldest=GL.Now(),0,nil
+    for guid,sight in pairs(sightings) do
+        if now-sight.at>900 then
+            sightings[guid]=nil
+        else
+            count=count+1
+            if not oldest or sight.at<sightings[oldest].at then oldest=guid end
+        end
+    end
+    if count>=WATCH_KEPT and oldest then sightings[oldest]=nil end
+    local sight={at=now,actor=sender,map=map,relation=code=="w" and "warning" or "enemy",bounty=code=="b",
+        name=unescape(name):sub(1,48),zone=unescape(zone):sub(1,48),member=B.MemberName(sender)}
+    sightings[target]=sight
+    GL.Emit("GUILD_SIGHTING",target,sight,map>0 and map==playerMap())
+    GL.Emit("DOSSIER_UPDATED",target)
+end
+-- The latest guild watch report for a player, for the session.
+function S.WatchSighting(target)
+    local sight=sightings[target]
+    return sight and GL.Now()-sight.at<=900 and sight or nil
+end
 local function sendWithdrawal(s)
     s.dossierSeq = math.max((s.dossierSeq or 0) + 1, GL.Now() * 1000)
     if Transport.SendBatch(s,{table.concat({"J",PROTOCOL,"W",s.dossierSeq},";")}) then
@@ -614,6 +694,13 @@ function S.Receive(s,sender,raw)
     if withdrawal then
         if #withdrawal <= 16 then
             withdrawAll(s,sender,tonumber(withdrawal))
+        end
+        return
+    end
+    local seen,map,code,name,zone = raw:match("^S2;V;(Player%-%w+%-%w+);(%d+);([ewb]);([A-Za-z0-9%% .,:_%-]*);([A-Za-z0-9%% .,:_%-]*)$")
+    if seen then
+        if #seen <= 32 and #map <= 8 and #name <= 144 and #zone <= 144 then
+            receiveSighting(s,sender,seen,tonumber(map),code,name,zone)
         end
         return
     end

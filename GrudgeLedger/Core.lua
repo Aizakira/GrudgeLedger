@@ -21,7 +21,7 @@ local socialTotals = setmetatable({}, { __mode = "k" })
 local lastInteraction = setmetatable({}, { __mode = "k" })
 local openingProofs = setmetatable({}, { __mode = "k" })
 local defaults = {
-    markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false,
+    markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false, guildSightings = true,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
     groupTracking = true, socialTracking = true, tradeTracking = false, minimapAngle = 225, readableFont = false,
     quickGestures = true, detectionLog = true, partyWarnings = false, tagReminders = true, chatBadges = false, compactTooltips = false,
