@@ -102,74 +102,6 @@ local function itemDetails(item)
     return #lines>0 and table.concat(lines,"\n") or L("Détails de la pièce non publiés.")
 end
 local relationNames={friend=L("Ami"),warning=L("Méfiance"),enemy=L("Ennemi"),neutral=L("Neutre")}
-local function relationsPage(f,record,row)
-    local B,G,S=GL.Bounties,GL.GuildProfiles,GL.SharedDossiers
-    local timeline={}
-    local function add(at,description,source)
-        timeline[#timeline+1]={at=tonumber(at) or 0,description=description,source=source,seq=#timeline+1}
-    end
-    row(L("Avis sur ce personnage"),nil,true)
-    if record then
-        row(L("Votre carnet"),string.format("%+d",record.reputation or 0).." · "..(relationNames[GL.Relation(record)] or unknown))
-        if GL.TagText and GL.TagText(record) then row(GL.TagText(record)) end
-        for _,item in ipairs(GL.JournalEvents()) do
-            if item.record==record then
-                local e=item.event
-                local description=GL.HistoryTitle(e)
-                if e.text then description=description.."\n"..UI.plain(e.text) end
-                if e.zone and e.zone~="?" then description=description.." · "..UI.plain(e.zone) end
-                if e.voided then description=description.." · "..L("Annulé · exclu") end
-                add(e.time,description,L("Votre journal").." · "..UI.plain(e.actorName or L("Auteur inconnu")))
-            end
-        end
-    else row(L("Aucune rencontre personnelle enregistrée.")) end
-    local reports=S and S.SocialReports(f.guid) or {}
-    for _,report in ipairs(reports) do
-        local author=UI.plain(B.MemberName(report.actor) or report.authorName or L("Membre de guilde"))
-        row(author,string.format("%+d",report.score).." · "..relationNames[report.relation])
-        row(field(L("Relevé"),timestamp(report.at)))
-        for _,e in ipairs(report.events) do
-            add(e.time,GL.HistoryTitle(e,author,f.nameLabel:GetText())..(e.zone and (" · "..UI.plain(e.zone)) or ""),L("Témoignage de %s"):format(author))
-        end
-    end
-    if #reports==0 then row(L("Aucun historique ni solde partagé par les autres membres.")) end
-    row(L("Le partage des faits et avis se règle dans Réglages > Relations. Les notes restent privées."))
-    local seen,tagNames={},{}
-    for _,choice in ipairs(G and G.choices or {}) do tagNames[choice[1]]=L(choice[2]) end
-    for _,card in ipairs(G and G.List() or {}) do
-        if card.target==f.guid then
-            local history=G.View(card)
-            for _,e in ipairs(history) do
-                local key=e.actor..":"..e.seq
-                if not seen[key] then
-                    seen[key]=true
-                    add(e.time,(e.on and L("Étiquette ajoutée : ") or L("Étiquette retirée : "))..(tagNames[e.tag] or unknown),
-                        L("Avis de %s"):format(UI.plain(e.authorName)))
-                end
-            end
-        end
-    end
-    for _,order in pairs(B and B.List() or {}) do
-        if order.target==f.guid then
-            local author=UI.plain(B.MemberName(order.owner) or L("Membre de guilde"))
-            add(order.at,L("Mise à prix créée"),L("Créée par %s"):format(author))
-            if order.endedAt then add(order.endedAt,L("Fin de la mise à prix"),L("Créée par %s"):format(author)) end
-        end
-    end
-    table.sort(timeline,function(a,b) if a.at~=b.at then return a.at>b.at end return a.seq>b.seq end)
-    row(L("Interactions datées"),nil,true)
-    row(L("Les témoignages restent attribués à leur auteur ; ils ne modifient pas votre avis."))
-    local offset=math.min(f.historyOffset or 0,math.max(0,math.ceil(#timeline/40)-1)*40)
-    f.historyOffset=offset
-    f.historyPrev:SetEnabled(offset>0); f.historyNext:SetEnabled(offset+40<#timeline)
-    f.historyCount:SetText(("%d–%d / %d"):format(#timeline>0 and offset+1 or 0,math.min(offset+40,#timeline),#timeline))
-    if #timeline==0 then row(L("Aucune interaction datée disponible.")) end
-    for i=offset+1,math.min(offset+40,#timeline) do
-        local entry=timeline[i]
-        row(timestamp(entry.at).." · "..entry.source.."\n"..entry.description)
-    end
-end
-
 local frame
 local function armoryURL(fullName)
     local region=GL.ArmoryRegion()
@@ -448,6 +380,187 @@ end
 local function inGuild(f)
     return f.guid and GL.Bounties and GL.Safe(GetGuildInfo,"player")
 end
+local function bountyDossier(guid)
+    local B=GL.Bounties
+    return B and B.TargetRecord and B.TargetRecord(guid) or {orders={},count=0}
+end
+local function gold(copper)
+    return GL.BountyMoney and GL.BountyMoney(copper or 0) or tostring(math.floor((copper or 0)/10000))
+end
+-- "Mis à prix 4 fois · 140 PO promis", then "Tué 3 fois · 1 expirée · contrats honorés 3/3".
+local function bountySummary(r)
+    local first=L("Mis à prix %d fois · %s promis"):format(r.count,gold(r.promised))
+    local second=L("Tué %d fois"):format(r.killed)
+    if r.expired>0 then
+        second=second.." · "..(r.expired==1 and L("%d expirée") or L("%d expirées")):format(r.expired)
+    end
+    if r.withdrawn>0 then
+        second=second.." · "..(r.withdrawn==1 and L("%d retirée") or L("%d retirées")):format(r.withdrawn)
+    end
+    if r.completed>0 then
+        second=second.." · "..L("contrats honorés %d/%d"):format(r.honored,r.completed)
+    end
+    return first.."\n"..second
+end
+local bountyStates={open=L("ouverte"),claimed=L("réclamée, en attente de validation"),fulfilled=L("paiement en attente"),
+    sent=L("payée, réception à confirmer"),paid=L("payée"),withdrawn=L("retirée"),expired=L("expirée sans victoire")}
+local function delay(seconds)
+    local hours=math.max(0,math.floor(seconds/3600))
+    if hours<48 then
+        return L("%d h"):format(hours)
+    end
+    return L("%d j"):format(math.floor(hours/24))
+end
+-- "18/11/2026 · 60 PO · remplie par Kazuma (+1) en 2 h · payée"
+local function bountyLine(e)
+    local line=timestamp(e.at).." · "..gold(e.pot)
+    if e.hunter then
+        local helpers=0
+        for _ in (e.helpers or ""):gmatch("[^,]+") do
+            helpers=helpers+1
+        end
+        local name=UI.plain(GL.Bounties.MemberName(e.hunter) or L("Membre de guilde"))
+        line=line.." · "..L("remplie par %s"):format(name..(helpers>0 and (" (+"..helpers..")") or ""))
+        line=line.." "..L("en %s"):format(delay((e.killedAt or e.at)-e.at))
+    end
+    return line.." · "..(bountyStates[e.state] or unknown)
+end
+-- One row per guild member: their opinion and their fights against the target, then the guild total.
+local function memberRows(f,row)
+    local B,S=GL.Bounties,GL.SharedDossiers
+    local members,me={},GL.Safe(UnitGUID,"player")
+    local function member(id)
+        members[id]=members[id] or {id=id}
+        return members[id]
+    end
+    for _,report in ipairs(S and S.SocialReports(f.guid) or {}) do
+        local m=member(report.actor)
+        m.score,m.relation,m.name=report.score,report.relation,report.authorName
+    end
+    local scope=inGuild(f) and B.GuildScope()
+    for id,fights in pairs(scope and scope.scores and scope.scores[f.guid] or {}) do
+        member(id).fights=fights
+    end
+    members[me]=nil
+    local list={}
+    for _,m in pairs(members) do
+        m.label=UI.plain(B and B.MemberName(m.id) or m.name or L("Membre de guilde"))
+        list[#list+1]=m
+    end
+    table.sort(list,function(a,b)
+        if (a.score or math.huge)~=(b.score or math.huge) then
+            return (a.score or math.huge)<(b.score or math.huge)
+        end
+        return a.label<b.label
+    end)
+    local sum,count=0,0
+    for _,m in ipairs(list) do
+        local parts={L("sans avis")}
+        if m.score then
+            parts[1]=("%+d"):format(m.score).." · "..(relationNames[m.relation] or unknown)
+            sum,count=sum+m.score,count+1
+        end
+        if m.fights then
+            parts[2]=score(m.fights[1],m.fights[2])
+        end
+        row(m.label,table.concat(parts," · "))
+    end
+    if #list==0 then
+        row(L("Aucun historique ni solde partagé par les autres membres."))
+    end
+    if count>0 then
+        row(L("Total de la guilde"),L("%s · %d avis"):format(("%+d"):format(sum),count))
+    end
+end
+local filters={{"mine","Moi",58},{"guild","Guilde",92},{"all","Tout",58}}
+local function relationsPage(f,record,row)
+    local B,G,S=GL.Bounties,GL.GuildProfiles,GL.SharedDossiers
+    local me,filter=GL.Safe(UnitGUID,"player"),f.relationFilter or "all"
+    local timeline={}
+    local function add(at,description,source,mine)
+        if filter=="all" or (filter=="mine")==(mine==true) then
+            timeline[#timeline+1]={at=tonumber(at) or 0,description=description,source=source,seq=#timeline+1}
+        end
+    end
+    row(L("Votre avis"),nil,true)
+    if record then
+        row(L("Votre carnet"),("%+d"):format(record.reputation or 0).." · "..(relationNames[GL.Relation(record)] or unknown))
+        if GL.TagText and GL.TagText(record) then
+            row(GL.TagText(record))
+        end
+        for _,item in ipairs(GL.JournalEvents()) do
+            if item.record==record then
+                local e=item.event
+                local description=GL.HistoryTitle(e)
+                if e.text then
+                    description=description.."\n"..UI.plain(e.text)
+                end
+                if e.zone and e.zone~="?" then
+                    description=description.." · "..UI.plain(e.zone)
+                end
+                if e.voided then
+                    description=description.." · "..L("Annulé · exclu")
+                end
+                add(e.time,description,L("Votre journal").." · "..UI.plain(e.actorName or L("Auteur inconnu")),true)
+            end
+        end
+    else
+        row(L("Aucune rencontre personnelle enregistrée."))
+    end
+    row(L("Avis de la guilde"),nil,true)
+    memberRows(f,row)
+    for _,report in ipairs(S and S.SocialReports(f.guid) or {}) do
+        local author=UI.plain(B.MemberName(report.actor) or report.authorName or L("Membre de guilde"))
+        for _,e in ipairs(report.events) do
+            local title=GL.HistoryTitle(e,author,f.nameLabel:GetText())..(e.zone and (" · "..UI.plain(e.zone)) or "")
+            add(e.time,title,L("Témoignage de %s"):format(author),report.actor==me)
+        end
+    end
+    local seen,tagNames={},{}
+    for _,choice in ipairs(G and G.choices or {}) do
+        tagNames[choice[1]]=L(choice[2])
+    end
+    for _,card in ipairs(G and G.List() or {}) do
+        if card.target==f.guid then
+            for _,e in ipairs(G.View(card)) do
+                local key=e.actor..":"..e.seq
+                if not seen[key] then
+                    seen[key]=true
+                    local change=(e.on and L("Étiquette ajoutée : ") or L("Étiquette retirée : "))..(tagNames[e.tag] or unknown)
+                    add(e.time,change,L("Avis de %s"):format(UI.plain(e.authorName)),e.actor==me)
+                end
+            end
+        end
+    end
+    for _,order in ipairs(bountyDossier(f.guid).orders) do
+        local author=L("Créée par %s"):format(UI.plain(B.MemberName(order.owner) or L("Membre de guilde")))
+        add(order.at,L("Mise à prix créée"),author,order.owner==me)
+        if order.endedAt then
+            add(order.endedAt,L("Fin de la mise à prix"),author,order.owner==me)
+        end
+    end
+    table.sort(timeline,function(a,b)
+        if a.at~=b.at then
+            return a.at>b.at
+        end
+        return a.seq>b.seq
+    end)
+    row(L("Interactions datées"),nil,true)
+    row(L("Les témoignages restent attribués à leur auteur ; ils ne modifient pas votre avis."))
+    local offset=math.min(f.historyOffset or 0,math.max(0,math.ceil(#timeline/40)-1)*40)
+    f.historyOffset=offset
+    f.historyPrev:SetEnabled(offset>0)
+    f.historyNext:SetEnabled(offset+40<#timeline)
+    f.historyCount:SetText(("%d–%d / %d"):format(#timeline>0 and offset+1 or 0,math.min(offset+40,#timeline),#timeline))
+    if #timeline==0 then
+        row(L("Aucune interaction datée disponible."))
+    end
+    for i=offset+1,math.min(offset+40,#timeline) do
+        local entry=timeline[i]
+        row(timestamp(entry.at).." · "..entry.source.."\n"..entry.description)
+    end
+    row(L("Le partage des faits et avis se règle dans Réglages > Relations. Les notes restent privées."))
+end
 local function overviewPage(f,d,row)
     local record=d.localRecord
     row(L("Dernière rencontre"),nil,true)
@@ -480,19 +593,15 @@ local function overviewPage(f,d,row)
         row(L("Total de la guilde"),score(GL.Bounties.GuildFights(f.guid)))
     end
     row(L("Primes"),nil,true)
-    local order,count=openBounty(f.guid),0
-    for _,o in pairs(GL.Bounties and GL.Bounties.List() or {}) do
-        if o.target==f.guid then
-            count=count+1
-        end
-    end
+    local order=openBounty(f.guid)
     if order then
         row(L("Prime ouverte"),bountyAmount(order))
     else
         row(L("Aucune prime ouverte."))
     end
-    if count>0 then
-        row(L("Mises à prix connues"),tostring(count))
+    local dossier=bountyDossier(f.guid)
+    if dossier.count>0 then
+        row(bountySummary(dossier))
     end
     row(L("Évolution"),nil,true)
     local lines=f.guid and GL.CharacterEvolution and GL.CharacterEvolution(f.guid) or {}
@@ -538,6 +647,17 @@ local function combatPage(f,d,row)
         end
     else
         row(unknown)
+    end
+    row(L("Dossier de primes"),nil,true)
+    local dossier=bountyDossier(f.guid)
+    if dossier.count==0 then
+        row(L("Jamais mis à prix dans votre guilde."))
+    else
+        row(bountySummary(dossier))
+        for _,e in ipairs(dossier.orders) do
+            local by=UI.plain(GL.Bounties.MemberName(e.owner) or L("Membre de guilde"))
+            row(bountyLine(e),L("par %s"):format(by))
+        end
     end
     row(L("Palmarès JcJ · Armurerie"),nil,true)
     row(L("Victoires honorables"),valueOf(profile.honorableKills) or unknown)
@@ -628,7 +748,10 @@ local function draw(f)
     for key,b in pairs(f.tabs) do
         UI.selectButton(b,f.page==key)
     end
-    for _,control in ipairs({f.historyPrev,f.historyNext,f.historyCount}) do
+    for key,b in pairs(f.filters) do
+        UI.selectButton(b,(f.relationFilter or "all")==key)
+    end
+    for _,control in ipairs({f.historyPrev,f.historyNext,f.historyCount,f.filters.mine,f.filters.guild,f.filters.all}) do
         if f.page=="relations" then
             control:Show()
         else
@@ -805,6 +928,18 @@ local function build()
         f.scroll:SetVerticalScroll(0)
         draw(f)
     end,nil,true)
+    f.filters={}
+    local x=671
+    for _,s in ipairs(filters) do
+        local key=s[1]
+        f.filters[key]=UI.button(f,L(s[2]),x,-190,s[3],function()
+            f.relationFilter=key
+            f.historyOffset=0
+            f.scroll:SetVerticalScroll(0)
+            draw(f)
+        end,true,true)
+        x=x+s[3]+3
+    end
     f.historyCount=UI.label(f,"",nil,493,-652,252)
     f.historyCount:SetJustifyH("CENTER")
     f.historyCount:SetTextColor(unpack(UI.theme.inkMuted))
@@ -830,7 +965,7 @@ function GL.OpenPlayerDossier(id,onReturn,knownName,page)
     frame.armoryLink:Hide()
     frame.key,frame.guid,frame.onReturn,frame.knownName=key,guid,onReturn,knownName
     frame.page=frame.tabs[page] and page or "overview"
-    frame.historyOffset,frame.gearStats=0,false
+    frame.historyOffset,frame.gearStats,frame.relationFilter=0,false,"all"
     frame.scroll:SetVerticalScroll(0)
     frame.identityScroll:SetVerticalScroll(0)
     if GL.InspectDossierUnit then

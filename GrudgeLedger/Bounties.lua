@@ -325,6 +325,91 @@ function B.History()
     end
     return GL.db and GL.db.bountyHistory and GL.db.bountyHistory[GL.Safe(UnitGUID,"player")] or {}
 end
+-- A compact record per target, so the sheet keeps its bounty dossier after the
+-- 38-day rotation of guild events. Each member keeps the copy of what they saw.
+local MAX_RECORD_ORDERS, MAX_RECORD_TARGETS = 30, 400
+local function compact(o)
+    local total=0
+    for _,amount in pairs(o.pot) do
+        total=total+amount
+    end
+    local w=o.winner
+    return {at=o.at,owner=o.owner,pot=total,state=o.state,endedAt=o.endedAt,expires=o.expires,quota=o.quota,
+        hunter=w and w.actor,helpers=w and w.detail~="" and w.detail or nil,killedAt=w and w.time}
+end
+local function trim(map,limit,date)
+    local keys={}
+    for key in pairs(map) do
+        keys[#keys+1]=key
+    end
+    if #keys<=limit then
+        return
+    end
+    table.sort(keys,function(a,b) return date(map[a])>date(map[b]) end)
+    for i=limit+1,#keys do
+        map[keys[i]]=nil
+    end
+end
+local function archive(s,orders)
+    s.bountyRecords=s.bountyRecords or {}
+    local records=s.bountyRecords
+    for id,o in pairs(orders) do
+        local r=records[o.target]
+        if o.supersededBy then
+            if r then
+                r.orders[id]=nil
+            end
+        elseif not o.archived and guid(o.target) then
+            r=r or {orders={}}
+            r.name,r.at=o.name,math.max(r.at or 0,o.at)
+            r.orders[id]=compact(o)
+            records[o.target]=r
+            trim(r.orders,MAX_RECORD_ORDERS,function(c) return c.at end)
+        end
+    end
+    trim(records,MAX_RECORD_TARGETS,function(r) return r.at or 0 end)
+end
+-- The bounty dossier of one target: live orders first, then what was archived.
+function B.TargetRecord(target)
+    local s=scope()
+    local result={orders={},count=0,promised=0,killed=0,expired=0,withdrawn=0,completed=0,honored=0}
+    if not s or not guid(target) then
+        return result
+    end
+    local entries={}
+    local saved=s.bountyRecords and s.bountyRecords[target]
+    for id,c in pairs(saved and saved.orders or {}) do
+        entries[id]=c
+    end
+    for id,o in pairs(view(s)) do
+        if o.target==target and not o.archived then
+            entries[id]=not o.supersededBy and compact(o) or nil
+        end
+    end
+    for id,c in pairs(entries) do
+        local e={id=id}
+        for k,v in pairs(c) do
+            e[k]=v
+        end
+        if e.state=="open" and e.expires and GL.Now()>e.expires then
+            e.state="expired"
+        end
+        result.orders[#result.orders+1]=e
+        result.count,result.promised=result.count+1,result.promised+(e.pot or 0)
+        if e.hunter then
+            result.killed=result.killed+1
+        end
+        if e.state=="expired" or e.state=="withdrawn" then
+            result[e.state]=result[e.state]+1
+        end
+        if e.state=="paid" or e.state=="sent" or e.state=="fulfilled" then
+            result.completed=result.completed+1
+            result.honored=result.honored+(e.state=="paid" and 1 or 0)
+        end
+    end
+    table.sort(result.orders,function(a,b) return a.at>b.at end)
+    return result
+end
 function B.List()
     local s=scope()
     return s and view(s) or {}
@@ -377,6 +462,7 @@ local function changed(s,me)
         if scope()~=s then return end
         local orders=view(s)
         remember(orders,me)
+        archive(s,orders)
         local uncertain=s.mailUncertain and s.mailUncertain[me]
         if uncertain and uncertain.offset then
             local o=orders[uncertain.id] or GL.db.bountyHistory[me][uncertain.id]
@@ -958,7 +1044,9 @@ end
 local function join()
     local s,me=scope()
     if s and (not lastPrune or GL.Now()-lastPrune>=3600) then
-        remember(view(s,true),me)
+        local everything=view(s,true)
+        remember(everything,me)
+        archive(s,everything)
         for k,raw in pairs(s.events) do
             local e=unpackEvent(raw)
             -- Keep the recipient's own receipts available to payers who return after rotation.

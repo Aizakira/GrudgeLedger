@@ -325,6 +325,15 @@ function QA.capture(name)
             end
             return GL.OpenBounties(opponent.guid,"view")
         end
+        if name:find("^dossier%-") then
+            -- Two archived contracts, older than the guild event log (example values).
+            local scope=GL.Bounties.GuildScope()
+            local hunter,day=records[4].guid,86400
+            scope.bountyRecords={[guid]={name="Isabeau Clairfeuille",at=qaClock-12*day,orders={
+                ["Player-1-qa:1"]={at=qaClock-45*day,owner=hunter,pot=600000,state="paid",endedAt=qaClock-45*day+7200,
+                    expires=qaClock-38*day,quota=1,hunter=hunter,helpers="Player-1-qa-helper",killedAt=qaClock-45*day+7200},
+                ["Player-1-qa:2"]={at=qaClock-12*day,owner=hunter,pot=250000,state="open",expires=qaClock-5*day,quota=1}}}}
+        end
         if name=="dossier-relations" then
             GL.GuildProfiles.Publish(GL.Get("guid:"..guid))
             local scope=GL.Bounties.GuildScope()

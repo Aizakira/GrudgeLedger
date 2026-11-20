@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.15.0
+GRUDGE LEDGER — 0.16.0
+
+Dossier de primes : la fiche dit combien de fois un joueur a été mis à prix dans votre guilde, l’or promis, combien de fois il a été tué, les primes expirées ou retirées et les contrats honorés. L’onglet Combats liste chaque prime (date, montant, chasseur, délai, paiement). Ce résumé est gardé après les 38 jours d’effacement des événements de primes. Relations : une ligne par membre avec son avis et son bilan contre ce joueur, puis le total de la guilde ; les boutons Moi, Guilde et Tout filtrent les interactions datées.
 
 Nouvelle fiche joueur : elle s’ouvre sur l’Aperçu (dernière rencontre, dernier combat, bilan avec la guilde, primes, évolution). La colonne de gauche reste la même sur tous les onglets : niveau, classe et spécialisation, votre avis et celui de la guilde, prime ouverte, six chiffres clés, dernière fois vu et date des relevés. L’onglet Combats réunit votre face-à-face, la liste datée des combats (cliquez pour ouvrir le détail) et le palmarès de l’Armurerie. Toutes les caractéristiques sont dans Équipement → « Voir les caractéristiques ». L’onglet Factions est retiré.
 
