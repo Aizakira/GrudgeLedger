@@ -4,6 +4,10 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Retour au résumé"] = "Volver al resumen",
+        ["Votre histoire"] = "Tu historia",
+        ["Histoire détaillée"] = "Historia detallada",
+        ["Toutes les notes"] = "Todas las notas",
         ["Tous"] = "Todos",
         ["À régler"] = "Pendientes",
         ["Signalés"] = "Señalados",
@@ -1588,6 +1592,10 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Retour au résumé"] = "Back to the summary",
+        ["Votre histoire"] = "Your story",
+        ["Histoire détaillée"] = "Detailed history",
+        ["Toutes les notes"] = "All notes",
         ["Tous"] = "All",
         ["À régler"] = "To settle",
         ["Signalés"] = "Reported",

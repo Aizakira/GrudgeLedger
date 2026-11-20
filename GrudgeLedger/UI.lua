@@ -2100,9 +2100,10 @@ local function renderDetail()
     local tab = ledger.detailTab or "summary"
     if record then ledger.emptyPage:Hide() else ledger.emptyPage:Show() end
     for key, control in pairs(ledger.detailTabs) do
-        if record then control:Show() else control:Hide() end
+        control:Hide()
         UI.selectButton(control, tab == key)
     end
+    showIf(ledger.backToSummary, record ~= nil and tab ~= "summary")
     for _, b in ipairs(ledger.actions) do b:SetEnabled(record ~= nil) end
     ledger.guildButton:SetEnabled(record ~= nil and record.guild ~= nil)
     ledger.tools:SetEnabled(record ~= nil)
@@ -2128,8 +2129,8 @@ local function renderDetail()
     showIf(ledger.balancePanel, summary)
     showIf(ledger.matchupHistory, matchup)
     ledger.detailScroll:ClearAllPoints()
-    ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -450 or matchup and -380 or -283)
-    ledger.detailScroll:SetHeight(summary and 126 or matchup and 220 or 293)
+    ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -417 or matchup and -380 or -283)
+    ledger.detailScroll:SetHeight(summary and 165 or matchup and 220 or 293)
     ledger.detailTitle:SetTextColor(unpack(theme.ink))
     local profile = GL.ArmoryProfile(record)
     local public = profile and profile.identity
@@ -2207,6 +2208,13 @@ local function renderDetail()
                 "|cff653c20" .. L("Dernière rencontre") .. "|r",
                 record.lastEncounterAt and (stamp(record.lastEncounterAt) .. (record.lastEncounterZone and "  ·  " .. plain(record.lastEncounterSubzone or record.lastEncounterZone) or "")) or L("Date non enregistrée"),
             }
+            local story = GL.CharacterInsights and GL.CharacterInsights.Story(record) or {}
+            if #story > 0 then
+                local told = { "|cff653c20" .. L("Votre histoire") .. "|r" }
+                for _, sentence in ipairs(story) do told[#told + 1] = plain(sentence) end
+                told[#told + 1] = ""
+                for i = #told, 1, -1 do table.insert(lines, 1, told[i]) end
+            end
             local note = record.notes and record.notes[#record.notes]
             if note then
                 -- ponytail: a short UTF-8-safe preview keeps the summary compact; Notes retains the full text.
@@ -2871,7 +2879,7 @@ local function buildLedger()
         if record then GL.EditNote(record) end
     end, nil, true)
     f.toolsMenu = CreateFrame("Frame", nil, f)
-    f.toolsMenu:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 734, -624) f.toolsMenu:SetSize(180, 148)
+    f.toolsMenu:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 734, -624) f.toolsMenu:SetSize(180, 206)
     f.toolsMenu:SetFrameStrata("FULLSCREEN_DIALOG") f.toolsMenu:SetToplevel(true) f.toolsMenu:EnableMouse(true)
     surface(f.toolsMenu, theme.gold) surface(f.toolsMenu, theme.panel, 1)
     f.tools = button(f, L("Autres actions"), 734, -634, 180, function() toggleMenu(f.toolsMenu) end, nil, true)
@@ -2912,7 +2920,17 @@ local function buildLedger()
         end,
     }
     f:HookScript("OnHide", function() StaticPopup_Hide(deleteDialog) end)
-    f.actions[#f.actions + 1] = button(f.toolsMenu, L("Supprimer la fiche…"), 3, -119, 174, function()
+    f.openHistory = button(f.toolsMenu, L("Histoire détaillée"), 3, -119, 174, function()
+        f.toolsMenu:Hide()
+        f.detailTab, f.historyPage.kind, f.historyPage.offset = "history", "all", 0
+        renderDetail()
+    end)
+    f.openNotes = button(f.toolsMenu, L("Toutes les notes"), 3, -148, 174, function()
+        f.toolsMenu:Hide()
+        f.detailTab = "notes"
+        renderDetail()
+    end)
+    f.actions[#f.actions + 1] = button(f.toolsMenu, L("Supprimer la fiche…"), 3, -177, 174, function()
         closeMenu()
         local record = currentRecord()
         if record then StaticPopup_Show(deleteDialog, plain(record.fullName or record.key), nil, record) end
@@ -2931,7 +2949,12 @@ local function buildLedger()
     end
     f.detailTabs.dossier = button(f, L("Armurerie"), 802, -234, 111, dossier, true, true)
     f.counters = CreateFrame("Frame", nil, f)
-    f.counters:SetPoint("TOPLEFT", 354, -269) f.counters:SetSize(558, 160)
+    f.counters:SetPoint("TOPLEFT", 354, -236) f.counters:SetSize(558, 160)
+    f.backToSummary = button(f, "‹ " .. L("Retour au résumé"), 354, -234, 190, function()
+        f.detailTab = "summary"
+        f.detailScroll.page = 1
+        renderDetail()
+    end, nil, true)
     f.metrics = {}
     for i, entry in ipairs({ { "deaths", L("Vos morts") }, { "kills", L("Vous l’avez vaincu") } }) do
         local card = CreateFrame("Frame", nil, f.counters)
