@@ -68,6 +68,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `dossiers` | Relevés publics, par cible : `fields` (une entrée par champ, avec `data`, `at`, `source`, `by`, `via` et, pour l'équipement, l'identité et les caractéristiques, `dates`), `received`, `sender`, `senderName`. Une inspection d'une cible sans fiche personnelle y est aussi gardée | 256 cibles, la plus ancienne est évincée |
 | `dossierSeq` | Dernier numéro de transfert de relevé émis | — |
 | `bountyRecords` | Dossier de primes par cible, gardé après l'effacement des événements : `name`, `at` (dernière prime) et `orders` par `auteur:numéro` (`at`, `owner`, `pot` total promis en cuivre, `state`, `endedAt`, `expires`, `quota`, `hunter`, `helpers`, `killedAt`). Chaque membre garde la copie de ce qu'il a vu ; rien n'est transmis | 30 primes par cible, 400 cibles, les plus anciennes sont évincées |
+| `socialReports` (lecture) | Depuis la 0.25.0, la somme des témoignages reçus et les mauvaises étiquettes des fiches de guilde donnent l'avis de la guilde sur un joueur (calculé à l'usage, non sauvegardé) : −10 ou moins ennemi, négatif ou mauvaise étiquette méfiance, +10 ou plus ami. Il ne s'applique que sans relation personnelle | — |
 | `socialWithdrawn` | Pour chaque membre, numéro de son dernier retrait de tous ses témoignages (message `W`) ; un témoignage plus ancien est refusé | Un par membre |
 | `socialReports` | Témoignages reçus, par `auteur:cible` : solde, relation, 32 faits au plus, ou marque de retrait | 256 témoignages |
 

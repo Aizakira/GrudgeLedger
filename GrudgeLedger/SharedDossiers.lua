@@ -144,6 +144,42 @@ local function withdrawAll(s,sender,seq)
     end
     if changed then GL.Emit("DOSSIER_UPDATED") end
 end
+-- What the guild thinks of each player, from testimonies and from tags on guild cards.
+-- Total of -10 or less: enemy; below 0 or a bad tag: warning; +10 or more: friend.
+local badTags={ninja=true,boosted=true,leaver=true,toxic=true,griefing=true}
+function S.RefreshOpinions()
+    local s,me=B.GuildScope()
+    local map={}
+    if not s then
+        GL.SetGuildOpinions(map)
+        return
+    end
+    local hidden=s.journal and s.journal.hidden or {}
+    local function entry(guid)
+        map[guid]=map[guid] or {score=0,count=0,tags=0}
+        return map[guid]
+    end
+    for _,report in pairs(s.socialReports or {}) do
+        if not report.removed and report.actor~=me and not hidden[report.target] and type(report.score)=="number" then
+            local e=entry(report.target)
+            e.score,e.count=e.score+report.score,e.count+1
+        end
+    end
+    local G=GL.GuildProfiles
+    for _,card in ipairs(G and G.List() or {}) do
+        local _,counts=G.View(card)
+        for tag,n in pairs(counts or {}) do
+            if badTags[tag] and n>0 then
+                local e=entry(card.target)
+                e.tags=e.tags+n
+            end
+        end
+    end
+    for _,e in pairs(map) do
+        e.relation=e.score<=-10 and "enemy" or (e.score<0 or e.tags>0) and "warning" or e.score>=10 and "friend" or "neutral"
+    end
+    GL.SetGuildOpinions(map)
+end
 function S.GuildSighting(target)
     local s,me=allowed(target)
     if not s then return end
@@ -651,10 +687,16 @@ GL.On("DOSSIER_INSPECTED",function(target,inspected)
     GL.Emit("DOSSIER_UPDATED",target)
 end)
 GL.On("GUILD_PROFILES",S.Refresh)
+GL.On("GUILD_PROFILES",S.RefreshOpinions)
+GL.On("DOSSIER_UPDATED",function() S.RefreshOpinions() end)
+GL.On("READY",function() S.RefreshOpinions() end)
 GL.On("BOUNTIES_CHANGED",S.Refresh)
 local frame=CreateFrame("Frame")
 for _,event in ipairs({"PLAYER_LOGIN","PLAYER_GUILD_UPDATE","GUILD_ROSTER_UPDATE","PLAYER_ENTERING_WORLD"}) do frame:RegisterEvent(event) end
-frame:SetScript("OnEvent",function() S.Refresh() end)
+frame:SetScript("OnEvent",function()
+    S.Refresh()
+    S.RefreshOpinions()
+end)
 frame:SetScript("OnUpdate",function(self,delta)
     self.elapsed=(self.elapsed or 0)+delta
     if self.elapsed<30 then return end

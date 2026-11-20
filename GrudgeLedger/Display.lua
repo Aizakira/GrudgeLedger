@@ -118,6 +118,11 @@ end
 
 local function alertTitle(record, relation)
     if GL.RelationSource(record) == "guild" then return guildLabel(record, relation) end
+    if GL.RelationSource(record) == "guildmates" then
+        local opinion = GL.GuildOpinion(record.guid)
+        local count = opinion and opinion.count > 0 and (" · " .. L("%d avis"):format(opinion.count)) or ""
+        return L("Avis de la guilde : %s"):format(L(styles[relation].label)) .. count
+    end
     return L("%s à proximité"):format(L(styles[relation].label))
 end
 
@@ -256,6 +261,8 @@ local function updateMarker(entry, reuseObservation)
     -- Refresh membership as well as identity: guild rules can change while the
     -- same player stays visible, and leaving a guild must remove its marker.
     local record = identity and GL.RecordSeen(identity, true)
+    -- Unknown to you but judged by guildmates: shown as they see the player, never added to your journal.
+    if not record and identity and GL.GuildOpinion(identity.guid) then record = identity end
     encounterState(record,entry.unit)
     partyWarning(record, entry.unit)
     local relation = record and GL.Relation(record)
@@ -426,6 +433,7 @@ alert = function(identity, unit)
     local record = GL.Get(identity)
     -- A received contract does not create a personal journal entry or enemy rating.
     if bounty and not record then record = identity end
+    if not record and GL.GuildOpinion(identity.guid) then record = identity end
     if not record then GL.Trace("unknown", identity, unit) return end
     local relation = bounty and "enemy" or GL.Relation(record)
     if relation == "neutral" then GL.Trace("neutral", identity, unit) return end

@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Avis de la guilde : %s"] = "Opinión de la hermandad: %s",
         ["Aucune zone notée pour l’instant."] = "Todavía no hay zonas anotadas.",
         [" · lui %s, vous %s"] = " · él %s, tú %s",
         ["%d avis"] = "%d opiniones",
@@ -1519,6 +1520,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Avis de la guilde : %s"] = "Guild opinion: %s",
         ["Aucune zone notée pour l’instant."] = "No zone noted yet.",
         [" · lui %s, vous %s"] = " · them %s, you %s",
         ["%d avis"] = "%d opinions",

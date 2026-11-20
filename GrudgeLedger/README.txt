@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.24.0
+GRUDGE LEDGER — 0.25.0
+
+Avis de la guilde : un joueur que vous ne connaissez pas, mais que vos collègues détestent, apparaît comme ennemi (total des témoignages de −10 ou moins) ou en méfiance (total négatif, ou étiquette Butin ninja, Départ anticipé, Toxique, Sabotage ou Boosté sur sa fiche de guilde). Le marqueur et l’alerte sonore se déclenchent, avec « Avis de la guilde » dans l’alerte, sans l’ajouter à votre journal. Votre propre avis passe toujours en premier ; sur la fiche, votre pastille reste la vôtre. Un témoignage retiré cesse de compter.
 
 Nouvelle mise en page de la fiche. Colonne de gauche : votre avis, celui de la guilde, la prime et les étiquettes en pastilles de couleur, neuf chiffres clés, « vu il y a 2 h ». Aperçu sur une seule page : quatre tuiles (vous contre lui avec la barre victoires et morts, la guilde, la dernière rencontre de vous et de la guilde, les primes), quatre faits en grand (« Tous les faits » ouvre la liste datée), la présence sur douze mois et le dernier combat. Nouvel onglet Habitudes : grille jour et heure, zones et évolution en listes qui tournent leurs propres pages. Relations : ce que chacun en pense avec une pastille par membre, chronologie groupée par jour avec l’auteur en étiquette. Pour un joueur de votre faction jamais combattu, Combats devient Rencontres (groupes, échanges, signalements). Un nouveau fichier : relancer complètement le jeu.
 

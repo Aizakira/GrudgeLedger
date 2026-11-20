@@ -271,7 +271,7 @@ local positiveTags={reliable=true}
 local function verdictItems(d,guid)
     local record,items=d.localRecord,{}
     if record then
-        local relation=GL.Relation(record)
+        local relation=GL.RelationSource(record)=="guildmates" and "neutral" or GL.Relation(record)
         items[1]={(relationNames[relation] or unknown).." · "..("%+d"):format(record.reputation or 0),relation,L("votre avis")}
     else
         items[1]={L("Aucune rencontre"),"neutral",L("votre avis")}
@@ -574,7 +574,7 @@ local function memberRows(f,row,record)
     members[me]=nil
     if record then
         local p=GL.ContactMatchup(record)
-        local relation=GL.Relation(record)
+        local relation=GL.RelationSource(record)=="guildmates" and "neutral" or GL.Relation(record)
         local mine=(relationNames[relation] or unknown).." · "..("%+d"):format(record.reputation or 0)
         row(L("Vous"),score(p.kills,p.deaths),nil,nil,nil,{pill={mine,relation}})
     else

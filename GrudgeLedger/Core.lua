@@ -613,6 +613,16 @@ function GL.RecordSeen(identity, visible)
     end
     return record
 end
+-- Guildmates' opinion of players, set by the guild sharing module: {relation, score, count, tags}.
+-- It applies only when you have no relation of your own with the player.
+local guildOpinions = {}
+function GL.SetGuildOpinions(map)
+    guildOpinions = type(map) == "table" and map or {}
+    invalidateJournal()
+end
+function GL.GuildOpinion(guid)
+    return type(guid) == "string" and guildOpinions[guid] or nil
+end
 local function effectiveRelation(record)
     if not record then return "neutral", "neutral" end
     local opinion = record.reaction == "friend" or record.reaction == "enemy" or record.reaction == "neutral" or record.reaction == "warning"
@@ -627,6 +637,8 @@ local function effectiveRelation(record)
     if opinion and record.reactionSource == "emote" then return record.reaction, "emote" end
     if rule then return rule.reaction, "guild" end
     if opinion then return record.reaction, "automatic" end
+    local guildmates = record.guid and guildOpinions[record.guid]
+    if guildmates and guildmates.relation ~= "neutral" then return guildmates.relation, "guildmates" end
     return "neutral", "neutral"
 end
 function GL.Relation(record) local relation = effectiveRelation(record) return relation end
