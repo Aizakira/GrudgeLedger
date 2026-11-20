@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.22.0
+GRUDGE LEDGER — 0.23.0
+
+Corrections : les migrations du carnet sont numérotées et gardent ce qu’elles remplacent (une ancienne mort « probable » garde sa nature d’origine) ; l’onglet Relations de la fiche ne lit plus tout le journal, seulement le joueur affiché.
 
 Confidentialité : quand rien n’est coché, votre client ne répond plus aux demandes de la guilde qu’avec des relevés publics (Armurerie, inspection) ; rien de votre carnet ne part, ni la date de votre dernière rencontre. Décocher « Partager mes faits datés et mon avis de guilde » retire tous vos témoignages en un seul message, renvoyé à chaque connexion tant que la case reste décochée : quitter le jeu juste après ne laisse plus rien chez les autres. Les fiches de guilde portent un identifiant de compte propre à chaque guilde, qui ne relie plus vos personnages d’une guilde à l’autre ; vos anciens avis gardent l’ancien identifiant.
 

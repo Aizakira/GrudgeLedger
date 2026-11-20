@@ -499,21 +499,20 @@ local function relationsPage(f,record,row)
         if GL.TagText and GL.TagText(record) then
             row(GL.TagText(record))
         end
-        for _,item in ipairs(GL.JournalEvents()) do
-            if item.record==record then
-                local e=item.event
-                local description=GL.HistoryTitle(e)
-                if e.text then
-                    description=description.."\n"..UI.plain(e.text)
-                end
-                if e.zone and e.zone~="?" then
-                    description=description.." · "..UI.plain(e.zone)
-                end
-                if e.voided then
-                    description=description.." · "..L("Annulé · exclu")
-                end
-                add(e.time,description,L("Votre journal").." · "..UI.plain(e.actorName or L("Auteur inconnu")),true)
+        -- Audit 0.12.0, problem 11: only this record's events, not the whole journal sorted.
+        for _,item in ipairs(GL.RecordEvents(record)) do
+            local e=item.event
+            local description=GL.HistoryTitle(e)
+            if e.text then
+                description=description.."\n"..UI.plain(e.text)
             end
+            if e.zone and e.zone~="?" then
+                description=description.." · "..UI.plain(e.zone)
+            end
+            if e.voided then
+                description=description.." · "..L("Annulé · exclu")
+            end
+            add(e.time,description,L("Votre journal").." · "..UI.plain(e.actorName or L("Auteur inconnu")),true)
         end
     else
         row(L("Aucune rencontre personnelle enregistrée."))

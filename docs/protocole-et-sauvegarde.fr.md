@@ -24,6 +24,7 @@ Le jeu écrit cette table sur le disque au `/reload` et à la déconnexion. Elle
 | `battlegroundArchive` | Fiches retirées par le nettoyage des champs de bataille | `Core.lua` | — |
 | `battlegroundCleanupVersion` | Marqueur de la migration 2 | `Core.lua` | — |
 | `grimoireFontDefaultApplied` | Marqueur de la migration 3 | `Core.lua` | — |
+| `migrations` | Migrations exécutées, par numéro, avec leur date | `Core.lua` | Une entrée par migration |
 | `authorAccount` | Identifiant aléatoire du compte, 16 caractères hexadécimaux. Jamais diffusé tel quel : depuis la 0.22.0, les fiches de guilde portent une empreinte propre à chaque guilde (SHA-256 de l'identifiant et de la clé de guilde, 16 caractères), qui ne relie pas les personnages d'une guilde à l'autre | `Core.lua`, `GuildProfiles.lua` | — |
 | `journalEdition` | Compteur des fiches de guilde publiées | `GuildProfiles.lua` | — |
 | `bountyGuilds` | Un espace par guilde, par `royaume/guilde`. Détail plus bas | `Bounties.lua`, `GuildProfiles.lua`, `SharedDossiers.lua` | Jamais purgé à ce jour, même après un départ de guilde |
@@ -74,11 +75,11 @@ Le champ `journal` contient lui-même : `cards` (fiches publiées, avec leurs av
 
 ### Migrations
 
-Trois migrations existent. Elles sont repérées par trois marqueurs indépendants, ce qui est un défaut : les suivantes seront numérotées dans une seule liste.
+Depuis la 0.23.0, les migrations sont numérotées dans `migrations` (numéro → date d'exécution ; 0 quand elle a eu lieu avant cette liste). Les trois anciens marqueurs restent lus et comptent comme faits. La migration 1 garde désormais ce qu'elle remplace : `migrated1` sur la fiche (compteurs « probables » fondus) et sur chaque événement (`confidence` et `evidence` d'origine). Sur un carnet déjà migré avant la 0.23.0, l'information perdue ne revient pas.
 
 | N° | Marqueur | Effet | Peut-on revenir en arrière ? |
 | --- | --- | --- | --- |
-| 1 | `schema` = 2 | Les compteurs et événements « probables » sont fondus dans les « confirmés » ; les doublons d'un même identifiant d'événement sont annulés | Non : aucune copie n'est gardée |
+| 1 | `schema` = 2 | Les compteurs et événements « probables » sont fondus dans les « confirmés » ; les doublons d'un même identifiant d'événement sont annulés | Oui depuis la 0.23.0 : `migrated1` garde les valeurs remplacées. Non pour un carnet migré avant |
 | 2 | `battlegroundCleanupVersion` = 1 | Les événements des champs de bataille connus sont annulés ; les fiches devenues vides vont dans `battlegroundArchive` | Oui : rien n'est effacé |
 | 3 | `grimoireFontDefaultApplied` | Le réglage de police revient une fois à sa valeur par défaut | Sans objet |
 

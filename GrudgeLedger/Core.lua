@@ -1299,6 +1299,29 @@ local function indexedJournal()
     journalIndex = rows
     return rows
 end
+-- The events and notes of one record, newest first, as GL.JournalEvents would list them.
+function GL.RecordEvents(record)
+    local result, now = {}, GL.Now()
+    if type(record) ~= "table" then return result end
+    for index, event in ipairs(record.history or {}) do
+        if type(event) == "table" and (event.kind ~= "honor" or GL.HonorPoints(event)) and eventTime(event) <= now then
+            result[#result + 1] = { event = event, at = eventTime(event), sequence = index }
+        end
+    end
+    for index, note in ipairs(record.notes or {}) do
+        if type(note) == "table" and type(note.text) == "string" and eventTime(note) <= now then
+            result[#result + 1] = { at = eventTime(note), sequence = #(record.history or {}) + index, event = {
+                kind = "note", time = note.time, text = note.text, updatedAt = note.updatedAt,
+                actorGUID = note.actorGUID, actorName = note.actorName, note = note,
+            } }
+        end
+    end
+    table.sort(result, function(a, b)
+        if a.at ~= b.at then return a.at > b.at end
+        return a.sequence > b.sequence
+    end)
+    return result
+end
 local function inScope(author, scope, actor)
     return scope == "all" or scope == "legacy" and not author or scope == "character" and actor and author == actor
 end
@@ -1648,6 +1671,13 @@ function GL.InitDB()
     traceLast = {}
     if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end
     GL.db = GrudgeLedgerDB
+    -- Numbered migrations (audit 0.12.0, problem 6). The three older markers count as done:
+    -- 1 schema 2 (probable merged into confirmed), 2 battleground cleanup, 3 grimoire font.
+    GL.db.migrations = type(GL.db.migrations) == "table" and GL.db.migrations or {}
+    local migrations = GL.db.migrations
+    if GL.db.schema == 2 then migrations[1] = migrations[1] or 0 end
+    if GL.db.battlegroundCleanupVersion == 1 then migrations[2] = migrations[2] or 0 end
+    if GL.db.grimoireFontDefaultApplied then migrations[3] = migrations[3] or 0 end
     local migratePvP = GL.db.schema ~= 2
     GL.db.players = type(GL.db.players) == "table" and GL.db.players or {}
     if GL.db.unassignedHonor ~= nil and type(GL.db.unassignedHonor) ~= "table" then
@@ -1679,6 +1709,11 @@ function GL.InitDB()
                 local pvp = record.pvp
                 if type(pvp) == "table" then
                     for old, field in pairs({probableDeaths="deaths", probableKills="kills", probableAggressions="aggressions"}) do
+                        -- Migration 1 keeps the probable counters it merges, so the difference stays readable.
+                        if tonumber(pvp[old]) then
+                            record.migrated1 = record.migrated1 or {}
+                            record.migrated1[old] = (record.migrated1[old] or 0) + tonumber(pvp[old])
+                        end
                         pvp[field] = (tonumber(pvp[field]) or 0) + (tonumber(pvp[old]) or 0)
                         pvp[old] = nil
                     end
@@ -1686,6 +1721,8 @@ function GL.InitDB()
                 local seen = {}
                 for _, event in ipairs(type(record.history) == "table" and record.history or {}) do
                     if type(event) == "table" and event.confidence == "probable" then
+                        -- The event keeps its former nature and evidence: a deduction is never shown as a fact.
+                        event.migrated1 = event.migrated1 or { confidence = "probable", evidence = event.evidence }
                         event.confidence = "confirmed"
                         if event.kind == "death" and type(event.evidence) == "string" and event.evidence:find("Participation probable", 1, true) then
                             event.evidence = "Participation à l’attaque ayant causé votre mort."
@@ -1717,7 +1754,10 @@ function GL.InitDB()
         end
     end
     GL.db.schema = 2
+    migrations[1] = migrations[1] or GL.Now()
     cleanBattlegroundHistory()
+    migrations[2] = migrations[2] or (GL.db.battlegroundCleanupVersion == 1 and GL.Now() or nil)
+    migrations[3] = migrations[3] or (GL.db.grimoireFontDefaultApplied and GL.Now() or nil)
     GL.Emit("READY")
 end
 local boot = CreateFrame("Frame")
