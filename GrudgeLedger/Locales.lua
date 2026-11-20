@@ -4,6 +4,9 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Vu en jeu à %s"] = "Visto en el juego a las %s",
+        ["modèle 3D gardé"] = "modelo 3D guardado",
+        ["modèle 3D non pris"] = "modelo 3D no tomado",
         ["Aucun relevé : le jeu ne laisse pas inspecter un joueur ennemi"] = "Sin datos: el juego no permite inspeccionar a un jugador enemigo",
         ["1 autre source de dégâts"] = "1 fuente de daño más",
         ["Comment il vous a tué"] = "Cómo te mató",
@@ -1632,6 +1635,9 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Vu en jeu à %s"] = "Seen in game at %s",
+        ["modèle 3D gardé"] = "3D model kept",
+        ["modèle 3D non pris"] = "3D model not taken",
         ["Aucun relevé : le jeu ne laisse pas inspecter un joueur ennemi"] = "No data: the game does not let you inspect an enemy player",
         ["1 autre source de dégâts"] = "1 other damage source",
         ["Comment il vous a tué"] = "How they killed you",

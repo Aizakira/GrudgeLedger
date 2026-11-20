@@ -67,6 +67,38 @@ GL.RecordPvP(id, "kill", "confirmed", "Combat log", "alone-k")
 assert(GL.OpenPlayerDossier(killer))
 click(f.tabs.overview)
 assert(o.recapTitle:GetText() == "" and o.recap:GetText() == "")
+
+-- Kept model. The game refuses to inspect an enemy, but a model taken while he was in sight keeps
+-- his real look: the equipment tab shows it once he is gone, until the next reload.
+local methods = getmetatable(UIParent).__index
+local taken = {}
+function methods:SetUnit(unit) taken[#taken + 1] = UnitGUID(unit) return true end
+function methods:ClearModel() end
+function methods:SetParent(parent) self.parent = parent end
+UnitIsVisible = UnitExists
+mock.units.target = { guid = killer, name = "Helvard", surname = "Lamenoire", isPlayer = true }
+assert(GL.KeepModel("target", "Player-9-FFFF") == false, "the unit must be that player")
+assert(GL.KeepModel("target", killer) == true and GL.KeptModelAt(killer) == later)
+local count = #taken
+assert(GL.KeepModel("target", killer) == true and #taken == count, "a fresh model is not taken twice")
+mock.units.target = nil
+assert(GL.OpenPlayerDossier(killer))
+click(f.tabs.gear)
+local view = f.equipment.equipment
+assert(view.kept and view.kept.frame.parent == view.stage, "the kept model stands on the equipment stage")
+assert(view.caption:GetText():find("^Vu en jeu à "), view.caption:GetText())
+-- Another player's sheet does not show it, and thirteen opponents never grow the pool past twelve.
+local shown = view.kept
+assert(GL.OpenPlayerDossier("Player-9-0A0A", nil, "Autre Joueur"))
+click(f.tabs.gear)
+assert(view.kept == nil and shown.frame.parent ~= view.stage and not shown.shown)
+local frames = #mock.frames
+for i = 1, 13 do
+    local other = ("Player-9-1%03d"):format(i)
+    mock.units.target = { guid = other, name = "Autre", surname = "N" .. i, isPlayer = true }
+    assert(GL.KeepModel("target", other))
+end
+assert(#mock.frames - frames == 11 and GL.KeptModelAt(killer) == nil, "the oldest model is recycled")
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
 print("PASS addon alone: class and faction from the GUID, how the last death happened from the combat log, "
-    .. "no dash column, in-game reading listed, gear placed by slot number")
+    .. "no dash column, in-game reading listed, gear placed by slot number, kept model shown and recycled")

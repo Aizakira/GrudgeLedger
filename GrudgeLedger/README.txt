@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.34.2
+GRUDGE LEDGER — 0.35.0
+
+Modèle gardé : dès qu’un adversaire est repéré (cible, survol, barre de nom), l’addon garde son modèle 3D réel, avec son équipement. L’onglet Équipement de sa fiche l’affiche quand il n’est plus en vue (« Vu en jeu à 21:40 »). Douze joueurs au plus, jusqu’au prochain rechargement : rien n’est enregistré sur le disque. Fonctionne avec l’addon seul.
 
 Mesuré en jeu avec /gl sonde : Forever laisse inspecter un joueur de votre faction (réponse en 0,2 s) et jamais un joueur ennemi. La fiche ne promet plus une lecture impossible et l’addon n’envoie plus de demandes inutiles. Programme de synchronisation Armurerie (facultatif, hors jeu) : le fichier lu par le jeu est reconstruit après chaque joueur et non en fin de tournée ; un /reload interrompt la tournée pour servir d’abord les nouveaux joueurs.
 

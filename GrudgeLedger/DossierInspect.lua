@@ -83,6 +83,8 @@ function GL.InspectDossierUnit(unit, guid, retrySample)
     local now = GL.Now()
     local state = stateFor(guid)
     mark(state, "token", now, unit)
+    -- The game refuses to inspect an enemy: his model, kept for the session, is what shows his gear.
+    if GL.KeepModel and GL.KeepModel(unit, guid) then mark(state, "model", now) end
     local record = GL.Get("guid:" .. guid)
     state.snapshot = state.snapshot or (record and record.inspection) or {}
     local snapshot = state.snapshot
@@ -249,6 +251,7 @@ local function traceLine(guid, state)
         parts[#parts + 1] = trace.far and L("inspection refusée : trop loin ou interdite") or L("inspection non tentée")
     end
     parts[#parts + 1] = L("%d pièces · talents %s"):format(count(snapshot.gear), snapshot.trees and L("lus") or L("absents"))
+    parts[#parts + 1] = trace.model and L("modèle 3D gardé") or L("modèle 3D non pris")
     return L("Suivi de %s : %s"):format(name, table.concat(parts, " · "))
 end
 local function probeTarget()
