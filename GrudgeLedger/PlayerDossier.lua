@@ -855,6 +855,11 @@ draw=function(f)
     else
         f.statsToggle:Hide()
     end
+    if f.page=="combat" and GL.DeathReport and #GL.DeathReport.Deaths(f.guid)>0 then
+        f.exportDeaths:Show()
+    else
+        f.exportDeaths:Hide()
+    end
     local gear,talents=f.page=="gear" and not f.gearStats,f.page=="talents"
     if gear then
         f.equipment:Show()
@@ -1020,6 +1025,9 @@ local function build()
         f.gearStats=not f.gearStats
         f.scroll:SetVerticalScroll(0)
         draw(f)
+    end,nil,true)
+    f.exportDeaths=UI.button(f,L("Exporter mes morts contre lui"),352,-645,260,function()
+        GL.DeathReport.ShowExport(f.guid)
     end,nil,true)
     f.historyPrev=UI.button(f,L("Précédent"),352,-645,130,function()
         f.historyOffset=math.max(0,(f.historyOffset or 0)-40)

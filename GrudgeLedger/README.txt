@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.17.0
+GRUDGE LEDGER — 0.18.0
+
+Rapport de mort : le détail d’une mort indique la durée du combat, votre vie au début, le nombre d’adversaires, les dégâts reçus par joueur et par sort, et le coup fatal. Les soins, les contrôles et les auras ne sont pas relevés. Votre propre spécialisation est maintenant gardée dans le build de chaque combat. Bilan → « Exporter mes morts pour une IA » (et Fiche → Combats → « Exporter mes morts contre lui ») prépare un texte sélectionné à copier dans Claude ou ChatGPT : vos dix dernières morts, les builds et les dégâts reçus, sans aucun nom de joueur. Un nouveau fichier : relancer complètement le jeu après la mise à jour.
 
 À savoir : l’Aperçu de la fiche donne des faits datés tirés de votre journal, sans note de menace. Qui ouvre le combat, écart de niveau moyen, ses sorts contre vous, ses complices, séries de victoires ou de morts, combats des 7 derniers jours, heures habituelles et jours où il a été vu. Cliquez sur « Faits » pour voir les événements qui justifient chaque phrase ; un combat ouvre son détail. Habitudes : une grille jour × heure montre quand le joueur est vu, et ses zones les plus fréquentes. Les apparitions sont notées à chaque nouvelle rencontre ; les événements déjà dans le journal comptent aussi. Un nouveau fichier : relancer complètement le jeu après la mise à jour.
 

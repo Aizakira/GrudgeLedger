@@ -517,6 +517,22 @@ function QA.capture(name)
         if name == "kill-details" then assert(GrudgeLedgerCorrections.event.kind == "kill") end
         if name == "correction-voided" then GrudgeLedgerCorrections.confirm:Click() details:Click() end
         return GrudgeLedgerCorrections
+    elseif name == "death-report" or name == "death-export" then
+        -- The example druid's death: its blow-by-blow and both builds (example values).
+        local guid = dossierExample()
+        local contact = GL.Get("guid:" .. guid)
+        local death
+        for _, e in ipairs(contact.history) do
+            if e.kind == "death" then death = e end
+        end
+        death.combat.healthPct, death.combat.opponents = 92, 2
+        death.build = {opponent = {level=41, spec="0/31/20", specName="Combat farouche", ilvl=37, stats={HEALTH=1933, ARMOR=1650}},
+            me = {level=39, spec="0/5/31", specName="Givre", ilvl=33, stats={HEALTH=1480, MANA=2100, ARMOR=610}, gear={head=4387, chest=10021}}}
+        if name == "death-report" then
+            GL.InspectEvent(contact, death)
+            return GrudgeLedgerCorrections
+        end
+        return GL.DeathReport.ShowExport()
     elseif name == "diagnostic" then SlashCmdList.GRUDGELEDGER("debug") return GrudgeLedgerDiagnostic
     elseif name == "minimap" or name == "minimap-large" then
         Minimap:SetSize(name == "minimap" and 160 or 260, name == "minimap" and 160 or 260)

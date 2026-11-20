@@ -218,6 +218,24 @@ local function opponentBuild(record)
     return build
 end
 
+-- Our talent trees, read from either GetTalentTabInfo signature (name first, or id first).
+local function ownTrees()
+    local trees = {}
+    for tab = 1, tonumber(GL.Safe(GetNumTalentTabs)) or 0 do
+        local ok, a, b, c, d, e = pcall(GetTalentTabInfo, tab)
+        if ok then
+            local name, points = a, c
+            if type(a) == "number" then
+                name, points = b, e
+            end
+            if type(name) == "string" and type(points) == "number" then
+                trees[#trees + 1] = {name = name, points = points}
+            end
+        end
+    end
+    return #trees > 0 and trees or nil
+end
+
 -- Our own build at the moment of the fight.
 local function selfBuild()
     local build = {level = GL.ValidLevel(GL.Safe(UnitLevel, "player")), gear = {}, stats = {}}
@@ -238,6 +256,7 @@ local function selfBuild()
         build.stats[key] = tonumber(effective)
     end
     build.stats = statsOf(build.stats)
+    build.spec, build.specName = specOf(ownTrees())
     return build
 end
 

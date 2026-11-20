@@ -1210,6 +1210,7 @@ local function refreshJournal()
     f.heading:SetText(({ summary = L("Votre tableau d’honneur"), history = L("La chronique de vos rencontres"), story = L("Votre récit de campagne"), year = L("Une année de rencontres") })[f.mode])
     f.subtitle:SetText(scope .. " · " .. period)
     showIf(f.copyAnnual, annual)
+    showIf(f.exportDeaths, f.mode == "summary")
     if not annual then f.cardCopy:Hide() end
     local stats
     if not history then
@@ -1449,6 +1450,10 @@ function GL.ShowJournal(mode)
             f.query, f.kind, f.period, f.scope, f.offset = "", "all", "all", "character", 0 f.search:SetText("") refreshJournal()
         end)
         f.help = label(f, "", nil, 36, -608, 256) f.help:SetTextColor(unpack(theme.muted)) f.help:SetHeight(46) journalFont(f.help, "GameFontHighlightSmall", 12)
+        -- Recent deaths as plain text for an AI assistant, without player names.
+        f.exportDeaths = button(f, L("Exporter mes morts pour une IA"), 36, -628, 256, function()
+            GL.DeathReport.ShowExport()
+        end)
         f.heading = label(f, "", "large", 372, -165, 532) f.heading:SetTextColor(unpack(theme.ink))
         journalFont(f.heading, "GameFontNormalLarge", 21)
         f.subtitle = label(f, "", nil, 372, -194, 532) f.subtitle:SetTextColor(unpack(theme.inkMuted))
@@ -1730,6 +1735,11 @@ local function renderCombatReport(f)
     -- Both players' builds as recorded at the fight, before the blow-by-blow.
     local build = GL.FightBuildText and GL.FightBuildText(e)
     if build then text[#text+1] = build end
+    -- A death adds its report: damage by source and spell, killing blow, length of the fight.
+    local death = GL.DeathReport and GL.DeathReport.Text(e, opponent, f.who:GetText())
+    if death then
+        text[#text+1] = death
+    end
     local dealt, received, others
     if rows and #rows > 0 then
         local lines = {}
