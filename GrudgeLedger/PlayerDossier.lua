@@ -1328,7 +1328,8 @@ local function sourceText(f,d)
     if d.pending then
         return L("Inspection en cours…")
     end
-    return GL.VisiblePortraitUnit(d.record) and L("Aucun relevé disponible en jeu") or L("Hors de vue · aucun relevé chargé")
+    return GL.VisiblePortraitUnit(d.record) and L("Aucun relevé disponible en jeu")
+        or L("Aucun relevé : ciblez-le à moins de 30 m, la lecture se fait seule")
 end
 draw=function(f)
     local d=resolve(f)

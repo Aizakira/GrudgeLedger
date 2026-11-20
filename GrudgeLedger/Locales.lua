@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Aucun relevé : ciblez-le à moins de 30 m, la lecture se fait seule"] = "Sin datos: selecciónalo a menos de 30 m, la lectura es automática",
         ["Retour au résumé"] = "Volver al resumen",
         ["Votre histoire"] = "Tu historia",
         ["Histoire détaillée"] = "Historia detallada",
@@ -1592,6 +1593,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Aucun relevé : ciblez-le à moins de 30 m, la lecture se fait seule"] = "No data: target them within 30 yd, the reading is automatic",
         ["Retour au résumé"] = "Back to the summary",
         ["Votre histoire"] = "Your story",
         ["Histoire détaillée"] = "Detailed history",

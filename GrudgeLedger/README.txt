@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.33.0
+GRUDGE LEDGER — 0.34.0
+
+Lecture de l’adversaire pendant tout le combat : après une agression, une mort ou une victoire, l’addon réessaie une fois par seconde pendant trois minutes. Dès que l’adversaire a une barre de nom, qu’il est ciblé ou survolé, sa vie et ses statistiques sont lues ; son équipement et ses talents sont inspectés dès qu’il passe à portée (environ 30 m). Croiser un ennemi connu rafraîchit aussi sa fiche. L’Armurerie, elle, ne peut se charger qu’après un /reload : un addon ne peut pas lire Internet pendant le jeu.
 
 Journal allégé : quatre vues rapides avec leur compteur (Tous, À régler, Amis, Signalés) remplacent les neuf boutons de filtre. Le bouton « Filtres » ouvre un panneau qui réunit tous les autres (avis, faction, étiquettes, notes, détail des lignes) et indique combien sont actifs. La liste montre sept joueurs au lieu de six (onze en mode compact) et chaque ligne dit quand et où le joueur a été vu. À droite, plus de barre d’onglets : le résumé raconte « Votre histoire » avec le joueur, la guilde est étiquetée et « Ouvrir la fiche » mène à la fiche complète (combats, équipement, talents). « Histoire détaillée » et « Toutes les notes » s’ouvrent depuis « Autres actions », avec un retour au résumé. Correction : en mode compact, le cadre des portraits ne se dessine plus par-dessus les noms.
 

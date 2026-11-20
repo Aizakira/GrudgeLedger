@@ -132,6 +132,60 @@ function GL.InspectDossierUnit(unit, guid, retrySample)
     end)
 end
 
+-- Owner report (0.33.0): a killer who was never targeted had no data 37 minutes later, because the
+-- reading was tried once, at the first blow. A fight now keeps trying once a second for three
+-- minutes: as soon as the opponent has a unit (target, nameplate, mouseover, a groupmate's target)
+-- their statistics are read, and they are inspected the moment they come within range.
+local WATCH_FIGHT, WATCH_SEEN, WATCH_MAX, FRESH = 180, 30, 8, 300
+local watch, watching, elapsed = {}, false, 0
+local function complete(guid)
+    local state = recent[guid]
+    local snapshot = state and state.snapshot
+    if not snapshot or not snapshot.stats or not snapshot.gearAt or snapshot.partialGear or not snapshot.talentsAt then return false end
+    return GL.Now() - math.min(snapshot.gearAt, snapshot.talentsAt) < FRESH
+end
+function GL.StepInspectionWatch()
+    local now, left = GL.Now(), 0
+    for guid, expiry in pairs(watch) do
+        if now >= expiry or complete(guid) or GL.IsPvPInstance() then
+            watch[guid] = nil
+        else
+            left = left + 1
+            GL.InspectDossierUnit(nil, guid)
+        end
+    end
+    if left == 0 and watching then
+        watching = false
+        events:SetScript("OnUpdate", nil)
+    end
+    return left
+end
+function GL.WatchForInspection(guid, seconds)
+    if type(guid) ~= "string" or not guid:match("^Player%-") or GL.IsPvPInstance() or complete(guid) then return false end
+    local count = 0
+    for _ in pairs(watch) do count = count + 1 end
+    if not watch[guid] and count >= WATCH_MAX then return false end
+    watch[guid] = math.max(watch[guid] or 0, GL.Now() + (seconds or WATCH_FIGHT))
+    if not watching then
+        watching, elapsed = true, 0
+        events:SetScript("OnUpdate", function(_, delta)
+            elapsed = elapsed + (tonumber(delta) or 0)
+            if elapsed >= 1 then
+                elapsed = 0
+                GL.StepInspectionWatch()
+            end
+        end)
+    end
+    return true
+end
+-- Seeing a known threat is a shorter chance to refresh what you know about them.
+GL.On("THREAT_SEEN", function(identity)
+    if type(identity) == "table" and identity.guid then
+        GL.InspectDossierUnit(nil, identity.guid)
+        GL.WatchForInspection(identity.guid, WATCH_SEEN)
+    end
+end)
+
 function GL.DossierInspection(record)
     local state = recent[record.guid]
     return record.inspection or (state and state.snapshot), pending and pending.guid == record.guid
@@ -152,6 +206,8 @@ GL.On("CHANGED", function(record, reason)
     if state and state.snapshot and next(state.snapshot) then record.inspection = state.snapshot end
     if record.pvp and ((record.pvp.deaths or 0) > 0 or (record.pvp.kills or 0) > 0 or (record.pvp.aggressions or 0) > 0 or reason == "opening") then
         GL.InspectDossierUnit(GL.VisiblePortraitUnit(record), record.guid)
+        -- A fight just happened: keep trying while it lasts.
+        if GL.FoughtRecently and GL.FoughtRecently(record) then GL.WatchForInspection(record.guid) end
     end
 end)
 
