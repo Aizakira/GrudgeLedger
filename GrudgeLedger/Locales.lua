@@ -4,6 +4,13 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Tous"] = "Todos",
+        ["À régler"] = "Pendientes",
+        ["Signalés"] = "Señalados",
+        ["Faction"] = "Facción",
+        ["Étiquettes"] = "Etiquetas",
+        ["Filtres"] = "Filtros",
+        ["Présence"] = "Presencia",
         ["−%d de plus"] = "−%d más",
         ["Victoire : +1. Un agresseur reste ennemi même tué. Riposte : −1."] = "Victoria: +1. Un agresor sigue siendo enemigo aunque lo mates. Respuesta: −1.",
         ["Prévient votre guilde : le joueur ciblé et votre zone."] = "Avisa a tu hermandad: el jugador seleccionado y tu zona.",
@@ -1581,6 +1588,13 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Tous"] = "All",
+        ["À régler"] = "To settle",
+        ["Signalés"] = "Reported",
+        ["Faction"] = "Faction",
+        ["Étiquettes"] = "Tags",
+        ["Filtres"] = "Filters",
+        ["Présence"] = "Presence",
         ["−%d de plus"] = "−%d more",
         ["Victoire : +1. Un agresseur reste ennemi même tué. Riposte : −1."] = "Victory: +1. An aggressor stays an enemy even once killed. Reply: −1.",
         ["Prévient votre guilde : le joueur ciblé et votre zone."] = "Tells your guild: the targeted player and your zone.",

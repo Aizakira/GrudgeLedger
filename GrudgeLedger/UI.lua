@@ -9,9 +9,9 @@ local selectedKey, filter, offset = nil, "all", 0
 local factionFilter = "all"
 local tagFilter = "all"
 local notesOnly = false
-local listSort, listDetail = "recent", "identity"
+local listSort, listDetail = "recent", "seen"
 local sortChoices = { { "recent", L("Dernière interaction") }, { "name", L("Nom") }, { "reputation", L("Réputation") }, { "kills", L("Victoires") }, { "deaths", L("Morts") }, { "encounters", L("Nb de rencontres") } }
-local detailChoices = { { "identity", L("Identité") }, { "guild", L("Guilde") }, { "pvp", L("JcJ") }, { "notes", L("Notes") } }
+local detailChoices = { { "seen", L("Présence") }, { "identity", L("Identité") }, { "guild", L("Guilde") }, { "pvp", L("JcJ") }, { "notes", L("Notes") } }
 local drafts = {}
 local guildDrafts = {}
 local relationNames = { friend = L("Ami"), warning = L("Méfiance"), enemy = L("Ennemi"), neutral = L("Neutre") }
@@ -382,7 +382,8 @@ local function portraitOverlay(row)
     local level = (GL.Safe(base.GetFrameLevel, base) or 1) + 2
     GL.Safe(overlay.SetFrameLevel, overlay, level)
     if row.levelBadge then GL.Safe(row.levelBadge.SetFrameLevel, row.levelBadge, level + 1) end
-    overlay:Show()
+    -- No frame without a face: the compact list hides its portraits.
+    if row.raceIcon:IsShown() then overlay:Show() else overlay:Hide() end
     -- Hiding the face (showIf) hides its frame too.
     row.raceIcon.portraitOverlay = overlay
     if row.faceAnchor then row.faceAnchor.portraitOverlay = overlay end
@@ -2121,8 +2122,8 @@ local function renderDetail()
         local control = ledger.actions[i]
         showIf(control, summary)
     end
-    if not summary then ledger.hint:Hide() ledger.tools:Hide() ledger.toolsMenu:Hide()
-    else ledger.hint:Show() ledger.tools:Show() end
+    if not summary then ledger.hint:Hide() ledger.tools:Hide() ledger.toolsMenu:Hide() ledger.openSheet:Hide()
+    else ledger.hint:Show() ledger.tools:Show() ledger.openSheet:Show() end
     showIf(ledger.counters, summary or matchup)
     showIf(ledger.balancePanel, summary)
     showIf(ledger.matchupHistory, matchup)
@@ -2163,7 +2164,8 @@ local function renderDetail()
         if banner then ledger.detailFaction:SetTexture(banner) end
         showIf(ledger.detailFaction, banner)
         ledger.detailIdentity:SetText(plain(faction .. " · " .. race .. " · " .. class))
-        ledger.detailGuild:SetText(plain(record.guild or (public and public.guild) or L("Guilde non renseignée")))
+        local guildName = record.guild or (public and public.guild)
+        ledger.detailGuild:SetText(guildName and L("Guilde : %s"):format(plain(guildName)) or L("Guilde non renseignée"))
         ledger.raceIcon:Show() ledger.classIcon:Show() identityIcons(ledger, record)
         local duels = matchup and GL.ContactMatchup(record)
         if summary or matchup then
@@ -2634,43 +2636,87 @@ local function buildLedger()
         if opening then openMenu = menu menu:Show() menu:Raise() end
     end
     f:HookScript("OnHide", closeMenu)
-    local function filterMenu(x, options, select, y, width)
-        y, width = y or 193, width or 134
-        local menu = CreateFrame("Frame", nil, f)
-        menu:SetPoint("TOPLEFT", x, -y-29) menu:SetSize(width, #options * 28 + 4)
-        menu:EnableMouse(true) menu:SetFrameStrata("FULLSCREEN_DIALOG") menu:SetToplevel(true)
-        if menu.SetFrameLevel then menu:SetFrameLevel(f:GetFrameLevel()+8) end
-        surface(menu, theme.gold) surface(menu, theme.panel, 1)
+    -- Quick views: the four lists people open most, one click each, with their count.
+    f.views = {}
+    local viewX = 36
+    for _, view in ipairs({ { "all", L("Tous"), 56 }, { "debt", L("À régler"), 84 }, { "friend", L("Amis"), 58 }, { "any", L("Signalés"), 73 } }) do
+        local key = view[1]
+        local control = button(f, view[2], viewX, -188, view[3], function()
+            closeMenu()
+            filter = (key == "debt" or key == "friend") and key or "all"
+            tagFilter = key == "any" and "any" or "all"
+            offset = 0
+            refresh()
+        end, true)
+        control.title = view[2]
+        f.views[key] = control
+        viewX = viewX + view[3]
+    end
+    -- Every other filter lives in one panel, opened on demand; it stays open while you choose.
+    local panel = CreateFrame("Frame", nil, f)
+    f.filterPanel = panel
+    panel:SetPoint("TOPLEFT", 30, -246)
+    panel:SetSize(283, 300)
+    panel:EnableMouse(true)
+    panel:SetFrameStrata("FULLSCREEN_DIALOG")
+    panel:SetToplevel(true)
+    if panel.SetFrameLevel then panel:SetFrameLevel(f:GetFrameLevel() + 8) end
+    surface(panel, theme.gold)
+    surface(panel, theme.panel, 1)
+    panel:Hide()
+    local function group(title, y, options, select, columns, width)
+        local caption = label(panel, title, nil, 8, -y, 267)
+        caption:SetTextColor(unpack(theme.brass))
         local choices = {}
         for i, entry in ipairs(options) do
             local value = entry[2]
-            choices[value] = button(menu, entry[1], 2, -2 - (i - 1) * 28, width-4, function()
-                menu:Hide() select(value) offset = 0 refresh()
+            local x, row = 8 + ((i - 1) % columns) * (width + 2), math.floor((i - 1) / columns)
+            choices[value] = button(panel, entry[1], x, -(y + 18) - row * 28, width, function()
+                select(value)
+                offset = 0
+                refresh()
             end, true)
         end
-        menu:Hide()
-        local opener = button(f, "", x, -y, width, function() toggleMenu(menu) end)
-        opener.caption:ClearAllPoints() opener.caption:SetPoint("TOPLEFT", 3, -5) opener.caption:SetWidth(width-22)
-        local arrow = opener:CreateTexture(nil, "ARTWORK")
-        arrow:SetPoint("RIGHT", -3, 0) arrow:SetSize(16, 16)
-        arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
-        return opener, choices
+        return caption, choices
     end
-    f.relationFilter, f.filters = filterMenu(36, { { L("Tous les avis"), "all" }, { L("Comptes à régler"), "debt" }, { L("Amis"), "friend" },
-        { L("Méfiance"), "warning" }, { L("Ennemis"), "enemy" }, { L("Neutres"), "neutral" } }, function(value) filter = value end)
-    f.factionFilter, f.factions = filterMenu(173, { { L("Toutes factions"), "all" }, { L("Alliance"), "Alliance" },
-        { L("Horde"), "Horde" }, { L("Inconnue"), "unknown" } }, function(value) factionFilter = value end)
+    f.relationFilter, f.filters = group(L("Avis"), 8, { { L("Tous les avis"), "all" }, { L("Comptes à régler"), "debt" },
+        { L("Amis"), "friend" }, { L("Méfiance"), "warning" }, { L("Ennemis"), "enemy" }, { L("Neutres"), "neutral" } },
+        function(value) filter = value end, 2, 133)
+    f.factionFilter, f.factions = group(L("Faction"), 116, { { L("Toutes factions"), "all" }, { L("Alliance"), "Alliance" },
+        { L("Horde"), "Horde" }, { L("Inconnue"), "unknown" } }, function(value) factionFilter = value end, 2, 133)
+    local tail = 196
     if GL.TagChoices then
         local options = { { L("Toutes les étiquettes"), "all" }, { L("Tous les signalés"), "any" } }
         for _, entry in ipairs(GL.TagChoices) do options[#options + 1] = { L(entry[2]), entry[1] } end
-        f.tagFilter, f.tagFilters = filterMenu(36, options, function(value) tagFilter = value end, 293, 147)
-        f.sharedProfiles = button(f, L("Fiches de guilde"), 187, -293, 120, function()
+        f.tagFilter, f.tagFilters = group(L("Étiquettes"), tail, options, function(value) tagFilter = value end, 2, 133)
+        tail = tail + 18 + math.ceil(#options / 2) * 28 + 8
+    end
+    f.rows = {}
+    f.notesOnly = button(panel, L("Avec notes"), 8, -tail, 133, function()
+        notesOnly, offset = not notesOnly, 0
+        refresh()
+    end, true, false)
+    f.detail = button(panel, L("Détail : Identité"), 143, -tail, 133, function()
+        for i, choice in ipairs(detailChoices) do
+            if choice[1] == listDetail then listDetail = detailChoices[i % #detailChoices + 1][1] break end
+        end
+        GL.SetSetting("listDetail", listDetail)
+        refresh()
+    end, nil, false)
+    if GL.TagChoices then
+        f.sharedProfiles = button(panel, L("Fiches de guilde"), 8, -(tail + 30), 133, function()
             closeMenu()
             GL.OpenGuildProfiles(currentRecord())
         end)
     end
-    f.rows = {}
-    f.sort = button(f, L("Dernière interaction"), 149, -229, 158, function()
+    f.reset = button(panel, L("Effacer"), 143, -(tail + 30), 65, function()
+        filter, factionFilter, tagFilter, notesOnly, offset, f.query = "all", "all", "all", false, 0, ""
+        f.search:SetText("")
+        refresh()
+    end)
+    f.closeFilters = button(panel, L("Fermer"), 211, -(tail + 30), 65, closeMenu)
+    panel:SetHeight(tail + 64)
+    f.sort = button(f, L("Dernière interaction"), 36, -218, 168, function()
         if not f.query or f.query == "" then return end
         for i, choice in ipairs(sortChoices) do
             if choice[1] == listSort then listSort = sortChoices[i % #sortChoices + 1][1] break end
@@ -2679,19 +2725,8 @@ local function buildLedger()
         GL.SetSetting("listSort", listSort)
         refresh()
     end, nil, false)
-    f.notesOnly = button(f, L("Avec notes"), 36, -229, 107, function() notesOnly, offset = not notesOnly, 0 refresh() end, true, false)
-    f.detail = button(f, L("Détail : Identité"), 36, -262, 177, function()
-        for i, choice in ipairs(detailChoices) do
-            if choice[1] == listDetail then listDetail = detailChoices[i % #detailChoices + 1][1] break end
-        end
-        GL.SetSetting("listDetail", listDetail)
-        refresh()
-    end, nil, false)
-    f.reset = button(f, L("Effacer"), 218, -262, 89, function()
-        filter, factionFilter, tagFilter, notesOnly, offset, f.query = "all", "all", "all", false, 0, ""
-        f.search:SetText("") refresh()
-    end)
-    for i = 1, 9 do
+    f.openFilters = button(f, L("Filtres"), 208, -218, 99, function() toggleMenu(panel) end)
+    for i = 1, 11 do
         local row = CreateFrame("Button", nil, f)
         row:SetPoint("TOPLEFT", 32, -301 - (i - 1) * 53)
         row:SetSize(277, 51)
@@ -2840,6 +2875,14 @@ local function buildLedger()
     f.toolsMenu:SetFrameStrata("FULLSCREEN_DIALOG") f.toolsMenu:SetToplevel(true) f.toolsMenu:EnableMouse(true)
     surface(f.toolsMenu, theme.gold) surface(f.toolsMenu, theme.panel, 1)
     f.tools = button(f, L("Autres actions"), 734, -634, 180, function() toggleMenu(f.toolsMenu) end, nil, true)
+    -- The full sheet is one visible click away, not hidden behind the name.
+    f.openSheet = button(f, L("Ouvrir la fiche"), 356, -634, 182, function()
+        local r = currentRecord()
+        if r and GL.OpenPlayerDossier then
+            GL.OpenPlayerDossier(r.guid or r.key, function() GL.ShowLedger() end, r.fullName or r.name)
+        end
+    end, nil, true)
+    UI.selectButton(f.openSheet, true)
     for i, option in ipairs({ { L("Avis positif (+1)"), 1 }, { L("Avis négatif (-1)"), -1 } }) do
         local delta = option[2]
         f.actions[#f.actions + 1] = button(f.toolsMenu, option[1], 3, -3 - (i - 1) * 29, 174, function()
@@ -2960,7 +3003,8 @@ local function buildLedger()
     f.detailText = f.detailScroll.body
     journalFont(f.detailText, "QuestFont_Large", 15)
     f.detailText:SetSpacing(4)
-    local hint = label(f, L("Votre choix personnel reste prioritaire."), nil, 356, -632, 181)
+    -- The hint gave way to the "Ouvrir la fiche" button; the label stays for the font settings.
+    local hint = label(f, "", nil, 356, -632, 181)
     f.hint = hint
     journalFont(hint, "GameFontHighlightSmall", 12, true)
     hint:SetHeight(34)
@@ -2983,17 +3027,17 @@ local function buildLedger()
 end
 
 local function layoutIndex(f, compact)
-    local pageSize = compact and 9 or 6
+    local pageSize = compact and 11 or 7
     if f.pageSize == pageSize then return end
     f.pageSize, offset = pageSize, 0
     for i, row in ipairs(f.rows) do
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 32, -326 - (i - 1) * (compact and 33 or 50))
+        row:SetPoint("TOPLEFT", 32, -250 - (i - 1) * (compact and 33 or 50))
         row:SetHeight(compact and 31 or 48)
         row.name:ClearAllPoints() row.name:SetPoint("TOPLEFT", compact and 34 or 52, compact and -7 or -4)
-        row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 215, compact and -8 or -6)
-        row.relation:SetWidth(58)
-        row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 200, -6)
+        row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 205, compact and -8 or -6)
+        row.relation:SetWidth(68)
+        row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 187, -6)
         row.relationIcon:SetSize(compact and 22 or 16, compact and 22 or 16)
         for _, detail in ipairs({ row.raceIcon, row.classIcon, row.identity }) do
             if compact then detail:Hide() else detail:Show() end
@@ -3049,7 +3093,18 @@ refresh = function(focusSelected)
             end
             local faction, race, class = identityLabels(record)
             local detail = faction .. " · " .. race .. " · " .. class
-            if listDetail == "guild" then detail = record.guild or L("Guilde inconnue")
+            if listDetail == "seen" then
+                -- Who, when and where: "Prêtre 44 · il y a 40 min · Feralas".
+                local at = record.lastSeen or record.lastEncounterAt
+                local age = at and math.max(0, GL.Now() - at)
+                local when = not age and L("Pas encore croisé") or age < 60 and L("à l'instant")
+                    or age < 3600 and L("il y a %d min"):format(math.floor(age / 60))
+                    or age < 86400 and L("il y a %d h"):format(math.floor(age / 3600))
+                    or L("il y a %d j"):format(math.floor(age / 86400))
+                local level = GL.ValidLevel and GL.ValidLevel(record.level)
+                local zone = record.lastZone or record.lastEncounterZone
+                detail = class .. (level and (" " .. level) or "") .. " · " .. when .. (zone and (" · " .. zone) or "")
+            elseif listDetail == "guild" then detail = record.guild or L("Guilde inconnue")
             elseif listDetail == "pvp" then
                 local pvp = record.pvp or {}
                 detail = counted(pvp.kills or 0, "victoire") .. " · " .. counted(pvp.deaths or 0, "mort")
@@ -3058,9 +3113,9 @@ refresh = function(focusSelected)
                 detail = note and note.text or L("Aucune note")
             end
             row.identity:SetText(plain(detail):gsub("[\r\n]", " "))
-            local compact = ledger.pageSize == 9
+            local compact = GL.Settings().compactMode == true
             local tagWidth = journalTags(row, record, compact)
-            row.name:SetWidth(compact and (168-tagWidth) or 145)
+            row.name:SetWidth(compact and (168-tagWidth) or 133)
             row.identity:SetWidth(compact and 198 or (198-tagWidth))
             identityIcons(row, record)
             local background = selectedKey == record.key and theme.red or theme.panel
@@ -3091,11 +3146,26 @@ refresh = function(focusSelected)
     for value, control in pairs(ledger.factions) do
         UI.selectButton(control, value == factionFilter)
     end
-    ledger.relationFilter:SetText(filter == "all" and L("Tous les avis") or filter == "debt" and L("Comptes à régler") or relationNames[filter])
-    ledger.factionFilter:SetText(factionNames[factionFilter] or (factionFilter == "unknown" and L("Inconnue") or L("Toutes factions")))
+    local relationName = filter == "all" and L("Tous les avis") or filter == "debt" and L("Comptes à régler") or relationNames[filter]
+    ledger.relationFilter:SetText(L("Avis") .. " : " .. relationName)
+    local factionName = factionNames[factionFilter] or (factionFilter == "unknown" and L("Inconnue") or L("Toutes factions"))
+    ledger.factionFilter:SetText(L("Faction") .. " : " .. factionName)
+    -- Quick views with their counts; the Filtres button says how many filters are on.
+    local counts = GL.JournalCounts()
+    local unfiltered = factionFilter == "all" and not notesOnly
+    UI.selectButton(ledger.views.all, unfiltered and filter == "all" and tagFilter == "all")
+    UI.selectButton(ledger.views.debt, unfiltered and filter == "debt" and tagFilter == "all")
+    UI.selectButton(ledger.views.friend, unfiltered and filter == "friend" and tagFilter == "all")
+    UI.selectButton(ledger.views.any, unfiltered and filter == "all" and tagFilter == "any")
+    for key, control in pairs(ledger.views) do
+        control:SetText(control.title .. " " .. counts[key])
+    end
+    local active = (filter ~= "all" and 1 or 0) + (factionFilter ~= "all" and 1 or 0) + (tagFilter ~= "all" and 1 or 0) + (notesOnly and 1 or 0)
+    ledger.openFilters:SetText(active > 0 and (L("Filtres") .. " · " .. active) or L("Filtres"))
+    UI.selectButton(ledger.openFilters, active > 0)
     for value, control in pairs(ledger.tagFilters or {}) do
         UI.selectButton(control, value == tagFilter)
-        if value == tagFilter then ledger.tagFilter:SetText(control:GetText()) end
+        if value == tagFilter then ledger.tagFilter:SetText(L("Étiquettes") .. " : " .. control:GetText()) end
     end
     ledger.previous:SetEnabled(offset > 0)
     ledger.next:SetEnabled(offset + ledger.pageSize < #records)

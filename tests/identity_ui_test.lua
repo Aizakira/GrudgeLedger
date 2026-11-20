@@ -60,6 +60,7 @@ local function click(button) button.scripts.OnClick(button, "LeftButton") end
 local function rowFor(key)
     for _, row in ipairs(f.rows) do if row:IsShown() and row.key == key then return row end end
 end
+GL.SetSetting("listDetail", "identity")
 local row = assert(rowFor(record.key))
 assert(row.identity:GetText() == "Alliance · Naine · Chamane")
 assert(row.raceIcon.texture == GL.icon and row.classIcon.atlas == "classicon-shaman")
@@ -96,9 +97,9 @@ GL.ShowLedger(dwarf.key)
 assert(rowFor(record.key).raceIcon.texture == GL.icon and f.raceIcon.texture == GL.icon,
     "both the index and the profile use the book while no portrait is available")
 assert(f.detailIdentity:GetText() == "Alliance · Enano · Chamane" and f.levelBadge:IsShown() and f.levelBadge.caption:GetText() == "42", "profile shares the cached native race label with the index")
-click(f.relationFilter) assert(f.filters.friend.parent:IsShown())
-click(f.filters.friend) assert(not f.filters.friend.parent:IsShown())
-click(f.factionFilter) click(f.factions.Horde)
+click(f.openFilters) assert(f.filters.friend.parent:IsShown())
+click(f.filters.friend) assert(f.filters.friend.parent:IsShown(), "the panel stays open while you choose")
+click(f.factions.Horde)
 assert(f.total:GetText() == "1 personne" and f.rows[1].key == hordeFriend.key)
 assert(f.actions[1].enabled and f.rows[1].selection:IsShown() and f.detailTitle:GetText() == hordeFriend.fullName,
     "filtering replaces an excluded contact with the first visible profile")
@@ -139,26 +140,26 @@ assert(not rowFor(record.key).classIcon.texture and rowFor(record.key).raceIcon.
     "missing atlas APIs still fall back to the book")
 
 -- Pagination must compose with filters and return to the first page on a change.
-for i = 1, 12 do add("Paged" .. i, "Horde", "enemy") end
+for i = 1, 20 do add("Paged" .. i, "Horde", "enemy") end
 click(f.filters.enemy) click(f.factions.Horde)
 assert(f.next.enabled and #f.rows > 0)
 local firstKey = f.rows[1].key
 click(f.next)
 assert(f.rows[1].key ~= firstKey and f.rows[1].selection:IsShown() and f.detailTitle:GetText() == GL.Get(f.rows[1].key).fullName)
-for page = 2, math.ceil(13 / f.pageSize) - 1 do
+for page = 2, math.ceil(21 / f.pageSize) - 1 do
     assert(f.next.enabled, "remaining filtered records must be reachable")
     click(f.next)
 end
-assert(not f.next.enabled, "pagination ends after all 13 filtered records")
+assert(not f.next.enabled, "pagination ends after all 21 filtered records")
 local finalContact = f.detailTitle:GetText()
 GL.SetSetting("compactMode", true)
 assert(f.previous.enabled and f.detailTitle:GetText() == finalContact, "changing density keeps the current contact and its page")
 click(f.previous)
-assert(f.pageSize == 9 and f.rows[9]:IsShown() and not f.rows[8].raceIcon:IsShown())
+assert(f.pageSize == 11 and f.rows[11]:IsShown() and not f.rows[10].raceIcon:IsShown())
 click(f.next)
-assert(not f.next.enabled and f.rows[4]:IsShown() and not f.rows[5]:IsShown())
+assert(not f.next.enabled and f.rows[10]:IsShown() and not f.rows[11]:IsShown())
 GL.SetSetting("compactMode", false)
-assert(f.pageSize == 6 and not f.rows[7]:IsShown() and f.rows[1].raceIcon:IsShown())
+assert(f.pageSize == 7 and not f.rows[8]:IsShown() and f.rows[1].raceIcon:IsShown())
 click(f.factions.Alliance)
 assert(f.rows[1].key == allianceEnemy.key and not f.next.enabled)
 
@@ -214,7 +215,7 @@ guildContact.guild, guildContact.realm = "Old Guild", "Realm One"
 local guildRecord = GL.RecordPvP(guildContact, "death", "confirmed", "Fixture", "ui-guild-1")
 guildContact.guild = "New Guild" GL.Remember(guildContact)
 GL.ShowLedger(guildRecord.key)
-assert(f.detailGuild:GetText() == "New Guild")
+assert(f.detailGuild:GetText() == "Guilde : New Guild")
 click(f.detailTabs.history)
 click(f.historyPage.rows[1].details)
 assert(GrudgeLedgerCorrections.scroll.fullText:find("Guilde mémorisée : Old Guild (Realm One)",1,true))

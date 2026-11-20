@@ -307,6 +307,15 @@ function QA.capture(name)
         GL.OpenGuildProfiles(records[10])
         return GrudgeLedgerGuildProfiles
     end
+    if name == "journal-filters" then
+        -- The filter panel open over the list, with two filters on.
+        GL.ShowLedger(records[1].key)
+        local f = GrudgeLedgerWindow
+        f.openFilters:Click()
+        f.filters.enemy:Click()
+        f.factions.Alliance:Click()
+        return f
+    end
     if name:find("^journal%-tags") then
         local contact = records[10]
         contact.tags = {reliable=true}

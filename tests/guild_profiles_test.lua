@@ -68,6 +68,7 @@ a.GL.ToggleTag(contact,"reliable")
 assert(record.tagHistory[1].actorGUID==a.id and record.tagHistory[1].enabled and record.tagHistory[1].time==now)
 assert(record.notes[1].actorAccount==record.creatorAccount)
 a.GL.ShowLedger(record.key)
+click(a.env.GrudgeLedgerWindow.openFilters)
 click(a.env.GrudgeLedgerWindow.sharedProfiles)
 local window=a.env.GrudgeLedgerGuildProfiles
 assert(window.publish:IsVisible() and not window.remove:IsVisible())

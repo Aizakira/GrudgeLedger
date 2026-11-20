@@ -26,10 +26,10 @@ local defaults = {
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
     groupTracking = true, socialTracking = true, tradeTracking = false, minimapAngle = 225, readableFont = false,
     quickGestures = true, detectionLog = true, partyWarnings = false, tagReminders = true, chatBadges = false, compactTooltips = false,
-    listSort = "recent", listDetail = "identity", readingScale = 1, compactMode = false, guideSeen = false,
+    listSort = "recent", listDetail = "seen", readingScale = 1, compactMode = false, guideSeen = false,
 }
 local listSorts = { recent = true, name = true, reputation = true, kills = true, deaths = true, encounters = true }
-local listDetails = { identity = true, guild = true, pvp = true, notes = true }
+local listDetails = { seen = true, identity = true, guild = true, pvp = true, notes = true }
 local function invalidateJournal()
     journalIndex, journalSorted, personalStatistics, breakdownStatistics = nil, nil, nil, {}
 end
@@ -1424,6 +1424,19 @@ function GL.Titles()
         end
     end
     return nemesis and nemesis.key, companion and companion.key
+end
+-- The counts shown on the Journal's quick views, in one pass.
+function GL.JournalCounts()
+    local counts = { all = 0, debt = 0, friend = 0, any = 0 }
+    for _, record in pairs(GL.db and GL.db.players or {}) do
+        if not GL.IsGroupOnly(record) then
+            counts.all = counts.all + 1
+            if GL.Debt(record) > 0 then counts.debt = counts.debt + 1 end
+            if GL.Relation(record) == "friend" then counts.friend = counts.friend + 1 end
+            if GL.HasTag and GL.HasTag(record) then counts.any = counts.any + 1 end
+        end
+    end
+    return counts
 end
 function GL.SearchPlayers(options)
     options = type(options) == "table" and options or {}
