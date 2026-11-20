@@ -160,7 +160,7 @@ local ceilings = {
     ["QuickGestures.lua"] = { 0, 1 }, ["MinimapProbe.lua"] = { 7, 2 }, ["DruidRadar.lua"] = { 0, 4 },
     ["Bounties.lua"] = { 29, 3 }, ["GuildProfiles.lua"] = { 2, 0 }, ["GuildProfilesUI.lua"] = { 12, 0 },
     ["DossierEquipment.lua"] = { 1, 0 }, ["DossierTalents.lua"] = { 11, 0 }, ["DossierInspect.lua"] = { 2, 0 },
-    ["SharedDossiers.lua"] = { 30, 3 }, ["PlayerDossier.lua"] = { 39, 3 }, ["BountyUI.lua"] = { 93, 0 },
+    ["SharedDossiers.lua"] = { 30, 3 }, ["PlayerDossier.lua"] = { 3, 0 }, ["BountyUI.lua"] = { 93, 0 },
 }
 local function readability(name)
     local several, long = 0, 0

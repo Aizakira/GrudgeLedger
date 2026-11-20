@@ -245,6 +245,9 @@ local function dossierExample()
     local id=GL.IdentityFromName("Isabeau","Clairfeuille",guid)
     id.class,id.className,id.race,id.raceName,id.faction,id.level="DRUID","Druide","NightElf","Elfe de la nuit","Alliance",41
     GL.Remember(id)
+    -- Two dated fights with both levels, so the overview and the Combats tab have content.
+    GL.RecordPvP(id,"kill","confirmed","fixture","qa-dossier-kill",{opponentLevel=41,playerLevel=40})
+    GL.RecordPvP(id,"death","confirmed","fixture","qa-dossier-death",{opponentLevel=41,playerLevel=39})
     local p={level=41,updated=qaClock,averageItemLevel=37,identity={classFile="DRUID"},gear={},
         stats={HEALTH=1933,MANA=1894,STRENGTH=70,AGILITY=108,STAMINA=143,INTELLECT=84,CRITICALSTRIKE="6 %"},
         trees={{id="feral-combat",name="Combat farouche",points=8,
@@ -353,7 +356,12 @@ function QA.capture(name)
             local names={["Player-1-qa-source"]="Célestine Longuebrise",["Player-1-qa-relay"]="Aubin Clairval"}
             local memberName=GL.Bounties.MemberName
             GL.Bounties.MemberName=function(id) return names[id] or memberName(id) end
-            GL.OpenPlayerDossier(guid)
+            GL.OpenPlayerDossier(guid,nil,nil,"gear")
+            return f
+        end
+        if name=="dossier-stats" then
+            f.tabs.gear:Click()
+            f.statsToggle:Click()
             return f
         end
         f.tabs[name:sub(9)]:Click()

@@ -1,6 +1,8 @@
-GRUDGE LEDGER — 0.14.0
+GRUDGE LEDGER — 0.15.0
 
-Historique daté : la fiche retient l’évolution de chaque joueur (niveau, niveau d’objet, spécialisation, guilde, pièces d’équipement), avec la date de chaque changement. Elle affiche ce qui a changé, par exemple « Niveau : 32 → 38 (depuis le 12/11) ». Chaque victoire, mort ou agression garde le build des deux joueurs au moment du combat ; le détail du combat l’affiche en tête. Un nouveau fichier : relancer complètement le jeu après la mise à jour.
+Nouvelle fiche joueur : elle s’ouvre sur l’Aperçu (dernière rencontre, dernier combat, bilan avec la guilde, primes, évolution). La colonne de gauche reste la même sur tous les onglets : niveau, classe et spécialisation, votre avis et celui de la guilde, prime ouverte, six chiffres clés, dernière fois vu et date des relevés. L’onglet Combats réunit votre face-à-face, la liste datée des combats (cliquez pour ouvrir le détail) et le palmarès de l’Armurerie. Toutes les caractéristiques sont dans Équipement → « Voir les caractéristiques ». L’onglet Factions est retiré.
+
+Historique daté : la fiche retient l’évolution de chaque joueur (niveau, niveau d’objet, spécialisation, guilde, pièces d’équipement), avec la date de chaque changement. Elle affiche ce qui a changé, par exemple « Niveau : de 32 à 38 (depuis le 12/11) ». Chaque victoire, mort ou agression garde le build des deux joueurs au moment du combat ; le détail du combat l’affiche en tête. Un nouveau fichier : relancer complètement le jeu après la mise à jour.
 
 Fiche fiable : chaque onglet de la fiche dit qui a relevé ses données et quand (« Inspection de Megumin · 19/11/2026 22:12 », « Votre relevé Armurerie »). Apercevoir soi-même un joueur ne fait plus de vous la source de l’équipement reçu d’un collègue. Une pièce vue avant le dernier relevé est estompée et son infobulle donne sa date. L’inspection d’une cible de prime ou de fiche de guilde, sans fiche personnelle, est gardée après /reload.
 

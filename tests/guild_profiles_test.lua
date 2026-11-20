@@ -183,7 +183,7 @@ do
     assert(p.honorableKills==12 and p.reputations[1].value==12 and p.stats.HEALTH==1500)
     assert(p.provenance.gear.by==a.id and not p.notes and not p.history and not b.GL.Get(identity))
     assert(b.GL.db.armoryRequests[identity.key.."|public target"],"received cards enqueue the automatic Armory fallback")
-    b.GL.OpenPlayerDossier(identity.guid,nil,"Public Target")
+    b.GL.OpenPlayerDossier(identity.guid,nil,"Public Target","gear")
     assert(b.env.GrudgeLedgerPlayerDossier.equipment.equipment.buttons[1].itemName=="Helmet")
     assert(#b.GL.errors==0,b.GL.errors[1] and b.GL.errors[1].text)
     -- Local newer data wins, but a missing section still comes from a peer.

@@ -1774,6 +1774,10 @@ local function renderCombatReport(f)
     f.section:SetText(rows and (f.source == "recap" and L("Derniers coups reçus") or L("Actions observées")) or L("Pourquoi cet événement ?"))
 end
 
+-- The player dossier opens the same fight detail as the journal history.
+function GL.InspectEvent(record, e)
+    return inspectEvent(record, e)
+end
 inspectEvent = function(record, e)
     if not e or not record and e.kind ~= "honor" then return end
     if not correctionWindow then

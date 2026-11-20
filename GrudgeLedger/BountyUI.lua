@@ -35,6 +35,7 @@ local function money(n)
     return ("%d %s %d %s %d %s"):format(math.floor(n / 10000), L("po"), math.floor(n / 100) % 100,
         L("pa"), n % 100, L("pc"))
 end
+GL.BountyMoney, GL.BountyTotal = money, total
 local function copper(value)
     local whole, fraction = value:match("^%s*(%d+)[.,](%d+)%s*$")
     if not whole then whole, fraction = value:match("^%s*(%d+)%s*$"), "" end

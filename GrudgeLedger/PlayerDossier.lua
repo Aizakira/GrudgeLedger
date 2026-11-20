@@ -101,16 +101,6 @@ local function itemDetails(item)
     add(L("Identifiant d’objet"),text(item.id))
     return #lines>0 and table.concat(lines,"\n") or L("Détails de la pièce non publiés.")
 end
-local function latestCombat(record)
-    local latest
-    for _,e in ipairs(object(record.history)) do
-        if type(e)=="table" and not e.voided and e.voidReason~="battleground"
-            and (e.kind=="kill" or e.kind=="death" or e.kind=="aggression") and type(e.time)=="number"
-            and (not latest or e.time>=latest.time) then latest=e end
-    end
-    return latest
-end
-
 local relationNames={friend=L("Ami"),warning=L("Méfiance"),enemy=L("Ennemi"),neutral=L("Neutre")}
 local function relationsPage(f,record,row)
     local B,G,S=GL.Bounties,GL.GuildProfiles,GL.SharedDossiers
@@ -201,7 +191,7 @@ local function statValue(key,v)
     return valueOf(v)
 end
 -- Which dossier field each tab shows, for its "source · observer · date" line.
-local pageFields={gear="gear",talents="trees",pvp="honorableKills",reputation="reputations"}
+local pageFields={gear="gear",talents="trees",combat="honorableKills"}
 local function memberName(guid)
     return UI.plain(GL.Bounties.MemberName(guid) or L("Membre de guilde"))
 end
@@ -224,276 +214,645 @@ local function provenanceLabel(profile,page)
     if p.via and p.via~=p.by and p.via~=me then label=label..L(", reçu de %s"):format(memberName(p.via)) end
     return label.." · "..timestamp(p.at)
 end
-local function draw(f)
+-- The profile the dossier shows: the archive, overlaid by this session's inspection when it is newer.
+local function resolve(f)
     local localRecord=GL.Get(f.key)
     local record=localRecord or {guid=f.guid}
     f.guid=record.guid
     local archive=object(GL.ArmoryProfile(record,localRecord~=nil))
     local profile=setmetatable({}, {__index=archive})
     local inspection,pending
-    if GL.DossierInspection then inspection,pending=GL.DossierInspection(record) end
+    if GL.DossierInspection then
+        inspection,pending=GL.DossierInspection(record)
+    end
     inspection=object(inspection)
     local archivedAt=tonumber(archive.updated) or 0
-    if archivedAt>=100000000000 then archivedAt=archivedAt/1000 end
+    if archivedAt>=100000000000 then
+        archivedAt=archivedAt/1000
+    end
     if inspection.gear and (not archive.gear or inspection.gearAt>=(archive.gearAt or archivedAt)) then
         profile.inspectedGear,profile.partialGear=inspection.gear,inspection.partialGear
     end
-    if inspection.trees and (not archive.trees or inspection.talentsAt>=(archive.treesAt or archivedAt)) then profile.trees=inspection.trees end
-    local public=object(profile.identity)
-    local mode=GL.ContactBountyMode(record)
-    if mode then
-        f.bounty:SetText(mode=="view" and L("Voir la prime") or L("Créer une prime"))
-        f.bounty:Show()
-    else f.bounty:Hide() end
-    local name=text(record.fullName) or text(public.name) or text(f.knownName)
-    if not name and f.guid and GL.Bounties and GL.Bounties.MemberName then name=text(GL.Bounties.MemberName(f.guid)) end
-    f.nameLabel:SetText(name or unknown)
-    GL.PaintBookPortrait(f.portrait,record)
-    local faction,race,class=GL.IdentityLabels(record)
-    f.identity:SetText(table.concat({
-        (record.race or record.raceName) and text(race) or text(public.race) or unknown,
-        (record.class or record.className) and text(class) or text(public.class) or unknown,
-        record.faction and text(faction) or text(public.faction) or unknown}," · "))
-    local event=latestCombat(record)
-    local combat=object(event and event.combat)
+    if inspection.trees and (not archive.trees or inspection.talentsAt>=(archive.treesAt or archivedAt)) then
+        profile.trees=inspection.trees
+    end
     local stats=object(profile.stats)
     local liveStats=inspection.stats and (not next(stats) or inspection.statsAt>=(archive.statsAt or archivedAt))
     if liveStats then
         local combined={}
-        for key,v in pairs(stats) do combined[key]=v end
-        for key,v in pairs(inspection.stats) do combined[key]=v end
+        for key,v in pairs(stats) do
+            combined[key]=v
+        end
+        for key,v in pairs(inspection.stats) do
+            combined[key]=v
+        end
         stats=combined
     end
-    -- Reuse the two-column stat rows as the selected character changes.
-    local used,seen,y=0,{},0
-    local function addStat(key)
-        local val=statValue(key,stats[key])
-        if not val then return end
-        local c=f.statCells[used+1]
-        if not c then
-            c=CreateFrame("Frame",nil,f.identityBody); c:SetSize(117,44)
-            c.value=UI.label(c,"","large",0,0,116); c.value:SetTextColor(unpack(UI.theme.paper))
-            c.label=UI.label(c,"",nil,0,-23,117); UI.journalFont(c.label,"GameFontHighlight",11)
-            c.label:SetTextColor(unpack(UI.theme.brass)); f.statCells[used+1]=c
+    local itemLevel=profile.averageItemLevel
+    if profile.inspectedGear then
+        itemLevel=inspection.averageItemLevel or itemLevel
+    end
+    return {record=record,localRecord=localRecord,archive=archive,profile=profile,live=inspection,
+        pending=pending,archivedAt=archivedAt,stats=stats,liveStats=liveStats,itemLevel=itemLevel}
+end
+
+-- Main specialization: the talent tree with the most points.
+local function specName(trees)
+    local best,most
+    for _,tree in ipairs(object(trees)) do
+        local points=type(tree)=="table" and tonumber(tree.points) or 0
+        if points>0 and (not most or points>most) then
+            best,most=text(tree.name),points
         end
-        c:ClearAllPoints(); c:SetPoint("TOPLEFT",(used%2)*122,-math.floor(used/2)*47); used=used+1
-        c.value:SetText(val); c.label:SetText(statNames[key] or text(prettyKey(key))); c:Show(); seen[key]=true
     end
-    for _,key in ipairs({"HEALTH","MANA","ENERGY","RAGE","FOCUS","RUNICPOWER","STRENGTH","AGILITY","STAMINA","INTELLECT","SPIRIT","ARMOR","CRITICALSTRIKE"}) do addStat(key) end
-    for _,key in ipairs(sortedKeys(stats)) do if not seen[key] and key~="ITEMLEVEL" then addStat(key) end end
-    for i=used+1,#f.statCells do f.statCells[i]:Hide() end
-    y=math.ceil(used/2)*47
-    local info={}
-    if used==0 then info[1]=L("Aucun relevé de caractéristiques.\n") end
-    if not next(archive) then
-        info[#info+1]=L("Le compagnon lit le Journal à la déconnexion ou au /reload. Après l’import, /reload affiche le relevé.")
+    return best
+end
+-- Levels only rise: keep the highest of what we saw in game and what the Armory says.
+local function levelOf(d)
+    local armory=d.profile.level
+    if type(armory)=="table" then
+        armory=tonumber(armory.value)
     end
-    if liveStats then
-        info[#info+1]=field(L("Caractéristiques vues en jeu"),timestamp(inspection.statsAt))
+    local seen,published=GL.ValidLevel(d.record.level),GL.ValidLevel(armory)
+    if seen and published then
+        return math.max(seen,published)
     end
-    info[#info+1]=field(L("Guilde"),text(record.guild) or text(public.guild))
-    info[#info+1]=field(L("Niveau Armurerie"),valueOf(profile.level))
-    info[#info+1]=field(L("Niveau vu en jeu"),text(GL.ValidLevel(record.level)))
-    info[#info+1]=field(L("Dernière rencontre"),timestamp(record.lastEncounterAt or record.lastDirectEncounterAt))
+    return seen or published
+end
+local function identityText(d)
+    local record,public=d.record,object(d.profile.identity)
+    local faction,race,class=GL.IdentityLabels(record)
+    race=(record.race or record.raceName) and text(race) or text(public.race) or unknown
+    class=(record.class or record.className) and text(class) or text(public.class) or unknown
+    faction=record.faction and text(faction) or text(public.faction) or unknown
+    local spec,level=specName(d.profile.trees),levelOf(d)
+    local first=(level and (L("Niv. %d"):format(level).." · ") or "")..class
+    local lines={first..(spec and (" ("..spec..")") or ""),race.." · "..faction}
+    local guild=text(record.guild) or text(public.guild)
+    if guild then
+        lines[3]="<"..guild..">"
+    end
+    return table.concat(lines,"\n")
+end
+local function openBounty(guid)
+    local B=GL.Bounties
+    return guid and B and B.OpenFor and B.OpenFor(guid)
+end
+local function bountyAmount(order)
+    return GL.BountyMoney and GL.BountyMoney(GL.BountyTotal(order)) or unknown
+end
+-- Your opinion first, then the guild's total, an open bounty and the tags.
+local function verdictText(d,guid)
+    local record,lines=d.localRecord,{}
+    if record then
+        local relation=relationNames[GL.Relation(record)] or unknown
+        lines[1]=L("Vous : %s · %s"):format(("%+d"):format(record.reputation or 0),relation)
+    else
+        lines[1]=L("Vous : aucune rencontre")
+    end
+    local reports=GL.SharedDossiers and guid and GL.SharedDossiers.SocialReports(guid) or {}
+    local sum=0
+    for _,report in ipairs(reports) do
+        sum=sum+(tonumber(report.score) or 0)
+    end
+    lines[2]=#reports>0 and L("Guilde : %s · %d avis"):format(("%+d"):format(sum),#reports) or L("Guilde : aucun avis partagé")
+    local order=openBounty(guid)
+    if order then
+        lines[#lines+1]=L("Prime ouverte : %s"):format(bountyAmount(order))
+    end
+    local tags=record and GL.TagText and GL.TagText(record)
+    if tags then
+        lines[#lines+1]=tags
+    end
+    return table.concat(lines,"\n")
+end
+local powers={"MANA","ENERGY","RAGE","FOCUS","RUNICPOWER"}
+local function keyFigures(d)
+    local stats,power=d.stats,"MANA"
+    for i=#powers,1,-1 do
+        if stats[powers[i]] then
+            power=powers[i]
+        end
+    end
+    return {
+        {statValue("HEALTH",stats.HEALTH),statNames.HEALTH},
+        {statValue(power,stats[power]),statNames[power]},
+        {statValue("ARMOR",stats.ARMOR),statNames.ARMOR},
+        {valueOf(d.itemLevel),L("Niv. objet")},
+        {valueOf(d.profile.pvpRank),L("Rang JcJ")},
+        {valueOf(d.profile.honorableKills),L("Vict. hon.")},
+    }
+end
+local function seenText(d)
+    local record,lines=d.record,{}
+    local at=record.lastSeen or record.lastEncounterAt
+    if at then
+        local zone=text(record.lastZone) or text(record.lastEncounterZone)
+        lines[1]=L("Vu le %s"):format(timestamp(at))..(zone and (" · "..zone) or "")
+    else
+        lines[1]=L("Pas encore croisé")
+    end
+    local readings={}
+    local inspectedAt=d.live.gearAt or d.live.statsAt or d.live.talentsAt
+    if inspectedAt then
+        readings[#readings+1]=L("inspection %s"):format(timestamp(inspectedAt))
+    end
+    if d.archivedAt>0 then
+        readings[#readings+1]=L("Armurerie %s"):format(timestamp(d.archivedAt))
+    end
+    lines[#lines+1]=#readings>0 and L("Relevés : %s"):format(table.concat(readings," · ")) or L("Aucun relevé chargé")
+    if not next(d.archive) then
+        lines[#lines+1]=L("Le compagnon lit le Journal à la déconnexion ou au /reload. Après l’import, /reload affiche le relevé.")
+    end
+    return table.concat(lines,"\n")
+end
+local function keyCell(f,i)
+    local c=f.statCells[i]
+    if c then
+        return c
+    end
+    c=CreateFrame("Frame",nil,f.identityBody)
+    c:SetSize(78,44)
+    c.value=UI.label(c,"","large",0,0,78)
+    c.label=UI.label(c,"",nil,0,-23,80)
+    UI.journalFont(c.label,"GameFontHighlight",11)
+    c.label:SetTextColor(unpack(UI.theme.brass))
+    f.statCells[i]=c
+    return c
+end
+-- The identity column is the same on every tab: who, the verdict, six key figures, when last seen.
+local function drawIdentity(f,d)
+    local record=d.record
+    local name=text(record.fullName) or text(object(d.profile.identity).name) or text(f.knownName)
+    if not name and f.guid and GL.Bounties and GL.Bounties.MemberName then
+        name=text(GL.Bounties.MemberName(f.guid))
+    end
+    f.nameLabel:SetText(name or unknown)
+    GL.PaintBookPortrait(f.portrait,record)
+    f.identity:SetText(identityText(d))
+    local mode=GL.ContactBountyMode(record)
+    f.bounty:SetText(mode=="view" and L("Voir la prime") or L("Créer une prime"))
+    if mode then
+        f.bounty:Show()
+    else
+        f.bounty:Hide()
+    end
+    local y=0
+    local function place(region,height)
+        region:ClearAllPoints()
+        region:SetPoint("TOPLEFT",0,-y)
+        y=y+height
+    end
+    place(f.verdictHeading,26)
+    f.verdict:SetText(verdictText(d,f.guid))
+    place(f.verdict,f.verdict:GetStringHeight()+14)
+    place(f.keyHeading,26)
+    for i,figure in ipairs(keyFigures(d)) do
+        local c=keyCell(f,i)
+        c:ClearAllPoints()
+        c:SetPoint("TOPLEFT",((i-1)%3)*82,-(y+math.floor((i-1)/3)*47))
+        c.value:SetText(figure[1] or "—")
+        c.value:SetTextColor(unpack(figure[1] and UI.theme.paper or UI.theme.muted))
+        c.label:SetText(figure[2])
+        c:Show()
+    end
+    y=y+2*47+6
+    f.observed:SetText(seenText(d))
+    place(f.observed,f.observed:GetStringHeight()+12)
+    f.identityBody:SetHeight(math.max(f.identityScroll:GetHeight(),y))
+end
+
+local combatKinds={kill=true,death=true,aggression=true}
+local function fights(record)
+    local list={}
+    for _,e in ipairs(object(record and record.history)) do
+        if type(e)=="table" and combatKinds[e.kind] and not e.voided and e.voidReason~="battleground" and type(e.time)=="number" then
+            list[#list+1]=e
+        end
+    end
+    table.sort(list,function(a,b) return a.time>b.time end)
+    return list
+end
+local function fightLine(e)
+    local combat=object(e.combat)
+    local line=GL.HistoryTitle(e)..(text(e.zone) and e.zone~="?" and (" · "..text(e.zone)) or "")
+    local his,mine=GL.ValidLevel(combat.opponentLevel),GL.ValidLevel(combat.playerLevel)
+    if his or mine then
+        line=line.."\n"..L("Niveaux : lui %s · vous %s"):format(his or "?",mine or "?")
+    end
+    return line
+end
+local function score(wins,losses)
+    return wins..L(" V").." / "..losses..L(" D")
+end
+local function inGuild(f)
+    return f.guid and GL.Bounties and GL.Safe(GetGuildInfo,"player")
+end
+local function overviewPage(f,d,row)
+    local record=d.localRecord
+    row(L("Dernière rencontre"),nil,true)
+    local event=fights(record)[1]
+    local met=record and (record.lastEncounterAt or record.lastSeen)
+    if met then
+        local zone=record.lastEncounterAt and text(record.lastEncounterZone) or text(record.lastZone)
+        row(timestamp(met)..(zone and (" · "..zone) or ""))
+    elseif not event then
+        row(L("Aucune rencontre personnelle enregistrée."))
+    end
     if event then
-        info[#info+1]=field(L("Dernier combat"),timestamp(event.time))
-        info[#info+1]=field(L("Niveau adverse au combat"),text(GL.ValidLevel(combat.opponentLevel)))
-        info[#info+1]=field(L("Votre niveau au combat"),text(GL.ValidLevel(combat.playerLevel)))
+        row(L("Dernier combat · %s"):format(timestamp(event.time)).."\n"..fightLine(event),L("Détail"),nil,function()
+            GL.InspectEvent(record,event)
+        end)
     end
-    -- What changed over time: level, item level, specialization, guild, pieces of equipment.
-    for _,line in ipairs(GL.CharacterEvolution and GL.CharacterEvolution(f.guid) or {}) do info[#info+1]=line end
-    f.observed:ClearAllPoints(); f.observed:SetPoint("TOPLEFT",0,-y-5); f.observed:SetText(table.concat(info,"\n"))
-    f.identityBody:SetHeight(math.max(f.identityScroll:GetHeight(),y+f.observed:GetStringHeight()+12))
-    local snap=f.page=="reputation" and profile.reputationsAt or profile.updated
+    row(L("Bilan des combats"),nil,true)
+    if record then
+        local p=GL.ContactMatchup(d.record)
+        row(L("Vous"),score(p.kills,p.deaths))
+    else
+        row(L("Vous"),L("aucun combat"))
+    end
+    if inGuild(f) then
+        local scope=GL.Bounties.GuildScope()
+        local members=scope and scope.scores and scope.scores[f.guid] or {}
+        for _,member in ipairs(sortedKeys(members)) do
+            row(UI.plain(GL.Bounties.MemberName(member) or L("Membre de guilde")),score(members[member][1],members[member][2]))
+        end
+        row(L("Total de la guilde"),score(GL.Bounties.GuildFights(f.guid)))
+    end
+    row(L("Primes"),nil,true)
+    local order,count=openBounty(f.guid),0
+    for _,o in pairs(GL.Bounties and GL.Bounties.List() or {}) do
+        if o.target==f.guid then
+            count=count+1
+        end
+    end
+    if order then
+        row(L("Prime ouverte"),bountyAmount(order))
+    else
+        row(L("Aucune prime ouverte."))
+    end
+    if count>0 then
+        row(L("Mises à prix connues"),tostring(count))
+    end
+    row(L("Évolution"),nil,true)
+    local lines=f.guid and GL.CharacterEvolution and GL.CharacterEvolution(f.guid) or {}
+    if #lines==0 then
+        row(L("Aucun changement relevé pour l’instant."))
+    end
+    for _,line in ipairs(lines) do
+        row(line)
+    end
+end
+local MAX_FIGHTS=15
+local function combatPage(f,d,row)
+    local profile,record=d.profile,d.localRecord
+    row(L("Votre face-à-face · Journal"),nil,true)
+    if record then
+        local p=GL.ContactMatchup(d.record)
+        row(L("Victoires / morts"),p.kills.." / "..p.deaths)
+        row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
+        local list=fights(record)
+        for i=1,math.min(MAX_FIGHTS,#list) do
+            local e=list[i]
+            row(timestamp(e.time).." · "..fightLine(e),L("Détail"),nil,function() GL.InspectEvent(record,e) end)
+        end
+        if #list>MAX_FIGHTS then
+            row(L("%d combats plus anciens dans l’Histoire du journal."):format(#list-MAX_FIGHTS))
+        end
+    else
+        row(L("Aucune rencontre personnelle enregistrée."))
+    end
+    row(L("Face-à-face de la guilde"),nil,true)
+    if inGuild(f) then
+        local wins,losses=GL.Bounties.GuildFights(f.guid)
+        if wins==0 and losses==0 then
+            row(L("Aucun résultat partagé pour cette cible."))
+        else
+            row(L("Victoires / morts"),wins.." / "..losses)
+        end
+        local scope=GL.Bounties.GuildScope()
+        local members=scope and scope.scores and scope.scores[f.guid] or {}
+        for _,member in ipairs(sortedKeys(members)) do
+            local s=members[member]
+            row(GL.Bounties.MemberName(member) or L("Membre de guilde"),s[1]..L(" V").." / "..s[2]..L(" D"))
+        end
+    else
+        row(unknown)
+    end
+    row(L("Palmarès JcJ · Armurerie"),nil,true)
+    row(L("Victoires honorables"),valueOf(profile.honorableKills) or unknown)
+    row(L("Rang JcJ"),valueOf(profile.pvpRank) or unknown)
+    row(L("Champs de bataille"),profile.battlegroundsAt and timestamp(profile.battlegroundsAt),true)
+    if #object(profile.battlegrounds)==0 then
+        row(profile.battlegrounds and L("Aucun champ de bataille publié.") or L("Champs de bataille non renseignés."))
+    end
+    for _,v in ipairs(object(profile.battlegrounds)) do
+        local games,wins,losses=valueOf(v.games) or "—",valueOf(v.wins) or "—",valueOf(v.losses) or "—"
+        row(text(v.name) or unknown,games..L(" parties").." · "..wins..L(" V").." / "..losses..L(" D"))
+    end
+    row(L("Hauts faits JcJ"),type(profile.achievements)=="table" and tostring(#profile.achievements) or unknown,true)
+    if profile.achievementsAt then
+        row(field(L("Relevé"),timestamp(profile.achievementsAt)))
+    end
+    for _,a in ipairs(object(profile.achievements)) do
+        row((text(a.name) or unknown)..(a.accountWide and L(" (compte)") or ""))
+    end
+end
+local statOrder={"HEALTH","MANA","ENERGY","RAGE","FOCUS","RUNICPOWER","STRENGTH","AGILITY","STAMINA","INTELLECT","SPIRIT","ARMOR","CRITICALSTRIKE"}
+-- Every statistic, moved out of the identity column into the Equipment tab.
+local function statsPage(d,row)
+    row(L("Caractéristiques"),nil,true)
+    if d.liveStats then
+        row(field(L("Caractéristiques vues en jeu"),timestamp(d.live.statsAt)))
+    end
+    local seen,count={},0
+    local function add(key)
+        local val=not seen[key] and key~="ITEMLEVEL" and statValue(key,d.stats[key])
+        if val then
+            row(statNames[key] or text(prettyKey(key)),val)
+            seen[key],count=true,count+1
+        end
+    end
+    for _,key in ipairs(statOrder) do
+        add(key)
+    end
+    for _,key in ipairs(sortedKeys(d.stats)) do
+        add(key)
+    end
+    if count==0 then
+        row(L("Aucun relevé de caractéristiques."))
+    end
+end
+local function sourceText(f,d)
+    if f.page=="overview" then
+        return L("Votre journal, la guilde et les derniers relevés")
+    end
+    if f.page=="relations" then
+        return L("Journal personnel et témoignages de guilde")
+    end
+    local profile,inspection=d.profile,d.live
     local observedAt=f.page=="gear" and profile.inspectedGear and inspection.gearAt
         or f.page=="talents" and inspection.trees and profile.trees==inspection.trees and inspection.talentsAt
-    local source
     local shared=not observedAt and provenanceLabel(profile,f.page)
     if shared then
-        source=shared
-    elseif observedAt then
-        source=(f.page=="gear" and profile.partialGear and L("Inspection partielle · ")
-            or L("Inspection en jeu · "))..timestamp(observedAt)
-    elseif snap then source=L("Relevé Armurerie : ")..timestamp(snap)
-    elseif pending and (f.page=="gear" or f.page=="talents") then
-        source=L("Inspection en cours…")
-    elseif f.page=="gear" or f.page=="talents" then
-        local unit=GL.VisiblePortraitUnit(record)
-        if not unit then source=L("Hors de vue · aucun relevé chargé")
-        else source=L("Aucun relevé disponible en jeu") end
-    else source=L("Aucun relevé Armurerie chargé") end
-    f.source:SetText(source)
-    if f.page=="relations" then f.source:SetText(L("Journal personnel et témoignages de guilde")) end
-    f.armoryURL=armoryURL(record.fullName or public.name or f.knownName)
-    if f.armoryURL then f.armoryButton:Show() else f.armoryButton:Hide(); f.armoryLink:Hide() end
-    local itemLevel=profile.averageItemLevel
-    if profile.inspectedGear then itemLevel=inspection.averageItemLevel or itemLevel end
-    f.ilvl:SetText(f.page=="gear" and field(L("Niv. d’objet moyen"),valueOf(itemLevel)) or "")
-    for key,b in pairs(f.tabs) do UI.selectButton(b,f.page==key) end
-    local gear,talents=f.page=="gear",f.page=="talents"
-    for _,control in ipairs({f.historyPrev,f.historyNext,f.historyCount}) do
-        if f.page=="relations" then control:Show() else control:Hide() end
+        return shared
     end
-    if gear then f.equipment:Show(); GL.DrawDossierEquipment(f.equipment,record,profile,slots,slotOrder,itemDetails) else f.equipment:Hide() end
+    if observedAt then
+        local partial=f.page=="gear" and profile.partialGear
+        return (partial and L("Inspection partielle · ") or L("Inspection en jeu · "))..timestamp(observedAt)
+    end
+    if profile.updated then
+        return L("Relevé Armurerie : ")..timestamp(profile.updated)
+    end
+    if f.page~="gear" and f.page~="talents" then
+        return L("Aucun relevé Armurerie chargé")
+    end
+    if d.pending then
+        return L("Inspection en cours…")
+    end
+    return GL.VisiblePortraitUnit(d.record) and L("Aucun relevé disponible en jeu") or L("Hors de vue · aucun relevé chargé")
+end
+local function draw(f)
+    local d=resolve(f)
+    drawIdentity(f,d)
+    f.source:SetText(sourceText(f,d))
+    local public=object(d.profile.identity)
+    f.armoryURL=armoryURL(d.record.fullName or public.name or f.knownName)
+    if f.armoryURL then
+        f.armoryButton:Show()
+    else
+        f.armoryButton:Hide()
+        f.armoryLink:Hide()
+    end
+    f.ilvl:SetText(f.page=="gear" and field(L("Niv. d’objet moyen"),valueOf(d.itemLevel)) or "")
+    for key,b in pairs(f.tabs) do
+        UI.selectButton(b,f.page==key)
+    end
+    for _,control in ipairs({f.historyPrev,f.historyNext,f.historyCount}) do
+        if f.page=="relations" then
+            control:Show()
+        else
+            control:Hide()
+        end
+    end
+    f.statsToggle:SetText(f.gearStats and L("Voir le mannequin") or L("Voir les caractéristiques"))
+    if f.page=="gear" then
+        f.statsToggle:Show()
+    else
+        f.statsToggle:Hide()
+    end
+    local gear,talents=f.page=="gear" and not f.gearStats,f.page=="talents"
+    if gear then
+        f.equipment:Show()
+        GL.DrawDossierEquipment(f.equipment,d.record,d.profile,slots,slotOrder,itemDetails)
+    else
+        f.equipment:Hide()
+    end
     if talents then
         f.talentScroll:Show()
-        local h=GL.DrawDossierTalents(f.talents,record,profile)
+        local h=GL.DrawDossierTalents(f.talents,d.record,d.profile)
         f.talents:SetHeight(math.max(f.talentScroll:GetHeight(),h))
         f.talentScroll:SetVerticalScroll(0)
-    else f.talentScroll:Hide() end
-    if gear or talents then f.scroll:Hide(); return end
+    else
+        f.talentScroll:Hide()
+    end
+    if gear or talents then
+        f.scroll:Hide()
+        return
+    end
     f.scroll:Show()
     local count,height=0,0
-    local function row(label,amount,heading)
+    local function row(label,amount,heading,onClick)
         count=count+1
         local r=f.rows[count]
         if not r then
-            r=CreateFrame("Frame",nil,f.body); f.rows[count]=r
+            r=CreateFrame("Button",nil,f.body)
+            f.rows[count]=r
             r.caption=UI.label(r,"",nil,7,-4,510)
-            r.amount=UI.label(r,"",nil,308,-4,198); r.amount:SetJustifyH("RIGHT")
-            r.rule=r:CreateTexture(nil,"BACKGROUND"); r.rule:SetPoint("BOTTOMLEFT"); r.rule:SetPoint("BOTTOMRIGHT")
-            r.rule:SetHeight(1); r.rule:SetColorTexture(.45,.28,.11,.21)
+            r.amount=UI.label(r,"",nil,308,-4,198)
+            r.amount:SetJustifyH("RIGHT")
+            r.rule=r:CreateTexture(nil,"BACKGROUND")
+            r.rule:SetPoint("BOTTOMLEFT")
+            r.rule:SetPoint("BOTTOMRIGHT")
+            r.rule:SetHeight(1)
+            r.rule:SetColorTexture(.45,.28,.11,.21)
+            r.hover=r:CreateTexture(nil,"HIGHLIGHT")
+            r.hover:SetAllPoints()
+            r.hover:SetColorTexture(.45,.28,.11,.12)
         end
+        r:EnableMouse(onClick~=nil)
+        r:SetScript("OnClick",onClick)
         r.caption:SetWidth(amount and 292 or 500)
         UI.journalFont(r.caption,heading and "GameFontNormalLarge" or "GameFontHighlight",heading and 17 or 13)
-        r.caption:SetTextColor(unpack(heading and UI.theme.red or UI.theme.ink)); r.amount:SetTextColor(unpack(UI.theme.ink))
-        r.caption:SetText(label); r.amount:SetText(amount or "")
+        r.caption:SetTextColor(unpack(heading and UI.theme.red or UI.theme.ink))
+        r.amount:SetTextColor(unpack(onClick and UI.theme.red or UI.theme.ink))
+        r.caption:SetText(label)
+        r.amount:SetText(amount or "")
         local h=math.max(heading and 35 or 26,r.caption:GetStringHeight()+10,r.amount:GetStringHeight()+10)
-        r:ClearAllPoints(); r:SetPoint("TOPLEFT",0,-height); r:SetSize(514,h); r:Show(); height=height+h
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT",0,-height)
+        r:SetSize(514,h)
+        r:Show()
+        height=height+h
     end
     if f.page=="relations" then
-        relationsPage(f,localRecord,row)
-    elseif f.page=="reputation" then
-        row(L("Réputations auprès des factions"),nil,true)
-        local reps=object(profile.reputations)
-        if #reps==0 then row(profile.reputations and L("Aucune faction publiée.") or L("Réputations non disponibles dans ce relevé.")) end
-        local group
-        for _,v in ipairs(reps) do
-            if v.group and v.group~=group then group=v.group; row(text(group) or unknown,nil,true) end
-            local points=valueOf(v.value)
-            if points and valueOf(v.max) then points=points.." / "..valueOf(v.max) end
-            row(text(v.name) or unknown,(valueOf(v.standing) or unknown)..(points and (" · "..points) or ""))
-        end
+        relationsPage(f,d.localRecord,row)
+    elseif f.page=="overview" then
+        overviewPage(f,d,row)
+    elseif f.page=="combat" then
+        combatPage(f,d,row)
     else
-        row(L("Palmarès JcJ · Armurerie"),nil,true)
-        row(L("Victoires honorables"),valueOf(profile.honorableKills) or unknown)
-        row(L("Rang JcJ"),valueOf(profile.pvpRank) or unknown)
-        row(L("Champs de bataille"),profile.battlegroundsAt and timestamp(profile.battlegroundsAt),true)
-        if #object(profile.battlegrounds)==0 then row(profile.battlegrounds and L("Aucun champ de bataille publié.") or L("Champs de bataille non renseignés.")) end
-        for _,v in ipairs(object(profile.battlegrounds)) do
-            row(text(v.name) or unknown,(valueOf(v.games) or "—")..L(" parties").." · "..(valueOf(v.wins) or "—")..L(" V").." / "..(valueOf(v.losses) or "—")..L(" D"))
-        end
-        row(L("Votre face-à-face · Journal"),nil,true)
-        if localRecord then
-            local p=GL.ContactMatchup(record)
-            row(L("Victoires / morts"),p.kills.." / "..p.deaths)
-            row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
-        else row(L("Aucune rencontre personnelle enregistrée.")) end
-        row(L("Face-à-face de la guilde"),nil,true)
-        if f.guid and GL.Bounties and GL.Safe(GetGuildInfo,"player") then
-            local wins,losses=GL.Bounties.GuildFights(f.guid)
-            if wins==0 and losses==0 then row(L("Aucun résultat partagé pour cette cible."))
-            else row(L("Victoires / morts"),wins.." / "..losses) end
-            local scope=GL.Bounties.GuildScope()
-            local members=scope and scope.scores and scope.scores[f.guid] or {}
-            for _,member in ipairs(sortedKeys(members)) do
-                local score=members[member]
-                row(GL.Bounties.MemberName(member) or L("Membre de guilde"),score[1]..L(" V").." / "..score[2]..L(" D"))
-            end
-        else row(unknown) end
-        row(L("Hauts faits JcJ"),type(profile.achievements)=="table" and tostring(#profile.achievements) or unknown,true)
-        if profile.achievementsAt then row(field(L("Relevé"),timestamp(profile.achievementsAt))) end
-        for _,a in ipairs(object(profile.achievements)) do
-            row((text(a.name) or unknown)..(a.accountWide and L(" (compte)") or ""))
-        end
+        statsPage(d,row)
     end
-    for i=count+1,#f.rows do f.rows[i]:Hide() end
+    for i=count+1,#f.rows do
+        f.rows[i]:Hide()
+    end
     f.body:SetHeight(math.max(f.scroll:GetHeight(),height))
 end
 
 local function scrollArea(f,x,y,w,h)
     local scroll=CreateFrame("ScrollFrame",nil,f,"UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT",x,y); scroll:SetSize(w,h)
+    scroll:SetPoint("TOPLEFT",x,y)
+    scroll:SetSize(w,h)
     local body=CreateFrame("Frame",nil,scroll)
-    body:SetSize(w,h); scroll:SetScrollChild(body)
+    body:SetSize(w,h)
+    scroll:SetScrollChild(body)
     return scroll,body
 end
+local tabs={{"overview","Aperçu"},{"combat","Combats"},{"relations","Relations"},{"gear","Équipement"},{"talents","Talents"}}
 local function build()
     local f=UI.bookWindow("GrudgeLedgerPlayerDossier","Grudge Ledger")
     GL.SetupBookNavigation(f,"ledger")
     f.back=UI.button(f,L("Retour"),39,-154,116,function()
         f:Hide()
-        if f.onReturn then f.onReturn() else GL.ShowLedger(f.key) end
+        if f.onReturn then
+            f.onReturn()
+        else
+            GL.ShowLedger(f.key)
+        end
     end)
-    f.portrait=CreateFrame("Frame",nil,f); f.portrait:SetPoint("TOPLEFT",40,-193); f.portrait:SetSize(64,64)
-    f.portrait.raceIcon=f.portrait:CreateTexture(nil,"ARTWORK"); f.portrait.raceIcon:SetAllPoints()
-    f.portrait.classIcon=f.portrait:CreateTexture(nil,"OVERLAY"); f.portrait.classIcon:SetSize(16,16)
+    f.portrait=CreateFrame("Frame",nil,f)
+    f.portrait:SetPoint("TOPLEFT",40,-193)
+    f.portrait:SetSize(64,64)
+    f.portrait.raceIcon=f.portrait:CreateTexture(nil,"ARTWORK")
+    f.portrait.raceIcon:SetAllPoints()
+    f.portrait.classIcon=f.portrait:CreateTexture(nil,"OVERLAY")
+    f.portrait.classIcon:SetSize(16,16)
     f.portrait.classIcon:SetPoint("BOTTOMRIGHT")
     f.nameLabel=UI.label(f,"","large",111,-192,193)
     GL.Safe(f.nameLabel.SetMaxLines,f.nameLabel,2)
     f.identity=UI.label(f,"",nil,111,-237,193)
+    f.identity:ClearAllPoints()
+    f.identity:SetPoint("TOPLEFT",f.nameLabel,"BOTTOMLEFT",0,-4)
     UI.journalFont(f.identity,"GameFontHighlight",11)
-    f.statHeading=UI.label(f,L("Caractéristiques"),"large",40,-266,255); f.statHeading:SetTextColor(unpack(UI.theme.brass))
-    f.identityScroll,f.identityBody=scrollArea(f,40,-297,243,296)
-    f.observed=UI.label(f.identityBody,"",nil,0,0,239); f.observed:SetTextColor(unpack(UI.theme.muted))
+    GL.Safe(f.identity.SetMaxLines,f.identity,4)
+    f.identityScroll,f.identityBody=scrollArea(f,40,-284,247,318)
+    f.identityScroll.scrollBarHideable=true
+    f.verdictHeading=UI.label(f.identityBody,L("Verdict"),"large",0,0,243)
+    f.verdictHeading:SetTextColor(unpack(UI.theme.brass))
+    f.verdict=UI.label(f.identityBody,"",nil,0,0,243)
+    f.verdict:SetTextColor(unpack(UI.theme.paper))
+    f.keyHeading=UI.label(f.identityBody,L("Chiffres clés"),"large",0,0,243)
+    f.keyHeading:SetTextColor(unpack(UI.theme.brass))
+    f.observed=UI.label(f.identityBody,"",nil,0,0,243)
+    f.observed:SetTextColor(unpack(UI.theme.muted))
     f.bounty=UI.button(f,"",40,-612,247,function() GL.OpenContactBounty(f.guid) end)
     f.armoryButton=UI.button(f,L("Lien vers l’Armurerie"),40,-643,247,function()
-        f.armoryLink:SetText(f.armoryURL); f.armoryLink:Show(); f.armoryLink:SetFocus(); f.armoryLink:HighlightText()
+        f.armoryLink:SetText(f.armoryURL)
+        f.armoryLink:Show()
+        f.armoryLink:SetFocus()
+        f.armoryLink:HighlightText()
     end)
     f.armoryLink=CreateFrame("EditBox",nil,f.armoryButton,"InputBoxTemplate")
-    f.armoryLink:SetSize(245,24); f.armoryLink:SetPoint("CENTER")
-    f.armoryLink:SetAutoFocus(false); f.armoryLink:Hide()
+    f.armoryLink:SetSize(245,24)
+    f.armoryLink:SetPoint("CENTER")
+    f.armoryLink:SetAutoFocus(false)
+    f.armoryLink:Hide()
     f.armoryLink:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
     f.armoryLink:SetScript("OnEditFocusLost",function(self) self:Hide() end)
-    f.tabs={}; f.rows={}; f.statCells={}
-    for i,s in ipairs({{"gear","Équipement"},{"talents","Talents"},{"pvp","JcJ"},{"reputation","Factions"},{"relations","Relations"}}) do
+    f.tabs,f.rows,f.statCells={},{},{}
+    for i,s in ipairs(tabs) do
         local key=s[1]
         f.tabs[key]=UI.button(f,L(s[2]),352+(i-1)*110,-156,105,function()
-            f.page=key; f.scroll:SetVerticalScroll(0); draw(f)
+            f.page=key
+            f.scroll:SetVerticalScroll(0)
+            draw(f)
         end,true,true)
     end
-    f.source=UI.label(f,"",nil,355,-196,312); f.source:SetTextColor(unpack(UI.theme.inkMuted))
-    f.ilvl=UI.label(f,"",nil,669,-196,222); f.ilvl:SetJustifyH("RIGHT"); f.ilvl:SetTextColor(unpack(UI.theme.ink))
+    f.source=UI.label(f,"",nil,355,-196,312)
+    f.source:SetTextColor(unpack(UI.theme.inkMuted))
+    f.ilvl=UI.label(f,"",nil,669,-196,222)
+    f.ilvl:SetJustifyH("RIGHT")
+    f.ilvl:SetTextColor(unpack(UI.theme.ink))
     f.scroll,f.body=scrollArea(f,352,-225,520,408)
-    f.equipment=CreateFrame("Frame",nil,f); f.equipment:SetPoint("TOPLEFT",359,-229); f.equipment:SetSize(515,398)
+    f.equipment=CreateFrame("Frame",nil,f)
+    f.equipment:SetPoint("TOPLEFT",359,-229)
+    f.equipment:SetSize(515,398)
     f.talentScroll,f.talents=scrollArea(f,352,-225,529,403)
     f.talentScroll.scrollBarHideable=true
+    f.statsToggle=UI.button(f,"",352,-645,230,function()
+        f.gearStats=not f.gearStats
+        f.scroll:SetVerticalScroll(0)
+        draw(f)
+    end,nil,true)
     f.historyPrev=UI.button(f,L("Précédent"),352,-645,130,function()
-        f.historyOffset=math.max(0,(f.historyOffset or 0)-40); f.scroll:SetVerticalScroll(0); draw(f)
+        f.historyOffset=math.max(0,(f.historyOffset or 0)-40)
+        f.scroll:SetVerticalScroll(0)
+        draw(f)
     end,nil,true)
     f.historyNext=UI.button(f,L("Suivant"),758,-645,130,function()
-        f.historyOffset=(f.historyOffset or 0)+40; f.scroll:SetVerticalScroll(0); draw(f)
+        f.historyOffset=(f.historyOffset or 0)+40
+        f.scroll:SetVerticalScroll(0)
+        draw(f)
     end,nil,true)
-    f.historyCount=UI.label(f,"",nil,493,-652,252); f.historyCount:SetJustifyH("CENTER")
+    f.historyCount=UI.label(f,"",nil,493,-652,252)
+    f.historyCount:SetJustifyH("CENTER")
     f.historyCount:SetTextColor(unpack(UI.theme.inkMuted))
     return f
 end
-function GL.OpenPlayerDossier(id,onReturn,knownName)
-    if type(id)~="string" then return false end
+-- page: optional tab to open; the sheet opens on the overview by default.
+function GL.OpenPlayerDossier(id,onReturn,knownName,page)
+    if type(id)~="string" then
+        return false
+    end
     local key,guid
     if #id<=32 and id:match("^Player%-%w+%-%w+$") then
         key,guid="guid:"..id,id
     elseif id:match("^name:") and GL.Get(id) then
         local contact=GL.Get(id)
         key,guid=contact.key,contact.guid
-    else return false end
+    else
+        return false
+    end
     local contact=GL.Get(key)
     GL.RequestArmory(key,(contact and contact.fullName) or knownName,guid)
     frame=frame or build()
     frame.armoryLink:Hide()
-    frame.key,frame.guid,frame.onReturn,frame.knownName,frame.page=key,guid,onReturn,knownName,"gear"
-    frame.historyOffset=0
-    frame.scroll:SetVerticalScroll(0); frame.identityScroll:SetVerticalScroll(0)
-    if GL.InspectDossierUnit then GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=guid}),guid) end
+    frame.key,frame.guid,frame.onReturn,frame.knownName=key,guid,onReturn,knownName
+    frame.page=frame.tabs[page] and page or "overview"
+    frame.historyOffset,frame.gearStats=0,false
+    frame.scroll:SetVerticalScroll(0)
+    frame.identityScroll:SetVerticalScroll(0)
+    if GL.InspectDossierUnit then
+        GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=guid}),guid)
+    end
     GL.ShowBookPage(frame)
     draw(frame)
-    if guid and GL.SharedDossiers then GL.SharedDossiers.Request(guid) end
+    if guid and GL.SharedDossiers then
+        GL.SharedDossiers.Request(guid)
+    end
     return true
 end
 
 GL.On("DOSSIER_UPDATED",function(guid)
-    if frame and frame:IsShown() and (not guid or frame.guid==guid) then draw(frame) end
+    if frame and frame:IsShown() and (not guid or frame.guid==guid) then
+        draw(frame)
+    end
 end)
 for _,event in ipairs({"CHANGED","GUILD_PROFILES","BOUNTIES_CHANGED"}) do
-    GL.On(event,function() if frame and frame:IsShown() then draw(frame) end end)
+    GL.On(event,function()
+        if frame and frame:IsShown() then
+            draw(frame)
+        end
+    end)
 end

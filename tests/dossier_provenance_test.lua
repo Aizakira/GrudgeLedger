@@ -105,7 +105,7 @@ do
     gear=profile(b,identity.guid).provenance.gear
     assert(gear.by==a.id,"seeing the target does not make B the source of A's equipment")
     -- The dossier header names the observer and the date.
-    b.GL.OpenPlayerDossier(identity.guid)
+    b.GL.OpenPlayerDossier(identity.guid,nil,nil,"gear")
     local label=b.env.GrudgeLedgerPlayerDossier.source:GetText()
     assert(label:find("Member1",1,true) and label:find("/",1,true),label)
     assert(not label:find("Member2",1,true),label)
@@ -124,7 +124,7 @@ do
     assert(p.dates.gear.head==t1,"the helmet keeps the date it was seen, not the new snapshot's")
     assert(p.dates.identity.guild==t1 and p.dates.stats.MANA==t1 and p.dates.stats.HEALTH==t2)
     -- The equipment tab marks the helmet as seen before the latest snapshot.
-    b.GL.OpenPlayerDossier(identity.guid)
+    b.GL.OpenPlayerDossier(identity.guid,nil,nil,"gear")
     local view=b.env.GrudgeLedgerPlayerDossier.equipment.equipment
     local marked={}
     for _,button in ipairs(view.buttons) do if button.seenAt then marked[#marked+1]=button.seenAt end end
