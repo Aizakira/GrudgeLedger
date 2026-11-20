@@ -33,7 +33,12 @@ end
 
 local function publish(guid, state)
     local record = GL.Get("guid:" .. guid)
-    if record and next(state.snapshot) then record.inspection = state.snapshot end
+    if record and next(state.snapshot) then
+        record.inspection = state.snapshot
+    elseif next(state.snapshot) then
+        -- No journal entry: hand the snapshot over so a card or bounty target keeps it after a reload.
+        GL.Emit("DOSSIER_INSPECTED", guid, state.snapshot)
+    end
     GL.Emit("DOSSIER_UPDATED", guid)
 end
 

@@ -137,7 +137,6 @@ local rawSnapshots = {
     [".inspection"] = { ["UI.lua"] = true, ["DossierInspect.lua"] = true, ["SharedDossiers.lua"] = true },
     [".dossiers"] = { ["SharedDossiers.lua"] = true },
     ["socialReports"] = { ["SharedDossiers.lua"] = true },
-    ["sharedSource"] = { ["SharedDossiers.lua"] = true, ["PlayerDossier.lua"] = true },
 }
 for token, allowed in pairs(rawSnapshots) do
     for _, name in ipairs(files) do

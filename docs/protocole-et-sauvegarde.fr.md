@@ -63,7 +63,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `shareFights`, `shareDeaths`, `shareSocial` | Accords de partage, par personnage. Absents ou faux par défaut | — |
 | `mailUncertain` | Envoi de courrier dont l'accusé n'a pas été reçu | Un par personnage |
 | `journal` | Fiches de guilde. Détail ci-dessous | — |
-| `dossiers` | Relevés publics reçus, par cible : `fields` (une entrée par champ, avec `data`, `at` et `source`), `received`, `sender`, `senderName` | 256 cibles, la plus ancienne est évincée |
+| `dossiers` | Relevés publics, par cible : `fields` (une entrée par champ, avec `data`, `at`, `source`, `by`, `via` et, pour l'équipement, l'identité et les caractéristiques, `dates`), `received`, `sender`, `senderName`. Une inspection d'une cible sans fiche personnelle y est aussi gardée | 256 cibles, la plus ancienne est évincée |
 | `dossierSeq` | Dernier numéro de transfert de relevé émis | — |
 | `socialReports` | Témoignages reçus, par `auteur:cible` : solde, relation, 32 faits au plus, ou marque de retrait | 256 témoignages |
 
@@ -143,6 +143,10 @@ Ordre des dates d'une demande : `identity`, `gear`, `trees`, `stats`, `level`, `
 3. La réponse attend de 0 à 7 secondes, selon le membre et la cible. Quand un autre membre commence une réponse `r` pour la même cible, une réponse encore en attente est annulée. Les champs qui manqueraient arrivent à la demande suivante.
 4. Le témoignage de l'expéditeur accompagne chaque réponse `r`. Sans données publiques à envoyer, il part seul (`t`) s'il a changé ou s'il n'a pas été diffusé depuis 30 minutes.
 5. Un fragment n'ouvre un transfert que s'il en est la partie 1. Un expéditeur n'a qu'un transfert ouvert à la fois ; les parties doivent arriver dans l'ordre.
+6. Chaque champ transmis porte son observateur `by` (le membre qui a fait l'inspection ou importé la fiche Armurerie) et, quand il relaie le relevé d'un autre, l'expéditeur le note en `via`. Sans `by`, l'expéditeur est l'observateur. Un membre qui aperçoit lui-même la cible ne devient pas l'observateur des champs reçus.
+7. L'équipement, l'identité et les caractéristiques portent `dates`, la date de chaque pièce ou valeur. Un relevé partiel plus récent complète les manques avec les pièces plus anciennes, qui gardent leur propre date. La fiche signale une pièce vue plus d'une heure avant le relevé principal.
+
+Ces deux champs sont facultatifs : un client 0.13.0 les ignore, et une réception sans eux date chaque pièce du relevé entier.
 
 | Limite | Valeur |
 | --- | --- |

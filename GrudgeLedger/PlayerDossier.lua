@@ -200,6 +200,30 @@ local function statValue(key,v)
     if type(v)=="table" and tonumber(v[1]) and tonumber(v[2]) then return number(v[1]).." – "..number(v[2]) end
     return valueOf(v)
 end
+-- Which dossier field each tab shows, for its "source · observer · date" line.
+local pageFields={gear="gear",talents="trees",pvp="honorableKills",reputation="reputations"}
+local function memberName(guid)
+    return UI.plain(GL.Bounties.MemberName(guid) or L("Membre de guilde"))
+end
+-- Names who observed the tab's data and when: "Inspection de Megumin · 19/11/2026 22:12".
+-- Our own observations read "Votre inspection"; a relayed snapshot also names the relay.
+local function provenanceLabel(profile,page)
+    local key=pageFields[page]
+    local p=key and profile.provenance and profile.provenance[key]
+    if key=="honorableKills" and not p then p=profile.provenance and (profile.provenance.pvpRank or profile.provenance.battlegrounds) end
+    if not p or not p.at then return end
+    local me=GL.Safe(UnitGUID,"player")
+    local label
+    if p.by==me then
+        label=p.source=="armory" and L("Votre relevé Armurerie") or L("Votre inspection")
+    elseif p.by then
+        label=(p.source=="armory" and L("Relevé Armurerie de %s") or L("Inspection de %s")):format(memberName(p.by))
+    else
+        label=p.source=="armory" and L("Relevé Armurerie") or L("Inspection")
+    end
+    if p.via and p.via~=p.by and p.via~=me then label=label..L(", reçu de %s"):format(memberName(p.via)) end
+    return label.." · "..timestamp(p.at)
+end
 local function draw(f)
     local localRecord=GL.Get(f.key)
     local record=localRecord or {guid=f.guid}
@@ -282,8 +306,9 @@ local function draw(f)
     local observedAt=f.page=="gear" and profile.inspectedGear and inspection.gearAt
         or f.page=="talents" and inspection.trees and profile.trees==inspection.trees and inspection.talentsAt
     local source
-    if profile.sharedSource and not observedAt then
-        source=L("Relevé partagé par %s"):format(GL.Bounties.MemberName(profile.sharedSource) or profile.sharedName or L("Membre de guilde"))
+    local shared=not observedAt and provenanceLabel(profile,f.page)
+    if shared then
+        source=shared
     elseif observedAt then
         source=(f.page=="gear" and profile.partialGear and L("Inspection partielle · ")
             or L("Inspection en jeu · "))..timestamp(observedAt)

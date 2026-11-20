@@ -137,8 +137,19 @@ function S.SocialReports(target)
     table.sort(out,function(a,b)return a.actor<b.actor end)
     return out
 end
-local function merge(fields,key,data,at,source)
-    data=clean(data,schema[key]); at=stamp(at)
+-- Fields observed piece by piece: each part keeps the date it was seen.
+local partial = {gear=true, identity=true, stats=true}
+local function observer(by)
+    if type(by) == "string" and #by <= 32 and by:match("^Player%-%w+%-%w+$") then
+        return by
+    end
+end
+-- Each field keeps who observed it (by), who handed it over when it was relayed (via), and,
+-- for gear, identity and stats, the date of every part: a newer partial observation fills
+-- the gaps with older parts but never re-dates them.
+local function merge(fields,key,data,at,source,by,via,dates)
+    data=clean(data,schema[key])
+    at=stamp(at)
     if not data or not at then return end
     if key=="trees" then
         for _,tree in ipairs(data) do
@@ -146,46 +157,67 @@ local function merge(fields,key,data,at,source)
             for _,talent in ipairs(tree.talents or {}) do if not talent[1] or not talent[3] then return end end
         end
     end
+    local parts
+    if partial[key] then
+        parts = {}
+        for k in pairs(data) do
+            local seen = type(dates) == "table" and stamp(dates[k])
+            parts[k] = seen and math.min(seen, at) or at
+        end
+    end
     local old=fields[key]
     if not old or at>old.at then
-        -- A partial equipment/identity/stats observation fills gaps without erasing known slots.
-        if old and (key=="gear" or key=="identity" or key=="stats") then
-            for k,v in pairs(old.data) do if data[k]==nil then data[k]=v end end
+        if old and parts then
+            for k,v in pairs(old.data) do
+                if data[k]==nil then
+                    data[k] = v
+                    parts[k] = old.dates and old.dates[k] or old.at
+                end
+            end
         end
-        fields[key]={data=data,at=at,source=source}
-    elseif key=="gear" or key=="identity" or key=="stats" then
-        for k,v in pairs(data) do if old.data[k]==nil then old.data[k]=v end end
+        fields[key]={data=data,at=at,source=source,by=observer(by),via=observer(via),dates=parts}
+    elseif parts then
+        old.dates = old.dates or {}
+        for k,v in pairs(data) do
+            if old.data[k]==nil then
+                old.data[k] = v
+                old.dates[k] = parts[k]
+            end
+        end
     end
+end
+-- Converts an inspection snapshot (item links, talent trees, stats) into dossier fields.
+local function inspectionFields(fields, inspected, by)
+    local gear={}
+    for slot,link in pairs(inspected.gear or {}) do
+        local ref=type(link)=="string" and link:match("|H(item:[%d:%-]+)|h")
+        if slots[slot] and ref then
+            gear[slots[slot]]={id=tonumber(ref:match("item:(%d+)")),ref=ref,name=link:match("|h%[(.-)%]|h"),
+                icon=GL.Safe(C_Item and C_Item.GetItemIconByID or GetItemIcon,ref)}
+        end
+    end
+    merge(fields,"gear",gear,inspected.gearAt,"inspection",by)
+    merge(fields,"trees",inspected.trees,inspected.talentsAt,"inspection",by)
+    merge(fields,"stats",inspected.stats,inspected.statsAt,"inspection",by)
 end
 local function localFields(target,name)
     local record=GL.Get("guid:"..target) or {guid=target,fullName=name}
     local p=GL.ArmoryProfile(record,false,true) or {}
+    local me=GL.Safe(UnitGUID,"player")
     local fields={}
     for key in pairs(schema) do
         local data=p[key]
         if key=="gear" and type(data)=="table" then
             data=resolvedGear(data)
         end
-        merge(fields,key,data,p[key.."At"] or p.updated,"armory")
+        merge(fields,key,data,p[key.."At"] or p.updated,"armory",me)
     end
     local inspected=GL.DossierInspection and GL.DossierInspection(record) or record.inspection
-    if inspected then
-        local gear={}
-        for slot,link in pairs(inspected.gear or {}) do
-            local ref=type(link)=="string" and link:match("|H(item:[%d:%-]+)|h")
-            if slots[slot] and ref then
-                gear[slots[slot]]={id=tonumber(ref:match("item:(%d+)")),ref=ref,name=link:match("|h%[(.-)%]|h"),
-                    icon=GL.Safe(C_Item and C_Item.GetItemIconByID or GetItemIcon,ref)}
-            end
-        end
-        merge(fields,"gear",gear,inspected.gearAt,"inspection")
-        merge(fields,"trees",inspected.trees,inspected.talentsAt,"inspection")
-        merge(fields,"stats",inspected.stats,inspected.statsAt,"inspection")
-    end
+    if inspected then inspectionFields(fields, inspected, me) end
     local identity={name=name,race=record.raceName,raceID=record.raceID,sex=record.sex,
         classFile=record.class,faction=record.faction,guild=record.guild}
-    merge(fields,"identity",identity,record.lastSeen,"inspection")
-    merge(fields,"level",record.level,record.lastSeen,"inspection")
+    merge(fields,"identity",identity,record.lastSeen,"inspection",me)
+    merge(fields,"level",record.level,record.lastSeen,"inspection",me)
     return fields
 end
 local function cache(s,target)
@@ -200,6 +232,8 @@ local function cache(s,target)
     end
     return s.dossiers[target]
 end
+-- Adds the guild dossier to a local profile. result.provenance[key] names the observer, relay
+-- and date of every field taken from the dossier; result.dates[key][part] dates each piece.
 function S.Merge(record,original)
     local s=allowed(record.guid)
     local saved=s and s.dossiers and s.dossiers[record.guid]
@@ -207,28 +241,36 @@ function S.Merge(record,original)
     local result={}
     for k,v in pairs(original or {}) do result[k]=v end
     local at=stamp(original and original.updated) or 0
-    local used=false
+    result.provenance, result.dates = {}, {}
     for key,entry in pairs(saved.fields) do
         local own=stamp(original and original[key.."At"]) or at
-        local fill=key=="gear" or key=="stats" or key=="identity"
-        if fill then
-            local first,second=result[key],entry.data
-            if key=="gear" then first=resolvedGear(first) end
-            for k in pairs(second) do if not first or first[k]==nil then used=true end end
-            if entry.at>own then first,second=second,first end
-            local combined={}
-            for k,v in pairs(second or {}) do combined[k]=v end
-            for k,v in pairs(first or {}) do combined[k]=v end
-            result[key]=combined
-        end
-        if result[key]==nil or (type(result[key])=="table" and not next(result[key])) or entry.at>own then
-            if not fill then result[key]=entry.data end
-            result[key.."At"]=entry.at; used=true
-        elseif fill and not original then
-            result[key.."At"]=entry.at; used=true
+        local shared={source=entry.source,by=entry.by,via=entry.via,at=entry.at}
+        if partial[key] then
+            local mine=result[key]
+            if key=="gear" then mine=resolvedGear(mine) end
+            local combined, dates = {}, {}
+            local newer = entry.at > own
+            -- The newer source wins each part; the other only fills what it lacks.
+            for k,v in pairs(newer and (mine or {}) or entry.data) do
+                combined[k] = v
+                dates[k] = newer and own or (entry.dates and entry.dates[k] or entry.at)
+            end
+            for k,v in pairs(newer and entry.data or (mine or {})) do
+                combined[k] = v
+                dates[k] = newer and (entry.dates and entry.dates[k] or entry.at) or own
+            end
+            result[key] = combined
+            result.dates[key] = dates
+            if newer or not original or mine == nil or not next(mine) then
+                result[key.."At"] = entry.at
+                result.provenance[key] = shared
+            end
+        elseif result[key]==nil or (type(result[key])=="table" and not next(result[key])) or entry.at>own then
+            result[key]=entry.data
+            result[key.."At"]=entry.at
+            result.provenance[key] = shared
         end
     end
-    if used then result.sharedSource=saved.sender; result.sharedName=saved.senderName; result.sharedAt=saved.received end
     return result
 end
 
@@ -306,7 +348,7 @@ local function knownFields(s,target,name)
     local fields = localFields(target,name)
     local saved = s.dossiers and s.dossiers[target]
     for k,e in pairs(saved and saved.fields or {}) do
-        merge(fields,k,e.data,e.at,e.source)
+        merge(fields,k,e.data,e.at,e.source,e.by,e.via,e.dates)
     end
     return fields
 end
@@ -414,10 +456,12 @@ function S.Observe(identity)
     local s,name=allowed(identity.guid)
     if not s then return end
     local saved=cache(s,identity.guid)
+    local me=GL.Safe(UnitGUID,"player")
     merge(saved.fields,"identity",{name=name,race=identity.raceName,raceID=identity.raceID,sex=identity.sex,
-        classFile=identity.class,faction=identity.faction,guild=identity.guild},GL.Now(),"inspection")
-    merge(saved.fields,"level",identity.level,GL.Now(),"inspection")
-    saved.received,saved.sender=GL.Now(),GL.Safe(UnitGUID,"player")
+        classFile=identity.class,faction=identity.faction,guild=identity.guild},GL.Now(),"inspection",me)
+    merge(saved.fields,"level",identity.level,GL.Now(),"inspection",me)
+    -- Our own sighting dates the dossier but never names us as the source of what others sent.
+    saved.received=GL.Now()
     S.Request(identity.guid)
 end
 local function answer(s,target,theirs)
@@ -459,7 +503,11 @@ local function receiveTransfer(s,sender,target,id,text)
     if not ok or type(data)~="table" then return end
     local result={}
     for k,e in pairs(data) do
-        if schema[k] and type(e)=="table" and (e.source=="armory" or e.source=="inspection") then merge(result,k,e.data,e.at,e.source) end
+        if schema[k] and type(e)=="table" and (e.source=="armory" or e.source=="inspection") then
+            -- The sender is the observer unless it relays another member's observation.
+            local by=observer(e.by) or sender
+            merge(result,k,e.data,e.at,e.source,by,by~=sender and sender or nil,e.dates)
+        end
     end
     local _,expectedName=allowed(target)
     local publicName=result.identity and result.identity.data.name
@@ -467,7 +515,7 @@ local function receiveTransfer(s,sender,target,id,text)
     local changed=receiveSocial(s,sender,target,tonumber(id),data.social)
     if next(result) then
         local saved=cache(s,target)
-        for k,e in pairs(result) do merge(saved.fields,k,e.data,e.at,e.source) end
+        for k,e in pairs(result) do merge(saved.fields,k,e.data,e.at,e.source,e.by,e.via,e.dates) end
         saved.received,saved.sender=GL.Now(),sender
         saved.senderName=B.MemberName(sender); changed=true
     end
@@ -528,6 +576,17 @@ end
 GL.On("CHANGED",function(record)
     local s=B.GuildScope(); reset(s)
     if s and record and record.guid and S.SharingSocial() and allowed(record.guid)==s then dirty[record.guid]=true end
+end)
+-- An inspection of a card or bounty target without a journal entry lives only in the session:
+-- keep it in the guild dossier, which is saved, so a reload does not lose it.
+GL.On("DOSSIER_INSPECTED",function(target,inspected)
+    local s=allowed(target)
+    if not s or type(inspected)~="table" then return end
+    reset(s)
+    local saved=cache(s,target)
+    inspectionFields(saved.fields,inspected,GL.Safe(UnitGUID,"player"))
+    saved.received=GL.Now()
+    GL.Emit("DOSSIER_UPDATED",target)
 end)
 GL.On("GUILD_PROFILES",S.Refresh)
 GL.On("BOUNTIES_CHANGED",S.Refresh)

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.13.0
+GRUDGE LEDGER — 0.13.1
+
+Fiche fiable : chaque onglet de la fiche dit qui a relevé ses données et quand (« Inspection de Megumin · 19/11/2026 22:12 », « Votre relevé Armurerie »). Apercevoir soi-même un joueur ne fait plus de vous la source de l’équipement reçu d’un collègue. Une pièce vue avant le dernier relevé est estompée et son infobulle donne sa date. L’inspection d’une cible de prime ou de fiche de guilde, sans fiche personnelle, est gardée après /reload.
 
 Relevés de guilde : un membre qui se connecte reçoit l’équipement, les talents et les statistiques des primes et des fiches de guilde dès sa première demande, au lieu d’attendre plus de 5 minutes. Un seul membre répond, et seulement avec ce qui manque : le canal de guilde ne reste plus saturé. Les primes passent avant les relevés. Tous les membres doivent installer la 0.13.0 pour échanger les relevés ; la 0.12.0 ne les échange pas avec elle. Les primes et les avis restent partagés entre les deux versions.
 

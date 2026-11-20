@@ -46,8 +46,12 @@ GL.VisiblePortraitUnit=function(record)
     if UnitGUID("target")==record.guid then return "target" end
 end
 local identity=GL.Identity("target")
+-- Without a journal entry, the snapshot goes to the guild dossier (saved) instead of being lost.
+local handedOver
+GL.On("DOSSIER_INSPECTED",function(target,snapshot) handedOver={target=target,snapshot=snapshot} end)
 GL.InspectDossierUnit("target",guid)
 assert(requests==1 and not GL.Get(identity),"precombat capture must not create contacts")
+assert(handedOver and handedOver.target==guid and handedOver.snapshot.stats.HEALTH==1933,"inspection handed to the guild dossier")
 local record=GL.RecordPvP(identity,"death","confirmed","fixture","hit")
 assert(record.inspection.stats.HEALTH==1933 and record.inspection.stats.MANA==1894 and not record.inspection.stats.ARMOR)
 assert(GL.OpenPlayerDossier(guid))

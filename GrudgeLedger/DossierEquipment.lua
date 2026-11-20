@@ -10,6 +10,12 @@ local function closeTip(button)
     button.waitingForItem=nil
     if GameTooltip and GameTooltip.GetOwner and GameTooltip:GetOwner() == button then GameTooltip:Hide() end
 end
+-- A piece seen well before the latest snapshot may have been replaced since: say when it was seen.
+local function addSeenLine(button)
+    if button.seenAt then
+        GameTooltip:AddLine(L("Vu le %s, avant le dernier relevé."):format(date("%d/%m/%Y %H:%M",button.seenAt)),.95,.75,.35,true)
+    end
+end
 local function openTip(button)
     if not GameTooltip then return end
     GameTooltip:SetOwner(button, "ANCHOR_CURSOR")
@@ -18,6 +24,7 @@ local function openTip(button)
     if link and GameTooltip.SetHyperlink then
         GameTooltip:SetHyperlink(link)
         GameTooltip:AddLine(L("Maj + clic pour insérer dans la discussion."),.75,.75,.75)
+        addSeenLine(button)
         GameTooltip:Show()
         return
     end
@@ -28,6 +35,7 @@ local function openTip(button)
             GameTooltip:AddLine(line, 1, 1, 1, true)
         end
         GameTooltip:AddLine(L("Relevé Armurerie · lien en jeu indisponible."),.75,.75,.75,true)
+        addSeenLine(button)
     else
         GameTooltip:AddLine(button.hasVariant and L("Détails de l’objet indisponibles.")
             or L("Aucune pièce publiée pour cet emplacement."), 1, 1, 1, true)
@@ -283,6 +291,9 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
     local faceSize=math.min(96,stageWidth-4,stageHeight-28)
     view.face:SetSize(faceSize,faceSize)
     GL.PaintBookPortrait(view.face,record)
+    -- Pieces older than the snapshot by more than an hour are marked, not hidden.
+    local pieceDates=type(profile.dates)=="table" and profile.dates.gear or {}
+    local snapshotAt=tonumber(profile.gearAt)
     local variantKeys={}
     if type(profile.gear)=="table" then
         for key in pairs(profile.gear) do
@@ -309,7 +320,9 @@ function GL.DrawDossierEquipment(parent,record,profile,slots,slotOrder,itemDetai
         local icon=link and GL.Safe(C_Item and C_Item.GetItemIconByID or GetItemIcon,link) or (b.item and tonumber(item.icon))
         local texture=(icon and icon>0 and icon) or b.emptyIcon
         if texture then b.icon:SetTexture(texture) else b.icon:SetColorTexture(unpack(UI.theme.panel)) end
-        b.icon:SetAlpha((link or b.item or not texture) and 1 or .45)
+        local seen=not link and key and tonumber(pieceDates[key])
+        b.seenAt=seen and snapshotAt and snapshotAt-seen>3600 and seen or nil
+        b.icon:SetAlpha(((link or b.item or not texture) and 1 or .45)*(b.seenAt and .7 or 1))
         b.title:SetText(b.itemName or "—")
     end
     dressPreview(view,profile.identity)

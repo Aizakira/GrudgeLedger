@@ -333,8 +333,15 @@ function QA.capture(name)
         assert(GL.OpenPlayerDossier(guid))
         local f=GrudgeLedgerPlayerDossier
         if name=="dossier-shared" then
-            GrudgeLedgerArmory.profiles[guid].sharedSource="Player-1-qa-source"
-            GrudgeLedgerArmory.profiles[guid].sharedName="Célestine Longuebrise"
+            -- A colleague's inspection, relayed by another member; the helmet was seen three days earlier.
+            local profile=GrudgeLedgerArmory.profiles[guid]
+            local at=1794391200
+            profile.gearAt=at
+            profile.provenance={gear={source="inspection",by="Player-1-qa-source",via="Player-1-qa-relay",at=at}}
+            profile.dates={gear={head=at-3*86400}}
+            local names={["Player-1-qa-source"]="Célestine Longuebrise",["Player-1-qa-relay"]="Aubin Clairval"}
+            local memberName=GL.Bounties.MemberName
+            GL.Bounties.MemberName=function(id) return names[id] or memberName(id) end
             GL.OpenPlayerDossier(guid)
             return f
         end

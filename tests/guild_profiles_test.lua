@@ -181,7 +181,7 @@ do
     local p=assert(b.GL.ArmoryProfile(identity),"shared profile missing")
     assert(p.gear.head.id==100 and p.identity.raceID==6 and p.trees[1].talents[1][3]==1)
     assert(p.honorableKills==12 and p.reputations[1].value==12 and p.stats.HEALTH==1500)
-    assert(p.sharedSource and not p.notes and not p.history and not b.GL.Get(identity))
+    assert(p.provenance.gear.by==a.id and not p.notes and not p.history and not b.GL.Get(identity))
     assert(b.GL.db.armoryRequests[identity.key.."|public target"],"received cards enqueue the automatic Armory fallback")
     b.GL.OpenPlayerDossier(identity.guid,nil,"Public Target")
     assert(b.env.GrudgeLedgerPlayerDossier.equipment.equipment.buttons[1].itemName=="Helmet")
