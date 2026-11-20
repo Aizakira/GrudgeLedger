@@ -1057,6 +1057,8 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat, rep
     refreshReputation(record)
     local event = history(record, kind, { confidence = confidence, evidence = evidence, eventId = eventId, killingBlow = killingBlow,
         combat = withLevels(combatContext(combat), identity, record), report = report })
+    -- Listeners attach the build of both players at this moment to the event.
+    GL.Emit("FIGHT_RECORDED", record, event)
     GL.Emit("CHANGED", record)
     return record, event
 end
@@ -1071,7 +1073,9 @@ function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     local field = pvpFields.aggression[confidence]
     record.pvp[field] = record.pvp[field] + 1
     refreshReputation(record)
-    history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId, combat = withLevels(combatContext(combat), identity, record) })
+    local event = history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId,
+        combat = withLevels(combatContext(combat), identity, record) })
+    GL.Emit("FIGHT_RECORDED", record, event)
     GL.Emit("CHANGED", record)
     return record
 end

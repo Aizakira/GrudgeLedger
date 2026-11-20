@@ -1727,6 +1727,9 @@ local function renderCombatReport(f)
         if guid and guid == opponent then return f.who:GetText() end
         return plain(name or L("Source inconnue"))
     end
+    -- Both players' builds as recorded at the fight, before the blow-by-blow.
+    local build = GL.FightBuildText and GL.FightBuildText(e)
+    if build then text[#text+1] = build end
     local dealt, received, others
     if rows and #rows > 0 then
         local lines = {}

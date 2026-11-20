@@ -28,6 +28,7 @@ Le jeu écrit cette table sur le disque au `/reload` et à la déconnexion. Elle
 | `journalEdition` | Compteur des fiches de guilde publiées | `GuildProfiles.lua` | — |
 | `bountyGuilds` | Un espace par guilde, par `royaume/guilde`. Détail plus bas | `Bounties.lua`, `GuildProfiles.lua`, `SharedDossiers.lua` | Jamais purgé à ce jour, même après un départ de guilde |
 | `bountyHistory` | Primes passées qui concernent chaque personnage | `Bounties.lua` | — |
+| `characterHistory` | Historique daté de chaque personnage, par GUID : `state` et `stateAt` (dernière valeur connue et sa date), `changes` (chaque changement : `at`, `key` parmi `level`, `ilvl`, `spec`, `guild` et `gear:emplacement`, `value`, `source`, `by`), `seen` | `CharacterHistory.lua` | 120 changements par personnage, 600 personnages ; les moins récemment vus sont retirés |
 | `bountyInbox` | En-têtes de courrier en attente de rapprochement avec une prime | `Bounties.lua` | 128 en-têtes non vérifiés, 38 jours |
 | `bountyPins` | Primes épinglées, par personnage | `BountyUI.lua` | — |
 | `tracker` | Groupes en cours, pour compter les sessions partagées | `Tracker.lua` | — |
@@ -48,7 +49,7 @@ Chaque entrée de `players` regroupe quatre familles de champs.
 | Faits | `history`, `pvp` (victoires, morts, agressions), `groupCount`, `encounters`, `firstSeen`, `lastSeen`, `lastEncounterAt`, `lastDirectEncounterAt` |
 | Relevés | `inspection` (équipement, talents et caractéristiques vus en jeu, chacun avec sa date), `armorySnapshot` (copie du relevé Web importé) |
 
-Un événement de `history` porte toujours sa date, sa zone, son auteur (`actorGUID`, `actorName`) et son type : `kill`, `death`, `aggression`, `opening`, `honor`, `reputation`, `reaction`, `grouped` ou `trade`. Une correction ne supprime rien : elle marque l'événement `voided` et garde la preuve d'origine.
+Un événement de `history` porte toujours sa date, sa zone, son auteur (`actorGUID`, `actorName`) et son type : `kill`, `death`, `aggression`, `opening`, `honor`, `reputation`, `reaction`, `grouped` ou `trade`. Depuis la 0.13.1, une victoire, une mort ou une agression porte aussi `build` : `opponent` et `me`, le build de chaque joueur au moment du combat (`level`, `ilvl`, `spec`, `specName`, `stats`, `gear` par emplacement, et pour l'adversaire `at`, `source`, `by`, la date et l'origine du relevé). Il n'est jamais réécrit. Une correction ne supprime rien : elle marque l'événement `voided` et garde la preuve d'origine.
 
 ### Espace d'une guilde
 

@@ -300,6 +300,8 @@ local function draw(f)
         info[#info+1]=field(L("Niveau adverse au combat"),text(GL.ValidLevel(combat.opponentLevel)))
         info[#info+1]=field(L("Votre niveau au combat"),text(GL.ValidLevel(combat.playerLevel)))
     end
+    -- What changed over time: level, item level, specialization, guild, pieces of equipment.
+    for _,line in ipairs(GL.CharacterEvolution and GL.CharacterEvolution(f.guid) or {}) do info[#info+1]=line end
     f.observed:ClearAllPoints(); f.observed:SetPoint("TOPLEFT",0,-y-5); f.observed:SetText(table.concat(info,"\n"))
     f.identityBody:SetHeight(math.max(f.identityScroll:GetHeight(),y+f.observed:GetStringHeight()+12))
     local snap=f.page=="reputation" and profile.reputationsAt or profile.updated

@@ -332,6 +332,17 @@ function QA.capture(name)
         end
         assert(GL.OpenPlayerDossier(guid))
         local f=GrudgeLedgerPlayerDossier
+        if name=="dossier-gear" then
+            -- A character seen over a week: level, guild and two pieces changed (example values).
+            local day=86400
+            GL.db.characterHistory=GL.db.characterHistory or {}
+            GL.db.characterHistory[guid]={seen=1794391200,state={},stateAt={},changes={
+                {at=1794391200-7*day,key="level",value=36},{at=1794391200,key="level",value=41},
+                {at=1794391200-7*day,key="guild",value="Les Sentinelles"},{at=1794391200-2*day,key="guild",value="Cercle d'Elune"},
+                {at=1794391200-7*day,key="gear:head",value=100},{at=1794391200-day,key="gear:head",value=101},
+                {at=1794391200-7*day,key="gear:chest",value=200},{at=1794391200,key="gear:chest",value=201}}}
+            GL.OpenPlayerDossier(guid)
+        end
         if name=="dossier-shared" then
             -- A colleague's inspection, relayed by another member; the helmet was seen three days earlier.
             local profile=GrudgeLedgerArmory.profiles[guid]
@@ -449,6 +460,13 @@ function QA.capture(name)
                 {kind="SWING_DAMAGE", at=102, src=records[7].guid, dst=row.event.actorGUID, amount=132},
                 {kind="SWING_DAMAGE", at=103, src="Creature-1-wolf", from="Loup gris", dst=row.event.actorGUID, amount=58},
             }}
+        end
+        if name == "kill-details" then
+            -- Both builds as recorded at the fight (example values).
+            row.event.build = {
+                opponent = {level=41, spec="31/0/20", specName="Restauration", ilvl=37, stats={HEALTH=1933}, at=1794391200, source="inspection"},
+                me = {level=40, ilvl=35, stats={HEALTH=1760}},
+            }
         end
         local details = row.details
         details:Click()
