@@ -248,6 +248,21 @@ local function dossierExample()
     -- Two dated fights with both levels, so the overview and the Combats tab have content.
     GL.RecordPvP(id,"kill","confirmed","fixture","qa-dossier-kill",{opponentLevel=41,playerLevel=40})
     GL.RecordPvP(id,"death","confirmed","fixture","qa-dossier-death",{opponentLevel=41,playerLevel=39})
+    -- Example habits: openings, one fight report and visits over a week (example values).
+    local record=GL.Get("guid:"..guid)
+    local me,hour=UnitGUID("player"),3600
+    for i,opener in ipairs({"opponent","opponent","player","opponent"}) do
+        record.history[#record.history+1]={kind="opening",time=qaClock-i*30*hour,opener=opener,actorGUID=me,zone="Hurlevent"}
+    end
+    for _,e in ipairs(record.history) do
+        if e.kind=="death" then
+            e.report={live={{src=guid,dst=me,spell="Griffure",amount=80,at=1},{src=guid,dst=me,spell="Griffure",amount=75,at=2},
+                {src=guid,dst=me,spell="Racines enchevêtrées",at=3},{src="Player-999-00QAHELP",dst=me,from="Aldric Brisefer",spell="Frappe",amount=40,at=4}}}
+        end
+    end
+    for i,shift in ipairs({-7*24+9,-6*24+10,-5*24+9,-4*24+8,-3*24+9,-2*24+10,-2*24+2,-24+9,-24+11,-3}) do
+        GL.CharacterInsights.RecordVisit(guid,qaClock+shift*hour,i%3==0 and "Strangleronce" or "Forêt d’Elwynn")
+    end
     local p={level=41,updated=qaClock,averageItemLevel=37,identity={classFile="DRUID"},gear={},
         stats={HEALTH=1933,MANA=1894,STRENGTH=70,AGILITY=108,STAMINA=143,INTELLECT=84,CRITICALSTRIKE="6 %"},
         trees={{id="feral-combat",name="Combat farouche",points=8,
@@ -366,6 +381,17 @@ function QA.capture(name)
             local memberName=GL.Bounties.MemberName
             GL.Bounties.MemberName=function(id) return names[id] or memberName(id) end
             GL.OpenPlayerDossier(guid,nil,nil,"gear")
+            return f
+        end
+        if name=="dossier-facts" then
+            f.expanded.opening=true
+            GL.OpenPlayerDossier(guid)
+            f.expanded.opening=true
+            f.tabs.overview:Click()
+            return f
+        end
+        if name=="dossier-habits" then
+            f.scroll:SetVerticalScroll(math.max(0,f.body:GetHeight()-f.scroll:GetHeight()))
             return f
         end
         if name=="dossier-stats" then

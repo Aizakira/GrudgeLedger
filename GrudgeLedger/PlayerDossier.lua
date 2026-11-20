@@ -103,6 +103,8 @@ local function itemDetails(item)
 end
 local relationNames={friend=L("Ami"),warning=L("Méfiance"),enemy=L("Ennemi"),neutral=L("Neutre")}
 local frame
+-- Assigned below; the expandable facts redraw the sheet.
+local draw
 local function armoryURL(fullName)
     local region=GL.ArmoryRegion()
     if not region or type(fullName)~="string" or not fullName:find(" ",1,true) then return end
@@ -561,8 +563,96 @@ local function relationsPage(f,record,row)
     end
     row(L("Le partage des faits et avis se règle dans Réglages > Relations. Les notes restent privées."))
 end
-local function overviewPage(f,d,row)
+local MAX_FACTS=10
+local function factRow(record,row,fact)
+    local e=fact.event
+    if not e then
+        local zone=text(fact.zone)
+        row(timestamp(fact.at).." · "..L("Vu à proximité")..(zone and (" · "..zone) or ""),nil,nil,nil,true)
+        return
+    end
+    local zone=text(e.zone) and e.zone~="?" and (" · "..text(e.zone)) or ""
+    local open=combatKinds[e.kind] and function() GL.InspectEvent(record,e) end
+    row(timestamp(fact.at).." · "..GL.HistoryTitle(e)..zone,open and L("Détail") or nil,nil,open,true)
+end
+-- Dated facts only, no score: each sentence opens the events that justify it.
+local function insightsSection(f,d,row)
+    local I=GL.CharacterInsights
+    local list=I and d.localRecord and I.Facts(d.localRecord,f.guid) or {}
+    row(L("À savoir"),nil,true)
+    if #list==0 then
+        row(L("Pas encore assez de faits datés pour en tirer des habitudes."))
+        return
+    end
+    for _,item in ipairs(list) do
+        local open=f.expanded[item.key]
+        row(item.text,open and L("Masquer") or L("Faits (%d)"):format(#item.facts),nil,function()
+            f.expanded[item.key]=not f.expanded[item.key]
+            draw(f)
+        end)
+        if open then
+            for i=1,math.min(MAX_FACTS,#item.facts) do
+                factRow(d.localRecord,row,item.facts[i])
+            end
+            if #item.facts>MAX_FACTS then
+                row(L("… et %d autres"):format(#item.facts-MAX_FACTS),nil,nil,nil,true)
+            end
+        end
+    end
+end
+local dayNames={"Lun","Mar","Mer","Jeu","Ven","Sam","Dim"}
+local function heatmap(parent)
+    local m=CreateFrame("Frame",nil,parent)
+    m:SetSize(500,7*14+20)
+    m.cells={}
+    for day=1,7 do
+        local label=UI.label(m,L(dayNames[day]),nil,0,-(day-1)*14,32)
+        UI.journalFont(label,"GameFontHighlight",10)
+        label:SetTextColor(unpack(UI.theme.inkMuted))
+        for hour=0,23 do
+            local cell=m:CreateTexture(nil,"ARTWORK")
+            cell:SetSize(17,12)
+            cell:SetPoint("TOPLEFT",36+hour*19,-(day-1)*14-1)
+            m.cells[(day-1)*24+hour]=cell
+        end
+    end
+    for _,hour in ipairs({0,6,12,18,23}) do
+        local label=UI.label(m,L("%d h"):format(hour),nil,34+hour*19,-7*14-3,40)
+        UI.journalFont(label,"GameFontHighlight",10)
+        label:SetTextColor(unpack(UI.theme.inkMuted))
+    end
+    m:Hide()
+    return m
+end
+local function paintHeatmap(m,presence)
+    for key,cell in pairs(m.cells) do
+        local n=presence.grid[key] or 0
+        if n==0 then
+            cell:SetColorTexture(.45,.28,.11,.08)
+        else
+            cell:SetColorTexture(.55,.08,.05,.3+.7*n/math.max(1,presence.max))
+        end
+    end
+end
+-- Weekday by hour, darker where the player was seen more often, then the usual zones.
+local function habitsSection(f,d,row,block)
+    local I=GL.CharacterInsights
+    local presence=I and d.localRecord and I.Presence(d.localRecord,f.guid)
+    row(L("Habitudes"),nil,true)
+    if not presence or presence.total==0 then
+        row(L("Aucune apparition enregistrée."))
+        return
+    end
+    paintHeatmap(f.heatmap,presence)
+    block(f.heatmap,f.heatmap:GetHeight()+6)
+    local zones=text(I.Zones(presence,3))
+    if zones then
+        row(L("Zones : %s"):format(zones))
+    end
+end
+local function overviewPage(f,d,row,block)
     local record=d.localRecord
+    insightsSection(f,d,row)
     row(L("Dernière rencontre"),nil,true)
     local event=fights(record)[1]
     local met=record and (record.lastEncounterAt or record.lastSeen)
@@ -592,6 +682,7 @@ local function overviewPage(f,d,row)
         end
         row(L("Total de la guilde"),score(GL.Bounties.GuildFights(f.guid)))
     end
+    habitsSection(f,d,row,block)
     row(L("Primes"),nil,true)
     local order=openBounty(f.guid)
     if order then
@@ -732,7 +823,7 @@ local function sourceText(f,d)
     end
     return GL.VisiblePortraitUnit(d.record) and L("Aucun relevé disponible en jeu") or L("Hors de vue · aucun relevé chargé")
 end
-local function draw(f)
+draw=function(f)
     local d=resolve(f)
     drawIdentity(f,d)
     f.source:SetText(sourceText(f,d))
@@ -785,7 +876,7 @@ local function draw(f)
     end
     f.scroll:Show()
     local count,height=0,0
-    local function row(label,amount,heading,onClick)
+    local function row(label,amount,heading,onClick,indent)
         count=count+1
         local r=f.rows[count]
         if not r then
@@ -805,9 +896,12 @@ local function draw(f)
         end
         r:EnableMouse(onClick~=nil)
         r:SetScript("OnClick",onClick)
-        r.caption:SetWidth(amount and 292 or 500)
+        r.caption:ClearAllPoints()
+        r.caption:SetPoint("TOPLEFT",indent and 27 or 7,-4)
+        -- A clickable row has a short action on the right ("Détail", "Faits (3)"): give the text more room.
+        r.caption:SetWidth((amount and (onClick and 400 or 292) or 500)-(indent and 20 or 0))
         UI.journalFont(r.caption,heading and "GameFontNormalLarge" or "GameFontHighlight",heading and 17 or 13)
-        r.caption:SetTextColor(unpack(heading and UI.theme.red or UI.theme.ink))
+        r.caption:SetTextColor(unpack(heading and UI.theme.red or indent and UI.theme.inkMuted or UI.theme.ink))
         r.amount:SetTextColor(unpack(onClick and UI.theme.red or UI.theme.ink))
         r.caption:SetText(label)
         r.amount:SetText(amount or "")
@@ -818,10 +912,17 @@ local function draw(f)
         r:Show()
         height=height+h
     end
+    local function block(region,h)
+        region:ClearAllPoints()
+        region:SetPoint("TOPLEFT",7,-height)
+        region:Show()
+        height=height+h
+    end
+    f.heatmap:Hide()
     if f.page=="relations" then
         relationsPage(f,d.localRecord,row)
     elseif f.page=="overview" then
-        overviewPage(f,d,row)
+        overviewPage(f,d,row,block)
     elseif f.page=="combat" then
         combatPage(f,d,row)
     else
@@ -908,6 +1009,8 @@ local function build()
     f.ilvl:SetJustifyH("RIGHT")
     f.ilvl:SetTextColor(unpack(UI.theme.ink))
     f.scroll,f.body=scrollArea(f,352,-225,520,408)
+    f.heatmap=heatmap(f.body)
+    f.expanded={}
     f.equipment=CreateFrame("Frame",nil,f)
     f.equipment:SetPoint("TOPLEFT",359,-229)
     f.equipment:SetSize(515,398)
@@ -965,7 +1068,7 @@ function GL.OpenPlayerDossier(id,onReturn,knownName,page)
     frame.armoryLink:Hide()
     frame.key,frame.guid,frame.onReturn,frame.knownName=key,guid,onReturn,knownName
     frame.page=frame.tabs[page] and page or "overview"
-    frame.historyOffset,frame.gearStats,frame.relationFilter=0,false,"all"
+    frame.historyOffset,frame.gearStats,frame.relationFilter,frame.expanded=0,false,"all",{}
     frame.scroll:SetVerticalScroll(0)
     frame.identityScroll:SetVerticalScroll(0)
     if GL.InspectDossierUnit then

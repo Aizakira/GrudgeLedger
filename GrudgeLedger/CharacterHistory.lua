@@ -52,6 +52,17 @@ local function entryFor(guid)
     return entry
 end
 
+-- The saved entry of a character; create makes one when it is missing.
+function H.Entry(guid, create)
+    if not GL.db or type(guid) ~= "string" then
+        return
+    end
+    if create then
+        return entryFor(guid)
+    end
+    return store()[guid]
+end
+
 -- Records value for key at its own observation date. The same value only confirms it;
 -- a value dated before what is already known is ignored rather than inserted out of order.
 local function observe(guid, key, value, at, source, by)

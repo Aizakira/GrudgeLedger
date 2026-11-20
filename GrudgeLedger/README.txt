@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.16.0
+GRUDGE LEDGER — 0.17.0
+
+À savoir : l’Aperçu de la fiche donne des faits datés tirés de votre journal, sans note de menace. Qui ouvre le combat, écart de niveau moyen, ses sorts contre vous, ses complices, séries de victoires ou de morts, combats des 7 derniers jours, heures habituelles et jours où il a été vu. Cliquez sur « Faits » pour voir les événements qui justifient chaque phrase ; un combat ouvre son détail. Habitudes : une grille jour × heure montre quand le joueur est vu, et ses zones les plus fréquentes. Les apparitions sont notées à chaque nouvelle rencontre ; les événements déjà dans le journal comptent aussi. Un nouveau fichier : relancer complètement le jeu après la mise à jour.
 
 Dossier de primes : la fiche dit combien de fois un joueur a été mis à prix dans votre guilde, l’or promis, combien de fois il a été tué, les primes expirées ou retirées et les contrats honorés. L’onglet Combats liste chaque prime (date, montant, chasseur, délai, paiement). Ce résumé est gardé après les 38 jours d’effacement des événements de primes. Relations : une ligne par membre avec son avis et son bilan contre ce joueur, puis le total de la guilde ; les boutons Moi, Guilde et Tout filtrent les interactions datées.
 
