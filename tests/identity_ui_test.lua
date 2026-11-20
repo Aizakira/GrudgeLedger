@@ -188,7 +188,7 @@ local promoted = GL.SetReaction(GL.IdentityFromName("Selected", "Promotion", "Pl
 GL.AddNote(promoted, "Still selected after identifying the player")
 assert(f.actions[1].enabled and rowFor(promoted.key).selection:IsShown(),
     "selection follows the canonical identity through name-to-GUID promotion")
-assert(f.detailText:GetText():find("Still selected after identifying the player", 1, true))
+assert(f.detailScroll.fullText:find("Still selected after identifying the player", 1, true))
 local roster = GL.Remember(GL.IdentityFromName("OnlyRoster", "Example", "Player-1-onlyroster"))
 roster.groupCount, roster.history = 2, { { kind = "grouped", sessionId = "old-session" } }
 GL.ShowLedger(record.key)
@@ -217,9 +217,9 @@ GL.ShowLedger(guildRecord.key)
 assert(f.detailGuild:GetText() == "New Guild")
 click(f.detailTabs.history)
 click(f.historyPage.rows[1].details)
-assert(GrudgeLedgerCorrections.proof:GetText():find("Guilde mémorisée : Old Guild (Realm One)",1,true))
+assert(GrudgeLedgerCorrections.scroll.fullText:find("Guilde mémorisée : Old Guild (Realm One)",1,true))
 assert(GL.VoidPvP(guildRecord, guildRecord.history[1]))
-assert(GrudgeLedgerCorrections.proof:GetText():find("Guilde mémorisée : Old Guild",1,true) and not GrudgeLedgerCorrections.confirm.enabled)
+assert(GrudgeLedgerCorrections.scroll.fullText:find("Guilde mémorisée : Old Guild",1,true) and not GrudgeLedgerCorrections.confirm.enabled)
 -- The same physical slot can show different contacts when the target, filter or page changes.
 local unitFor = { [record.guid] = "nameplate1" }
 local painted = 0

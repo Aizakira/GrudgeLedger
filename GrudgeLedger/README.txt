@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.27.0
+GRUDGE LEDGER — 0.28.0
+
+Plus aucune barre de défilement : le détail d’un événement, la synthèse du Journal et le récit du Bilan se lisent en pages, tournées avec les flèches en bas à droite ou la molette, sans couper une ligne. Les zones de saisie (notes, diagnostic) n’ont plus de barre ; la molette et le curseur déplacent le texte. Un long nom de sort (« Mot de l’ombre : Douleur ») rapetisse pour tenir dans sa carte. Le calcul du solde affiche les poids actuels : « 2 agressions × −5 · 2 morts × −5 = −20 ».
 
 Un combat, une seule ligne : une agression et la mort qu’elle cause forment un seul combat dans la fiche (« Agression → Vous a tué · coup fatal »). Des coups à moins de deux minutes d’écart font partie du même combat ; une mort ou une victoire le termine. Une escarmouche sans mort reste une seule ligne. Un même combat ne coûte qu’une agression (−5), même si vous sortez et rentrez en combat. « Combats ces 7 derniers jours » compte des combats, pas des coups.
 

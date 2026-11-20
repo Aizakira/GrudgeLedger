@@ -356,6 +356,14 @@ def render(name, frames, root):
             if rect[2]>rect[0] and rect[3]>rect[1]: layer.alpha_composite(textlayer.crop(rect),(rect[0],rect[1]))
             if natural > h+3 and not r.get("maxLines") and r["kind"] == "FontString":
                 issues.append({"kind":"text_height", "id":r["id"], "text":r["text"][:110], "natural":round(natural,1),"available":round(h,1)})
+            # A wrapping text taller than its box leaves the box (owner report: a long spell name in a fact card).
+            parent_id = r.get("parent")
+            if r["kind"] == "FontString" and wrapping and not r.get("maxLines") and parent_id and parent_id != root                     and lay.frames[parent_id]["kind"] == "Button":
+                rx,ry,rw,rh = lay.resolve(r["id"])
+                px,py,pw,ph = lay.resolve(parent_id)
+                if ph > 0 and ry + natural/region_scale > py + ph + 3:
+                    issues.append({"kind":"text_outside_frame","id":r["id"],"text":r["text"][:110],
+                                   "bottom":round(ry + natural/region_scale - py,1),"frame_height":round(ph,1)})
         clip = lay.clip(r["id"],root)
         if name.startswith("minimap"): clip=(rb[0]-40,rb[1]-40,rb[0]+rb[2]+40,rb[1]+rb[3]+40)
         clip = (max(0,round(clip[0]+offsetx)),max(0,round(clip[1]+offsety)),min(canvas.width,round(clip[2]+offsetx)),min(canvas.height,round(clip[3]+offsety)))

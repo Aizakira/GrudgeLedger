@@ -298,7 +298,75 @@ local function bookWindow(name, title)
     return f
 end
 
+-- Read-only text in pages, like a book: never a scroll bar. Whole lines only: a page ends before
+-- the line that would overflow it. The arrows at the bottom right and the wheel turn the pages.
+local function textPages(parent, width, height)
+    local view = CreateFrame("Frame", nil, parent)
+    view:SetSize(width, height)
+    view.body = label(view, "", nil, 0, 0, width - 4)
+    view.body:SetTextColor(unpack(theme.ink))
+    view.pages, view.page = { "" }, 1
+    local function turn(step)
+        view.page = math.max(1, math.min(#view.pages, view.page + step))
+        view:Paint()
+    end
+    view.next = button(view, "›", 0, 0, 34, function() turn(1) end, nil, true)
+    view.next:ClearAllPoints()
+    view.next:SetPoint("BOTTOMRIGHT", 0, 0)
+    view.pageLabel = label(view, "", nil, 0, 0, 56)
+    view.pageLabel:ClearAllPoints()
+    view.pageLabel:SetPoint("BOTTOMRIGHT", -36, 6)
+    view.pageLabel:SetJustifyH("CENTER")
+    view.pageLabel:SetTextColor(unpack(theme.inkMuted))
+    view.prev = button(view, "‹", 0, 0, 34, function() turn(-1) end, nil, true)
+    view.prev:ClearAllPoints()
+    view.prev:SetPoint("BOTTOMRIGHT", -94, 0)
+    GL.Safe(view.EnableMouseWheel, view, true)
+    view:SetScript("OnMouseWheel", function(_, delta) turn(delta > 0 and -1 or 1) end)
+    function view:Paint()
+        local many = #self.pages > 1
+        self.body:SetText(self.pages[self.page] or "")
+        self.pageLabel:SetText(many and (self.page .. " / " .. #self.pages) or "")
+        self.prev:SetShown(many)
+        self.next:SetShown(many)
+        self.prev:SetEnabled(self.page > 1)
+        self.next:SetEnabled(self.page < #self.pages)
+    end
+    function view:SetText(text, keepPage)
+        self.fullText = text or ""
+        local room = math.max(20, (self:GetHeight() or height) - 30)
+        local pages, current = {}, {}
+        for line in ((text or "") .. "\n"):gmatch("(.-)\n") do
+            if line ~= "" or #current > 0 then
+                current[#current + 1] = line
+                self.body:SetText(table.concat(current, "\n"))
+                if #current > 1 and (self.body:GetStringHeight() or 0) > room then
+                    current[#current] = nil
+                    pages[#pages + 1] = table.concat(current, "\n")
+                    current = line ~= "" and { line } or {}
+                end
+            end
+        end
+        if #current > 0 or #pages == 0 then pages[#pages + 1] = table.concat(current, "\n") end
+        self.pages = pages
+        self.page = keepPage and math.min(self.page, #pages) or 1
+        self:Paint()
+    end
+    return view
+end
+
+-- A text box (notes, diagnostic) shows no bar: the wheel moves its text by three lines.
+local function wheelScroll(scroll)
+    GL.Safe(scroll.EnableMouseWheel, scroll, true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local child = self:GetScrollChild()
+        local most = math.max(0, (child and child:GetHeight() or 0) - self:GetHeight())
+        self:SetVerticalScroll(math.max(0, math.min(most, self:GetVerticalScroll() - delta * 42)))
+    end)
+end
+
 GL.UITheme = {
+    textPages = textPages, wheelScroll = wheelScroll,
     theme = theme, journalFonts = journalFonts,
     surface = surface, plain = plain, label = label, button = button,
     selectButton = selectButton,

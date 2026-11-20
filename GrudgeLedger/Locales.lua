@@ -4,6 +4,8 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["riposte"] = "respuesta",
+        ["ripostes"] = "respuestas",
         ["Croisé %d fois · dernière fois : %s"] = "Cruzado %d veces · última vez: %s",
         ["Vaincu avec votre groupe"] = "Vencido con tu grupo",
         ["Escarmouche sans mort · il vous a agressé"] = "Escaramuza sin muertes · te agredió",
@@ -1526,6 +1528,8 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["riposte"] = "reply",
+        ["ripostes"] = "replies",
         ["Croisé %d fois · dernière fois : %s"] = "Crossed %d times · last time: %s",
         ["Vaincu avec votre groupe"] = "Defeated with your group",
         ["Escarmouche sans mort · il vous a agressé"] = "Skirmish without a death · they attacked you",

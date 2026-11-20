@@ -1371,9 +1371,7 @@ local function refreshJournal()
         if stats.honorAwards > 0 then story[#story + 1] = honorDetail(stats) end
         story[#story + 1] = ""
         story[#story + 1] = subdued(L("Ce récit résume vos archives, pas l'ensemble de votre carrière. Champs de bataille et rapports annulés sont exclus."))
-        f.storyText:SetText(table.concat(story, "\n"))
-        f.storyBody:SetHeight(math.max(405, f.storyText:GetStringHeight() + 12))
-        f.storyScroll:SetVerticalScroll(math.min(f.storyScroll:GetVerticalScroll() or 0, math.max(0, f.storyBody:GetHeight() - f.storyScroll:GetHeight())))
+        f.storyPages:SetText(table.concat(story, "\n"), true)
     else
         local events = GL.JournalEvents(options)
         f.offset = math.min(f.offset, math.max(0, math.floor((#events - 1) / #f.rows) * #f.rows))
@@ -1562,10 +1560,11 @@ function GL.ShowJournal(mode)
         f.breakdownPrevious = button(f.breakdown, "<", 808, -598, 42, function() f.breakdownOffset = math.max(0, f.breakdownOffset - #f.breakdownRows) refreshJournal() end, nil, true)
         f.breakdownNext = button(f.breakdown, ">", 862, -598, 42, function() f.breakdownOffset = f.breakdownOffset + #f.breakdownRows refreshJournal() end, nil, true)
         f.coverage = label(f.summary, "", nil, 356, -645, 548) f.coverage:SetTextColor(unpack(theme.inkMuted)) journalFont(f.coverage, "GameFontHighlightSmall", 12) f.coverage:SetHeight(17)
-        f.storyScroll = CreateFrame("ScrollFrame", nil, f.story, "UIPanelScrollFrameTemplate") f.storyScroll:SetPoint("TOPLEFT", 356, -221) f.storyScroll:SetSize(536, 405)
-        f.storyBody = CreateFrame("Frame", nil, f.storyScroll) f.storyBody:SetSize(531, 405)
-        f.storyText = label(f.storyBody, "", nil, 0, 0, 521) journalFont(f.storyText, "QuestFont_Large", 15) f.storyText:SetTextColor(unpack(theme.ink)) f.storyText:SetSpacing(5)
-        f.storyScroll:SetScrollChild(f.storyBody)
+        f.storyPages = UI.textPages(f.story, 536, 405)
+        f.storyPages:SetPoint("TOPLEFT", 356, -221)
+        f.storyText = f.storyPages.body
+        journalFont(f.storyText, "QuestFont_Large", 15)
+        f.storyText:SetSpacing(5)
         local annual = CreateFrame("Frame", nil, f)
         annual:SetPoint("TOPLEFT", 356, -213) annual:SetSize(548, 435)
         f.annual, annual.metrics, annual.recaps = annual, {}, {}
@@ -1792,9 +1791,7 @@ local function renderCombatReport(f)
         text[#text+1] = L("Aucun relevé de dégâts disponible pour ce combat.")
     end
     if f.evidenceText ~= "" then text[#text+1] = f.evidenceText end
-    f.proof:SetText(table.concat(text, "\n\n"))
-    f.body:SetHeight(math.max(f.scroll:GetHeight(), f.proof:GetStringHeight() + 8))
-    f.scroll:SetVerticalScroll(0)
+    f.scroll:SetText(table.concat(text, "\n\n"))
     UI.selectButton(f.pair, f.pairOnly) UI.selectButton(f.all, not f.pairOnly)
     f.otherSource:SetText(f.source == "live" and L("Voir les derniers coups reçus") or L("Voir les actions observées"))
     f.section:SetText(rows and (f.source == "recap" and L("Derniers coups reçus") or L("Actions observées")) or L("Pourquoi cet événement ?"))
@@ -1836,11 +1833,10 @@ inspectEvent = function(record, e)
         f.pair = button(f, L("Nos échanges"), 239, -241, 166, function()
             f.pairOnly = true renderCombatReport(f)
         end, true, true)
-        f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-        f.scroll:SetPoint("TOPLEFT", 26, -242) f.scroll:SetSize(510, 77)
-        local body = CreateFrame("Frame", nil, f.scroll) body:SetSize(500, 77)
-        f.proof = label(body, "", nil, 0, 0, 498) f.proof:SetTextColor(unpack(theme.ink))
-        f.scroll:SetScrollChild(body) f.body = body
+        -- Pages instead of a scroll bar.
+        f.scroll = UI.textPages(f, 532, 77)
+        f.scroll:SetPoint("TOPLEFT", 26, -242)
+        f.proof = f.scroll.body
         f.effect = field(26, -334, 532, 49, 13)
         f.keep = button(f, L("Fermer"), 24, -396, 105, function() f:Hide() end, true, true)
         UI.selectButton(f.keep, true)
@@ -1892,7 +1888,8 @@ local function showDiagnostic(private)
         local f = window("GrudgeLedgerDiagnostic", L("Grudge Ledger — Diagnostic"), 660, 500)
         diagnosticWindow = f
         f.privacy = label(f, "", nil, 18, -54, 620)
-        f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+        f.scroll = CreateFrame("ScrollFrame", nil, f)
+        UI.wheelScroll(f.scroll)
         f.scroll:SetPoint("TOPLEFT", 22, -91)
         f.scroll:SetSize(590, 315)
         f.edit = CreateFrame("EditBox", nil, f.scroll)
@@ -2119,8 +2116,14 @@ local function renderDetail()
             local deaths = (pvp.deaths or 0)
             local wins = (pvp.kills or 0)
             local hits = (pvp.aggressions or 0)
-            local formula = counted(deaths, "mort") .. " × −10  +  " .. counted(wins, "victoire")
-            if hits > 0 then formula = formula .. "  −  " .. counted(hits, "agression") end
+            -- The calculation in full, with today's weights: "2 agressions × −5 · 2 morts × −5 = −20".
+            local replies = GL.ProvokedAggressions and GL.ProvokedAggressions(record) or 0
+            local terms = {}
+            if hits - replies > 0 then terms[#terms + 1] = counted(hits - replies, "agression") .. " × −5" end
+            if replies > 0 then terms[#terms + 1] = counted(replies, "riposte") .. " × −1" end
+            if deaths > 0 then terms[#terms + 1] = counted(deaths, "mort") .. " × −5" end
+            if wins > 0 or #terms == 0 then terms[#terms + 1] = counted(wins, "victoire") .. " × +1" end
+            local formula = table.concat(terms, "  ·  ")
             if gestures ~= 0 then
                 formula = (L("Combats %+.0f   ·   Gestes %+.0f")):format(raw, gestures)
             else
@@ -2201,10 +2204,8 @@ local function renderDetail()
             editor:Show()
         end
     end
-    ledger.detailText:SetText(table.concat(lines, "\n"))
     ledger.detailText:SetSpacing(GL.Settings().compactMode and 2 or 4)
-    ledger.detailBody:SetHeight(math.max(ledger.detailScroll:GetHeight(), ledger.detailText:GetStringHeight() + 12))
-    ledger.detailScroll:SetVerticalScroll(math.min(ledger.detailScroll:GetVerticalScroll(), math.max(0, ledger.detailBody:GetHeight() - ledger.detailScroll:GetHeight())))
+    ledger.detailScroll:SetText(table.concat(lines, "\n"), true)
 end
 
 local function enableRecognition()
@@ -2657,7 +2658,7 @@ local function buildLedger()
         row.relation:SetHeight(18)
         GL.Safe(row.relation.SetWordWrap, row.relation, false)
         GL.Safe(row.relation.SetMaxLines, row.relation, 1)
-        row:SetScript("OnClick", function(self) closeMenu() selectedKey = self.key f.detailScroll:SetVerticalScroll(0) refresh() end)
+        row:SetScript("OnClick", function(self) closeMenu() selectedKey = self.key f.detailScroll.page = 1 refresh() end)
         row:SetScript("OnEnter", function(self)
             local record = self.key and GL.Get(self.key)
             if not record or not GameTooltip then return end
@@ -2805,7 +2806,7 @@ local function buildLedger()
     for i, entry in ipairs({ { "summary", L("Synthèse") }, { "history", L("Histoire") }, { "notes", L("Notes") }, { "matchup", L("Face-à-face") } }) do
         local key = entry[1]
         f.detailTabs[key] = button(f, entry[2], 354 + (i - 1) * 112, -234, 108, function()
-            f.detailTab = key f.detailScroll:SetVerticalScroll(0) renderDetail()
+            f.detailTab = key f.detailScroll.page = 1 renderDetail()
         end, true, true)
     end
     f.detailTabs.dossier = button(f, L("Armurerie"), 802, -234, 111, dossier, true, true)
@@ -2833,9 +2834,9 @@ local function buildLedger()
     f.formula:SetTextColor(unpack(theme.ink)) f.formula:SetJustifyH("CENTER") f.formula:SetHeight(22)
     f.scoreContext = label(f.balancePanel, "", nil, 6, -151, 546)
     journalFont(f.scoreContext, "GameFontHighlightSmall", 11, true) f.scoreContext:SetTextColor(unpack(theme.inkMuted)) f.scoreContext:SetJustifyH("CENTER") f.scoreContext:SetHeight(17)
-    f.detailScroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    -- Pages instead of a scroll bar.
+    f.detailScroll = UI.textPages(f, 544, 230)
     f.detailScroll:SetPoint("TOPLEFT", 356, -379)
-    f.detailScroll:SetSize(544, 190)
     f.matchupHistory = button(f, L("Voir les combats dans l’histoire"), 356, -619, 293, function()
         f.detailTab, f.historyPage.kind, f.historyPage.offset = "history", "matchup", 0
         renderDetail()
@@ -2878,13 +2879,10 @@ local function buildLedger()
     p.prev = button(p, L("Précédent"), 61, -337, 124, function() p.offset = math.max(0, p.offset - #p.rows) renderDetail() end, nil, true)
     p.next = button(p, L("Suivant"), 373, -337, 124, function() p.offset = p.offset + #p.rows renderDetail() end, nil, true)
     p:HookScript("OnHide", function() p.menu:Hide() end)
-    f.detailBody = CreateFrame("Frame", nil, f.detailScroll)
-    f.detailBody:SetSize(539, 210)
-    f.detailText = label(f.detailBody, "", nil, 0, 0, 529)
+    f.detailBody = f.detailScroll
+    f.detailText = f.detailScroll.body
     journalFont(f.detailText, "QuestFont_Large", 15)
-    f.detailText:SetTextColor(unpack(theme.ink))
     f.detailText:SetSpacing(4)
-    f.detailScroll:SetScrollChild(f.detailBody)
     local hint = label(f, L("Votre choix personnel reste prioritaire."), nil, 356, -632, 181)
     f.hint = hint
     journalFont(hint, "GameFontHighlightSmall", 12, true)
@@ -2949,7 +2947,7 @@ refresh = function(focusSelected)
     elseif not selectionIndex or selectionIndex <= offset or selectionIndex > offset + ledger.pageSize then
         selectedKey = records[offset + 1] and records[offset + 1].key
         ledger.detailTab = "summary"
-        ledger.detailScroll:SetVerticalScroll(0)
+        ledger.detailScroll.page = 1
         ledger.toolsMenu:Hide()
     end
     for i, row in ipairs(ledger.rows) do
@@ -3042,7 +3040,7 @@ function GL.ShowLedger(key)
         ledger.query, ledger.detailTab = "", "summary"
         ledger.historyPage.kind, ledger.historyPage.offset = "all", 0
         ledger.search:SetText("")
-        ledger.detailScroll:SetVerticalScroll(0)
+        ledger.detailScroll.page = 1
     end
     showBook(ledger)
     refresh(true)
@@ -3113,7 +3111,8 @@ noteEditor = function()
     f.total = label(f, "", nil, 42, -293, 76) f.total:SetTextColor(unpack(theme.ink)) f.total:SetJustifyH("CENTER")
     f.noteInfo = label(f, "", nil, 176, -70, 376)
     journalFont(f.noteInfo, "GameFontNormalLarge", 16) f.noteInfo:SetTextColor(unpack(theme.ink))
-    local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", nil, f)
+    UI.wheelScroll(scroll)
     f.scroll = scroll
     scroll:SetPoint("TOPLEFT", 176, -105) scroll:SetSize(354, 148)
     f.edit = CreateFrame("EditBox", nil, scroll)

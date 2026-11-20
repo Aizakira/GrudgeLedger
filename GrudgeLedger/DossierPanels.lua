@@ -47,6 +47,22 @@ function P.Text(parent, x, y, w, size, bold, color)
     return label
 end
 
+-- A value that never leaves its box, whatever the language: the font shrinks from its size down
+-- to the smallest, measured on one line; past that, the text wraps at the smallest size.
+function P.Fit(label, text, width, biggest, smallest, bold)
+    local face = bold and "GameFontNormalLarge" or "GameFontHighlight"
+    GL.Safe(label.SetWordWrap, label, false)
+    label:SetText(text or "")
+    local size = biggest
+    UI.journalFont(label, face, size)
+    while size > smallest and (GL.Safe(label.GetStringWidth, label) or 0) > width do
+        size = size - 1
+        UI.journalFont(label, face, size)
+    end
+    GL.Safe(label.SetWordWrap, label, (GL.Safe(label.GetStringWidth, label) or 0) > width)
+    return size
+end
+
 -- A tile: a small caption, then up to two lines.
 function P.Tile(parent, w, h)
     local tile = CreateFrame("Frame", nil, parent)

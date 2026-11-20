@@ -98,7 +98,7 @@ assert(GrudgeLedgerNote:IsShown() and #aqua.notes == 1, "over-byte-limit note re
 
 r.buttons["Ouvrir la fiche"]()
 assert(GrudgeLedgerWindow:IsShown())
-assert(GrudgeLedgerWindow.detailText:GetText():find("||cff00ff00", 1, true), "notes rendered as literal text")
+assert(GrudgeLedgerWindow.detailScroll.fullText:find("||cff00ff00", 1, true), "notes rendered as literal text")
 GL.RecordPvP(aqua, "death", "confirmed", "Déduction", "ui-test")
 assert(GL.Relation(aqua) == "enemy" and aqua.reputation == -5, "automatic keeps new PvP debt visible")
 assert(GrudgeLedgerWindow.metrics.deaths.value:GetText() == "1 fois" and GrudgeLedgerWindow.metrics.deaths.value:GetText() == "1 fois", "summary separates the probable death from confirmed deaths")
@@ -118,7 +118,7 @@ local status = GrudgeLedgerWindow.detailStatus
 assert(status:GetText():find("Méfiance", 1, true) and status.color[1] > status.color[2] and status.color[2] > status.color[3], "warning uses readable orange ink and an explicit status label")
 for _,row in ipairs(GrudgeLedgerWindow.historyPage.rows) do assert(not row.event or row.event.kind ~= "aggression","history does not invent aggression events") end
 click(GrudgeLedgerWindow.detailTabs.summary)
-assert(GrudgeLedgerWindow.detailText:GetText():find("0 agression", 1, true))
+assert(GrudgeLedgerWindow.detailScroll.fullText:find("0 agression", 1, true))
 click(GrudgeLedgerWindow.actions[1])
 assert(GL.Relation(aqua) == "friend")
 GrudgeLedgerWindow.search:SetText("%")

@@ -220,7 +220,7 @@ for _, tab in ipairs({ "history", "notes", "summary" }) do
     click(ledger.detailTabs[tab])
     assert(ledger.detailTab == tab and ledger.counters:IsShown() == (tab == "summary"))
     for key, control in pairs(ledger.detailTabs) do assert(control.selection:IsShown() == (key == tab)) end
-    if tab == "summary" then assert(ledger.detailText:GetText():find("Dernière rencontre",1,true))
+    if tab == "summary" then assert(ledger.detailScroll.fullText:find("Dernière rencontre",1,true))
     elseif tab == "history" then assert(ledger.historyPage:IsShown() and ledger.historyPage.rows[1].event)
     else assert(GrudgeLedgerNote:IsShown() and GrudgeLedgerNote.edit:GetText() ~= "") end
     assert(ledger.detailBody:GetHeight() >= ledger.detailScroll:GetHeight())

@@ -968,7 +968,7 @@ local function paintOverview(f,d)
         card:SetShown(item~=nil)
         if item then
             card.key=item.key
-            card.value:SetText(item.value or "")
+            Panels.Fit(card.value,item.value or "",96,18,11,true)
             card.caption:SetText(item.caption or item.text)
         end
     end

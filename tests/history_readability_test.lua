@@ -37,7 +37,7 @@ local function text(tab)
     GL.ShowLedger(record.key)
     local control = GrudgeLedgerWindow.detailTabs[tab or "history"]
     control:GetScript("OnClick")(control)
-    if tab == "summary" then return GrudgeLedgerWindow.detailText:GetText() end
+    if tab == "summary" then return GrudgeLedgerWindow.detailScroll.fullText end
     if tab == "notes" then
         local editor = GrudgeLedgerNote
         if editor.rows[1].note then editor.rows[1].scripts.OnClick() end
@@ -50,16 +50,16 @@ local function text(tab)
                 for _,field in ipairs({row.date,row.title,row.hint,row.badge}) do lines[#lines+1] = field:GetText() end
                 if row.event.kind == "reputation" and row.event.source == "manual" then
                     row.details.scripts.OnClick()
-                    lines[#lines+1] = GrudgeLedgerCorrections.proof:GetText()
+                    lines[#lines+1] = GrudgeLedgerCorrections.scroll.fullText
                     GrudgeLedgerCorrections.keep.scripts.OnClick()
                 elseif row.event.questTitle and row.event.kind == "death" and row.event.confidence == "confirmed" then
                     row.details.scripts.OnClick()
                     if row.event == first then
-                        assert(GrudgeLedgerCorrections.proof:GetText():find("UNIT_DIED",1,true))
+                        assert(GrudgeLedgerCorrections.scroll.fullText:find("UNIT_DIED",1,true))
                         assert(row.playerLevel:IsShown() and row.playerLevel:GetText() == "Vous · niv. 34")
                         assert(row.opponentLevel:IsShown() and row.opponentLevel:GetText() == "Adversaire · niv. 39")
                         assert(not row.hint:IsShown())
-                        local proof = GrudgeLedgerCorrections.proof:GetText()
+                        local proof = GrudgeLedgerCorrections.scroll.fullText
                         assert(proof:find("Monstre engagé pendant le combat", 1, true) and proof:find("44 %", 1, true))
                         assert(proof:find("vous 34, adversaire 39 (+5)", 1, true))
                     end
@@ -88,9 +88,12 @@ assert(text("notes"):find("Mon souvenir personnel", 1, true), "notes have a dedi
 text("summary")
 assert(GrudgeLedgerWindow.metrics.kills.value:GetText() == "1 fois"
     and GrudgeLedgerWindow.metrics.deaths.value:GetText() == "1 fois"
-    and GrudgeLedgerWindow.detailText:GetText():find("1 agression", 1, true), "summary keeps confidence counters separate")
+    and GrudgeLedgerWindow.detailScroll.fullText:find("1 agression", 1, true), "summary keeps confidence counters separate")
 assert(GrudgeLedgerWindow.balance:GetText() == "-9" and GrudgeLedgerWindow.scoreContext:GetText():find("Avis personnel", 1, true),
     "manual friendship does not overwrite the displayed automatic debt")
+-- Owner report: the formula still said "× −10"; it now spells out today's weights.
+assert(GrudgeLedgerWindow.formula:GetText() == "1 agression × −5  ·  1 mort × −5  ·  1 victoire × +1  =  -9",
+    GrudgeLedgerWindow.formula:GetText())
 GL.RecordGroup(identity, "different-place", "Monastère écarlate")
 local group = record.history[#record.history]
 assert(group.kind == "grouped" and not group.subzone and not group.questTitle, "explicitly different locations must not inherit current context")

@@ -256,7 +256,7 @@ local function dossierExample()
     end
     for _,e in ipairs(record.history) do
         if e.kind=="death" then
-            e.report={live={{src=guid,dst=me,spell="Griffure",amount=80,at=1},{src=guid,dst=me,spell="Griffure",amount=75,at=2},
+            e.report={live={{src=guid,dst=me,spell="Mot de l'ombre : Douleur",amount=80,at=1},{src=guid,dst=me,spell="Mot de l'ombre : Douleur",amount=75,at=2},
                 {src=guid,dst=me,spell="Racines enchevêtrées",at=3},{src="Player-999-00QAHELP",dst=me,from="Aldric Brisefer",spell="Frappe",amount=40,at=4}}}
         end
     end
