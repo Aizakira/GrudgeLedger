@@ -77,6 +77,18 @@ GL.RecordPvP(light, "death", "confirmed", "Direct", "light-d2")
 local nemesis = GL.Titles()
 assert(nemesis == GL.Get(light).key, tostring(nemesis))
 
+-- Pre-merge review: events of the same second keep their order of arrival.
+local same = GL.IdentityFromName("Same", "Second", "Player-1-same")
+GL.RecordAggression(same, "confirmed", "Observed", "same-a")
+GL.RecordPvP(same, "death", "confirmed", "Direct", "same-d")
+GL.RecordPvP(same, "kill", "confirmed", "Group", "same-k", { assist = "Mate" })
+local sameFights = GL.Fights(GL.Get(same))
+assert(#sameFights == 1 and #sameFights[1].events == 3 and sameFights[1].main.kind == "death", #sameFights)
+assert(sameFights[1].events[1].kind == "aggression" and sameFights[1].events[3].kind == "kill")
+-- The debt list keeps the heaviest first even when the list is ordered by name.
+local byName = GL.SearchPlayers({ relation = "debt", sort = "name" })
+assert(GL.Debt(byName[1]) >= GL.Debt(byName[#byName]) and #byName >= 2)
+
 -- Zones on the Habits tab: most crossings first, never the order of the visits.
 local zones = GL.CharacterInsights.ZoneList({ zones = { ["Tanaris"] = 2, ["Feralas"] = 7, ["Desolace"] = 2, ["Azshara"] = 1 } })
 assert(zones[1].name == "Feralas" and zones[2].name == "Desolace" and zones[3].name == "Tanaris" and zones[4].name == "Azshara")

@@ -1200,7 +1200,8 @@ local function combatPage(f,d,row)
         row(L("Victoires / morts"),p.kills.." / "..p.deaths.." · "..L("%d combats"):format(#list),true)
         local formula=GL.BalanceFormula(record)
         if formula~="" then
-            row(L("Solde %+d = %s"):format(record.reputation or 0,formula))
+            local _,fightBalance=GL.AutomaticBalance(record)
+            row(L("Solde %+d = %s"):format(fightBalance or 0,formula))
         end
         row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
         local duels=object(record.duels)

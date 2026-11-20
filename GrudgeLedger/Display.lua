@@ -417,8 +417,9 @@ local function makeToast(preview)
     frame.help.label:SetTextColor(0.94, 0.80, 0.57)
     frame.help.label:SetText(L("Appeler la guilde"))
     frame.help:SetScript("OnClick", function(self)
-        if self.identity then GL.Emit("CALL_FOR_HELP", self.identity, self.relation, self.bounty) end
-        self.label:SetText(L("Guilde prévenue"))
+        local result = {}
+        if self.identity then GL.Emit("CALL_FOR_HELP", self.identity, self.relation, self.bounty, result) end
+        self.label:SetText(result.sent and L("Guilde prévenue") or L("Réessayez dans un instant"))
     end)
     frame.help:SetScript("OnShow", function(self) self.label:SetText(L("Appeler la guilde")) end)
     frame.help:Hide()

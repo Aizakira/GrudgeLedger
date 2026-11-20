@@ -1086,11 +1086,18 @@ local function joins(fight, e)
 end
 -- Newest first. Each fight: at, last, events (oldest first), kills, deaths, aggressions, main.
 function GL.Fights(record)
-    local list = {}
-    for _, e in ipairs(type(record) == "table" and record.history or {}) do
-        if fightEvent(e) then list[#list + 1] = e end
+    local list, arrival = {}, {}
+    for i, e in ipairs(type(record) == "table" and record.history or {}) do
+        if fightEvent(e) then
+            list[#list + 1] = e
+            arrival[e] = i
+        end
     end
-    table.sort(list, function(a, b) return a.time < b.time end)
+    -- Events of the same second keep their order of arrival (table.sort alone is not stable).
+    table.sort(list, function(a, b)
+        if a.time ~= b.time then return a.time < b.time end
+        return arrival[a] < arrival[b]
+    end)
     local fights, current = {}, nil
     for _, e in ipairs(list) do
         if not joins(current, e) then
@@ -1433,7 +1440,7 @@ function GL.SearchPlayers(options)
     end
     table.sort(result, function(a, b)
         local av, bv = value(a), value(b)
-        if av ~= bv then if sort == "name" then return av < bv end return av > bv end
+        if av ~= bv then if sort == "name" and not debts then return av < bv end return av > bv end
         return a.key < b.key
     end)
     return result

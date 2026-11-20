@@ -563,7 +563,7 @@ end
 GL.On("THREAT_SEEN",relaySighting)
 -- "Appeler la guilde" on an alert: an explicit request, sent even when the automatic watch is off.
 -- Still at most one call every ten seconds.
-GL.On("CALL_FOR_HELP",function(identity)
+GL.On("CALL_FOR_HELP",function(identity,_,_,result)
     local s,me=B.GuildScope()
     local guid=type(identity)=="table" and identity.guid
     if not s or not me or type(guid)~="string" or #guid>32 or not guid:match("^Player%-%w+%-%w+$") or GL.IsPvPInstance() then return end
@@ -577,10 +577,24 @@ GL.On("CALL_FOR_HELP",function(identity)
     if #message<=250 then
         Transport.Send(s,message)
         watchSent[guid],watchLast=now,now
+        if type(result)=="table" then result.sent=true end
     end
 end)
+local helpFrom = {}
+-- Text from the network is shown in an alert: no formatting code may survive.
+local function shown(text)
+    return (unescape(text):sub(1,48):gsub("|","||"))
+end
 local function receiveSighting(s,sender,target,map,code,name,zone)
     local now,count,oldest=GL.Now(),0,nil
+    -- The sender's own pauses cannot be trusted: one call for help per member every thirty seconds,
+    -- and one report per member and per player every thirty seconds.
+    if code=="h" then
+        if helpFrom[sender] and now-helpFrom[sender]<30 then return end
+        helpFrom[sender]=now
+    end
+    local previous=sightings[target]
+    if previous and previous.actor==sender and code~="h" and now-previous.at<30 then return end
     for guid,sight in pairs(sightings) do
         if now-sight.at>900 then
             sightings[guid]=nil
@@ -591,7 +605,7 @@ local function receiveSighting(s,sender,target,map,code,name,zone)
     end
     if count>=WATCH_KEPT and oldest then sightings[oldest]=nil end
     local sight={at=now,actor=sender,map=map,relation=code=="w" and "warning" or "enemy",bounty=code=="b",help=code=="h",
-        name=unescape(name):sub(1,48),zone=unescape(zone):sub(1,48),member=B.MemberName(sender)}
+        name=shown(name),zone=shown(zone),member=B.MemberName(sender)}
     sightings[target]=sight
     GL.Emit("GUILD_SIGHTING",target,sight,map>0 and map==playerMap())
     GL.Emit("DOSSIER_UPDATED",target)

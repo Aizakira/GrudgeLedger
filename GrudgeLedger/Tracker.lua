@@ -1060,9 +1060,12 @@ function T.OnSystemMessage(message)
             local mine = GL.Clean(GL.Safe(UnitName, "player"), "string")
             local identity = GL.Identity("target")
             local other = identity and identity.name
-            if mine and other and ((winner:find(mine, 1, true) and loser:find(other, 1, true))
-                or (loser:find(mine, 1, true) and winner:find(other, 1, true))) then
-                GL.RecordDuel(identity, winner:find(mine, 1, true) ~= nil)
+            -- The message names each duellist in full; compare whole names or whole first names.
+            local function is(text, name)
+                return text == name or text:match("^(%S+)") == name
+            end
+            if mine and other and ((is(winner, mine) and is(loser, other)) or (is(loser, mine) and is(winner, other))) then
+                GL.RecordDuel(identity, is(winner, mine))
             end
             return
         end
@@ -1140,9 +1143,13 @@ function T.ScanGroup()
                 local id = previous[identity.key] or (record and previous[record.key])
                 record = GL.RecordSeen(identity)
                 if not record and identity.guid then
+                    -- Keep the same entry from scan to scan: it carries the time spent together.
                     local known = strangers[identity.key]
-                    strangers[identity.key] = { identity = identity, zone = known and known.zone or GL.Where(),
-                        at = known and known.at or now, current = true }
+                    if known then
+                        known.current = true
+                    else
+                        strangers[identity.key] = { identity = identity, zone = GL.Where(), at = now, current = true }
+                    end
                 end
                 if record then
                     if not id then
@@ -1174,18 +1181,22 @@ function T.ScanGroup()
     end
     state.groups[me] = current
     for _, stranger in pairs(strangers) do
-        stranger.current = nil
+        stranger.was, stranger.current = stranger.current, nil
     end
     for i = 1, size > 0 and (raid and math.min(size, 40) or 4) or 0 do
         local identity = GL.Identity((raid and "raid" or "party") .. i)
         local stranger = identity and strangers[identity.key]
         if stranger then
+            -- Time between two scans where they were present both times; gaps between groups do not count.
+            if stranger.was and stranger.last then
+                stranger.together = (stranger.together or 0) + math.max(0, now - stranger.last)
+            end
             stranger.current, stranger.last = true, now
         end
     end
     -- A good group with a stranger who just left: offer once to add them to your book.
     for _, stranger in pairs(strangers) do
-        local together = (stranger.last or stranger.at) - stranger.at
+        local together = stranger.together or 0
         if not stranger.current and not stranger.suggested and together >= 900 then
             stranger.suggested = true
             GL.Emit("COMPANION_SUGGESTION", stranger.identity, together)

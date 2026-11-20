@@ -345,7 +345,11 @@ function I.Story(record)
             first, zone = e.time, type(e.zone) == "string" and e.zone ~= "?" and e.zone or nil
         end
     end
-    first = math.min(first or math.huge, tonumber(record.firstSeen) or math.huge)
+    local seen = tonumber(record.firstSeen)
+    if seen and (not first or seen < first) then
+        first, zone = seen, nil
+    end
+    first = first or math.huge
     if first < math.huge then
         out[#out + 1] = zone and L("Croisé pour la première fois le %s, %s."):format(day(first), zone)
             or L("Croisé pour la première fois le %s."):format(day(first))

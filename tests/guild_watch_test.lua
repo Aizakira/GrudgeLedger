@@ -151,6 +151,21 @@ for i=1,4 do
     a.GL.RecordPvP(a.GL.IdentityFromName("Sneaky","Rogue",target),"kill","confirmed","Direct","revenge-kill-"..i)
 end
 assert(toast.title:GetText()=="Compte réglé" and toast.note:GetText()=="Sa dette de 1 est effacée.",toast.note:GetText())
+-- Pre-merge review: text from the network never carries a formatting code into an alert.
+local other="Player-1-0f0f"
+a.GL.SharedDossiers.Receive(scope,b.id,"S2;V;"..other..";1444;e;%7CTbad%7Ct;Zone%7Ccff")
+local escaped=assert(a.GL.SharedDossiers.WatchSighting(other))
+assert(escaped.name=="||Tbad||t" and escaped.zone=="Zone||cff",escaped.name)
+-- A member cannot flood the guild: one call for help per member every thirty seconds.
+a.GL.SharedDossiers.Receive(scope,b.id,"S2;V;"..other..";1444;h;First;Zone")
+local firstCall=a.GL.SharedDossiers.WatchSighting(other)
+assert(firstCall.help and firstCall.name=="First")
+now=now+5
+a.GL.SharedDossiers.Receive(scope,b.id,"S2;V;"..other..";1444;h;Second;Zone")
+assert(a.GL.SharedDossiers.WatchSighting(other).name=="First","a second call within thirty seconds is ignored")
+now=now+31
+a.GL.SharedDossiers.Receive(scope,b.id,"S2;V;"..other..";1444;h;Third;Zone")
+assert(a.GL.SharedDossiers.WatchSighting(other).name=="Third")
 for _,p in ipairs(clients) do assert(#p.GL.errors==0,p.GL.errors[1] and p.GL.errors[1].text) end
 print("PASS guild watch: opt-in sending, one report per player per two minutes, alert for your enemies anywhere, "
     .."warning for a guildmate's enemy in your zone, nothing saved in the journal, alert switch, malformed reports ignored, call for help reaches everyone, revenge and settled banners")

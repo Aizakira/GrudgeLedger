@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Réessayez dans un instant"] = "Inténtalo de nuevo en un momento",
         ["Croisé pour la première fois le %s, %s."] = "Visto por primera vez el %s, %s.",
         ["Croisé pour la première fois le %s."] = "Visto por primera vez el %s.",
         ["Un groupe ensemble"] = "Un grupo juntos",
@@ -1574,6 +1575,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Réessayez dans un instant"] = "Try again in a moment",
         ["Croisé pour la première fois le %s, %s."] = "First crossed on %s, %s.",
         ["Croisé pour la première fois le %s."] = "First crossed on %s.",
         ["Un groupe ensemble"] = "One group together",
