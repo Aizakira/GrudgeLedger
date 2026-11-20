@@ -69,6 +69,8 @@ local function all()
     while f.pagePrev:IsShown() and f.pagePrev:IsEnabled() do click(f.pagePrev) end
     return table.concat(visible,"\n")
 end
+-- Combats has four sub-tabs; the bounty record is under Primes.
+click(f.combatTabs.bounties)
 assert(all():find("Mis à prix 2 fois · 60 PO promis",1,true),all())
 assert(all():find("Tué 1 fois · 1 expirée · contrats honorés 1/1",1,true),all())
 assert(all():find("en 2 h · payée",1,true) and all():find("expirée sans victoire",1,true),all())

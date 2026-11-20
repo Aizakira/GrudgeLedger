@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.28.0
+GRUDGE LEDGER — 0.29.0
+
+Fiche joueur, troisième version. La colonne de gauche ne prend plus qu’un cinquième de la fenêtre ; la page de droite gagne la place. Sous votre avis, le calcul du solde (« 2 agressions × −5 · 2 morts × −5 »). Sept chiffres clés choisis selon la classe : Esprit pour un prêtre, Force pour un guerrier, Agilité pour un druide farouche. L’Aperçu montre six faits au lieu de quatre, sans phrase d’introduction. Combats se range en quatre sous-onglets : Vous, Guilde, Primes, Armurerie. Talents montre les arbres seuls ; la spécialisation est écrite dans la colonne. Le détail d’un combat se lit en trois sous-onglets : Résumé, Builds, Preuves. Un nouveau fichier d’image : relancer complètement le jeu.
 
 Plus aucune barre de défilement : le détail d’un événement, la synthèse du Journal et le récit du Bilan se lisent en pages, tournées avec les flèches en bas à droite ou la molette, sans couper une ligne. Les zones de saisie (notes, diagnostic) n’ont plus de barre ; la molette et le curseur déplacent le texte. Un long nom de sort (« Mot de l’ombre : Douleur ») rapetisse pour tenir dans sa carte. Le calcul du solde affiche les poids actuels : « 2 agressions × −5 · 2 morts × −5 = −20 ».
 

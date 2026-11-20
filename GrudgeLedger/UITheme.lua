@@ -261,7 +261,8 @@ local function window(name, title, width, height, isBook)
     return f
 end
 
-local function bookWindow(name, title)
+-- narrow: the player sheet's variant, its left column about 20 % of the window.
+local function bookWindow(name, title, narrow)
     local f = window(name, title, bookAnchor:GetWidth(), bookAnchor:GetHeight(), true)
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)
@@ -286,15 +287,15 @@ local function bookWindow(name, title)
     if f.wordmark:SetTexture(media .. "JournalWordmark") ~= false then f.title:Hide() end
     f.indexPaper = f:CreateTexture(nil, "BACKGROUND", nil, -1)
     f.indexPaper:SetPoint("TOPLEFT", 25, -145)
-    f.indexPaper:SetSize(295, 520)
+    f.indexPaper:SetSize(narrow and 189 or 295, 520)
     f.indexPaper:SetColorTexture(unpack(theme.panel))
     f.paper = f:CreateTexture(nil, "BACKGROUND", nil, -1)
-    f.paper:SetPoint("TOPLEFT", 340, -145)
-    f.paper:SetSize(590, 520)
+    f.paper:SetPoint("TOPLEFT", narrow and 226 or 340, -145)
+    f.paper:SetSize(narrow and 704 or 590, 520)
     f.paper:SetColorTexture(unpack(theme.paper))
     f.bookSurface = f:CreateTexture(nil, "BACKGROUND", nil, 0)
     f.bookSurface:SetAllPoints()
-    f.bookSurface:SetTexture(media .. "JournalBookSurface")
+    f.bookSurface:SetTexture(media .. (narrow and "JournalBookSurfaceSheet" or "JournalBookSurface"))
     return f
 end
 

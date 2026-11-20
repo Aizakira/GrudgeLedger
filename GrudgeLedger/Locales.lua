@@ -4,6 +4,14 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Résumé"] = "Resumen",
+        ["Builds"] = "Builds",
+        ["Preuves"] = "Pruebas",
+        ["Aucun build relevé pour ce combat."] = "No se registró ningún build para este combate.",
+        ["Lien Armurerie"] = "Enlace de la Armería",
+        ["Vict. honorables"] = "Victorias honorables",
+        ["%d combats"] = "%d combates",
+        ["Solde %+d = %s"] = "Saldo %+d = %s",
         ["riposte"] = "respuesta",
         ["ripostes"] = "respuestas",
         ["Croisé %d fois · dernière fois : %s"] = "Cruzado %d veces · última vez: %s",
@@ -1528,6 +1536,14 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Résumé"] = "Summary",
+        ["Builds"] = "Builds",
+        ["Preuves"] = "Evidence",
+        ["Aucun build relevé pour ce combat."] = "No build recorded for this fight.",
+        ["Lien Armurerie"] = "Armory link",
+        ["Vict. honorables"] = "Honorable kills",
+        ["%d combats"] = "%d fights",
+        ["Solde %+d = %s"] = "Balance %+d = %s",
         ["riposte"] = "reply",
         ["ripostes"] = "replies",
         ["Croisé %d fois · dernière fois : %s"] = "Crossed %d times · last time: %s",

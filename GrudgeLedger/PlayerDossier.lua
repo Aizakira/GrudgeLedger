@@ -220,11 +220,14 @@ local function identityText(d)
     class=(record.class or record.className) and text(class) or text(public.class) or unknown
     faction=record.faction and text(faction) or text(public.faction) or unknown
     local spec,level=specName(d.profile.trees),levelOf(d)
-    local first=(level and (L("Niv. %d"):format(level).." · ") or "")..class
-    local lines={first..(spec and (" ("..spec..")") or ""),race.." · "..faction}
+    local lines={(level and (L("Niv. %d"):format(level).." · ") or "")..class}
+    if spec then
+        lines[#lines+1]=spec
+    end
+    lines[#lines+1]=race.." · "..faction
     local guild=text(record.guild) or text(public.guild)
     if guild then
-        lines[3]="<"..guild..">"
+        lines[#lines+1]="<"..guild..">"
     end
     return table.concat(lines,"\n")
 end
@@ -340,8 +343,34 @@ local function encounters(d,guid)
     return result
 end
 local powers={"MANA","ENERGY","RAGE","FOCUS","RUNICPOWER"}
--- Nine figures: health, power, armour; item level, stamina, main attribute; then critical
--- strike and the PvP record, or for the same-faction variant groups, trades and reports.
+-- The three statistics that matter for each class; a feral druid reads like a rogue.
+local classStats={
+    WARRIOR={"STRENGTH","ARMOR","CRITICALSTRIKE"}, ROGUE={"AGILITY","CRITICALSTRIKE","STAMINA"},
+    HUNTER={"AGILITY","CRITICALSTRIKE","STAMINA"}, MAGE={"INTELLECT","CRITICALSTRIKE","STAMINA"},
+    WARLOCK={"INTELLECT","CRITICALSTRIKE","STAMINA"}, PRIEST={"INTELLECT","SPIRIT","CRITICALSTRIKE"},
+    PALADIN={"STRENGTH","INTELLECT","ARMOR"}, SHAMAN={"INTELLECT","AGILITY","CRITICALSTRIKE"},
+    DRUID={"INTELLECT","SPIRIT","CRITICALSTRIKE"}, FERAL={"AGILITY","ARMOR","CRITICALSTRIKE"},
+}
+local function classToken(d)
+    local token=text(object(d.profile.identity).classFile) or text(d.record.class)
+    token=token and token:upper()
+    if token=="DRUID" then
+        -- Feral Combat is the second tree; its name also tells it when the order is unknown.
+        local trees,best,most,name=object(d.profile.trees),nil,0,""
+        for i,tree in ipairs(trees) do
+            local points=type(tree)=="table" and tonumber(tree.points) or 0
+            if points>most then
+                best,most,name=i,points,(text(tree.name) or ""):lower()
+            end
+        end
+        if best==2 or name:find("farouche",1,true) or name:find("feral",1,true) then
+            return "FERAL","DRUID"
+        end
+    end
+    return token,token
+end
+-- Seven lines: health, power, item level, the three statistics of the class, then honorable
+-- kills, or for the same-faction variant groups, trades and reports.
 local function keyFigures(d,ally,met)
     local stats,power=d.stats,"MANA"
     for i=#powers,1,-1 do
@@ -349,29 +378,32 @@ local function keyFigures(d,ally,met)
             power=powers[i]
         end
     end
-    local main,best="AGILITY",-1
-    for _,key in ipairs({"STRENGTH","AGILITY","INTELLECT"}) do
-        local value=tonumber(stats[key])
-        if value and value>best then
-            main,best=key,value
+    local token=classToken(d)
+    local chosen=classStats[token]
+    if not chosen then
+        local main,best="AGILITY",-1
+        for _,key in ipairs({"STRENGTH","AGILITY","INTELLECT"}) do
+            local value=tonumber(stats[key])
+            if value and value>best then
+                main,best=key,value
+            end
         end
+        chosen={main,"STAMINA","CRITICALSTRIKE"}
     end
     local figures={
         {statValue("HEALTH",stats.HEALTH),statNames.HEALTH},
         {statValue(power,stats[power]),statNames[power]},
-        {statValue("ARMOR",stats.ARMOR),statNames.ARMOR},
         {valueOf(d.itemLevel),L("Niv. objet")},
-        {statValue("STAMINA",stats.STAMINA),statNames.STAMINA},
-        {statValue(main,stats[main]),statNames[main]},
     }
+    for _,key in ipairs(chosen) do
+        figures[#figures+1]={statValue(key,stats[key]),key=="CRITICALSTRIKE" and L("Critique") or statNames[key]}
+    end
     if ally then
-        figures[7]={tostring(met.groups),L("Groupes")}
-        figures[8]={tostring(met.trades),L("Échanges")}
-        figures[9]={tostring(met.taggers),L("Signalements")}
+        figures[5]={tostring(met.groups),L("Groupes")}
+        figures[6]={tostring(met.trades),L("Échanges")}
+        figures[7]={tostring(met.taggers),L("Signalements")}
     else
-        figures[7]={statValue("CRITICALSTRIKE",stats.CRITICALSTRIKE),L("Critique")}
-        figures[8]={valueOf(d.profile.pvpRank),L("Rang JcJ")}
-        figures[9]={valueOf(d.profile.honorableKills),L("Vict. hon.")}
+        figures[7]={valueOf(d.profile.honorableKills),L("Vict. honorables")}
     end
     return figures
 end
@@ -395,17 +427,24 @@ local function seenText(d)
     lines[#lines+1]=#readings>0 and L("Relevés : %s"):format(table.concat(readings," · ")) or L("Aucun relevé chargé")
     return table.concat(lines,"\n")
 end
+local COLUMN=166
 local function keyCell(f,i)
     local c=f.statCells[i]
     if c then
         return c
     end
     c=CreateFrame("Frame",nil,f.identityBody)
-    c:SetSize(78,40)
-    c.value=UI.label(c,"","large",0,0,78)
-    c.label=UI.label(c,"",nil,0,-23,80)
+    c:SetSize(COLUMN,18)
+    c.label=UI.label(c,"",nil,0,-2,104)
     UI.journalFont(c.label,"GameFontHighlight",11)
     c.label:SetTextColor(unpack(UI.theme.brass))
+    c.value=UI.label(c,"",nil,COLUMN-64,0,64)
+    UI.journalFont(c.value,"GameFontNormalLarge",13)
+    c.value:SetJustifyH("RIGHT")
+    c.rule=c:CreateTexture(nil,"BACKGROUND")
+    c.rule:SetPoint("BOTTOMLEFT")
+    c.rule:SetSize(COLUMN,1)
+    c.rule:SetColorTexture(.55,.40,.20,.30)
     f.statCells[i]=c
     return c
 end
@@ -416,7 +455,7 @@ local function drawIdentity(f,d)
     if not name and f.guid and GL.Bounties and GL.Bounties.MemberName then
         name=text(GL.Bounties.MemberName(f.guid))
     end
-    f.nameLabel:SetText(name or unknown)
+    Panels.Fit(f.nameLabel,name or unknown,112,18,12,true)
     GL.PaintBookPortrait(f.portrait,record)
     -- The studio bust, when the Avatar Replay Lab has photographed this player.
     local photos=GL.StudioPhotos and GL.StudioPhotos(f.guid)
@@ -444,9 +483,11 @@ local function drawIdentity(f,d)
         region:SetPoint("TOPLEFT",0,-y)
         y=y+height
     end
-    place(f.verdictHeading,20)
-    -- Pills: your opinion and the guild's each with a short note; the bounty and tags flow after.
+    f.verdictHeading:Hide()
+    -- Pills: your opinion (with its calculation) and the guild's, each with a short note below;
+    -- the bounty and tags flow after.
     local items=verdictItems(d,f.guid)
+    local formula=d.localRecord and GL.BalanceFormula(d.localRecord) or ""
     for _,pill in ipairs(f.pills) do
         pill:Hide()
         pill.note:Hide()
@@ -455,7 +496,8 @@ local function drawIdentity(f,d)
     for i,item in ipairs(items) do
         local pill=f.pills[i] or Panels.Pill(f.identityBody)
         if not f.pills[i] then
-            pill.note=Panels.Text(f.identityBody,0,0,150,11,false,UI.theme.muted)
+            pill.note=Panels.Text(f.identityBody,0,0,COLUMN,11,false,UI.theme.muted)
+            GL.Safe(pill.note.SetMaxLines,pill.note,2)
             f.pills[i]=pill
         end
         pill:Set(item[1],item[2])
@@ -467,12 +509,12 @@ local function drawIdentity(f,d)
             end
             pill:SetPoint("TOPLEFT",0,-y)
             pill.note:ClearAllPoints()
-            pill.note:SetPoint("TOPLEFT",pill:GetWidth()+8,-y-4)
-            pill.note:SetText(item[3])
+            pill.note:SetPoint("TOPLEFT",2,-y-24)
+            pill.note:SetText(i==1 and formula~="" and (item[3].." · "..formula:gsub("  ·  "," · ")) or item[3])
             pill.note:Show()
-            y=y+26
+            y=y+26+math.max(14,(GL.Safe(pill.note.GetStringHeight,pill.note) or 13)+3)
         else
-            if x+pill:GetWidth()>243 then
+            if x+pill:GetWidth()>COLUMN then
                 y=y+26
                 x=0
             end
@@ -483,18 +525,23 @@ local function drawIdentity(f,d)
     if x>0 then
         y=y+26
     end
-    y=y+6
-    place(f.keyHeading,20)
-    for i,figure in ipairs(keyFigures(d,ally,met)) do
+    y=y+4
+    f.keyHeading:SetText(L("Chiffres clés"))
+    place(f.keyHeading,18)
+    local figures=keyFigures(d,ally,met)
+    for i,figure in ipairs(figures) do
         local c=keyCell(f,i)
         c:ClearAllPoints()
-        c:SetPoint("TOPLEFT",((i-1)%3)*82,-(y+math.floor((i-1)/3)*42))
+        c:SetPoint("TOPLEFT",0,-(y+(i-1)*18))
         c.value:SetText(figure[1] or "—")
         c.value:SetTextColor(unpack(figure[1] and UI.theme.paper or UI.theme.muted))
         c.label:SetText(figure[2])
         c:Show()
     end
-    y=y+3*42+4
+    for i=#figures+1,#f.statCells do
+        f.statCells[i]:Hide()
+    end
+    y=y+#figures*18+8
     f.observed:SetText(seenText(d))
     place(f.observed,f.observed:GetStringHeight()+8)
 end
@@ -814,19 +861,19 @@ local function legend(parent,y)
 end
 local function heatmap(parent)
     local m=CreateFrame("Frame",nil,parent)
-    m:SetSize(500,7*14+36)
+    m:SetSize(640,7*14+36)
     m.cells={}
     for day=1,7 do
         smallLabel(m,L(dayNames[day]),0,-(day-1)*14,32)
         for hour=0,23 do
-            local cell=gridCell(m,17,12)
-            cell:SetPoint("TOPLEFT",36+hour*19,-(day-1)*14-1)
+            local cell=gridCell(m,22,12)
+            cell:SetPoint("TOPLEFT",36+hour*25,-(day-1)*14-1)
             cell.title=L("%s, de %d h à %d h"):format(L(fullDays[day]),hour,(hour+1)%24)
             m.cells[(day-1)*24+hour]=cell
         end
     end
     for _,hour in ipairs({0,6,12,18,23}) do
-        smallLabel(m,L("%d h"):format(hour),34+hour*19,-7*14-3,40)
+        smallLabel(m,L("%d h"):format(hour),34+hour*25,-7*14-3,40)
     end
     legend(m,-7*14-19)
     m:Hide()
@@ -861,25 +908,25 @@ local function weeks(presence)
 end
 local function buildOverview(f)
     local o=CreateFrame("Frame",nil,f)
-    o:SetPoint("TOPLEFT",352,-225)
-    o:SetSize(520,408)
+    o:SetPoint("TOPLEFT",232,-197)
+    o:SetSize(640,408)
     o.tiles={}
     for i=1,4 do
-        local tile=Panels.Tile(o,124,82)
-        tile:SetPoint("TOPLEFT",(i-1)*132,0)
+        local tile=Panels.Tile(o,154,82)
+        tile:SetPoint("TOPLEFT",(i-1)*162,0)
         o.tiles[i]=tile
     end
-    o.bar=Panels.Bar(o.tiles[1],104)
+    o.bar=Panels.Bar(o.tiles[1],134)
     o.bar:SetPoint("TOPLEFT",10,-56)
     o.factsTitle=Panels.Text(o,0,-96,300,16,true,UI.theme.red)
-    o.factsLink=Panels.Link(o,320,-98,200,function()
+    o.factsLink=Panels.Link(o,440,-98,200,function()
         f.factsMode,f.pageNumber=true,1
         draw(f)
     end)
     o.cards={}
-    for i=1,4 do
-        local card=Panels.FactCard(o,256,54)
-        card:SetPoint("TOPLEFT",((i-1)%2)*264,-120-math.floor((i-1)/2)*62)
+    for i=1,6 do
+        local card=Panels.FactCard(o,208,54)
+        card:SetPoint("TOPLEFT",((i-1)%3)*216,-120-math.floor((i-1)/3)*62)
         card:SetScript("OnClick",function(self)
             f.factsMode,f.pageNumber=true,1
             f.expanded[self.key]=true
@@ -887,21 +934,21 @@ local function buildOverview(f)
         end)
         o.cards[i]=card
     end
-    o.noFacts=Panels.Text(o,0,-126,520,13,false,UI.theme.inkMuted)
+    o.noFacts=Panels.Text(o,0,-126,640,13,false,UI.theme.inkMuted)
     o.presenceTitle=Panels.Text(o,0,-254,300,16,true,UI.theme.red)
-    o.presenceLink=Panels.Link(o,320,-256,200,function()
+    o.presenceLink=Panels.Link(o,440,-256,200,function()
         f.page,f.pageNumber="habits",1
         draw(f)
     end)
-    o.strip=Panels.YearStrip(o,520)
+    o.strip=Panels.YearStrip(o,640)
     o.strip:SetPoint("TOPLEFT",0,-276)
     o.rule=o:CreateTexture(nil,"BACKGROUND")
     o.rule:SetPoint("TOPLEFT",0,-326)
-    o.rule:SetSize(520,1)
+    o.rule:SetSize(640,1)
     o.rule:SetColorTexture(.45,.28,.11,.35)
     o.lastCaption=Panels.Text(o,0,-338,110,11,false,UI.theme.inkMuted)
-    o.lastText=Panels.Text(o,110,-336,330,12)
-    o.lastLink=Panels.Link(o,450,-336,70,nil)
+    o.lastText=Panels.Text(o,110,-336,450,12)
+    o.lastLink=Panels.Link(o,570,-336,70,nil)
     o:Hide()
     return o
 end
@@ -1020,22 +1067,22 @@ local function changeText(c)
 end
 local function buildHabits(f)
     local h=CreateFrame("Frame",nil,f)
-    h:SetPoint("TOPLEFT",352,-225)
-    h:SetSize(520,408)
+    h:SetPoint("TOPLEFT",232,-197)
+    h:SetSize(640,408)
     h.tiles={}
     for i=1,3 do
-        local tile=Panels.Tile(h,168,58)
-        tile:SetPoint("TOPLEFT",(i-1)*176,0)
+        local tile=Panels.Tile(h,208,58)
+        tile:SetPoint("TOPLEFT",(i-1)*216,0)
         h.tiles[i]=tile
     end
     h.gridTitle=Panels.Text(h,0,-70,300,16,true,UI.theme.red)
     h.grid=heatmap(h)
     h.grid:ClearAllPoints()
     h.grid:SetPoint("TOPLEFT",0,-92)
-    h.zones=Panels.ListBlock(h,254,4)
+    h.zones=Panels.ListBlock(h,314,4)
     h.zones:SetPoint("TOPLEFT",0,-236)
-    h.changes=Panels.ListBlock(h,254,4)
-    h.changes:SetPoint("TOPLEFT",266,-236)
+    h.changes=Panels.ListBlock(h,314,4)
+    h.changes:SetPoint("TOPLEFT",326,-236)
     h:Hide()
     return h
 end
@@ -1110,14 +1157,20 @@ local function encountersPage(f,d,row)
     end
 end
 local MAX_FIGHTS=15
+local combatTabs={{"you","Vous",70},{"guild","Guilde",74},{"bounties","Primes",74},{"armory","Armurerie",96}}
 local function combatPage(f,d,row)
     local profile,record=d.profile,d.localRecord
-    row(L("Votre face-à-face · Journal"),nil,true)
+    local tab=f.combatTab or "you"
+    if tab=="you" then
     if record then
         local p=GL.ContactMatchup(d.record)
-        row(L("Victoires / morts"),p.kills.." / "..p.deaths)
-        row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
         local list=fights(record)
+        row(L("Victoires / morts"),p.kills.." / "..p.deaths.." · "..L("%d combats"):format(#list),true)
+        local formula=GL.BalanceFormula(record)
+        if formula~="" then
+            row(L("Solde %+d = %s"):format(record.reputation or 0,formula))
+        end
+        row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
         for i=1,math.min(MAX_FIGHTS,#list) do
             local fight=list[i]
             row(timestamp(fight.at).." · "..fightText(fight),L("Détail"),nil,function() GL.InspectEvent(record,fight.main) end)
@@ -1134,6 +1187,7 @@ local function combatPage(f,d,row)
     else
         row(L("Aucune rencontre personnelle enregistrée."))
     end
+    elseif tab=="guild" then
     row(L("Face-à-face de la guilde"),nil,true)
     if inGuild(f) then
         local wins,losses=GL.Bounties.GuildFights(f.guid)
@@ -1151,6 +1205,7 @@ local function combatPage(f,d,row)
     else
         row(unknown)
     end
+    elseif tab=="bounties" then
     row(L("Dossier de primes"),nil,true)
     local dossier=bountyDossier(f.guid)
     if dossier.count==0 then
@@ -1162,7 +1217,9 @@ local function combatPage(f,d,row)
             row(bountyLine(e),L("par %s"):format(by))
         end
     end
+    else
     row(L("Palmarès JcJ · Armurerie"),nil,true)
+    row(profile.updated and (L("Relevé Armurerie : ")..timestamp(profile.updated)) or L("Aucun relevé Armurerie chargé"))
     row(L("Victoires honorables"),valueOf(profile.honorableKills) or unknown)
     row(L("Rang JcJ"),valueOf(profile.pvpRank) or unknown)
     row(L("Champs de bataille"),profile.battlegroundsAt and timestamp(profile.battlegroundsAt),true)
@@ -1179,6 +1236,7 @@ local function combatPage(f,d,row)
     end
     for _,a in ipairs(object(profile.achievements)) do
         row((text(a.name) or unknown)..(a.accountWide and L(" (compte)") or ""))
+    end
     end
 end
 local statOrder={"HEALTH","MANA","ENERGY","RAGE","FOCUS","RUNICPOWER","STRENGTH","AGILITY","STAMINA","INTELLECT","SPIRIT","ARMOR","CRITICALSTRIKE"}
@@ -1207,8 +1265,8 @@ local function statsPage(d,row)
     end
 end
 local function sourceText(f,d)
-    if f.page=="overview" or f.page=="habits" then
-        return L("Votre journal, la guilde et les derniers relevés")
+    if f.page=="overview" or f.page=="habits" or f.page=="combat" then
+        return ""
     end
     if f.page=="relations" then
         return L("Journal personnel et témoignages de guilde")
@@ -1270,6 +1328,10 @@ draw=function(f)
     -- Same format for everyone; for a player of your faction never fought, Combats reads Encounters.
     local ally=allyVariant(d)
     f.tabs.combat:SetText(ally and L("Rencontres") or L("Combats"))
+    for key,b in pairs(f.combatTabs) do
+        b:SetShown(f.page=="combat" and not ally)
+        UI.selectButton(b,(f.combatTab or "you")==key)
+    end
     local overview=f.page=="overview" and not f.factsMode
     f.overview:SetShown(overview)
     if overview then
@@ -1329,8 +1391,8 @@ local function rowFrame(f,count)
     if not r then
         r=CreateFrame("Button",nil,f.body)
         f.rows[count]=r
-        r.caption=UI.label(r,"",nil,7,-4,510)
-        r.amount=UI.label(r,"",nil,308,-4,198)
+        r.caption=UI.label(r,"",nil,7,-4,630)
+        r.amount=UI.label(r,"",nil,428,-4,198)
         r.amount:SetJustifyH("RIGHT")
         r.rule=r:CreateTexture(nil,"BACKGROUND")
         r.rule:SetPoint("BOTTOMLEFT")
@@ -1378,7 +1440,7 @@ local function fillRow(r,s)
     r.caption:ClearAllPoints()
     r.caption:SetPoint("TOPLEFT",left,-4)
     -- A clickable row has a short action on the right ("Détail", "Faits (3)"): give the text more room.
-    local width=(amount and (onClick and 400 or 292) or 500)-(left-7)
+    local width=(amount and (onClick and 520 or 412) or 620)-(left-7)
     r.caption:SetWidth(extra.pill and 236 or width)
     UI.journalFont(r.caption,heading and "GameFontNormalLarge" or "GameFontHighlight",heading and 17 or extra.small and 11 or 13)
     r.caption:SetTextColor(unpack(heading and UI.theme.red or (indent or extra.small) and UI.theme.inkMuted or UI.theme.ink))
@@ -1386,7 +1448,7 @@ local function fillRow(r,s)
     r.caption:SetText(label)
     r.amount:SetText(amount or "")
     local h=math.max(heading and 35 or extra.small and 22 or 26,r.caption:GetStringHeight()+10,r.amount:GetStringHeight()+10)
-    r:SetSize(514,h)
+    r:SetSize(634,h)
     return h
 end
 -- No scroll bar: rows fill the page, the rest goes on the next pages. A heading never ends a
@@ -1455,7 +1517,7 @@ local function turnPage(f,step)
 end
 local tabs={{"overview","Aperçu"},{"combat","Combats"},{"habits","Habitudes"},{"relations","Relations"},{"gear","Équipement"},{"talents","Talents"}}
 local function build()
-    local f=UI.bookWindow("GrudgeLedgerPlayerDossier","Grudge Ledger")
+    local f=UI.bookWindow("GrudgeLedgerPlayerDossier","Grudge Ledger",true)
     GL.SetupBookNavigation(f,"ledger")
     f.back=UI.button(f,L("Retour"),39,-154,116,function()
         f:Hide()
@@ -1466,42 +1528,41 @@ local function build()
         end
     end)
     f.portrait=CreateFrame("Frame",nil,f)
-    f.portrait:SetPoint("TOPLEFT",40,-193)
-    f.portrait:SetSize(64,64)
+    f.portrait:SetPoint("TOPLEFT",38,-190)
+    f.portrait:SetSize(50,50)
     f.portrait.raceIcon=f.portrait:CreateTexture(nil,"ARTWORK")
     f.portrait.raceIcon:SetAllPoints()
     f.portrait.photo=f.portrait:CreateTexture(nil,"ARTWORK",nil,1)
     f.portrait.photo:SetAllPoints()
     f.portrait.photo:Hide()
     f.portrait.classIcon=f.portrait:CreateTexture(nil,"OVERLAY")
-    f.portrait.classIcon:SetSize(16,16)
+    f.portrait.classIcon:SetSize(14,14)
     f.portrait.classIcon:SetPoint("BOTTOMRIGHT")
-    f.nameLabel=UI.label(f,"","large",111,-192,193)
+    f.nameLabel=UI.label(f,"","large",94,-190,112)
     GL.Safe(f.nameLabel.SetMaxLines,f.nameLabel,2)
-    f.identity=UI.label(f,"",nil,111,-237,193)
-    f.identity:ClearAllPoints()
-    f.identity:SetPoint("TOPLEFT",f.nameLabel,"BOTTOMLEFT",0,-4)
+    f.identity=UI.label(f,"",nil,38,-246,168)
     UI.journalFont(f.identity,"GameFontHighlight",11)
     GL.Safe(f.identity.SetMaxLines,f.identity,4)
     -- The identity column is fixed: verdict, six figures and the last sighting fit without scrolling.
     f.identityBody=CreateFrame("Frame",nil,f)
-    f.identityBody:SetPoint("TOPLEFT",40,-284)
-    f.identityBody:SetSize(247,318)
-    f.verdictHeading=Panels.Text(f.identityBody,0,0,243,12,true,UI.theme.brass)
+    f.identityBody:SetPoint("TOPLEFT",38,-306)
+    f.identityBody:SetSize(168,300)
+    f.verdictHeading=Panels.Text(f.identityBody,0,0,166,12,true,UI.theme.brass)
     f.verdictHeading:SetText(L("Verdict"))
-    f.keyHeading=Panels.Text(f.identityBody,0,0,243,12,true,UI.theme.brass)
+    f.keyHeading=Panels.Text(f.identityBody,0,0,166,12,true,UI.theme.brass)
     f.keyHeading:SetText(L("Chiffres clés"))
-    f.observed=UI.label(f.identityBody,"",nil,0,0,243)
+    f.observed=UI.label(f.identityBody,"",nil,0,0,166)
+    UI.journalFont(f.observed,"GameFontHighlight",11)
     f.observed:SetTextColor(unpack(UI.theme.muted))
-    f.bounty=UI.button(f,"",40,-612,247,function() GL.OpenContactBounty(f.guid) end)
-    f.armoryButton=UI.button(f,L("Lien vers l’Armurerie"),40,-643,247,function()
+    f.bounty=UI.button(f,"",38,-612,168,function() GL.OpenContactBounty(f.guid) end)
+    f.armoryButton=UI.button(f,L("Lien Armurerie"),38,-643,168,function()
         f.armoryLink:SetText(f.armoryURL)
         f.armoryLink:Show()
         f.armoryLink:SetFocus()
         f.armoryLink:HighlightText()
     end)
     f.armoryLink=CreateFrame("EditBox",nil,f.armoryButton,"InputBoxTemplate")
-    f.armoryLink:SetSize(245,24)
+    f.armoryLink:SetSize(166,24)
     f.armoryLink:SetPoint("CENTER")
     f.armoryLink:SetAutoFocus(false)
     f.armoryLink:Hide()
@@ -1510,31 +1571,41 @@ local function build()
     f.tabs,f.rows,f.statCells,f.pills={},{},{},{}
     for i,s in ipairs(tabs) do
         local key=s[1]
-        f.tabs[key]=UI.button(f,L(s[2]),352+(i-1)*90,-156,86,function()
+        f.tabs[key]=UI.button(f,L(s[2]),232+(i-1)*106,-156,102,function()
             f.page,f.pageNumber,f.factsMode=key,1,false
             draw(f)
         end,true,true)
     end
-    f.source=UI.label(f,"",nil,355,-196,312)
+    f.source=UI.label(f,"",nil,235,-196,430)
+    f.combatTabs={}
+    local cx=232
+    for _,s in ipairs(combatTabs) do
+        local key=s[1]
+        f.combatTabs[key]=UI.button(f,L(s[2]),cx,-190,s[3],function()
+            f.combatTab,f.pageNumber=key,1
+            draw(f)
+        end,true,true)
+        cx=cx+s[3]+3
+    end
     f.source:SetTextColor(unpack(UI.theme.inkMuted))
     f.ilvl=UI.label(f,"",nil,669,-196,222)
     f.ilvl:SetJustifyH("RIGHT")
     f.ilvl:SetTextColor(unpack(UI.theme.ink))
     f.body=CreateFrame("Frame",nil,f)
-    f.body:SetPoint("TOPLEFT",352,-225)
-    f.body:SetSize(520,408)
+    f.body:SetPoint("TOPLEFT",232,-225)
+    f.body:SetSize(640,408)
     GL.Safe(f.body.EnableMouseWheel,f.body,true)
     f.body:SetScript("OnMouseWheel",function(_,delta) turnPage(f,delta>0 and -1 or 1) end)
     f.overview=buildOverview(f)
     f.habits=buildHabits(f)
     f.expanded={}
     f.equipment=CreateFrame("Frame",nil,f)
-    f.equipment:SetPoint("TOPLEFT",359,-229)
-    f.equipment:SetSize(515,398)
+    f.equipment:SetPoint("TOPLEFT",239,-229)
+    f.equipment:SetSize(635,398)
     f.talents=CreateFrame("Frame",nil,f)
-    f.talents:SetPoint("TOPLEFT",352,-225)
-    f.talents:SetSize(529,403)
-    f.statsToggle=UI.button(f,"",352,-645,230,function()
+    f.talents:SetPoint("TOPLEFT",232,-225)
+    f.talents:SetSize(649,403)
+    f.statsToggle=UI.button(f,"",232,-645,230,function()
         f.gearStats,f.pageNumber=not f.gearStats,1
         draw(f)
     end,nil,true)
@@ -1576,6 +1647,7 @@ function GL.OpenPlayerDossier(id,onReturn,knownName,page)
     frame.key,frame.guid,frame.onReturn,frame.knownName=key,guid,onReturn,knownName
     frame.page=frame.tabs[page] and page or "overview"
     frame.pageNumber,frame.gearStats,frame.relationFilter,frame.expanded,frame.factsMode=1,false,"all",{},false
+    frame.combatTab="you"
     if GL.InspectDossierUnit then
         GL.InspectDossierUnit(GL.VisiblePortraitUnit({guid=guid}),guid)
     end

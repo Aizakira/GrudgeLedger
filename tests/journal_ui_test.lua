@@ -350,14 +350,19 @@ do
         {kind="SWING_DAMAGE", at=12, src="Creature-1-wolf", from="Loup gris", dst=revenge.actorGUID, amount=12},
     }, recap={{kind="SWING_DAMAGE", at=12, src=opponent.guid, dst=revenge.actorGUID, amount=32}}}
     click(row.details)
-    local function shows(s) return report.proof:GetText():find(s, 1, true) end
-    assert(shows("Infligés à l’adversaire  81") and shows("Reçus de l’adversaire  32") and shows("Reçus d’autres sources  12"))
+    local function shows(s) return report.scroll.fullText:find(s, 1, true) end
+    -- Three sub-tabs: the summary first, then builds and the blow-by-blow evidence.
+    assert(report.views.summary:IsShown() and shows("Infligés à l’adversaire  81") and shows("Reçus de l’adversaire  32")
+        and shows("Reçus d’autres sources  12") and not report.all:IsShown())
+    click(report.views.proof)
     assert(shows("+2 s   Loup gris") and shows("Éclair") and report.otherSource:IsShown())
     click(report.pair)
     assert(not shows("Loup gris") and shows("Éclair"))
     click(report.otherSource)
-    assert(report.section:GetText() == "Derniers coups reçus" and shows("Reçus de l’adversaire  32"))
-    assert(shows("Infligés à l’adversaire  —") and not shows("Éclair"))
+    assert(report.otherSource:GetText() == "Voir les actions observées" and not shows("Éclair"))
+    click(report.views.summary)
+    assert(shows("Reçus de l’adversaire  32") and shows("Infligés à l’adversaire  —"))
+    click(report.views.proof)
     click(report.otherSource) click(report.all)
     assert(shows("Loup gris"))
 end

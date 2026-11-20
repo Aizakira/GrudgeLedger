@@ -157,46 +157,6 @@ local function caption(parent,index,value,x,y,w,footer)
     text:SetText(value); text:Show()
 end
 
--- "Spécialisation : Combat farouche (31/0/20)" and the learned talents that shape the build:
--- one-rank talents (often a spell) and those in the deepest rows, deepest first.
-local DEEP_ROW=4
-local function summaryText(catalog,branches,ranked)
-    local points,best,most={},nil,0
-    for i,d in ipairs(catalog) do
-        points[i]=branches[i] and tonumber(branches[i].points) or 0
-        if points[i]>most then
-            best,most=L(d.fr),points[i]
-        end
-    end
-    if not best then
-        return
-    end
-    local decisive={}
-    for _,d in ipairs(catalog) do
-        for _,node in ipairs(d.nodes) do
-            local learned=ranked[node[1]]
-            if learned and (node[5]==1 or node[4]>=DEEP_ROW) then
-                decisive[#decisive+1]={row=node[4],name=nodeName(node,learned[2])}
-            end
-        end
-    end
-    table.sort(decisive,function(a,b)
-        if a.row~=b.row then
-            return a.row>b.row
-        end
-        return a.name<b.name
-    end)
-    local names={}
-    for i=1,math.min(6,#decisive) do
-        names[i]=decisive[i].name
-    end
-    local text=L("Spécialisation : %s (%s)"):format(best,table.concat(points,"/"))
-    if #names>0 then
-        text=text.." · "..L("Talents décisifs : %s"):format(table.concat(names,", "))
-    end
-    return text
-end
-
 function GL.DrawDossierTalents(parent,record,profile)
     local width=parent:GetWidth()
     local class=classOf(record,profile)
@@ -219,7 +179,8 @@ function GL.DrawDossierTalents(parent,record,profile)
         parent.talentSummary:SetTextColor(unpack(UI.theme.ink))
         GL.Safe(parent.talentSummary.SetMaxLines,parent.talentSummary,2)
     end
-    local summary=catalog and summaryText(catalog,branches,ranked)
+    -- The trees speak for themselves; the specialization is written in the identity column.
+    local summary=nil
     parent.talentSummary:SetText(summary or "")
     -- The trees start below the summary when there is one.
     local top=summary and 40 or 0

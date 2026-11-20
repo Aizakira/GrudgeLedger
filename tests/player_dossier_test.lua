@@ -62,14 +62,17 @@ assert(f:IsShown() and f.navigation.ledger.active and f.nameLabel:GetText()==rec
 local o=f.overview
 assert(f.page=="overview" and o:IsVisible() and not f.body:IsVisible() and not f.equipment:IsVisible())
 assert(not f.identityScroll and not f.scroll,"no scroll frame on the sheet")
-assert(f.identity:GetText():find("Niv. 29",1,true) and f.identity:GetText():find("(Restoration)",1,true),f.identity:GetText())
+assert(f.identity:GetText():find("Niv. 29",1,true) and f.identity:GetText():find("Restoration",1,true),f.identity:GetText())
 assert(record.level==19 and record.history[1].combat.opponentLevel==21)
-assert(f.pills[1].label:GetText():find(" · ",1,true) and f.pills[1].note:GetText()=="votre avis")
+assert(f.pills[1].label:GetText():find(" · ",1,true) and f.pills[1].note:GetText():find("^votre avis"))
 assert(f.pills[2].label:GetText()=="Aucun avis" and f.pills[2].note:GetText()=="guilde")
 local cells={}
 for _,c in ipairs(f.statCells) do if c:IsVisible() then cells[c.label:GetText()]=c.value:GetText() end end
-assert(cells.Vie=="1721" and cells.Mana=="—" and cells.Armure=="—" and cells["Niv. objet"]=="24")
-assert(cells["Rang JcJ"]=="0" and cells["Vict. hon."]=="396" and cells["Agilité"]=="99" and cells.Critique=="5,6 %")
+-- Seven lines: health, power, item level, the three statistics of the class, honorable kills.
+local shown=0
+for _ in pairs(cells) do shown=shown+1 end
+assert(shown==7 and cells.Vie=="1721" and cells.Mana=="—" and cells["Niv. objet"]=="24" and cells["Vict. honorables"]=="396")
+assert(cells.Critique=="5,6 %",cells.Critique)
 -- Tiles: you against them, the guild, the last encounter, bounties.
 assert(o.tiles[1].value:GetText()=="1 V / 0 D" and o.tiles[2].value:GetText()=="3 V / 5 D" and o.tiles[2].detail:GetText()=="1 membres")
 assert(o.tiles[3].value:GetText():find("^Vous : ") and o.tiles[4].value:GetText()=="Aucune")
@@ -94,11 +97,16 @@ assert(f.equipment:IsVisible() and not f.body:IsVisible())
 click(f.tabs.talents)
 assert(not f.equipment:IsVisible() and f.talents:IsVisible() and not f.body:IsVisible() and not f.statsToggle:IsVisible())
 click(f.tabs.combat)
+-- Four sub-tabs: you, the guild, bounties, the Armory.
+assert(f.combatTabs.you:IsVisible() and f.combatTab=="you")
+assert(all():find("1 / 0",1,true) and all():find("Niveaux : lui 21 · vous 20",1,true),"dated fights are listed with both levels")
+click(f.combatTabs.guild)
+assert(all():find("3 / 5",1,true))
+assert(all():find("Guild Victim 1 V / 3 D",1,true),"guild member deaths remain separate from personal history")
+click(f.combatTabs.armory)
 assert(all():find("396",1,true) and all():find("Rang JcJ 0",1,true) and all():find("Account champion (compte)",1,true))
 assert(all():find("Arathi 3 parties · 2 V / 1 D",1,true))
-assert(all():find("1 / 0",1,true) and all():find("3 / 5",1,true))
-assert(all():find("Guild Victim 1 V / 3 D",1,true),"guild member deaths remain separate from personal history")
-assert(all():find("Niveaux : lui 21 · vous 20",1,true),"dated fights are listed with both levels")
+click(f.combatTabs.you)
 assert(not f.tabs.reputation and not f.tabs.pvp,"the Factions tab is gone")
 GL.AddNote(id,"My private note")
 click(f.tabs.relations)
@@ -188,4 +196,16 @@ for _,c in ipairs(f.statCells) do if c:IsVisible() then figures[c.label:GetText(
 assert(figures.Groupes=="1" and figures["Échanges"]=="0")
 click(f.tabs.combat)
 assert(all():find("Vos rencontres",1,true) and all():find("Signalements de la guilde",1,true),all())
+-- Key figures follow the class: a priest shows Intelligence and Spirit, a warrior Strength.
+local priest=GL.Remember(GL.IdentityFromName("Shadow","Priest","Player-42-00C1"))
+priest.class="PRIEST"
+assert(GL.OpenPlayerDossier(priest.guid))
+local labels={}
+for _,c in ipairs(f.statCells) do if c:IsVisible() then labels[c.label:GetText()]=true end end
+assert(labels.Intelligence and labels.Esprit and not labels.Force,"priest figures")
+priest.class="WARRIOR"
+assert(GL.OpenPlayerDossier(priest.guid))
+labels={}
+for _,c in ipairs(f.statCells) do if c:IsVisible() then labels[c.label:GetText()]=true end end
+assert(labels.Force and labels.Armure and not labels.Esprit,"warrior figures")
 print("PASS dossier: overview first, fixed identity column with verdict and key figures, combats tab, stats in equipment, exact item variants, canonical slots, long effects, talents, provenance, private vs guild scores, guild-only identity and return")

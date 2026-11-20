@@ -30,6 +30,7 @@ for name, expected_width, expected_height, transparent in (
     ("RelationNeutral.tga", 128, 128, True),
     ("JournalPaper.tga", 512, 512, False),
     ("JournalBookSurface.tga", 1024, 1024, True),
+    ("JournalBookSurfaceSheet.tga", 1024, 1024, True),
     ("JournalButtons.tga", 512, 512, True),
     ("GestureKiss.tga", 128, 128, False),
 ):
@@ -43,7 +44,7 @@ for name, expected_width, expected_height, transparent in (
     alpha = texture[pixels + 3:pixels + width * height * 4:4]
     if transparent:
         # Resampling preserves generated alpha; allow an imperceptible 3/255 fringe.
-        corner_limit = 3 if name in ("JournalBookSurface.tga", "JournalButtons.tga", "JournalDialog.tga") else 0
+        corner_limit = 3 if name in ("JournalBookSurface.tga", "JournalBookSurfaceSheet.tga", "JournalButtons.tga", "JournalDialog.tga") else 0
         assert all(alpha[y * width + x] <= corner_limit for x in (0, width - 1) for y in (0, height - 1)), name + ": artwork corners must be transparent"
     else:
         assert all(a == 255 for a in alpha), "opaque artwork must remain opaque"

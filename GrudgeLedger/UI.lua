@@ -1749,12 +1749,13 @@ local function renderCombatReport(f)
     end
     -- Both players' builds as recorded at the fight, before the blow-by-blow.
     local build = GL.FightBuildText and GL.FightBuildText(e)
-    if build then text[#text+1] = build end
     -- A death adds its report: damage by source and spell, killing blow, length of the fight.
     local death = GL.DeathReport and GL.DeathReport.Text(e, opponent, f.who:GetText())
-    if death then
-        text[#text+1] = death
-    end
+    local tabs = report ~= nil and (e.kind == "kill" or e.kind == "death")
+    local view = tabs and (f.view or "summary") or "all"
+    local summary, blows = {}, {}
+    if build and view ~= "summary" then text[#text+1] = build end
+    if death then summary[#summary+1] = death end
     local dealt, received, others
     if rows and #rows > 0 then
         local lines = {}
@@ -1782,15 +1783,38 @@ local function renderCombatReport(f)
                     plain(action or L("Sort non identifié")), detail)
             end
         end
-        text[#text+1] = L("Dégâts observés") .. "\n" .. L("Infligés à l’adversaire") .. "  " .. (dealt or "—")
+        summary[#summary+1] = L("Dégâts observés") .. "\n" .. L("Infligés à l’adversaire") .. "  " .. (dealt or "—")
             .. "     ·     " .. L("Reçus de l’adversaire") .. "  " .. (received or "—")
             .. "\n" .. L("Reçus d’autres sources") .. "  " .. (others or "—")
-        if f.source == "live" and report.clipped then text[#text+1] = L("Seules les 64 dernières actions sont conservées.") end
-        text[#text+1] = #lines > 0 and table.concat(lines, "\n") or L("Aucun échange direct relevé.")
+        if f.source == "live" and report.clipped then blows[#blows+1] = L("Seules les 64 dernières actions sont conservées.") end
+        blows[#blows+1] = #lines > 0 and table.concat(lines, "\n") or L("Aucun échange direct relevé.")
     elseif e.kind == "kill" or e.kind == "death" then
-        text[#text+1] = L("Aucun relevé de dégâts disponible pour ce combat.")
+        summary[#summary+1] = L("Aucun relevé de dégâts disponible pour ce combat.")
     end
-    if f.evidenceText ~= "" then text[#text+1] = f.evidenceText end
+    if view == "summary" then
+        text = #summary > 0 and summary or { build or L("Aucun relevé de dégâts disponible pour ce combat.") }
+    elseif view == "builds" then
+        text = { build or L("Aucun build relevé pour ce combat.") }
+    elseif view == "proof" then
+        text = blows
+        if f.evidenceText ~= "" then text[#text+1] = f.evidenceText end
+    else
+        for _, part in ipairs(summary) do text[#text+1] = part end
+        for _, part in ipairs(blows) do text[#text+1] = part end
+        if f.evidenceText ~= "" then text[#text+1] = f.evidenceText end
+    end
+    -- Sub-tabs, and the blow-by-blow controls on the Preuves tab only.
+    local proof = view == "proof"
+    for key, b in pairs(f.views) do
+        showIf(b, tabs)
+        UI.selectButton(b, view == key)
+    end
+    showIf(f.section, not tabs)
+    showIf(f.all, proof) showIf(f.pair, proof)
+    showIf(f.otherSource, proof and report and report.live and report.recap)
+    f.scroll:ClearAllPoints()
+    f.scroll:SetPoint("TOPLEFT", 26, proof and -280 or -242)
+    f.scroll:SetHeight(tabs and (proof and 166 or 204) or 77)
     f.scroll:SetText(table.concat(text, "\n\n"))
     UI.selectButton(f.pair, f.pairOnly) UI.selectButton(f.all, not f.pairOnly)
     f.otherSource:SetText(f.source == "live" and L("Voir les derniers coups reçus") or L("Voir les actions observées"))
@@ -1823,16 +1847,27 @@ inspectEvent = function(record, e)
         f.who = field(98, -122, 463, 28, 16)
         f.where = field(98, -156, 463, 45, 13)
         f.section = field(26, -209, 301, 26, 17)
-        f.otherSource = button(f, "", 329, -207, 229, function()
+        f.otherSource = button(f, "", 300, -241, 258, function()
             f.source = f.source == "live" and "recap" or "live"
             renderCombatReport(f)
         end, nil, true)
-        f.all = button(f, L("Tous les intervenants"), 26, -241, 205, function()
+        f.all = button(f, L("Tous les intervenants"), 26, -241, 150, function()
             f.pairOnly = false renderCombatReport(f)
         end, true, true)
-        f.pair = button(f, L("Nos échanges"), 239, -241, 166, function()
+        f.pair = button(f, L("Nos échanges"), 180, -241, 116, function()
             f.pairOnly = true renderCombatReport(f)
         end, true, true)
+        -- A fight with a damage report reads in three sub-tabs instead of one long text.
+        f.views = {}
+        local vx = 26
+        for _, view in ipairs({ { "summary", L("Résumé"), 104 }, { "builds", L("Builds"), 90 }, { "proof", L("Preuves"), 100 } }) do
+            local key = view[1]
+            f.views[key] = button(f, view[2], vx, -207, view[3], function()
+                f.view = key
+                renderCombatReport(f)
+            end, true, true)
+            vx = vx + view[3] + 4
+        end
         -- Pages instead of a scroll bar.
         f.scroll = UI.textPages(f, 532, 77)
         f.scroll:SetPoint("TOPLEFT", 26, -242)
@@ -1851,11 +1886,7 @@ inspectEvent = function(record, e)
     local report = isCombat and e.report
     f.source, f.pairOnly = report and report.live and "live" or "recap", false
     f:SetHeight(report and 575 or 447)
-    f.scroll:ClearAllPoints()
-    f.scroll:SetPoint("TOPLEFT", 26, report and -280 or -242)
-    f.scroll:SetHeight(report and 166 or 77)
-    showIf(f.otherSource, report and report.live and report.recap)
-    showIf(f.all, report) showIf(f.pair, report)
+    f.view = "summary"
     f.title:SetText(isCombat and L("Détail du combat") or pvpNames[e.kind] and L("Vérifier cet événement") or L("Détails de la rencontre"))
     f.action:SetText(eventAction(e))
     if record then identityIcons(f, record) else portraitRows[f] = nil end
@@ -2117,13 +2148,8 @@ local function renderDetail()
             local wins = (pvp.kills or 0)
             local hits = (pvp.aggressions or 0)
             -- The calculation in full, with today's weights: "2 agressions × −5 · 2 morts × −5 = −20".
-            local replies = GL.ProvokedAggressions and GL.ProvokedAggressions(record) or 0
-            local terms = {}
-            if hits - replies > 0 then terms[#terms + 1] = counted(hits - replies, "agression") .. " × −5" end
-            if replies > 0 then terms[#terms + 1] = counted(replies, "riposte") .. " × −1" end
-            if deaths > 0 then terms[#terms + 1] = counted(deaths, "mort") .. " × −5" end
-            if wins > 0 or #terms == 0 then terms[#terms + 1] = counted(wins, "victoire") .. " × +1" end
-            local formula = table.concat(terms, "  ·  ")
+            local formula = GL.BalanceFormula(record)
+            if formula == "" then formula = counted(wins, "victoire") .. " × +1" end
             if gestures ~= 0 then
                 formula = (L("Combats %+.0f   ·   Gestes %+.0f")):format(raw, gestures)
             else

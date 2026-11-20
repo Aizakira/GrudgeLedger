@@ -255,6 +255,20 @@ local function provoked(record)
     return math.min(n, total)
 end
 GL.ProvokedAggressions = provoked
+-- "2 agressions × −5  ·  2 morts × −5": the automatic balance with today's weights.
+function GL.BalanceFormula(record)
+    local pvp = type(record) == "table" and record.pvp or {}
+    local replies = type(record) == "table" and provoked(record) or 0
+    local terms = {}
+    local function term(n, one, many, weight)
+        if n > 0 then terms[#terms + 1] = n .. " " .. L(n > 1 and many or one) .. " × " .. weight end
+    end
+    term((pvp.aggressions or 0) - replies, "agression", "agressions", "−5")
+    term(replies, "riposte", "ripostes", "−1")
+    term(pvp.deaths or 0, "mort", "morts", "−5")
+    term(pvp.kills or 0, "victoire", "victoires", "+1")
+    return table.concat(terms, "  ·  ")
+end
 -- What each fact weighs in the automatic balance.
 local AGGRESSION, PROVOKED, DEATH, VICTORY = 5, 1, 5, 1
 function GL.AutomaticBalance(record)

@@ -51,18 +51,19 @@ GL.DrawDossierTalents(parent,{}, {trees={{points=1,talents={{900001,"Nouveau tal
 assert(not cell(134399))
 local b=parent.talentButtons[1]; b.scripts.OnEnter(b)
 assert(b:IsShown() and not b.node and GameTooltip.lines[1]=="Nouveau talent" and GameTooltip.lines[3]=="Effet")
--- A summary above the trees: the main tree with the split, then the decisive talents (one rank
--- or deep rows, deepest first). It replaces the colour legend and the tab still fits without scrolling.
+-- Owner rule (0.29.0): no written summary above the trees; the specialization is in the identity
+-- column. The colour legend stays and the tab still fits without scrolling.
 local feral={points=15,name="Combat farouche",talents={{134399,"Férocité",5},{134405,"Charge farouche",1},
     {134416,"Chef de la meute",1},{134414,"Pourfendre et déchirer",5},{134401,"Instinct farouche",3}}}
 local height=GL.DrawDossierTalents(parent,{class="DRUID"},{trees={feral}})
 assert(height<=391,height)
-assert(parent.talentSummary:GetText()=="Spécialisation : Combat farouche (0/15/0) · Talents décisifs : "
-    .."Pourfendre et déchirer, Chef de la meute, Charge farouche",parent.talentSummary:GetText())
+assert(parent.talentSummary:GetText()=="",parent.talentSummary:GetText())
 assert(cell(134399).rank==5)
+local legendShown=false
 for _,label in ipairs(parent.talentLabels) do
-    assert(not (label:IsShown() and label:GetText():find("En couleur",1,true)),"the legend gives way to the summary")
+    legendShown=legendShown or (label:IsShown() and label:GetText():find("En couleur",1,true)~=nil)
 end
+assert(legendShown,"the colour legend explains the trees")
 GL.DrawDossierTalents(parent,{class="DRUID"},{})
 assert(parent.talentSummary:GetText()=="","no summary without published points")
-print("PASS Forever talent catalog, real layout, published vs unknown ranks, archived spell hover and player switching, specialization summary")
+print("PASS Forever talent catalog, real layout, published vs unknown ranks, archived spell hover and player switching, trees without a written summary")
