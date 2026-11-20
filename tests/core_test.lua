@@ -166,6 +166,8 @@ local correction = GL.IdentityFromName("Correction", "Example", "Player-1-correc
 local r = GL.RecordAggression(correction, "confirmed", "Observed health drop", "correction-a")
 local attack = r.history[#r.history]
 assert(GL.RelationConfidence(r) == "confirmed")
+assert(GL.RecordAggression(correction, "confirmed", "Same fight", "correction-same") == nil, "one aggression per fight")
+now = now + 130
 GL.RecordAggression(correction, "confirmed", "Damage log", "correction-b")
 local confirmedAttack = r.history[#r.history]
 assert(GL.RelationConfidence(r) == "confirmed")

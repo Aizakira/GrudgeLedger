@@ -28,6 +28,13 @@ assert(view.photo.texture==base.."-combat")
 click(view.photoButton)
 click(view.photoButton)
 assert(view.photo.texture==base.."-recherche","the poses cycle")
+-- The Lab's current poses ("menace" since its 1.5.0) show in the Lab's order.
+AvatarReplayLabPhotos={Get=function()
+    return {at=1794400000,bust=base.."-buste",poses={menace=base.."-menace",amical=base.."-amical"},order={"menace","amical"}}
+end}
+view.photoIndex=1
+assert(GL.OpenPlayerDossier(guid,nil,nil,"gear"))
+assert(view.photo:IsShown() and view.photo.texture==base.."-menace","the menace pose is shown")
 -- A broken Lab never breaks the sheet.
 AvatarReplayLabPhotos={Get=function() error("broken") end}
 assert(GL.OpenPlayerDossier(guid,nil,nil,"gear"))

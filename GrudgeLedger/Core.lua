@@ -1057,6 +1057,66 @@ function GL.KillOpeningCategory(record, event)
     if opening.hadGrudge == false then return "initiatedKillsNoGrudge" end
     return "unknownOpeningKills"
 end
+-- One fight: the blows, deaths and victories of one encounter with a player. Events less than two
+-- minutes apart belong to the same fight; a death or a victory ends it, except a victory of your
+-- group within a minute of your death (he is avenged in the same fight).
+local FIGHT_GAP, AVENGE_GAP = 120, 60
+local fightKinds = { aggression = true, kill = true, death = true }
+local function fightEvent(e)
+    return type(e) == "table" and fightKinds[e.kind] and not e.voided and e.voidReason ~= "battleground" and type(e.time) == "number"
+end
+local function joins(fight, e)
+    if not fight or e.time - fight.last > FIGHT_GAP then return false end
+    if not fight.ended then return true end
+    return fight.ended == "death" and e.kind == "kill" and e.time - fight.last <= AVENGE_GAP
+end
+-- Newest first. Each fight: at, last, events (oldest first), kills, deaths, aggressions, main.
+function GL.Fights(record)
+    local list = {}
+    for _, e in ipairs(type(record) == "table" and record.history or {}) do
+        if fightEvent(e) then list[#list + 1] = e end
+    end
+    table.sort(list, function(a, b) return a.time < b.time end)
+    local fights, current = {}, nil
+    for _, e in ipairs(list) do
+        if not joins(current, e) then
+            current = { at = e.time, events = {}, kills = 0, deaths = 0, aggressions = 0 }
+            fights[#fights + 1] = current
+        end
+        current.events[#current.events + 1] = e
+        current.last = e.time
+        if e.kind == "kill" then
+            current.kills, current.ended = current.kills + 1, "kill"
+        elseif e.kind == "death" then
+            current.deaths, current.ended = current.deaths + 1, "death"
+        else
+            current.aggressions = current.aggressions + 1
+        end
+    end
+    local out = {}
+    for i = #fights, 1, -1 do
+        local fight = fights[i]
+        for _, kind in ipairs({ "death", "kill", "aggression" }) do
+            for _, e in ipairs(fight.events) do
+                if not fight.main and e.kind == kind then fight.main = e end
+            end
+        end
+        out[#out + 1] = fight
+    end
+    return out
+end
+-- Whether you fought this player in the last two minutes (an opening counts).
+function GL.FoughtRecently(identity)
+    local record, now = GL.Get(identity), GL.Now()
+    local history = record and record.history or {}
+    for i = #history, 1, -1 do
+        local e = history[i]
+        if (fightEvent(e) or type(e) == "table" and e.kind == "opening" and type(e.time) == "number") then
+            return now - e.time >= 0 and now - e.time <= FIGHT_GAP
+        end
+    end
+    return false
+end
 local function combatContext(value)
     if not GL.Clean(value, "table") then return end
     local function integer(field, low, high)
@@ -1067,6 +1127,7 @@ local function combatContext(value)
         healthPct = integer("healthPct", 0, 100), playerLevel = integer("playerLevel", 1, 1000),
         opponentLevel = integer("opponentLevel", 1, 1000), opponents = integer("opponents", 1, 10000),
         pve = GL.Clean(value.pve, "boolean") or nil, pet = GL.Clean(value.pet, "boolean") or nil,
+        assist = cleanName(value.assist),
     }
     if (value.opener == "player" or value.opener == "opponent") and cleanName(value.encounterId) then
         snapshot.opener, snapshot.encounterId = value.opener, value.encounterId
@@ -1111,6 +1172,16 @@ function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     if not record then return nil end
     if eventId then
         for _, event in ipairs(record.history) do if event.eventId == eventId then return nil end end
+    end
+    -- One aggression per fight: a new blow less than two minutes after his last one, before any
+    -- death or victory, belongs to the same fight and costs nothing more.
+    for i = #record.history, 1, -1 do
+        local e = record.history[i]
+        if fightEvent(e) then
+            local age = GL.Now() - e.time
+            if e.kind == "aggression" and age >= 0 and age <= FIGHT_GAP then return nil end
+            break
+        end
     end
     local field = pvpFields.aggression[confidence]
     record.pvp[field] = record.pvp[field] + 1

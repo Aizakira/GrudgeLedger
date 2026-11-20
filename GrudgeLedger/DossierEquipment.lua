@@ -91,13 +91,15 @@ function GL.StudioPhotos(guid)
         return photos
     end
 end
--- Pose shown on the equipment stage, in this order; a click shows the next one.
-local POSE_ORDER = {"recherche", "combat", "amical", "vaincu", "moqueur"}
+-- Pose shown on the equipment stage: the studio's own order when it gives one (its poses change
+-- between versions, "menace" replaced "recherche"), else this order; a click shows the next one.
+local POSE_ORDER = {"menace", "recherche", "combat", "amical", "vaincu", "moqueur"}
 local function poseList(photos)
-    local list = {}
-    for _, name in ipairs(POSE_ORDER) do
-        if type(photos.poses[name]) == "string" then
-            list[#list + 1] = name
+    local list, seen = {}, {}
+    local order = type(photos.order) == "table" and photos.order or POSE_ORDER
+    for _, name in ipairs(order) do
+        if type(name) == "string" and not seen[name] and type(photos.poses[name]) == "string" then
+            list[#list + 1], seen[name] = name, true
         end
     end
     return list

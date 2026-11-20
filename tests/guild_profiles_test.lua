@@ -306,7 +306,7 @@ do
     c.GL.SharedDossiers.Refresh();flush()
     assert(#c.GL.SharedDossiers.SocialReports(identity.guid)==0,"peers cannot impersonate an offline witness")
     a.online=true
-    for i=1,40 do now=now+1; a.GL.RecordAggression(identity,"confirmed",nil,"social-extra-"..i) end
+    for i=1,40 do now=now+130; a.GL.RecordAggression(identity,"confirmed",nil,"social-extra-"..i) end
     now=now+31
     local old={}
     a.drop=function(msg) if msg:match("^J;S2;P;") then old[#old+1]=msg end; return false end

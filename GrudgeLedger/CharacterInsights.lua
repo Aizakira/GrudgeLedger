@@ -230,11 +230,12 @@ local function streak(fights, out)
             caption = kind == "kill" and L("victoires de suite contre lui") or L("morts de suite contre lui")}
     end
 end
-local function recent(fights, out)
+-- Whole fights, not their blows: an aggression and the death it caused are one fight.
+local function recent(record, out)
     local list = {}
-    for _, e in ipairs(fights) do
-        if e.time >= GL.Now() - 7 * DAY then
-            list[#list + 1] = e
+    for _, fight in ipairs(GL.Fights(record)) do
+        if fight.at >= GL.Now() - 7 * DAY then
+            table.insert(list, 1, fight.main)
         end
     end
     if #list >= 2 then
@@ -344,7 +345,7 @@ function I.Facts(record, guid)
     levels(fights, out)
     reports(guid or record.guid, fights, out)
     streak(fights, out)
-    recent(fights, out)
+    recent(record, out)
     habits(I.Presence(record, guid or record.guid), out)
     return out
 end

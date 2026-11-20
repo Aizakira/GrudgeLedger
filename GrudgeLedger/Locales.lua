@@ -4,6 +4,10 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Croisé %d fois · dernière fois : %s"] = "Cruzado %d veces · última vez: %s",
+        ["Vaincu avec votre groupe"] = "Vencido con tu grupo",
+        ["Escarmouche sans mort · il vous a agressé"] = "Escaramuza sin muertes · te agredió",
+        ["Coup fatal d’un membre de votre groupe."] = "Golpe final de un miembro de tu grupo.",
         ["−5 de plus"] = "−5 más",
         ["Un agresseur reste ennemi même si vous le tuez. S’il ripostait à votre attaque : −1."] = "Un agresor sigue siendo enemigo aunque lo mates. Si respondía a tu ataque: −1.",
         ["Avis de la guilde : %s"] = "Opinión de la hermandad: %s",
@@ -1522,6 +1526,10 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Croisé %d fois · dernière fois : %s"] = "Crossed %d times · last time: %s",
+        ["Vaincu avec votre groupe"] = "Defeated with your group",
+        ["Escarmouche sans mort · il vous a agressé"] = "Skirmish without a death · they attacked you",
+        ["Coup fatal d’un membre de votre groupe."] = "Killing blow by a member of your group.",
         ["−5 de plus"] = "−5 more",
         ["Un agresseur reste ennemi même si vous le tuez. S’il ripostait à votre attaque : −1."] = "An aggressor stays an enemy even if you kill them. If they were answering your attack: −1.",
         ["Avis de la guilde : %s"] = "Guild opinion: %s",

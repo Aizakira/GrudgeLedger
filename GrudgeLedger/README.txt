@@ -1,4 +1,12 @@
-GRUDGE LEDGER — 0.26.0
+GRUDGE LEDGER — 0.27.0
+
+Un combat, une seule ligne : une agression et la mort qu’elle cause forment un seul combat dans la fiche (« Agression → Vous a tué · coup fatal »). Des coups à moins de deux minutes d’écart font partie du même combat ; une mort ou une victoire le termine. Une escarmouche sans mort reste une seule ligne. Un même combat ne coûte qu’une agression (−5), même si vous sortez et rentrez en combat. « Combats ces 7 derniers jours » compte des combats, pas des coups.
+
+Victoire de groupe : si un membre de votre groupe porte le coup fatal à un joueur que vous combattiez, c’est votre victoire aussi, même juste après votre mort (« Vaincu avec votre groupe »).
+
+Groupes : un joueur avec qui vous avez groupé sans le connaître, puis que vous ajoutez au carnet dans les six heures (par exemple en le marquant Ami après le donjon), garde ce groupe. Rencontres indique aussi où vous l’avez croisé.
+
+Photos du studio : la pose « menace » d’Avatar Replay Lab s’affiche, dans l’ordre du studio.
 
 Carnet des rancunes : une agression compte dès le premier coup. Celui qui vous attaque prend −5 et devient ennemi tout de suite, même s’il ne vous tue pas. S’il vous tue, c’est −5 de plus (−10 en tout). Si vous le tuez ensuite, il reste ennemi : vos victoires (+1 chacune) font remonter le score, mais un agresseur ne sort jamais du carnet tout seul. Exception : s’il ne faisait que riposter à une attaque que vous avez lancée, l’agression ne compte que −1 et ne le rend pas ennemi. Une mort sans agression vaut −5 : ennemi tant qu’elle n’est pas rachetée, méfiance pendant le rachat. Les anciens scores sont recalculés au chargement, sans rien effacer.
 

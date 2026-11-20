@@ -294,15 +294,19 @@ local function verdictItems(d,guid)
     return items
 end
 local combatKinds={kill=true,death=true,aggression=true}
+-- Whole fights, newest first: an aggression and the death it caused are one entry.
 local function fights(record)
-    local list={}
-    for _,e in ipairs(object(record and record.history)) do
-        if type(e)=="table" and combatKinds[e.kind] and not e.voided and e.voidReason~="battleground" and type(e.time)=="number" then
-            list[#list+1]=e
-        end
+    return record and GL.Fights(record) or {}
+end
+local function fightText(fight)
+    local e=fight.main
+    local combat=object(e.combat)
+    local line=GL.FightTitle(fight)..(text(e.zone) and e.zone~="?" and (" · "..text(e.zone)) or "")
+    local his,mine=GL.ValidLevel(combat.opponentLevel),GL.ValidLevel(combat.playerLevel)
+    if his or mine then
+        line=line.."\n"..L("Niveaux : lui %s · vous %s"):format(his or "?",mine or "?")
     end
-    table.sort(list,function(a,b) return a.time>b.time end)
-    return list
+    return line
 end
 -- A player of your own faction you never fought: met in groups, trades and tags.
 local function allyVariant(d)
@@ -628,6 +632,10 @@ local function relationsPage(f,record,row)
     row(L("Ce que chacun en pense"),L("Avis · contre lui"),true)
     memberRows(f,row,record)
     -- Audit 0.12.0, problem 11: only this record's events, not the whole journal sorted.
+    for _,fight in ipairs(fights(record)) do
+        local zone=text(fight.main.zone) and fight.main.zone~="?" and (" · "..UI.plain(fight.main.zone)) or ""
+        add(fight.at,GL.FightTitle(fight)..zone,nil,true,fight.main)
+    end
     for _,item in ipairs(record and GL.RecordEvents(record) or {}) do
         local e=item.event
         local description=GL.HistoryTitle(e)
@@ -640,7 +648,10 @@ local function relationsPage(f,record,row)
         if e.voided then
             description=description.." · "..L("Annulé · exclu")
         end
-        add(e.time,description,nil,true,e)
+        -- Active fight events are shown above, one line per fight.
+        if e.voided or e.voidReason=="battleground" or not combatKinds[e.kind] then
+            add(e.time,description,nil,true,e)
+        end
     end
     for _,report in ipairs(S and S.SocialReports(f.guid) or {}) do
         local author=UI.plain(B.MemberName(report.actor) or report.authorName or L("Membre de guilde"))
@@ -965,13 +976,15 @@ local function paintOverview(f,d)
     o.presenceLink:SetText(L("Voir les habitudes"))
     local presence=I and record and I.Presence(record,f.guid) or {days={},total=0}
     o.strip:Set(weeks(presence),paintLevel)
-    local event=ally and encounters(d,f.guid).events[1] or fights(record)[1]
+    local last=not ally and fights(record)[1]
+    local event=ally and encounters(d,f.guid).events[1] or last and last.main
     o.lastCaption:SetText(ally and L("Dernier fait") or L("Dernier combat"))
     if event then
         local zone=text(event.zone) and event.zone~="?" and (" · "..text(event.zone)) or ""
         local combat=object(event.combat)
         local levels=combat.opponentLevel and combat.playerLevel and L(" · lui %s, vous %s"):format(combat.opponentLevel,combat.playerLevel) or ""
-        o.lastText:SetText((GL.Safe(date,"%d/%m",event.time) or "?").." · "..GL.HistoryTitle(event)..zone..levels)
+        local title=last and GL.FightTitle(last) or GL.HistoryTitle(event)
+        o.lastText:SetText((GL.Safe(date,"%d/%m",last and last.at or event.time) or "?").." · "..title..zone..levels)
         o.lastLink:SetText(L("Détail"))
         o.lastLink:SetScript("OnClick",function() GL.InspectEvent(record,event) end)
         o.lastLink:SetShown(combatKinds[event.kind]==true)
@@ -1061,6 +1074,16 @@ end
 local function encountersPage(f,d,row)
     local met=encounters(d,f.guid)
     row(L("Vos rencontres"),nil,true)
+    -- Where you crossed them, even without a group or a trade.
+    local r=d.localRecord
+    local seen=r and type(r.encounters)=="table" and tonumber(r.encounters.count) or 0
+    local zone=r and text(r.lastEncounterZone)
+    if zone then
+        local sub=text(r.lastEncounterSubzone)
+        local place=sub and sub~=zone and (sub.." · "..zone) or zone
+        row(L("Croisé %d fois · dernière fois : %s"):format(math.max(seen,1),place),nil,nil,nil,nil,
+            {time=r.lastEncounterAt and GL.Safe(date,"%d/%m",r.lastEncounterAt) or nil,chip={L("Vous"),true}})
+    end
     if #met.events==0 then
         row(L("Aucun groupe ni échange enregistré."))
     end
@@ -1096,8 +1119,8 @@ local function combatPage(f,d,row)
         row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
         local list=fights(record)
         for i=1,math.min(MAX_FIGHTS,#list) do
-            local e=list[i]
-            row(timestamp(e.time).." · "..fightLine(e),L("Détail"),nil,function() GL.InspectEvent(record,e) end)
+            local fight=list[i]
+            row(timestamp(fight.at).." · "..fightText(fight),L("Détail"),nil,function() GL.InspectEvent(record,fight.main) end)
         end
         if #list>MAX_FIGHTS then
             row(L("%d combats plus anciens dans l’Histoire du journal."):format(#list-MAX_FIGHTS))

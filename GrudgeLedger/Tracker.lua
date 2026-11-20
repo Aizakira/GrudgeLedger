@@ -300,7 +300,17 @@ local function combatSnapshot(f, identity, viaPet, credit)
     return snapshot
 end
 
-local function creditKill(identity, confidence, evidence, native)
+-- The name of a member of your party or raid, or nil.
+local function groupmate(guid)
+    if not GL.Safe(IsInGroup) then return nil end
+    local prefix = GL.Safe(IsInRaid) and "raid" or "party"
+    for i = 1, math.min(GL.Clean(GL.Safe(GetNumGroupMembers), "number") or 0, 40) do
+        if GL.Safe(UnitGUID, prefix .. i) == guid then return GL.Clean(GL.Safe(UnitName, prefix .. i), "string") or "?" end
+    end
+    return nil
+end
+
+local function creditKill(identity, confidence, evidence, native, assist)
     if not enabled() or not identity then return end
     local key = identity.guid or identity.key
     local now, previous = GL.Now(), recentCredits[key] or (identity.alias and recentCredits[identity.alias])
@@ -319,6 +329,10 @@ local function creditKill(identity, confidence, evidence, native)
         if confidence == "confirmed" and previous.observed and not previous.event.voided then
             previous.observed, previous.event.evidence = nil, evidence
         end
+        if assist and not previous.event.voided then
+            previous.event.combat = previous.event.combat or {}
+            previous.event.combat.assist = assist
+        end
         if native then previous.nativeAt = now end
         return
     end
@@ -329,7 +343,12 @@ local function creditKill(identity, confidence, evidence, native)
         end
     end
     observeOpponent(f, identity.guid)
-    local record, event = GL.RecordPvP(identity, "kill", "confirmed", evidence, nextID("kill"), combatSnapshot(f, identity, nil, true), combatReport(logFight, key))
+    local snapshot = combatSnapshot(f, identity, nil, true)
+    if assist then
+        snapshot = snapshot or {}
+        snapshot.assist = assist
+    end
+    local record, event = GL.RecordPvP(identity, "kill", "confirmed", evidence, nextID("kill"), snapshot, combatReport(logFight, key))
     if event then
         if logFight and logFight.logCount then
             logFight.logCuts = logFight.logCuts or {}
@@ -352,6 +371,12 @@ local function killingBlow(src, dst, name, evidence, native)
         if src:match("^Player%-%w") then
             local f, previous = combatSession(), recentCredits[dst]
             local enemy = f and f.enemies["guid:" .. dst]
+            -- A groupmate's killing blow on a player you fought is your victory too, even just after your death.
+            local mate = groupmate(src)
+            if mate and (enemy or GL.FoughtRecently("guid:" .. dst)) then
+                creditKill(identityForGUID(dst, name), "confirmed", "Coup fatal d’un membre de votre groupe.", native, mate)
+                return
+            end
             if enemy then enemy.otherKiller = true end
             local age = previous and GL.Now() - previous.at
             -- A later fight against the same GUID need not concern the death we
@@ -1017,8 +1042,27 @@ function T.OnCombatLog(...)
 end
 
 local groupTimers = {}
+-- Group members not yet in your book, for this session only (never saved): if you add one within
+-- six hours, for instance by marking them Friend after the dungeon, the group counts for them.
+local strangers = {}
+local function adoptStranger(record)
+    local stranger = strangers[record.key]
+    if not stranger then return end
+    strangers[record.key] = nil
+    local me, state = playerGUID(), GL.db.tracker
+    if not me or GL.Now() - stranger.at > 6 * 3600 or not GL.Settings().groupTracking or type(state) ~= "table"
+        or type(state.groups) ~= "table" or type(state.serial) ~= "number" then return end
+    state.serial = state.serial + 1
+    local id = me .. ":group:" .. state.serial
+    if GL.RecordGroup(stranger.identity, id, stranger.zone) and type(state.groups[me]) == "table" and stranger.current then
+        state.groups[me][record.key] = id
+    end
+end
 GL.On("CHANGED", function(record, reason)
-    if reason ~= "deleted" then return end
+    if reason ~= "deleted" then
+        if type(record) == "table" and record.key then adoptStranger(record) end
+        return
+    end
     local groups = type(GL.db.tracker) == "table" and GL.db.tracker.groups
     for _, members in pairs(type(groups) == "table" and groups or {}) do
         if type(members) == "table" and members[record.key] then
@@ -1067,6 +1111,11 @@ function T.ScanGroup()
                 local record = GL.Get(identity)
                 local id = previous[identity.key] or (record and previous[record.key])
                 record = GL.RecordSeen(identity)
+                if not record and identity.guid then
+                    local known = strangers[identity.key]
+                    strangers[identity.key] = { identity = identity, zone = known and known.zone or GL.Where(),
+                        at = known and known.at or now, current = true }
+                end
                 if record then
                     if not id then
                         state.serial = state.serial + 1
@@ -1096,6 +1145,13 @@ function T.ScanGroup()
         for key, id in pairs(previous) do if not current[key] then current[key] = id end end
     end
     state.groups[me] = current
+    for _, stranger in pairs(strangers) do
+        stranger.current = nil
+    end
+    for i = 1, size > 0 and (raid and math.min(size, 40) or 4) or 0 do
+        local identity = GL.Identity((raid and "raid" or "party") .. i)
+        if identity and strangers[identity.key] then strangers[identity.key].current = true end
+    end
     stopGroupTime(now, online)
 end
 
