@@ -207,8 +207,8 @@ eq(GL.Settings().partyWarnings, false, "chat warnings require opt-in")
 reset()
 add(a, "death", "confirmed", "tenacious-death1")
 add(a, "death", "confirmed", "tenacious-death2")
-for i = 1, 19 do add(a, "kill", "confirmed", "repayment" .. i) end
-eq(GL.Get(a).reputation, -1, "two deaths still negative after nineteen victories")
+for i = 1, 9 do add(a, "kill", "confirmed", "repayment" .. i) end
+eq(GL.Get(a).reputation, -1, "two deaths still negative after nine victories")
 eq(GL.Relation(GL.Get(a)), "warning", "danger persists until exactly zero")
 add(a, "kill", "confirmed", "repayment20")
 eq(GL.Get(a).reputation, 0, "twenty victories repay two deaths")

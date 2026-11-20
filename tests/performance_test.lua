@@ -106,7 +106,7 @@ GL.RecordPvP(live, "death", "confirmed", "test", "merge-death")
 assert(guild("Merge Guild").members == 2)
 live.name, live.surname = "Merged", "Example"
 local merged = GL.Remember(live)
-assert(merged.reputation == -11 and guild("Merge Guild").members == 1
+assert(merged.reputation == -6 and guild("Merge Guild").members == 1
     and guild("Merge Guild").deaths == 1, "identity merge invalidates both cached totals")
 
 -- Large social history: new opinions scan only the new tail, not old events.

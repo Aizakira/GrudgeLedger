@@ -2368,12 +2368,12 @@ showSettings = function()
         check("relations", "groupTracking", L("Compter les groupes avec mes contacts"), 267)
         check("relations", "tradeTracking", L("Consigner les échanges réussis avec mes contacts"), 299)
         settingText(p, L("Comment évolue une rancune ?"), 356, 340, 544, 18)
-        for i, rule in ipairs({{L("Il vous tue"),"−10"}, {L("Il vous agresse"),"−1"}, {L("Vous le vainquez"),"+1"}}) do
+        for i, rule in ipairs({{L("Il vous agresse"),"−5"}, {L("Il vous tue"),L("−5 de plus")}, {L("Vous le vainquez"),"+1"}}) do
             local x = 358+(i-1)*183
             settingText(p, rule[1], x, 372, 178, 15)
             settingText(p, rule[2], x, 396, 170, 19)
         end
-        settingText(p, L("Les victoires compensent la dette de PvP. Seul un avis positif peut créer une amitié."), 356, 425, 548, 14)
+        settingText(p, L("Un agresseur reste ennemi même si vous le tuez. S’il ripostait à votre attaque : −1."), 356, 425, 548, 14)
         settingText(p, L("Champs de bataille et arènes"), 356, 606, 548, 17)
         settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 635, 548, 13, theme.inkMuted)
         f.shareGuild = settingText(p, "", 356, 461, 541, 16)

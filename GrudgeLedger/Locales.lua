@@ -4,6 +4,8 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["−5 de plus"] = "−5 más",
+        ["Un agresseur reste ennemi même si vous le tuez. S’il ripostait à votre attaque : −1."] = "Un agresor sigue siendo enemigo aunque lo mates. Si respondía a tu ataque: −1.",
         ["Avis de la guilde : %s"] = "Opinión de la hermandad: %s",
         ["Aucune zone notée pour l’instant."] = "Todavía no hay zonas anotadas.",
         [" · lui %s, vous %s"] = " · él %s, tú %s",
@@ -1520,6 +1522,8 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["−5 de plus"] = "−5 more",
+        ["Un agresseur reste ennemi même si vous le tuez. S’il ripostait à votre attaque : −1."] = "An aggressor stays an enemy even if you kill them. If they were answering your attack: −1.",
         ["Avis de la guilde : %s"] = "Guild opinion: %s",
         ["Aucune zone notée pour l’instant."] = "No zone noted yet.",
         [" · lui %s, vous %s"] = " · them %s, you %s",

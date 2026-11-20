@@ -261,7 +261,7 @@ do
     now=now+60
     local _,death=a.GL.RecordPvP(identity,"death","confirmed","SECRET reason","social-death",nil,nil,true)
     a.GL.AddNote(identity,"SECRET personal note")
-    assert(record.reputation==-11 and a.g.Publish(record))
+    assert(record.reputation==-10 and a.g.Publish(record))
     flush()
     assert(#b.GL.SharedDossiers.SocialReports(identity.guid)==0,"social sharing defaults off")
     assert(not next(b.GL.Bounties.GuildScope().socialReports or {}),"never-enabled clients do not send empty social reports")
@@ -273,7 +273,7 @@ do
     assert(a.GL.SharedDossiers.SharingSocial())
     flush()
     local report=assert(b.GL.SharedDossiers.SocialReports(identity.guid)[1])
-    assert(report.actor==a.id and report.score==-11 and report.relation=="enemy")
+    assert(report.actor==a.id and report.score==-10 and report.relation=="enemy")
     assert(#report.events==2 and report.events[1].time==death.time and report.events[1].killingBlow==1)
     assert(not report.events[1].evidence and not report.events[1].reason and not b.GL.Get(identity))
     -- Our own opinion and notes remain independent of this testimony.
@@ -290,14 +290,14 @@ do
         end
     end
     local content=table.concat(rendered,"\n")
-    assert(content:find("-11",1,true) and content:find("Member1",1,true) and content:find("Social Target",1,true),content)
+    assert(content:find("-10",1,true) and content:find("Member1",1,true) and content:find("Social Target",1,true),content)
     assert(mine.reputation==0 and #mine.history==0 and mine.notes[1].text=="SECRET my note")
     b=client(2,b.GL.db);flush()
-    assert(b.GL.SharedDossiers.SocialReports(identity.guid)[1].score==-11,"testimony survives reload")
+    assert(b.GL.SharedDossiers.SocialReports(identity.guid)[1].score==-10,"testimony survives reload")
     assert(a.GL.VoidPvP(identity,death,false,"SECRET correction"))
     now=now+31; a.GL.SharedDossiers.Refresh(); flush()
     report=b.GL.SharedDossiers.SocialReports(identity.guid)[1]
-    assert(report.score==-1 and #report.events==1,"correction replaces the snapshot, including duplicated transport")
+    assert(report.score==-5 and #report.events==1,"correction replaces the snapshot, including duplicated transport")
     -- Only the author can publish their testimony, even when public data is relayed.
     a.online=false
     local c=client(3)

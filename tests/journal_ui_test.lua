@@ -191,7 +191,7 @@ do
     local m = GL.ContactMatchup(contact)
     assert(m.kills == 2 and m.deaths == 2 and m.run == 2 and m.lastKind == "kill")
     assert(m.recent[1] == last and #m.recent == 4 and m.closeDeaths.eventId == "second" and m.comeback.eventId == "revenge")
-    assert(GL.AutomaticBalance(contact) == balance and balance == -18)
+    assert(GL.AutomaticBalance(contact) == balance and balance == -8)
     assert(GL.VoidPvP(contact, last))
     assert(GL.ContactMatchup(contact).run == 1, "correcting an event takes effect on the next read")
 end

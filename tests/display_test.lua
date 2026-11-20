@@ -396,7 +396,7 @@ tooltipCallback(GameTooltip)
 text = ""
 for _, line in ipairs(GameTooltip.lines) do text = text .. tostring(line[1]) end
 assert(text:find("Agressions : 1"))
-assert(text:find("Camaraderie : %-1"))
+assert(text:find("Camaraderie : %-5"))
 assert(not text:find("Identification PvP probable"))
 
 -- A personal note cannot conceal uncertainty, and confirmed evidence clears it.
@@ -626,7 +626,7 @@ GL.AdjustReputation(debt, -1, "SPIT", "emote")
 GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k1")
 GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k2")
 local debtMarker = markerFor(debtPlate)
-assert(GL.Get(debt).reputation == -9 and debtMarker.shown and debtMarker.children[2].texture:find("RelationWarning"))
+assert(GL.Get(debt).reputation == -4 and debtMarker.shown and debtMarker.children[2].texture:find("RelationWarning"))
 assert(toast.shown and toast.relation == "warning", "partial repayment must keep a visible danger alert")
 for i=3,11 do GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k" .. i) end
 local repaidSounds = #sounds

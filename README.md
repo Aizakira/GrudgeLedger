@@ -86,7 +86,7 @@ In 0.7.1, open an event in **Histoire** to review its attribution before cancell
 
 ## Grudge balance
 
-Automatic records count **−10 per death, −1 per aggression and +1 per victory**. Negative gestures add to that balance: one death, one negative gesture and two victories leave **−9**, still **caution (orange)** with nearby alerts. Victories alone never create friendship; friendly gestures do not hide outstanding negative PvP debt. Explicit Friend/Caution/Enemy classifications and manual opinions stay authoritative. Existing automatic records are recalculated without deleting notes, counters or history.
+Automatic records count **−5 per aggression, −5 per death and +1 per victory**: an attack that kills you is −10. An aggressor stays an **enemy** even after you kill them; a reply to an attack you opened counts only −1. Negative gestures add to that balance: one death, one negative gesture and two victories leave **−4**, still **caution (orange)** with nearby alerts. Victories alone never create friendship; friendly gestures do not hide outstanding negative PvP debt. Explicit Friend/Caution/Enemy classifications and manual opinions stay authoritative. Existing automatic records are recalculated without deleting notes, counters or history.
 
 The personal **“Neutre” button is now “Automatique”**: it restores scoring from PvP encounters and gestures instead of forcing zero. Legacy records pinned by that button are repaired on load; an outstanding −9 stays orange. A genuine zero reached through manual +1/−1 opinions remains a personal choice. Notes, counters and history are preserved. Guild rules remain separate.
 

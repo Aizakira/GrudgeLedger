@@ -1484,7 +1484,7 @@ test("manual opinions override fatal inference but guild friendship does not", f
     end
     fixture() start() local automatic = GL.SetReaction(GL.Identity("target"), "neutral")
     T.HandleEvent("PLAYER_DEAD")
-    assert(GL.Relation(automatic) == "enemy" and automatic.reputation == -10)
+    assert(GL.Relation(automatic) == "enemy" and automatic.reputation == -5)
     fixture() start() local id = GL.Identity("target") id.guild, id.realm = "Friendly Guild", "Forever"
     GL.Remember(id) GL.SetGuildReaction(id, "friend")
     T.HandleEvent("PLAYER_DEAD")

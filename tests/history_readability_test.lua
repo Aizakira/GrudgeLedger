@@ -89,7 +89,7 @@ text("summary")
 assert(GrudgeLedgerWindow.metrics.kills.value:GetText() == "1 fois"
     and GrudgeLedgerWindow.metrics.deaths.value:GetText() == "1 fois"
     and GrudgeLedgerWindow.detailText:GetText():find("1 agression", 1, true), "summary keeps confidence counters separate")
-assert(GrudgeLedgerWindow.balance:GetText() == "-10" and GrudgeLedgerWindow.scoreContext:GetText():find("Avis personnel", 1, true),
+assert(GrudgeLedgerWindow.balance:GetText() == "-9" and GrudgeLedgerWindow.scoreContext:GetText():find("Avis personnel", 1, true),
     "manual friendship does not overwrite the displayed automatic debt")
 GL.RecordGroup(identity, "different-place", "Monastère écarlate")
 local group = record.history[#record.history]

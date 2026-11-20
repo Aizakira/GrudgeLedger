@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.25.0
+GRUDGE LEDGER — 0.26.0
+
+Carnet des rancunes : une agression compte dès le premier coup. Celui qui vous attaque prend −5 et devient ennemi tout de suite, même s’il ne vous tue pas. S’il vous tue, c’est −5 de plus (−10 en tout). Si vous le tuez ensuite, il reste ennemi : vos victoires (+1 chacune) font remonter le score, mais un agresseur ne sort jamais du carnet tout seul. Exception : s’il ne faisait que riposter à une attaque que vous avez lancée, l’agression ne compte que −1 et ne le rend pas ennemi. Une mort sans agression vaut −5 : ennemi tant qu’elle n’est pas rachetée, méfiance pendant le rachat. Les anciens scores sont recalculés au chargement, sans rien effacer.
 
 Avis de la guilde : un joueur que vous ne connaissez pas, mais que vos collègues détestent, apparaît comme ennemi (total des témoignages de −10 ou moins) ou en méfiance (total négatif, ou étiquette Butin ninja, Départ anticipé, Toxique, Sabotage ou Boosté sur sa fiche de guilde). Le marqueur et l’alerte sonore se déclenchent, avec « Avis de la guilde » dans l’alerte, sans l’ajouter à votre journal. Votre propre avis passe toujours en premier ; sur la fiche, votre pastille reste la vôtre. Un témoignage retiré cesse de compter.
 

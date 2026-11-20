@@ -235,6 +235,28 @@ end
 local function scoreRelation(score)
     return score > 0 and "friend" or score <= -10 and "enemy" or score < 0 and "warning" or "neutral"
 end
+-- Aggressions you provoked: the fight's opening shows that you hit first, so his damage was a reply.
+local provokedCache = setmetatable({}, { __mode = "k" })
+local function isReply(e)
+    local combat = type(e) == "table" and e.kind == "aggression" and not e.voided and e.voidReason ~= "battleground" and e.combat
+    return type(combat) == "table" and combat.opener == "player"
+end
+local function provoked(record)
+    local events, total = record.history or {}, record.pvp and record.pvp.aggressions or 0
+    local cached, count = provokedCache[record], #events
+    -- New events are appended: only the tail is read. Any other change (correction, merge) rereads all.
+    local same = cached and cached.total <= total and cached.count <= count
+        and cached.first == events[1] and cached.last == events[cached.count]
+    if same and cached.count == count and cached.total == total then return math.min(cached.n, total) end
+    local n, from = 0, 1
+    if same then n, from = cached.n, cached.count + 1 end
+    for i = from, count do if isReply(events[i]) then n = n + 1 end end
+    provokedCache[record] = { count = count, total = total, n = n, first = events[1], last = events[count] }
+    return math.min(n, total)
+end
+GL.ProvokedAggressions = provoked
+-- What each fact weighs in the automatic balance.
+local AGGRESSION, PROVOKED, DEATH, VICTORY = 5, 1, 5, 1
 function GL.AutomaticBalance(record)
     -- Histories remain authoritative and untouched. Replay only new entries;
     -- normalization/merges discard this session-only subtotal before replaying.
@@ -254,11 +276,15 @@ function GL.AutomaticBalance(record)
     end
     cached.total, cached.count = social, #events
     local pvp = record.pvp
-    local balance = (pvp.kills or 0)
-        - 10 * (pvp.deaths or 0)
-        - (pvp.aggressions or 0)
-    -- Friendly gestures cannot conceal an unsettled attack; victories repay one
-    -- point at a time but cannot by themselves make an opponent a friend.
+    local replies = provoked(record)
+    -- An aggression weighs -5 from the first hit, a death -5 more: an aggression that kills is -10.
+    -- His reply to an attack you opened weighs only -1.
+    local balance = VICTORY * (pvp.kills or 0)
+        - DEATH * (pvp.deaths or 0)
+        - AGGRESSION * ((pvp.aggressions or 0) - replies)
+        - PROVOKED * replies
+    -- Friendly gestures cannot conceal an unsettled attack; victories repay one point at a
+    -- time but cannot make an opponent a friend, and an aggressor stays an enemy (below).
     local score = balance < 0 and math.min(0, social) + balance
         or social < 0 and math.min(0, social + balance) or social
     return math.max(-100, math.min(100, score)), balance, social
@@ -628,12 +654,16 @@ local function effectiveRelation(record)
     local opinion = record.reaction == "friend" or record.reaction == "enemy" or record.reaction == "neutral" or record.reaction == "warning"
     if opinion and record.reactionSource ~= "emote" and record.reactionSource ~= "automatic" then return record.reaction, "manual" end
     local pvp = record.pvp or {}
+    -- An aggressor stays in the grudge book even after you kill him; a reply to your attack does not count.
+    local aggressor = (pvp.aggressions or 0) - provoked(record) > 0
+    -- Whoever killed you is an enemy while a whole death is unpaid, suspicious while your victories
+    -- repay it, and neutral once repaid; an aggressor stays an enemy.
     if (pvp.deaths or 0) > 0 and (record.reputation or 0) < 0 then
-        return (record.reputation <= -10 or (pvp.aggressions or 0) > 0) and "enemy" or "warning", "pvp"
+        return (record.reputation <= -DEATH or aggressor) and "enemy" or "warning", "pvp"
     end
     local rule = GL.GetGuildRule(record)
     if rule and rule.reaction == "enemy" then return "enemy", "guild" end
-    if (pvp.aggressions or 0) > 0 and (record.reputation or 0) < 0 then return "enemy", "pvp" end
+    if aggressor then return "enemy", "pvp" end
     if opinion and record.reactionSource == "emote" then return record.reaction, "emote" end
     if rule then return rule.reaction, "guild" end
     if opinion then return record.reaction, "automatic" end
@@ -1084,9 +1114,10 @@ function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
     end
     local field = pvpFields.aggression[confidence]
     record.pvp[field] = record.pvp[field] + 1
-    refreshReputation(record)
+    -- The event first: its opening tells whether this was a reply to your own attack.
     local event = history(record, "aggression", { confidence = confidence, evidence = evidence, eventId = eventId,
         combat = withLevels(combatContext(combat), identity, record) })
+    refreshReputation(record)
     GL.Emit("FIGHT_RECORDED", record, event)
     GL.Emit("CHANGED", record)
     return record
