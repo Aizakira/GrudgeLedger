@@ -412,6 +412,15 @@ local function keyFigures(d,ally,met)
     end
     return figures
 end
+-- Measured in the game with /gl sonde (0.34.1): Forever answers an inspection for your own faction
+-- and never for the other one. The sheet must not promise a reading that cannot happen.
+local function noReading(d)
+    local faction=d.record.faction or object(d.profile.identity).faction
+    if type(faction)=="string" and faction~=GL.Safe(UnitFactionGroup,"player") then
+        return L("Aucun relevé : le jeu ne laisse pas inspecter un joueur ennemi")
+    end
+    return L("Aucun relevé : ciblez-le à moins de 30 m, la lecture se fait seule")
+end
 local function seenText(d,unread)
     local record,lines=d.record,{}
     local at=record.lastSeen or record.lastEncounterAt
@@ -430,7 +439,7 @@ local function seenText(d,unread)
         readings[#readings+1]=L("Armurerie du %s"):format(GL.Safe(date,"%d/%m",math.floor(d.archivedAt)) or "?")
     end
     lines[#lines+1]=#readings>0 and L("Relevés : %s"):format(table.concat(readings," · "))
-        or unread and L("Aucun relevé : ciblez-le à moins de 30 m, la lecture se fait seule") or L("Aucun relevé chargé")
+        or unread and noReading(d) or L("Aucun relevé chargé")
     return table.concat(lines,"\n")
 end
 local COLUMN=166
@@ -1379,8 +1388,7 @@ local function sourceText(f,d)
     if d.pending then
         return L("Inspection en cours…")
     end
-    return GL.VisiblePortraitUnit(d.record) and L("Aucun relevé disponible en jeu")
-        or L("Aucun relevé : ciblez-le à moins de 30 m, la lecture se fait seule")
+    return GL.VisiblePortraitUnit(d.record) and L("Aucun relevé disponible en jeu") or noReading(d)
 end
 draw=function(f)
     local d=resolve(f)

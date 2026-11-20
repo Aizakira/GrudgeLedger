@@ -340,7 +340,21 @@ def publish_profiles(folder):
         write_atomic(recovery, catalog)
 
 
-def sync(root, region, contacts, force=False, profiles_only=True, achievements=False, locale="en-us", retry_after=None):
+def publish(folder):
+    # Publish only complete textures. A later run can recover a fully written
+    # portrait even if a previous import stopped before publishing the index.
+    from native_portraits_windows import native_guids
+    keys = dict.fromkeys(native_guids(folder), "native")
+    index = "GrudgeLedgerPortraitIndex = " + lua(keys) + "\n"
+    write_atomic(folder / "Portraits.lua", index.encode("ascii"))
+    publish_profiles(folder)
+    native_file = b"NativePortraits.lua\n" if (folder/"NativePortraits.lua").is_file() else b""
+    write_atomic(folder / "GrudgeLedgerPortraits.toc", TOC + b"Profiles.lua\n" + native_file)
+    return len(keys)
+
+
+def sync(root, region, contacts, force=False, profiles_only=True, achievements=False, locale="en-us", retry_after=None,
+         interrupted=None):
     addons = root / "Interface" / "AddOns"
     if not (addons / "GrudgeLedger" / "GrudgeLedger.toc").is_file():
         raise ValueError("Grudge Ledger is missing from the selected game folder")
@@ -348,7 +362,13 @@ def sync(root, region, contacts, force=False, profiles_only=True, achievements=F
     folder.mkdir(exist_ok=True)
     updated = fresh = unavailable = 0
     stems = {key: media_stem(region, key) for key in contacts}
+    # Players never fetched go first. The game only loads Profiles.lua, so it is rebuilt after each
+    # player instead of once at the end of the round: with seventy contacts the round is long, and
+    # the player who just killed you stayed invisible in game until it finished. A journal saved
+    # meanwhile (a /reload) ends the round early so its new players are served at once.
     for guid, names in sorted(contacts.items(), key=lambda pair: (folder / (stems[pair[0]] + ".json")).is_file()):
+        if interrupted and interrupted():
+            break
         if not force and retry_after is not None and retry_after.get(guid, 0) > time.monotonic():
             unavailable += 1
             continue
@@ -454,6 +474,7 @@ def sync(root, region, contacts, force=False, profiles_only=True, achievements=F
                 write_atomic(path, data)
                 path.touch()
             updated += 1
+            publish(folder)
             if retry_after is not None:
                 if (not usable_identity(snapshot) or not snapshot["gear"] or not snapshot["stats"]
                         or (achievements and not 0 <= time.time() - (snapshot.get("achievementsAt") or 0) < 7 * 86400)
@@ -466,16 +487,8 @@ def sync(root, region, contacts, force=False, profiles_only=True, achievements=F
             unavailable += 1
             if retry_after is not None:
                 retry_after[guid] = time.monotonic() + 1800
-    # Publish only complete textures. A later run can recover a fully written
-    # portrait even if a previous import stopped before publishing the index.
-    from native_portraits_windows import native_guids
-    keys = dict.fromkeys(native_guids(folder), "native")
-    index = "GrudgeLedgerPortraitIndex = " + lua(keys) + "\n"
-    write_atomic(folder / "Portraits.lua", index.encode("ascii"))
-    publish_profiles(folder)
-    native_file = b"NativePortraits.lua\n" if (folder/"NativePortraits.lua").is_file() else b""
-    write_atomic(folder / "GrudgeLedgerPortraits.toc", TOC + b"Profiles.lua\n" + native_file)
-    print(f"{updated} updated, {fresh} recent, {unavailable} unavailable. {len(keys)} portraits in {folder}", flush=True)
+    portraits = publish(folder)
+    print(f"{updated} updated, {fresh} recent, {unavailable} unavailable. {portraits} portraits in {folder}", flush=True)
     return unavailable
 
 
@@ -523,13 +536,16 @@ def main():
                                 and (not key.startswith("name:") or key[5:] == name.casefold())
                                 and (not args.name or name.casefold() == args.name.casefold())):
                             contacts.setdefault(key.removeprefix("guid:"), set()).add(name)
+                def journal_changed():
+                    return [(s, s.stat().st_mtime_ns, s.stat().st_size) for s in saves] != revision
                 unavailable = 0
                 if contacts:
-                    unavailable = sync(args.game, args.region, contacts, args.force, args.profiles_only, args.pvp_achievements, args.locale, retry_after)
+                    unavailable = sync(args.game, args.region, contacts, args.force, args.profiles_only, args.pvp_achievements,
+                                       args.locale, retry_after, journal_changed if args.watch else None)
                     args.force = False
                 elif not args.watch:
                     parser.exit(1, "No matching saved contacts. Save the journal with /reload and try again.\n")
-                last = revision
+                last = None if args.watch and journal_changed() else revision
                 # Recheck the cache even while the saved journal is unchanged.
                 check_at = min([time.monotonic() + 300] + [retry_after[k] for k in contacts if k in retry_after])
         except (ValueError, OSError, URLError) as exc:

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.34.1
+GRUDGE LEDGER — 0.34.2
+
+Mesuré en jeu avec /gl sonde : Forever laisse inspecter un joueur de votre faction (réponse en 0,2 s) et jamais un joueur ennemi. La fiche ne promet plus une lecture impossible et l’addon n’envoie plus de demandes inutiles. Programme de synchronisation Armurerie (facultatif, hors jeu) : le fichier lu par le jeu est reconstruit après chaque joueur et non en fin de tournée ; un /reload interrompt la tournée pour servir d’abord les nouveaux joueurs.
 
 Avec l’addon seul, sans Armurerie ni studio : la fiche de celui qui vient de vous tuer n’est plus vide. Sa classe, sa race et sa faction s’affichent tout de suite, même s’il n’a jamais été ciblé. L’aperçu dit « Comment il vous a tué » : ses sorts les plus lourds, le total des dégâts, la durée et le coup fatal, tirés du journal de combat. La colonne de gauche ne montre plus de tirets : elle liste ce qui a été lu, ou dit comment la lecture se fait. Lecture en jeu : une valeur cachée par le jeu en combat est relue deux secondes plus tard (et non une minute) ; l’inspection part dès que le jeu l’autorise ou que le joueur est proche (les deux n’étaient pas nécessaires). Nouvelle commande /gl sonde : ciblez un joueur, elle écrit dans la discussion ce que le jeu laisse lire sur lui, puis ce que l’addon a réussi sur vos derniers adversaires.
 

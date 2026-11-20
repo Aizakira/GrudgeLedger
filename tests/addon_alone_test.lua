@@ -31,8 +31,8 @@ assert(record.class == "ROGUE" and record.raceName == "Mort-vivant" and record.f
 assert(o.recapTitle:GetText() == "Comment il vous a tué", o.recapTitle:GetText())
 assert(o.recap:GetText() == "Embuscade 412 · Éviscération 356 · Attaque pernicieuse 188\n"
     .. "956 dégâts en 3 s · coup fatal : Éviscération · 1 autre source de dégâts", o.recap:GetText())
--- No column of dashes: one sentence says how the reading happens.
-assert(f.keyHeading:GetText() == "" and f.observed:GetText():find("la lecture se fait seule", 1, true), f.observed:GetText())
+-- No column of dashes, and no promise the game cannot keep: an enemy is never inspected on Forever.
+assert(f.keyHeading:GetText() == "" and f.observed:GetText():find("le jeu ne laisse pas inspecter un joueur ennemi", 1, true), f.observed:GetText())
 for _, cell in ipairs(f.statCells) do assert(not cell:IsShown(), "no empty line") end
 
 -- The in-game reading succeeded: what was read is listed, what the game never gives has no line.

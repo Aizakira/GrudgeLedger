@@ -75,22 +75,19 @@ now = now + 2
 GL.StepInspectionWatch()
 assert(other.inspection and other.inspection.stats.HEALTH == 3300, "readable two seconds later")
 
--- Forever accepts an inspection when the game allows it or when the player is close: one is enough.
+-- Measured on Forever: CanInspect alone decides. Close but refused (the other faction): no request.
 local before = requests
 CheckInteractDistance = function() return true end
 now = now + 5
 GL.StepInspectionWatch()
-assert(requests == before + 1, "close enough is enough, even when CanInspect says no")
+assert(requests == before, "refused by the game: nothing leaves, however close")
 CheckInteractDistance = function() return false end
-now = now + 40
-elapse() -- three seconds without an answer: given up, and nothing leaves while neither rule holds
-assert(requests == before + 1, "neither allowed nor close: no request")
 inRange = true
 now = now + 2
 GL.StepInspectionWatch()
-assert(requests == before + 2, "allowed by the game is enough, even beyond short range")
+assert(requests == before + 1, "allowed by the game is enough, even beyond short range")
 CheckInteractDistance = nil
-now = now + 1
+now = now + 43
 mock.Fire("INSPECT_READY", second)
 
 -- /gl sonde reports what the client lets an addon read about the target, in plain lines, then what
@@ -103,8 +100,8 @@ assert(report:find("Sonde de lecture · cible amicale · vous êtes hors combat"
 assert(report:find("Vie maximale : lisible (3300) · niveau : lisible (42)", 1, true), report)
 assert(report:find("Avant inspection : 3 pièces reconnues, 0 liens complets", 1, true), report)
 assert(report:find("Le jeu autorise l’inspection : oui · à courte portée : sans réponse", 1, true), report)
-assert(report:find("Suivi de Hidden Values : repéré après 0 s (target) · statistiques après 2 s · inspection demandée après 7 s"
-    .. " · réponse après 50 s · 0 pièces · talents absents", 1, true), report)
+assert(report:find("Suivi de Hidden Values : repéré après 0 s (target) · statistiques après 2 s · inspection demandée après 9 s"
+    .. " · réponse après 52 s · 0 pièces · talents absents", 1, true), report)
 assert(report:find("Suivi de Unseen Killer : repéré après 10 s (target) · statistiques après 10 s · inspection demandée après 12 s"
     .. " · sans réponse · 0 pièces · talents absents", 1, true), report)
 assert(GrudgeLedgerProbe:IsShown() and GrudgeLedgerProbe.model, "the kept-model window opens")

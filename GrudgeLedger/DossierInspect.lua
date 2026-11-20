@@ -128,16 +128,13 @@ function GL.InspectDossierUnit(unit, guid, retrySample)
         return
     end
     state.retryAt = now + 1
-    -- Forever accepts an inspection when CanInspect says yes or when the player is close: one is
-    -- enough (the Classic clients need both). Requiring both lost every reading beyond 28 yards.
-    -- The distance check is a restricted call in combat on recent clients: it is only made outside.
+    -- Measured on Forever with /gl sonde: CanInspect alone decides. A player of your faction answers
+    -- in 0.2 s even beyond short range; a player of the other faction never answers, however close.
     local allowed = GL.Safe(CanInspect, unit) == true
-    local close = CheckInteractDistance ~= nil and GL.Safe(InCombatLockdown) ~= true
-        and GL.Safe(CheckInteractDistance, unit, 1) == true
     local busy = (InspectFrame and InspectFrame:IsShown())
         or (PlayerSpellsFrame and GL.Safe(PlayerSpellsFrame.IsInspecting, PlayerSpellsFrame))
     if busy then return end
-    if not (allowed or close) then
+    if not allowed then
         mark(state, "far", now)
         return
     end

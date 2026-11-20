@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Aucun relevé : le jeu ne laisse pas inspecter un joueur ennemi"] = "Sin datos: el juego no permite inspeccionar a un jugador enemigo",
         ["1 autre source de dégâts"] = "1 fuente de daño más",
         ["Comment il vous a tué"] = "Cómo te mató",
         ["%d dégâts en %d s"] = "%d de daño en %d s",
@@ -1631,6 +1632,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Aucun relevé : le jeu ne laisse pas inspecter un joueur ennemi"] = "No data: the game does not let you inspect an enemy player",
         ["1 autre source de dégâts"] = "1 other damage source",
         ["Comment il vous a tué"] = "How they killed you",
         ["%d dégâts en %d s"] = "%d damage in %d s",
