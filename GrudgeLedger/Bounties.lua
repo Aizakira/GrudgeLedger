@@ -300,7 +300,7 @@ local function remember(orders,me)
                 GL.Print(ML("Prime remplacée pour %s. Consultez le contrat retenu dans votre historique."):format(o.name))
             elseif w and not o.supersededBy and (not previous or not previous.winner) and GL.Print then
                 if me==o.owner then
-                    GL.Print(ML("Prime accomplie : %s."):format(o.name).." "..(o.state=="paid" and ML("Aucun versement en attente.") or ML("Consultez les parts dans Primes → Mon historique.")))
+                    GL.Print(ML("Prime accomplie : %s."):format(o.name).." "..(o.state=="paid" and ML("Aucun versement en attente.") or ML("Consultez les parts dans Primes » Mon historique.")))
                 elseif w.actor==me then GL.Print(ML("Prime accomplie : %s."):format(o.name)) end
             end
         elseif history[id] and history[id].state=="superseded" then history[id]=nil end

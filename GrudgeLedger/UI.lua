@@ -1684,7 +1684,7 @@ local function eventAction(e)
     return eventTitle(e) .. delta
 end
 
--- One fight in one line: "Agression → Vous a tué · coup fatal → Vaincu avec votre groupe".
+-- One fight in one line: "Agression » Vous a tué · coup fatal » Vaincu avec votre groupe".
 function GL.FightTitle(fight)
     local parts = {}
     if fight.aggressions > 0 and fight.main and fight.main.kind ~= "aggression" then parts[1] = L("Agression") end
@@ -1696,7 +1696,7 @@ function GL.FightTitle(fight)
         end
     end
     if #parts == 0 then return L("Escarmouche sans mort · il vous a agressé") end
-    return table.concat(parts, " → ")
+    return table.concat(parts, " » ")
 end
 
 -- Reuse journal wording for personal facts; shared facts name both participants.

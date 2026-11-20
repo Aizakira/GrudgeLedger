@@ -42,10 +42,10 @@ assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local titles = {}
 for i, fight in ipairs(GL.Fights(r)) do titles[i] = GL.FightTitle(fight) end
 assert(titles[1] == "Escarmouche sans mort · il vous a agressé", titles[1])
-assert(titles[3]:find("^Agression → Vous a tué"), titles[3])
+assert(titles[3]:find("^Agression » Vous a tué"), titles[3])
 local avenged = { aggressions = 0, events = { { kind = "death", killingBlow = true }, { kind = "kill", combat = { assist = "Mate" } } } }
 avenged.main = avenged.events[1]
-assert(GL.FightTitle(avenged) == "Vous a tué · coup fatal → Vaincu avec votre groupe", GL.FightTitle(avenged))
+assert(GL.FightTitle(avenged) == "Vous a tué · coup fatal » Vaincu avec votre groupe", GL.FightTitle(avenged))
 
 -- The weekly count reads fights, not blows.
 assert(loadfile(TEST_ROOT .. "/CharacterHistory.lua"))()

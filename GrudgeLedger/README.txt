@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.29.0
+GRUDGE LEDGER — 0.29.1
+
+Correction : la flèche des combats s’affichait comme un rectangle vide (caractère absent de la police) ; elle devient « » ». Le portrait de la fiche est plus grand.
 
 Fiche joueur, troisième version. La colonne de gauche ne prend plus qu’un cinquième de la fenêtre ; la page de droite gagne la place. Sous votre avis, le calcul du solde (« 2 agressions × −5 · 2 morts × −5 »). Sept chiffres clés choisis selon la classe : Esprit pour un prêtre, Force pour un guerrier, Agilité pour un druide farouche. L’Aperçu montre six faits au lieu de quatre, sans phrase d’introduction. Combats se range en quatre sous-onglets : Vous, Guilde, Primes, Armurerie. Talents montre les arbres seuls ; la spécialisation est écrite dans la colonne. Le détail d’un combat se lit en trois sous-onglets : Résumé, Builds, Preuves. Un nouveau fichier d’image : relancer complètement le jeu.
 

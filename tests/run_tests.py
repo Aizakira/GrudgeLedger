@@ -18,6 +18,19 @@ for filename, digest in {
     "OFL.txt": "ddf311c28ddf5a5ad9747649837346b67bed9d356789c3072bb27dbce49e514d",
 }.items():
     assert sha256((font_dir / filename).read_bytes()).hexdigest() == digest, filename
+# Owner report (0.29.0): "→" showed as an empty box in game, the bundled font has no such glyph.
+# Every non-ASCII character written in the addon must exist in the three bundled faces.
+# Exceptions: combining accents (search normalisation, never drawn) and the native menu's check mark.
+from PIL import ImageFont
+faces = [ImageFont.truetype(str(font_dir / name), 32) for name in ("PTSerif-Regular.ttf", "PTSerif-Bold.ttf", "PTSerif-Italic.ttf")]
+def has_glyph(face, char):
+    drawn, blank = face.getmask(char), face.getmask("￿")
+    return not (drawn.size == blank.size and bytes(drawn) == bytes(blank))
+for source in sorted(addon.glob("*.lua")):
+    for char in sorted(set(source.read_text(encoding="utf-8-sig"))):
+        if ord(char) > 127 and not 0x300 <= ord(char) <= 0x36F and char != "✓":
+            assert all(has_glyph(face, char) for face in faces), f"{source.name}: {char!r} is not in the bundled font"
+print("PASS glyphs: every character written by the addon exists in the bundled font", flush=True)
 for name, expected_width, expected_height, transparent in (
     ("LedgerBook.tga", 256, 256, True),
     ("JournalMedallion.tga", 128, 128, True), ("JournalSettings.tga", 64, 64, True),
