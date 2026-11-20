@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.35.0
+GRUDGE LEDGER — 0.35.1
+
+Victoire partagée : si vous combattiez un joueur et que le jeu vous donne de l’honneur pour sa mort, c’est votre victoire aussi, même quand un inconnu hors de votre groupe porte le coup fatal (« Victoire partagée »).
 
 Modèle gardé : dès qu’un adversaire est repéré (cible, survol, barre de nom), l’addon garde son modèle 3D réel, avec son équipement. L’onglet Équipement de sa fiche l’affiche quand il n’est plus en vue (« Vu en jeu à 21:40 »). Douze joueurs au plus, jusqu’au prochain rechargement : rien n’est enregistré sur le disque. Fonctionne avec l’addon seul.
 

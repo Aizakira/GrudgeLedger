@@ -1725,7 +1725,7 @@ function GL.FightTitle(fight)
     if fight.aggressions > 0 and fight.main and fight.main.kind ~= "aggression" then parts[1] = L("Agression") end
     for _, e in ipairs(fight.events) do
         if e.kind == "kill" and type(e.combat) == "table" and e.combat.assist then
-            parts[#parts + 1] = L("Vaincu avec votre groupe")
+            parts[#parts + 1] = e.combat.assist == "+" and L("Victoire partagée") or L("Vaincu avec votre groupe")
         elseif e.kind ~= "aggression" then
             parts[#parts + 1] = eventTitle(e)
         end

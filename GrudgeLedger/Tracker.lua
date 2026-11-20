@@ -717,6 +717,11 @@ function T.OnHonorMessage(message, lineID)
         local identity = recordHonorReceipt(message, lineID, f)
         local enemy = identity and f and (f.enemies[identity.key] or f.enemies[identity.alias])
         if enemy then enemy.signalAt = GL.Now() tryKills() end
+        -- Owner's rule (0.35.1): honor named for a player you were fighting is your victory too, even
+        -- when a stranger lands the killing blow. "+" marks a victory shared outside your group.
+        if identity and (enemy or GL.FoughtRecently(identity)) then
+            creditKill(identity, "confirmed", "Victoire partagée : honneur reçu pour sa mort, après l'avoir combattu.", nil, "+")
+        end
         return
     end
     -- Compatibility with clients missing all named formats: this old signal
