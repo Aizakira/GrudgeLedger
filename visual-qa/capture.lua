@@ -343,6 +343,22 @@ function QA.capture(name)
             end
             return GL.OpenBounties(target.guid,"view")
         end
+        if name=="bounty-list" or name=="bounty-form" then
+            -- The list of the guild's bounties, and the creation of a bounty in gold on a known target.
+            for _,i in ipairs({5,6,8}) do
+                local opponent=records[i]
+                if opponent and not GL.Bounties.OpenFor(opponent.guid) then
+                    GL.Bounties.Post(opponent.guid,opponent.fullName,i==6 and 0 or i*50000,{quota=i==5 and 3 or 1,group=i==8 and "party" or "solo",
+                        split="winner",souvenir="none",note=""}) -- (records 3 and 7 serve the other views)
+                end
+            end
+            if name=="bounty-form" then
+                local f=GL.OpenBounties(records[7].guid,"create")
+                f.form.gift.scripts.OnClick(f.form.gift,"LeftButton")
+                return f
+            end
+            return GL.OpenBounties()
+        end
         if name=="bounty-contract" then
             local opponent=records[7]
             if not QA.contract then

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.55.0
+GRUDGE LEDGER — 0.56.0
+
+Page Primes refaite au format de Relations et de Guilde. À gauche : À chasser, Historique, Nouvelle prime et les chiffres clés (primes ouvertes, or en jeu, à recevoir, à envoyer). Sur la page : les primes en lignes (cible, montant ou « Avis », victoires, chasse, échéance), avec la recherche, le bouton de liste et « Filtres » du Journal (type, chasse, mon rôle). Un clic ouvre le contrat : les règles en quatre lignes, une seule barre d’actions, les actions du commanditaire à part. La création commence par un choix : « Avis de recherche · gratuit » ou « Prime en or » ; seuls les champs utiles s’affichent.
 
 Nouvel onglet Guilde, à la place de Bilan : le Journal de guilde, les Ennemis de la guilde (les joueurs qui tuent vos compagnons, les plus meurtriers d’abord, avec « Rechercher ») et les Guildes, avec la case « Vision de guilde » et les chiffres clés de la semaine. Le Bilan devient la première page de Relations, à la place de la Vue d’ensemble, et passe à neuf cartes : qui vous êtes, vos chiffres, vos trois personnes (némésis, compagnon, proie), votre territoire, les classes et les races qui vous tuent, qui frappe le premier, votre honneur, votre guilde. La période, les personnages, la copie et les tableaux détaillés sont en haut de la page.
 

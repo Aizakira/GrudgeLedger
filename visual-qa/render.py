@@ -449,7 +449,7 @@ def main():
               "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
               "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details", "combat-report", "death-report", "death-export"]
-    views += ["bounty-target", "bounty-contract", "bounty-history", "dossier-overview", "dossier-facts", "dossier-habits", "dossier-ally", "dossier-combat", "dossier-gear", "dossier-photos", "dossier-stats", "dossier-talents", "dossier-shared", "dossier-relations"]
+    views += ["bounty-list", "bounty-form", "bounty-target", "bounty-contract", "bounty-history", "dossier-overview", "dossier-facts", "dossier-habits", "dossier-ally", "dossier-combat", "dossier-gear", "dossier-photos", "dossier-stats", "dossier-talents", "dossier-shared", "dossier-relations"]
     # The addon alone: no Armory archive, no studio photo. The state every user starts from.
     views += ["dossier-fresh", "dossier-fresh-gear", "dossier-read", "dossier-read-gear", "dossier-read-talents"]
     views += ["relations-overview", "relations-debts", "relations-overview-empty", "relations-debts-empty",
