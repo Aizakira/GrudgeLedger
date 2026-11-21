@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.58.10
+GRUDGE LEDGER — 0.58.11
+
+Le renvoi de vos propres messages pendant le rattrapage ne s’empile plus quand plusieurs membres arrivent à la suite. Un courrier déjà envoyé à quelqu’un qui a quitté la guilde reste affiché « en transit ».
 
 Dernières retouches du rattrapage de guilde : le membre qui connaît le plus de primes répond le premier, ses propres messages repartent si un second membre arrive pendant l’envoi, et la carte de guilde garde sa place. La fenêtre Primes garde ce qu’un ancien membre a déjà reçu.
 
