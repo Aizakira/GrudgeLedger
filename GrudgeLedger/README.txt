@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.58.4
+GRUDGE LEDGER — 0.58.5
+
+Contrôles contre les faux messages. Un membre ne peut plus relayer une contribution, une victoire ou un paiement au nom de quelqu’un qui n’est pas dans la guilde. Si un membre fait passer en votre nom un message que vous n’avez jamais envoyé, il est ignoré et la discussion vous dit qui l’a fait. Deux victoires d’un même chasseur sur une prime doivent être espacées d’au moins une minute. Un membre ne peut pas remplir votre carnet : 600 messages au plus sur 38 jours, et les totaux de combats de la guilde sont bornés. La liste de ce qui peut être relayé n’est plus modifiable par un autre addon.
 
 Rappels de paiement. L’onglet Primes compte les primes que vous devez encore payer (« Primes · 2 »), et l’infobulle du livre de la mini-carte le rappelle en rouge. À la connexion, une bannière « Prime à régler » ouvre directement l’or à envoyer. Un paiement envoyé pendant votre absence est annoncé à la connexion suivante, avec une bannière : le courrier vous attend à la boîte aux lettres.
 

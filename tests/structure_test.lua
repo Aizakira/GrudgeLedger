@@ -223,5 +223,24 @@ for _, kind in ipairs(sortedKeys(eventKinds)) do
     documented(kind, "Bounty event kind")
 end
 
+-- Rule 6: no stray globals (0.58.5). The list of what a member may relay was a global: any other
+-- addon or a /run macro could widen it. A name assigned at the start of a line, without "local",
+-- must be one the game asks for or the addon's own saved tables.
+local allowedGlobal = { SlashCmdList = true, StaticPopupDialogs = true }
+for _, name in ipairs(files) do
+    local locals = {}
+    for line in (code[name] .. "\n"):gmatch("([^\n]*)\n") do
+        local names = line:match("^local%s+function%s+([%a_][%w_]*)") or line:match("^local%s+([%a_][%w_,%s]*)")
+        for local_name in (names or ""):gmatch("[%a_][%w_]*") do
+            locals[local_name] = true
+        end
+        local word = line:match("^([%a_][%w_]*)%s*[,=]") or line:match("^([%a_][%w_]*)%s*%[")
+        if word and word ~= "local" and not locals[word] and not allowedGlobal[word] and not word:match("^SLASH_") and not word:match("^BINDING_")
+            and not word:match("^GrudgeLedger") and word ~= "GL" and word ~= "private" then
+            error(name .. ": global '" .. word .. "' is assigned. Declare it local.")
+        end
+    end
+end
+
 print("PASS structure: dependency direction, single network door, single snapshot owner, "
-    .. "readability ceilings, saved data and guild messages documented")
+    .. "readability ceilings, saved data and guild messages documented, no stray globals")
