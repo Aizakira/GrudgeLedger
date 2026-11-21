@@ -4,6 +4,12 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Tueur de guilde"] = "Asesino de la hermandad",
+        ["un membre"] = "un miembro",
+        ["A tué %s %s."] = "Mató a %s %s.",
+        ["%d morts dans la guilde."] = "%d muertes en la hermandad.",
+        ["Tué par %s"] = "Muerto por %s",
+        ["A tué %s"] = "Mató a %s",
         ["Carte"] = "Mapa",
         ["Carte des combats"] = "Mapa de combates",
         ["Vision de guilde"] = "Visión de hermandad",
@@ -1742,6 +1748,12 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Tueur de guilde"] = "Guild killer",
+        ["un membre"] = "a member",
+        ["A tué %s %s."] = "Killed %s %s.",
+        ["%d morts dans la guilde."] = "%d deaths in the guild.",
+        ["Tué par %s"] = "Killed by %s",
+        ["A tué %s"] = "Killed %s",
         ["Carte"] = "Map",
         ["Carte des combats"] = "Map of fights",
         ["Vision de guilde"] = "Guild vision",

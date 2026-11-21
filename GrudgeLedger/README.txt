@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.49.0
+GRUDGE LEDGER — 0.50.0
+
+Vision de guilde complétée. Chaque combat partagé dit aussi contre qui. Nouvelle alerte « Tueur de guilde », avec son propre son : elle s’affiche quand vous croisez un joueur qui a tué un membre de votre guilde, même s’il n’est pas dans votre journal, et dit qui il a tué et quand. Un nouveau membre qui coche la case reçoit ce que la guilde sait : chaque membre renvoie ses combats, et l’un d’eux transmet ceux des absents.
 
 Carte des combats (l’onglet s’appelait Terres). Nouvelle case « Vision de guilde » sur la carte : cochée, vous voyez les victoires et les morts des membres qui l’ont cochée, et ils voient les vôtres (la zone et l’endroit, un petit message par combat). Décochée, rien n’est envoyé ni gardé. Les zones meurtrières ressortent enfin : la carte s’assombrit sous elles et chaque chiffre est posé sur une plaque rouge ou verte. Les petits carrés marrons ont disparu : seules les morts et les victoires sont dessinées.
 

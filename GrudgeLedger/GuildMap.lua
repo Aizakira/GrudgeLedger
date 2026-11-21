@@ -1,17 +1,20 @@
--- Guild vision of the map of fights (0.49.0).
--- A member who ticks "Vision de guilde" tells the guild where each of their victories and deaths
--- happened (map, place, kind, time) and sees those of the members who ticked it too. It is one
--- short message a fight, never a journal: a guild of a hundred stays light, on the wire and in the
--- saved file (150 members at most, 40 places each). Nothing is sent, and nothing received is kept,
--- while the box is unticked. Unticking asks the guild to forget your places.
+-- Guild vision (0.49.0, completed in 0.50.0): the fights of the guild, shared.
+-- A member who ticks "Vision de guilde" tells the guild each of their victories and deaths: where
+-- (map and place), when, and against whom. They see those of the members who ticked it too: on the
+-- map of fights, and as a "Tueur de guilde" alert when they meet a player who killed a member.
+-- It is one short message a fight, never a journal: a guild of a hundred stays light, on the wire
+-- and in the saved file (150 members at most, 40 fights each). A member who joins or ticks the box
+-- asks once and receives what the guild knows: each member answers with their own fights, and one
+-- of them passes on those of absent members. Nothing is sent, and nothing received is kept, while
+-- the box is unticked. Unticking asks the guild to forget your fights.
 local GL = GrudgeLedger
 local M = {}
 GL.GuildMap = M
 local DAY = 86400
 local KEEP = 38 * DAY -- like the other guild events
-local PER_MEMBER = 40 -- places kept for one member, the latest
+local PER_MEMBER = 40 -- fights kept for one member, the latest
 local MEMBERS = 150 -- members kept at once
-local REPLAYED = 15 -- of your own places, sent again when a member asks
+local RELAYED = 120 -- fights of other members passed on to a member who asks
 local ASK_GAP = 30 -- seconds between two answers to the same member
 
 local function guid(text)
@@ -21,6 +24,9 @@ local function whole(text, low, high)
     local n = tonumber(text)
     return n and n == math.floor(n) and n >= low and n <= high and n or nil
 end
+local function plainName(text)
+    return type(text) == "string" and #text <= 48 and not text:find(";", 1, true) and not GL.ContainsControlOrMarkup(text)
+end
 local function scope()
     if not GL.Bounties or not GL.Bounties.GuildScope then return nil end
     return GL.Bounties.GuildScope()
@@ -28,21 +34,30 @@ end
 local function on(s, me)
     return type(s) == "table" and type(s.shareMap) == "table" and s.shareMap[me] == true
 end
--- One place, as kept and as sent: time, map, x and y in thousandths, d (death) or k (victory).
-local function line(at, map, x, y, kind)
-    return table.concat({ at, map, x, y, kind }, ";")
+-- One fight, as kept and as sent: time, map, x and y in thousandths, d (death) or k (victory),
+-- then the opponent (identifier and name, either may be empty).
+local function line(at, map, x, y, kind, target, name)
+    return table.concat({ at, map, x, y, kind, target or "", name or "" }, ";")
 end
--- Reads a place back. Anything malformed, in the future or too old is refused.
+-- Reads a fight back. Anything malformed, in the future or too old is refused.
 local function read(text)
-    if type(text) ~= "string" or #text > 64 then return nil end
-    local at, map, x, y, kind = text:match("^(%d+);(%d+);(%d+);(%d+);([dk])$")
+    if type(text) ~= "string" or #text > 140 then return nil end
+    local at, map, x, y, kind, target, name = text:match("^(%d+);(%d+);(%d+);(%d+);([dk]);([^;]*);([^;]*)$")
     at, map, x, y = whole(at, 1, GL.Now() + 60), whole(map, 1, 999999), whole(x, 0, 1000), whole(y, 0, 1000)
     if not (at and map and x and y) or at < GL.Now() - KEEP then return nil end
-    return at, map, x, y, kind
+    if (target ~= "" and not guid(target)) or not plainName(name) then return nil end
+    return at, map, x, y, kind, target, name
 end
--- Keeps a member's place: the latest first, one a second, a bounded number. False when it was
+-- Who killed members of the guild, worked out once and again only when the fights change.
+local index, indexed
+local function forgetIndex()
+    index, indexed = nil, nil
+end
+-- Keeps a member's fight: the latest first, one a second, a bounded number. False when it was
 -- already known or too old to enter the list.
-local function keep(s, actor, at, map, x, y, kind)
+local function keep(s, actor, text)
+    local at = read(text)
+    if not at then return false end
     s.places = type(s.places) == "table" and s.places or {}
     local list = s.places[actor]
     if type(list) ~= "table" then
@@ -60,8 +75,8 @@ local function keep(s, actor, at, map, x, y, kind)
         s.places[actor] = list
     end
     local position = #list + 1
-    for i, text in ipairs(list) do
-        local other = read(text) or 0
+    for i, known in ipairs(list) do
+        local other = read(known) or 0
         if other == at then return false end
         if other < at then
             position = i
@@ -69,19 +84,40 @@ local function keep(s, actor, at, map, x, y, kind)
         end
     end
     if position > PER_MEMBER then return false end
-    table.insert(list, position, line(at, map, x, y, kind))
+    table.insert(list, position, text)
     for i = #list, PER_MEMBER + 1, -1 do list[i] = nil end
+    forgetIndex()
     return true
 end
 local function message(actor, text)
     return "M;1;" .. actor .. ";" .. text
 end
--- Your own latest places, sent again: to a member who just ticked the box or just logged in.
-local function replay(s, me)
-    local list = type(s.places) == "table" and s.places[me]
-    for i = 1, math.min(REPLAYED, type(list) == "table" and #list or 0) do
-        if read(list[i]) then GL.Transport.Send(s, message(me, list[i])) end
+-- Answers a member who asks: your own fights, then, a little later and unless another member
+-- does it first, the latest fights of the others. Sent behind the urgent guild messages.
+local function answer(s, me)
+    local T = GL.Transport
+    local own = {}
+    for _, text in ipairs(type(s.places) == "table" and type(s.places[me]) == "table" and s.places[me] or {}) do
+        if read(text) then own[#own + 1] = message(me, text) end
     end
+    if #own > 0 and not T.State(s, "map:own") then T.SendBatch(s, own, { key = "map:own" }) end
+    local others = {}
+    for actor, list in pairs(type(s.places) == "table" and s.places or {}) do
+        if actor ~= me and guid(actor) and type(list) == "table" then
+            for _, text in ipairs(list) do
+                local at = read(text)
+                if at then others[#others + 1] = { at = at, text = "R;" .. message(actor, text) } end
+            end
+        end
+    end
+    if #others == 0 or T.State(s, "map:relay") then return end
+    table.sort(others, function(a, b)
+        if a.at ~= b.at then return a.at > b.at end
+        return a.text < b.text
+    end)
+    local relayed = {}
+    for i = 1, math.min(RELAYED, #others) do relayed[i] = others[i].text end
+    T.SendBatch(s, relayed, { key = "map:relay", delay = 4 + math.random(0, 16) })
 end
 -- Your latest fights from your own journal, so that ticking the box shows something at once.
 local function seed(s, me)
@@ -90,14 +126,16 @@ local function seed(s, me)
         for _, e in ipairs(type(record) == "table" and type(record.history) == "table" and record.history or {}) do
             if type(e) == "table" and not e.voided and (e.kind == "kill" or e.kind == "death") and type(e.time) == "number"
                 and type(e.mapID) == "number" and type(e.mapX) == "number" and type(e.mapY) == "number" and e.time >= GL.Now() - KEEP then
-                found[#found + 1] = e
+                found[#found + 1] = { event = e, record = record }
             end
         end
     end
-    table.sort(found, function(a, b) return a.time > b.time end)
-    for i = 1, math.min(REPLAYED, #found) do
-        local e = found[i]
-        keep(s, me, e.time, e.mapID, math.floor(e.mapX * 1000 + 0.5), math.floor(e.mapY * 1000 + 0.5), e.kind == "death" and "d" or "k")
+    table.sort(found, function(a, b) return a.event.time > b.event.time end)
+    for i = 1, math.min(PER_MEMBER, #found) do
+        local e, record = found[i].event, found[i].record
+        local name = record.fullName or record.name
+        keep(s, me, line(e.time, e.mapID, math.floor(e.mapX * 1000 + 0.5), math.floor(e.mapY * 1000 + 0.5), e.kind == "death" and "d" or "k",
+            guid(record.guid) and record.guid or "", plainName(name) and name or ""))
     end
 end
 local function refresh()
@@ -114,20 +152,23 @@ function M.Enable(enabled)
     if type(s) ~= "table" then return false end
     s.shareMap = type(s.shareMap) == "table" and s.shareMap or {}
     s.shareMap[me] = enabled == true
+    forgetIndex()
     if enabled == true then
         seed(s, me)
-        replay(s, me)
+        answer(s, me)
         GL.Transport.Send(s, "MQ")
     else
         -- Nothing is kept while the box is unticked, and the guild is asked to forget yours.
         s.places = nil
+        GL.Transport.Cancel(s, "map:own")
+        GL.Transport.Cancel(s, "map:relay")
         GL.Transport.Send(s, "MX")
     end
     refresh()
     return true
 end
--- A victory ("k") or a death ("d") of yours, just now: its place goes to the guild.
-function M.Fight(kind)
+-- A victory ("k") or a death ("d") of yours, just now, against this player: it goes to the guild.
+function M.Fight(kind, target, name)
     local s, me = scope()
     if not on(s, me) or (kind ~= "d" and kind ~= "k") or not C_Map then return false end
     if GL.Safe(IsInInstance) == true then return false end
@@ -137,19 +178,28 @@ function M.Fight(kind)
     if type(position) == "table" and type(position.GetXY) == "function" then x, y = GL.Safe(position.GetXY, position) end
     x, y = GL.Clean(x, "number"), GL.Clean(y, "number")
     if not (x and y and x >= 0 and x <= 1 and y >= 0 and y <= 1) or not whole(map, 1, 999999) then return false end
-    local at, px, py = GL.Now(), math.floor(x * 1000 + 0.5), math.floor(y * 1000 + 0.5)
-    if not keep(s, me, at, map, px, py, kind) then return false end
-    GL.Transport.Send(s, message(me, line(at, map, px, py, kind)))
+    target = guid(target) and target or ""
+    local record = target ~= "" and GL.Get and GL.Get("guid:" .. target)
+    name = type(record) == "table" and (record.fullName or record.name) or name
+    local text = line(GL.Now(), map, math.floor(x * 1000 + 0.5), math.floor(y * 1000 + 0.5), kind, target, plainName(name) and name or "")
+    if not keep(s, me, text) then return false end
+    GL.Transport.Send(s, message(me, text))
     return true
 end
--- A guild message about places. The sender is a member of the roster, checked by the caller. A
--- place is only accepted from the member it is about: relays are refused.
+-- A guild message about fights. The sender is a member of the roster, checked by the caller.
+-- A fight heard from its own author is trusted as theirs. A fight passed on by another member
+-- ("relay") is guild testimony, like every relay: it fills the map of a member who was away, and
+-- never brings back the fights of a member who asked to be forgotten.
 local asked = {}
 function M.Receive(s, me, sender, raw, relay)
-    if relay or type(s) ~= "table" or not guid(sender) or sender == me or type(raw) ~= "string" then return false end
+    if type(s) ~= "table" or not guid(sender) or sender == me or type(raw) ~= "string" then return false end
     if raw == "MX" then
+        if relay then return false end
+        s.mapForgot = type(s.mapForgot) == "table" and s.mapForgot or {}
+        s.mapForgot[sender] = GL.Now()
         if type(s.places) == "table" and s.places[sender] then
             s.places[sender] = nil
+            forgetIndex()
             refresh()
         end
         return true
@@ -157,24 +207,37 @@ function M.Receive(s, me, sender, raw, relay)
     -- You see the guild's fights only while you show yours.
     if not on(s, me) then return false end
     if raw == "MQ" then
-        local now = GL.Now()
-        if asked[sender] and now - asked[sender] < ASK_GAP then return false end
-        asked[sender] = now
-        replay(s, me)
+        if relay then return false end
+        M.CatchUp(s, me, sender)
         return true
     end
     local actor, rest = raw:match("^M;1;([^;]+);(.+)$")
-    if actor ~= sender then return false end
-    local at, map, x, y, kind = read(rest)
-    if not at or not keep(s, actor, at, map, x, y, kind) then return false end
+    if not guid(actor) or actor == me then return false end
+    local forgot = type(s.mapForgot) == "table" and s.mapForgot[actor]
+    if relay then
+        -- Another member is already passing the guild's fights on: ours would only repeat them.
+        GL.Transport.Cancel(s, "map:relay")
+        local at = read(rest)
+        if not at or (forgot and at <= forgot) then return false end
+    elseif actor ~= sender then
+        return false
+    elseif forgot then
+        s.mapForgot[actor] = nil
+    end
+    if not keep(s, actor, rest) then return false end
     refresh()
     return true
 end
--- A member asked for a catch-up at login (message Q): your latest places go with the rest.
-function M.CatchUp(s, me)
-    if on(s, me) then replay(s, me) end
+-- A member asked what the guild knows (MQ when ticking the box, Q at login).
+function M.CatchUp(s, me, sender)
+    if not on(s, me) then return end
+    local now = GL.Now()
+    if sender and asked[sender] and now - asked[sender] < ASK_GAP then return end
+    if sender then asked[sender] = now end
+    answer(s, me)
 end
--- The guild's fights, the latest first: who, when, which map, where (0 to 1), death or kill.
+-- The guild's fights, the latest first: who, when, which map, where (0 to 1), death or kill, and
+-- against whom.
 function M.Points()
     local s, me = scope()
     local points = {}
@@ -182,10 +245,10 @@ function M.Points()
     for actor, list in pairs(s.places) do
         if actor ~= me and guid(actor) and type(list) == "table" then
             for i = 1, math.min(PER_MEMBER, #list) do
-                local at, map, x, y, kind = read(list[i])
+                local at, map, x, y, kind, target, name = read(list[i])
                 if at then
                     points[#points + 1] = { actor = actor, time = at, mapID = map, x = x / 1000, y = y / 1000,
-                        kind = kind == "d" and "death" or "kill" }
+                        kind = kind == "d" and "death" or "kill", target = target ~= "" and target or nil, name = name ~= "" and name or nil }
                 end
             end
         end
@@ -195,4 +258,29 @@ function M.Points()
         return a.actor < b.actor
     end)
     return points
+end
+-- Whether this player killed members of the guild: how many deaths, and the latest one (which
+-- member, when, on which map). Your own deaths are your journal's business, not counted here.
+function M.Killer(target)
+    local s, me = scope()
+    if not guid(target) or not on(s, me) or type(s.places) ~= "table" then return nil end
+    if indexed ~= s or not index then
+        index, indexed = {}, s
+        for actor, list in pairs(s.places) do
+            if actor ~= me and guid(actor) and type(list) == "table" then
+                for _, text in ipairs(list) do
+                    local at, map, _, _, kind, victim, name = read(text)
+                    if at and kind == "d" and victim ~= "" then
+                        local entry = index[victim] or { deaths = 0, time = 0 }
+                        index[victim] = entry
+                        entry.deaths = entry.deaths + 1
+                        if at > entry.time then
+                            entry.time, entry.actor, entry.mapID, entry.name = at, actor, map, name ~= "" and name or nil
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return index[target]
 end

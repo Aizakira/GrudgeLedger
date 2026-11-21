@@ -68,7 +68,8 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `shareFights`, `shareDeaths`, `shareSocial` | Accords de partage, par personnage. Absents ou faux par défaut | — |
 | `shareSightings` | Accord d'envoi des repérages (veille de guilde, 0.30.0), par personnage. Absent ou faux par défaut : l'envoi révèle la zone où l'on se trouve. Les repérages reçus ne sont jamais sauvegardés | — |
 | `shareMap` | Accord « Vision de guilde » (0.49.0), par personnage. Absent ou faux par défaut : coché, le personnage envoie l'endroit de ses victoires et de ses morts et garde ceux des autres | — |
-| `places` | Endroits des combats, par membre : lignes `date;carte;x;y;genre` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée | 150 membres, 40 lignes par membre, 38 jours |
+| `places` | Combats partagés, par membre : lignes `date;carte;x;y;genre;adversaire;nom` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée. Sert à la carte et à l'alerte « Tueur de guilde » | 150 membres, 40 lignes par membre, 38 jours |
+| `mapForgot` | Date du dernier `MX` de chaque membre : un relais plus ancien de ses combats est refusé. Effacée dès qu'il partage à nouveau | Un par membre |
 | `mailUncertain` | Envoi de courrier dont l'accusé n'a pas été reçu | Un par personnage |
 | `journal` | Fiches de guilde. Détail ci-dessous | — |
 | `dossiers` | Relevés publics, par cible : `fields` (une entrée par champ, avec `data`, `at`, `source`, `by`, `via` et, pour l'équipement, l'identité et les caractéristiques, `dates`), `received`, `sender`, `senderName`. Une inspection d'une cible sans fiche personnelle y est aussi gardée | 256 cibles, la plus ancienne est évincée |
@@ -115,9 +116,9 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | --- | --- |
 | `type;auteur;numéro;date;objet;valeur;détail` | Événement de prime, 250 octets au plus. Types ci-dessous |
 | `G;auteur;cible;victoires;morts` | Totaux cumulés d'un membre contre une cible, si `shareFights` est accordé |
-| `M;1;auteur;date;carte;x;y;genre` | Endroit d'une victoire (`k`) ou d'une mort (`d`) de l'auteur, si `shareMap` est accordé. Accepté seulement de l'auteur lui-même, jamais en relais, et seulement par un membre qui a lui aussi coché la case |
-| `MQ` | Demande des derniers endroits : chaque membre qui partage renvoie ses 15 derniers, une réponse par demandeur toutes les 30 secondes |
-| `MX` | Le membre a décoché la case : ses endroits sont effacés chez les autres |
+| `M;1;auteur;date;carte;x;y;genre;adversaire;nom` | Victoire (`k`) ou mort (`d`) de l'auteur : endroit et adversaire (identifiant et nom, 48 octets au plus, vides si inconnus), si `shareMap` est accordé. Gardé seulement par un membre qui a lui aussi coché la case. Reçu de l'auteur, il est tenu pour le sien. Reçu en relais (`R;M;…`), c'est un témoignage de guilde, refusé s'il précède un `MX` de l'auteur |
+| `MQ` | Demande de ce que la guilde sait : chaque membre qui partage renvoie ses propres combats (40 au plus), et l'un d'eux, après 4 à 20 secondes et si personne ne l'a fait avant lui, relaie les 120 combats les plus récents des autres. Une réponse par demandeur toutes les 30 secondes. `Q` déclenche la même réponse |
+| `MX` | Le membre a décoché la case : ses combats sont effacés chez les autres et la date est notée dans `mapForgot` |
 | `Q` | Demande de rattrapage à la connexion |
 | `R;…` | Relais d'un événement ou d'un total, en réponse à `Q` |
 | `J;C;cible;empreinte;date;compte;nom` | Publication d'une fiche de guilde |

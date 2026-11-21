@@ -17,6 +17,7 @@ local guildBursts = {}
 local signals, latestSignal = {}, nil
 local toast, previewToast, elapsed = nil, nil, 0
 local alert
+local guildKiller
 local lastSound
 local function alertSetting(relation) return relation == "friend" and "friendAlerts" or "enemyAlerts" end
 
@@ -464,6 +465,7 @@ alert = function(identity, unit)
     if not GL.db or not identity or GL.IsPvPInstance() then return end
     local bounty = activeBounty(identity)
     local record = GL.Get(identity)
+    if not bounty and guildKiller(identity, record) then return end
     -- A received contract does not create a personal journal entry or enemy rating.
     if bounty and not record then record = identity end
     if not record and GL.GuildOpinion(identity.guid) then record = identity end
@@ -616,6 +618,41 @@ GL.On("REVENGE", function(record, before, after)
     if sound and GL.Settings().sounds then GL.Safe(PlaySound, sound, "Master") end
 end)
 GL.ShowStoryBanner = banner
+-- A player who killed a member of the guild (guild vision, GuildMap.lua): a banner of its own and
+-- a sound of its own, even when this player is not in your journal. Your own enemies keep your
+-- own alert.
+local function since(at)
+    local delta = math.max(0, GL.Now() - at)
+    if delta < 3600 then return L("il y a %d min"):format(math.max(1, math.floor(delta / 60))) end
+    if delta < 86400 then return L("il y a %d h"):format(math.floor(delta / 3600)) end
+    return L("il y a %d j"):format(math.floor(delta / 86400))
+end
+guildKiller = function(identity, record)
+    local killer = GL.GuildMap and identity.guid and GL.GuildMap.Killer(identity.guid)
+    if not killer then return false end
+    local settings = GL.Settings()
+    if not settings.enemyAlerts then return false end
+    if record and GL.Relation(record) == "enemy" and GL.RelationSource(record) ~= "guild" then return false end
+    local now = GL.Now()
+    local key = "guildkiller:" .. identity.guid
+    if lastAlert[key] and now - lastAlert[key] < (settings.alertCooldown or 180) then return true end
+    lastAlert[key] = now
+    GL.Emit("THREAT_SEEN", identity, "enemy", false)
+    local victim = GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(killer.actor) or L("un membre")
+    local note = L("A tué %s %s."):format(victim, since(killer.time))
+    if killer.deaths > 1 then note = note .. " " .. L("%d morts dans la guilde."):format(killer.deaths) end
+    local who = identity.fullName or identity.name or killer.name or L("Joueur connu")
+    local frame = banner(identity.key, "enemy", L("Tueur de guilde"), who, note, nil, function()
+        if GL.OpenPlayerDossier then GL.OpenPlayerDossier(identity.guid, nil, who) end
+    end)
+    if not frame then return true end
+    frame.title:SetTextColor(1, 0.55, 0.1)
+    -- The horn of a battleground that opens: not the sound of any other alert.
+    local sounds = SOUNDKIT or {}
+    local sound = sounds.PVP_THROUGH_QUEUE or sounds.RAID_BOSS_EMOTE_WARNING or sounds.ALARM_CLOCK_WARNING_3 or sounds.RAID_WARNING
+    if sound and settings.sounds then GL.Safe(PlaySound, sound, "Master") end
+    return true
+end
 -- After a good group with a player who is not in your book: one click adds them as a friend.
 GL.On("COMPANION_SUGGESTION", function(identity, seconds)
     if not GL.Settings().friendAlerts or type(identity) ~= "table" or GL.Get(identity) then return end

@@ -1264,7 +1264,7 @@ local function paintMap(view, byName)
             if point.kind == "death" then more.deaths = more.deaths + 1 else more.kills = more.kills + 1 end
             if #guildPlaced < MAP_POINTS then
                 local rect = zone.rect
-                guildPlaced[#guildPlaced + 1] = { guild = point.actor, event = { kind = point.kind, time = point.time },
+                guildPlaced[#guildPlaced + 1] = { guild = point.actor, enemy = point.name, event = { kind = point.kind, time = point.time },
                     x = rect.left + point.x * (rect.right - rect.left), y = rect.top + point.y * (rect.bottom - rect.top) }
             end
         end
@@ -1349,8 +1349,9 @@ local function paintMap(view, byName)
         point:SetScript("OnEnter", function(self)
             if entry.guild then
                 local member = GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(entry.guild)
-                tip(self, UI.plain(member or L("Un membre de la guilde")),
-                    (kind == "death" and L("Mort d’un membre de la guilde") or L("Victoire d’un membre de la guilde")) .. " · " .. day(entry.event.time))
+                local what = kind == "death" and L("Mort d’un membre de la guilde") or L("Victoire d’un membre de la guilde")
+                if entry.enemy then what = (kind == "death" and L("Tué par %s") or L("A tué %s")):format(UI.plain(entry.enemy)) end
+                tip(self, UI.plain(member or L("Un membre de la guilde")), what .. " · " .. day(entry.event.time))
             else
                 tip(self, name(entry.record), (GL.HistoryTitle and GL.HistoryTitle(entry.event) or "") .. " · " .. day(entry.event.time))
             end
