@@ -1042,6 +1042,12 @@ function GL.OpenBounties(guid,mode)
     GL.ShowBookPage(f)
     f.cachedOrders=nil
     chooseTab("active")
+    if mode=="due" or mode=="incoming" then
+        chooseTab("history")
+        f.filterKey=mode
+        refresh()
+        return f
+    end
     if mode=="create" then
         local r=contact(guid)
         if guid and not r then
@@ -1075,6 +1081,18 @@ end
 -- happens, with a banner and the sound of coins, and reminded at login in the chat. A paid share
 -- is told too. Worked out again a few seconds after the guild's bounties change.
 local owedSeen, owingSeen
+-- The gold not yet sent to you at your last check, kept per character in GL.db.bountyPaymentWatch:
+-- a payer who sends it while you are offline is told at the next login (0.58.4). The mail itself is
+-- only counted as received at your mailbox. Read once, before the first check of the session
+-- writes over it.
+local offlineBase
+local function watched(me)
+    if type(GL.db.bountyPaymentWatch)~="table" then GL.db.bountyPaymentWatch={} end
+    local w=GL.db.bountyPaymentWatch
+    if type(w[me])~="table" then w[me]={} end
+    return w[me]
+end
+local function plural(n,one,many) return n==1 and one or many:format(n) end
 local function ledger()
     local me=mine()
     local dues,incomes={},{}
@@ -1099,11 +1117,12 @@ local function ledger()
                     end
                     if h==me then
                         for payer in pairs(o.pot) do
-                            local _,waiting=B.Payment(o,payer,me)
+                            local unsent,waiting=B.Payment(o,payer,me)
                             if payer~=me and waiting>0 then
-                                local entry=incomes[id] or {o=o,amount=0,payers=0}
+                                local entry=incomes[id] or {o=o,amount=0,unsent=0,payers=0}
                                 incomes[id]=entry
                                 entry.amount=entry.amount+waiting
+                                entry.unsent=entry.unsent+unsent
                                 entry.payers=entry.payers+1
                             end
                         end
@@ -1131,13 +1150,54 @@ function GL.BountyPaymentsCheck(first)
     if not GL.db then return end
     local dues,incomes,known=ledger()
     if not dues then return end
+    local me=mine()
+    if offlineBase==nil then
+        offlineBase={}
+        for id,amount in pairs(watched(me)) do
+            if type(id)=="string" and type(amount)=="number" then offlineBase[id]=amount end
+        end
+    end
+    local owe,count=total(dues)
+    GL.bountyDue={amount=owe,count=count,text=money(owe)}
+    if GL.PaintBountyReminder then GL.PaintBountyReminder() end
     if first or not owedSeen then
         -- At login: one line in the chat for each side, nothing when nothing is due.
         if first then
-            local owe,owing=total(dues),total(incomes)
+            local owing=total(incomes)
+            -- Sent while you were away: the gold not yet sent dropped on a contract still known.
+            local received,paidCount=0,0
+            if offlineBase then
+                for id,amount in pairs(offlineBase) do
+                    local now=incomes[id] and incomes[id].unsent or 0
+                    if known[id] and now<amount then
+                        received=received+amount-now
+                        paidCount=paidCount+1
+                    end
+                end
+                offlineBase=false
+            end
+            if received>0 then
+                local note=plural(paidCount,
+                    L("Pendant votre absence, %s vous ont été envoyés pour une prime. Le courrier vous attend à la boîte aux lettres."),
+                    L("Pendant votre absence, %s vous ont été envoyés pour %d primes. Les courriers vous attendent à la boîte aux lettres."))
+                    :format(money(received),paidCount)
+                GL.Print(note)
+                if GL.ShowStoryBanner then
+                    GL.ShowStoryBanner("bounty:received","friend",L("Paiement envoyé"),L("Primes"),note,
+                        L("Clic : la prime  •  clic droit : fermer"),function() GL.OpenBounties(nil,"incoming") end,"wanted")
+                end
+                coins()
+            end
             if owe>0 then
                 local line=L("Primes à régler : vous devez %s. À une boîte aux lettres, le bouton « Régler la prime » prépare chaque courrier.")
                 GL.Print(line:format(money(owe)))
+                if GL.ShowStoryBanner then
+                    local note=plural(count,L("Vous devez %s pour une prime. Une boîte aux lettres prépare le courrier."),
+                        L("Vous devez %s pour %d primes. Une boîte aux lettres prépare les courriers.")):format(money(owe),count)
+                    GL.ShowStoryBanner("bounty:due","warning",L("Prime à régler"),L("Primes"),note,
+                        L("Clic : la prime  •  clic droit : fermer"),function() GL.OpenBounties(nil,"due") end,"wanted")
+                end
+                if received==0 then coins() end
             end
             if owing>0 then GL.Print(L("Primes à recevoir : %s vous sont dus."):format(money(owing))) end
         end
@@ -1171,10 +1231,26 @@ function GL.BountyPaymentsCheck(first)
             local now=incomes[id]
             if known[id] and (not now or now.amount<entry.amount) then
                 GL.Print(L("Paiement reçu pour la prime sur %s."):format(UI.plain(entry.o.name)))
+                -- Told now: the login check does not tell it again.
+                if offlineBase then offlineBase[id]=nil end
+            elseif known[id] and now and offlineBase==false and now.unsent<(entry.unsent or 0) then
+                -- Sent to you now (after the login check, which tells what was sent while you were away).
+                local note=L("De l’or vous a été envoyé pour la prime sur %s. Le courrier vous attend à la boîte aux lettres.")
+                    :format(UI.plain(entry.o.name))
+                GL.Print(note)
+                if GL.ShowStoryBanner then
+                    GL.ShowStoryBanner(entry.o.target and ("guid:"..entry.o.target) or id,"friend",L("Paiement envoyé"),UI.plain(entry.o.name),note,
+                        L("Clic : la prime  •  clic droit : fermer"),function() GL.OpenBounties(entry.o.target,"view") end,"wanted")
+                end
+                coins()
             end
         end
     end
     owedSeen,owingSeen=dues,incomes
+    -- The snapshot the next login compares with.
+    local w=watched(me)
+    for id in pairs(w) do w[id]=nil end
+    for id,entry in pairs(incomes) do if entry.unsent>0 then w[id]=entry.unsent end end
     return dues,incomes
 end
 local checking=false
@@ -1193,6 +1269,8 @@ end)
 local reminder=CreateFrame("Frame")
 reminder:RegisterEvent("PLAYER_LOGIN")
 reminder:SetScript("OnEvent",function()
+    -- A new session: the next check reads what was saved at the end of the last one.
+    offlineBase=nil
     -- After the guild's catch-up, so that the reminder counts what arrived while you were away.
     if C_Timer and C_Timer.After then C_Timer.After(20,function() GL.BountyPaymentsCheck(true) end) end
 end)
