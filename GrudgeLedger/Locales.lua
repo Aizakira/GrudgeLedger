@@ -4,6 +4,19 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["3. Le reste se fait seul"] = "3. El resto se hace solo",
+        ["Un joueur qui vous attaque ou vous tue entre dans le Journal, avec le récit du combat. Vos avis et vos notes s’y retrouvent."] = "Un jugador que te ataca o te mata entra en el Diario, con el relato del combate. Tus opiniones y notas también están ahí.",
+        ["Un problème ? Tapez /gl bug. Ce guide reste dans les réglages, sous Données et diagnostic."] = "¿Un problema? Escribe /gl bug. Esta guía sigue en los ajustes, en Datos y diagnóstico.",
+        ["Ciblez un joueur pour ouvrir sa première fiche. Ceux qui vous attaquent ou vous tuent s’y inscrivent tout seuls."] = "Selecciona a un jugador para abrir su primera ficha. Quienes te atacan o te matan se inscriben solos.",
+        ["=== Signalement de bug ==="] = "=== Informe de error ===",
+        ["Ce qui s’est passé : "] = "Qué ocurrió: ",
+        ["Ce que vous attendiez : "] = "Qué esperabas: ",
+        ["Lieu : %s"] = "Lugar: %s",
+        ["Situation : combat %s · groupe %d · instance %s"] = "Situación: combate %s · grupo %d · estancia %s",
+        ["Langue : %s"] = "Idioma: %s",
+        ["Erreur : %s"] = "Error: %s",
+        ["Écrivez en haut ce qui s’est passé, puis « Tout sélectionner » et Ctrl+C. Collez sur github.com/Aizakira/GrudgeLedger/issues"] = "Escribe arriba qué ocurrió, luego «Seleccionar todo» y Ctrl+C. Pégalo en github.com/Aizakira/GrudgeLedger/issues",
+        ["Signaler un bug"] = "Informar de un error",
         ["Coup de main : d’autres l’ont achevé"] = "Ayuda: otros lo remataron",
         ["Coups de main"] = "Ayudas",
         ["%d fois, sans le coup fatal"] = "%d veces, sin el golpe fatal",
@@ -1638,6 +1651,19 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["3. Le reste se fait seul"] = "3. The rest happens by itself",
+        ["Un joueur qui vous attaque ou vous tue entre dans le Journal, avec le récit du combat. Vos avis et vos notes s’y retrouvent."] = "A player who attacks or kills you enters the Journal, with the story of the fight. Your opinions and notes are there too.",
+        ["Un problème ? Tapez /gl bug. Ce guide reste dans les réglages, sous Données et diagnostic."] = "A problem? Type /gl bug. This guide stays in the settings, under Data and diagnostics.",
+        ["Ciblez un joueur pour ouvrir sa première fiche. Ceux qui vous attaquent ou vous tuent s’y inscrivent tout seuls."] = "Target a player to open their first sheet. Those who attack or kill you are added by themselves.",
+        ["=== Signalement de bug ==="] = "=== Bug report ===",
+        ["Ce qui s’est passé : "] = "What happened: ",
+        ["Ce que vous attendiez : "] = "What you expected: ",
+        ["Lieu : %s"] = "Place: %s",
+        ["Situation : combat %s · groupe %d · instance %s"] = "Situation: combat %s · group %d · instance %s",
+        ["Langue : %s"] = "Language: %s",
+        ["Erreur : %s"] = "Error: %s",
+        ["Écrivez en haut ce qui s’est passé, puis « Tout sélectionner » et Ctrl+C. Collez sur github.com/Aizakira/GrudgeLedger/issues"] = "Write what happened at the top, then “Select all” and Ctrl+C. Paste it at github.com/Aizakira/GrudgeLedger/issues",
+        ["Signaler un bug"] = "Report a bug",
         ["Coup de main : d’autres l’ont achevé"] = "Helping hand: others finished them",
         ["Coups de main"] = "Helping hands",
         ["%d fois, sans le coup fatal"] = "%d times, without the killing blow",

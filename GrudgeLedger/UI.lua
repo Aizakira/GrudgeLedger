@@ -1950,7 +1950,27 @@ inspectEvent = function(record, e)
     f:Show() f:Raise() refreshCorrections()
 end
 
-local function showDiagnostic(private)
+-- The head of a bug report: where the player was and in what situation, never who was there.
+-- An addon cannot reach the Internet, so the player copies the text and pastes it on GitHub.
+local function bugHeader()
+    local zone, subzone = GL.Clean(GL.Safe(GetRealZoneText), "string"), GL.Clean(GL.Safe(GetSubZoneText), "string")
+    local place = (zone and zone ~= "" and zone or "?") .. (subzone and subzone ~= "" and subzone ~= zone and (" · " .. subzone) or "")
+    local _, instance = GL.Safe(IsInInstance)
+    local lines = { L("=== Signalement de bug ==="), L("Ce qui s’est passé : "), L("Ce que vous attendiez : "), "",
+        L("Lieu : %s"):format(place),
+        L("Situation : combat %s · groupe %d · instance %s"):format(GL.Safe(InCombatLockdown) == true and L("oui") or L("non"),
+            GL.Clean(GL.Safe(GetNumGroupMembers), "number") or 0, type(instance) == "string" and instance or "?"),
+        L("Langue : %s"):format(GL.Clean(GL.Safe(GetLocale), "string") or "?") }
+    -- Only the file and line of the last errors: an error message can carry a player's name.
+    local errors = GL.errors or {}
+    for i = #errors, math.max(1, #errors - 2), -1 do
+        local where = tostring(errors[i].text):match("([%w_]+%.lua:%d+)")
+        if where then lines[#lines + 1] = L("Erreur : %s"):format(where) end
+    end
+    lines[#lines + 1] = ""
+    return lines
+end
+local function showDiagnostic(private, bug)
     if not diagnosticWindow then
         local f = window("GrudgeLedgerDiagnostic", L("Grudge Ledger — Diagnostic"), 660, 500)
         diagnosticWindow = f
@@ -1978,7 +1998,7 @@ local function showDiagnostic(private)
         button(f, L("Données du registre"), 186, -461, 150, function()
             f:Hide() showSettings() settingsWindow:SelectCategory("data")
         end)
-        button(f, L("Actualiser"), 350, -461, 120, function() showDiagnostic(f.private) end)
+        button(f, L("Actualiser"), 350, -461, 120, function() showDiagnostic(f.private, f.bug) end)
         button(f, L("Validation druide"), 484, -461, 145, function()
             if SlashCmdList.GRUDGELEDGERDRUIDRADAR and C_Timer and type(C_Timer.After) == "function" then
                 f:Hide()
@@ -1998,9 +2018,12 @@ local function showDiagnostic(private)
     local client, build, _, interface = GL.Safe(GetBuildInfo)
     local loading, loaded = GL.Safe((C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded, "TidyPlates_ThreatPlates")
     loaded = loaded == true or (loaded == nil and loading == true)
-    local lines = { "Grudge Ledger " .. version(GL.version), L("Client : ") .. version(client), L("Build : ") .. version(build),
+    local lines = bug and bugHeader() or {}
+    for _, line in ipairs({ "Grudge Ledger " .. version(GL.version), L("Client : ") .. version(client), L("Build : ") .. version(build),
         L("Interface : ") .. version(interface), L("Intégration détectée : ") .. (loaded and "Threat Plates" or L("aucune")),
-        L("Erreurs conservées : ") .. #(GL.errors or {}), "", L("API disponibles :") }
+        L("Erreurs conservées : ") .. #(GL.errors or {}), "", L("API disponibles :") }) do
+        lines[#lines + 1] = line
+    end
     for _, api in ipairs({
         { "Menu.ModifyMenu", Menu and Menu.ModifyMenu }, { "C_NamePlate.GetNamePlateForUnit", C_NamePlate and C_NamePlate.GetNamePlateForUnit },
         { "GetGuildInfo", GetGuildInfo }, { "CombatLogGetCurrentEventInfo", CombatLogGetCurrentEventInfo },
@@ -2016,8 +2039,9 @@ local function showDiagnostic(private)
         local value = GL.Safe((C_CVar and C_CVar.GetCVar) or GetCVar, key)
         lines[#lines + 1] = key .. " : " .. ((value == "0" or value == "1") and value or L("indisponible"))
     end
-    diagnosticWindow.private = private == true
+    diagnosticWindow.private, diagnosticWindow.bug = private == true, bug == true
     diagnosticWindow.privacy:SetText(private == true and L("Journal local : contient les noms de votre livre. Ne le publiez pas tel quel.")
+        or bug and L("Écrivez en haut ce qui s’est passé, puis « Tout sélectionner » et Ctrl+C. Collez sur github.com/Aizakira/GrudgeLedger/issues")
         or L("Rapport anonyme : Ctrl+C pour copier. Aucun nom ni note personnelle."))
     lines[#lines + 1] = GL.DetectionReport(private == true)
     diagnosticWindow.edit:SetText(table.concat(lines, "\n"))
@@ -2027,7 +2051,12 @@ local function showDiagnostic(private)
     diagnosticWindow:Show()
     diagnosticWindow:Raise()
     diagnosticWindow.edit:SetFocus()
-    diagnosticWindow.edit:HighlightText()
+    -- A bug report is written in before it is copied: the text is not selected, so typing keeps it.
+    if bug then
+        GL.Safe(diagnosticWindow.edit.SetCursorPosition, diagnosticWindow.edit, 0)
+    else
+        diagnosticWindow.edit:HighlightText()
+    end
 end
 
 local noteEditor, selectNote
@@ -2517,15 +2546,16 @@ showSettings = function()
         f.traces = button(p, L("Consulter les traces"), 644, -437, 260, function() showDiagnostic(true) end, nil, true)
         settingText(p, L("Version de l’addon : %s"):format(tostring(GL.version)), 356, 491, 548, 13)
         f.guide = button(p, L("Revoir les premiers pas"), 356, -530, 253, function() GL.ShowGuide() end, nil, true)
+        f.reportBug = button(p, L("Signaler un bug"), 356, -568, 253, function() showDiagnostic(false, true) end, nil, true)
         f.clearAction = button(p, L("Effacer les traces…"), 644, -530, 260, function(self)
             if self.armed then
                 GL.ClearDetectionLog() self.armed = false self:SetText(L("Effacer les traces…"))
             else self.armed = true self:SetText(L("Confirmer l’effacement")) end
         end, nil, true)
-        f.experimental = button(p, L("Outils expérimentaux"), 356, -596, 253, function()
+        f.experimental = button(p, L("Outils expérimentaux"), 356, -606, 253, function()
             showIf(f.experimentalText, not f.experimentalText:IsShown())
         end, nil, true)
-        f.experimentalText = settingText(p, L("Radar druide en recherche. L’essai manuel reste accessible dans le diagnostic."), 644, 591, 262, 13, theme.inkMuted)
+        f.experimentalText = settingText(p, L("Radar druide en recherche. L’essai manuel reste accessible dans le diagnostic."), 644, 601, 262, 13, theme.inkMuted)
         f.experimentalText:Hide()
         function f:SyncControls()
             local settings = GL.Settings()
@@ -2577,11 +2607,14 @@ function GL.ShowGuide()
         bookIcon(f, 584, 395, 44, "Interface\\Icons\\Spell_Nature_CorrosiveBreath")
         settingText(f, L("Crachat  −1"), 642, 408, 226, 17)
         settingText(f, L("Le clic droit sur le portrait permet aussi de choisir un statut."), 344, 453, 535, 14)
-        settingText(f, L("3. Retrouvez vos rencontres"), 344, 502, 541, 20)
-        settingText(f, L("Le Journal rassemble vos avis, vos notes et votre histoire. Partager un groupe ne crée pas d’amitié."), 344, 544, 535, 14)
+        -- The first thing a new player must know: the book fills itself in PvP, nothing to set up.
+        settingText(f, L("3. Le reste se fait seul"), 344, 502, 541, 20)
+        settingText(f, L("Un joueur qui vous attaque ou vous tue entre dans le Journal, avec le récit du combat. Vos avis et vos notes s’y retrouvent."),
+            344, 544, 535, 14)
         f.openJournal = button(f, L("Ouvrir le Journal"), 306, -602, 348, function() GL.ShowLedger() end, nil, true)
         UI.selectButton(f.openJournal, true)
-        local revisit = settingText(f, L("Retrouvez ce guide dans les réglages, sous Données et diagnostic."), 62, 643, 836, 12, theme.inkMuted)
+        local revisit = settingText(f, L("Un problème ? Tapez /gl bug. Ce guide reste dans les réglages, sous Données et diagnostic."),
+            62, 643, 836, 12, theme.inkMuted)
         revisit:SetJustifyH("CENTER")
     end
     if not GL.Settings().guideSeen then GL.SetSetting("guideSeen", true) end
@@ -3161,7 +3194,7 @@ refresh = function(focusSelected)
         blank.body:SetText(L("Élargissez votre recherche ou effacez les filtres pour retrouver toutes vos fiches."))
     else
         blank.title:SetText(L("Votre livre commence ici"))
-        blank.body:SetText(L("Ciblez un joueur pour ouvrir sa première fiche. Vous pourrez y inscrire votre avis ou une note personnelle."))
+        blank.body:SetText(L("Ciblez un joueur pour ouvrir sa première fiche. Ceux qui vous attaquent ou vous tuent s’y inscrivent tout seuls."))
     end
     blank.action:SetText(ledger.filtersActive and L("Effacer les filtres") or L("Ajouter la cible"))
     for value, control in pairs(ledger.filters) do
@@ -3549,7 +3582,7 @@ local commandAliases = {
     guilds = "guildes", hermandades = "guildes", guild = "guilde", hermandad = "guilde",
     logs = "traces", registros = "traces", ajustes = "settings", opciones = "options",
     markers = "reperage", marcadores = "reperage", diagnostico = "debug", ["diagnóstico"] = "debug",
-    probe = "sonde", sonda = "sonde",
+    probe = "sonde", sonda = "sonde", error = "bug", erreur = "bug", fallo = "bug",
     estadisticas = "stats", ["estadísticas"] = "stats", nota = "note", guia = "guide", ["guía"] = "guide",
     friend = "ami", amigo = "ami", amiga = "ami", amie = "ami", enemy = "ennemi",
     enemigo = "ennemi", enemiga = "ennemi", ennemie = "ennemi", watch = "mefiance",
@@ -3568,6 +3601,7 @@ SlashCmdList.GRUDGELEDGER = function(message)
     elseif command == "debug" then
         showDiagnostic()
     elseif command == "traces" then showDiagnostic(true)
+    elseif command == "bug" then showDiagnostic(false, true)
     elseif command == "sonde" then
         if GL.ReadingProbe then GL.ReadingProbe() end
     elseif command == "stats" then GL.ShowStatistics("players")

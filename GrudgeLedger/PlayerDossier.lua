@@ -538,7 +538,8 @@ local function drawIdentity(f,d)
             pill:SetPoint("TOPLEFT",48,-y)
             pill.note:ClearAllPoints()
             pill.note:SetPoint("TOPLEFT",0,-y-4)
-            pill.note:SetText(item[3])
+            -- The label never leaves its 46 pixels, whatever the language: the type shrinks instead.
+            Panels.Fit(pill.note,item[3],46,11,8)
             pill.note:Show()
             y=y+25
         else

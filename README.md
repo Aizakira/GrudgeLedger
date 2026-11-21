@@ -365,6 +365,7 @@ For visible icons and colors, click **“Activer le repérage (icônes + couleur
 | `/gl settings` | Open settings |
 | `/gl reperage` | Enable nameplates, markers and colors outside combat |
 | `/gl debug` | Open a diagnostic report you can copy yourself |
+| `/gl bug` | Prepare a bug report (place, situation, version, no player name) to paste into a GitHub issue |
 | `/gl probe` (or `/gl sonde`) | Print what the game lets the addon read about your target, and what it managed on your last opponents |
 
 See the [full usage guide](GrudgeLedger/README.txt) for neutral status, priorities, corrections and data backup.
