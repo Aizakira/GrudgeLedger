@@ -281,6 +281,32 @@ now = now + 5
 assert(A.Fight("k", enemy, "Bad Guy") == true)
 flush()
 assert(from(B.Points(), a.id) >= 1 and b.GL.Bounties.GuildScope().mapForgot[a.id] == nil)
+-- Payments (0.58.2): A posts a bounty in gold, B adds to it, A wins it. B is told what it owes and
+-- reminded at login; A is told it won.
+for _, c in ipairs({ a, b }) do
+    c.env.UnitFactionGroup = function(unit) return unit == "player" and "Alliance" or "Horde" end
+    c.env.SOUNDKIT.LOOT_WINDOW_COIN_SOUND = 88
+end
+local prey = "Player-1-enemy09"
+local order = assert(a.GL.Bounties.Post(prey, "Rich Target", 100000))
+flush()
+assert(b.GL.Bounties.Pledge(order, 50000))
+flush()
+b.GL.BountyPaymentsCheck(false)
+a.GL.BountyPaymentsCheck(false)
+local soundsB = #b.sounds
+a.GL.Bounties.Kill(prey)
+flush()
+b.GL.BountyPaymentsCheck(false)
+a.GL.BountyPaymentsCheck(false)
+local toastB = assert(b.env.GrudgeLedgerNearbyAlert, "B is told")
+assert(toastB:IsShown() and toastB.title:GetText() == "Prime à régler" and toastB.name:GetText() == "Rich Target", toastB.title:GetText())
+assert(toastB.note:GetText():find("5 PO", 1, true) and #b.sounds > soundsB, toastB.note:GetText())
+local toastA = a.env.GrudgeLedgerNearbyAlert
+assert(toastA:IsShown() and toastA.title:GetText() == "Prime remportée" and toastA.note:GetText():find("5 PO", 1, true), toastA.title:GetText())
+local before = #b.m.messages
+b.GL.BountyPaymentsCheck(true)
+assert(#b.m.messages > before and b.m.messages[#b.m.messages]:find("Primes à régler", 1, true), tostring(b.m.messages[#b.m.messages]))
 for _, c in ipairs(clients) do assert(#c.GL.errors == 0, (c.GL.errors[1] or {}).text) end
 print("PASS guild vision: off by default, one message a fight with its opponent, kept only by members who share, borrowed fights "
     .. "refused, forty a member, a newcomer receives the guild's fights, guild killer alert with its own sound, forgotten when unticked")

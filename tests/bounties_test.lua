@@ -311,4 +311,40 @@ assert(a.b.Post(guildTarget,"Opponent",1))
 assert(a.b.ShareFights(false) and a.b.ShareDeaths(true))
 local fights,deaths=a.b.Sharing()
 assert(fights==false and deaths==true)
-print("PASS guild bounties: offline relay, duplicate messages, owner resolution, split, partial payments, expiration, withdrawal, automatic order, guild isolation.")
+-- Without a readable realm name (owner's client, 0.47.1), the roster and the mailbox still work, and
+-- a payment from a same-realm sender (no realm in the mail) is recognised (0.58.2).
+a.env.GetNormalizedRealmName,a.env.GetRealmName=nil,nil
+a.event(nil,"GUILD_ROSTER_UPDATE")
+local noRealm=assert(b.b.Post("Player-8-norealm","Nameless",30000,{group="solo"}));flush()
+a.b.Kill("Player-8-norealm");flush()
+assert(select(2,a.b.Payment(a.b.List()[noRealm],b.id,a.id))==30000)
+inbox(a,"Member2","[GL:"..noRealm.."/0] Nameless",30000); flush()
+assert(select(2,a.b.Payment(a.b.History()[noRealm] or a.b.List()[noRealm],b.id,a.id))==0, "a same-realm payment is recognised")
+-- A payment whose sending was not confirmed: two buttons on the mailbox settle it (0.58.2).
+local uncertainOrder=assert(b.b.Post("Player-8-uncertain","Doubt",9000,{group="solo"}));flush()
+a.b.Kill("Player-8-uncertain");flush()
+env.SendMailNameEditBox.v="";env.SendMailSubjectEditBox.v="";env.SendMailMoney.n=0
+assert(b.b.PrepareMail(uncertainOrder,a.id))
+send(a.name,env.SendMailSubjectEditBox.v);b.event(nil,"MAIL_CLOSED")
+now=now+61
+local created={}
+env.CreateFrame=function()
+    local frame=setmetatable({SetText=function(self,v) self.text=v end,SetScript=function(self,_,fn) self.click=fn end,
+        GetFontString=function() return {GetStringWidth=function() return 100 end} end,Show=function(self) self.shown=true end,
+        Hide=function(self) self.shown=false end},{__index=function() return function() end end})
+    created[#created+1]=frame
+    return frame
+end
+env.GrudgeLedger.Print=function() end
+b.event(nil,"MAIL_SHOW")
+local yes,no
+-- The pay button was made by the earlier mailbox visit; the second one may be new.
+table.insert(created,button)
+for _,frame in ipairs(created) do
+    if frame.text=="Le dernier règlement est parti" then yes=frame elseif frame.text=="Il n’est pas parti" then no=frame end
+end
+assert(yes and no, "two buttons settle an uncertain payment: "..tostring(button and button.text))
+yes:click()
+assert(b.b.Due(b.b.List()[uncertainOrder] or b.b.History()[uncertainOrder],b.id,a.id)==0, "the payment is recorded")
+print("PASS guild bounties: offline relay, duplicate messages, owner resolution, split, partial payments, expiration, withdrawal, automatic order, "
+    .."guild isolation, no readable realm, uncertain mail settled by buttons.")

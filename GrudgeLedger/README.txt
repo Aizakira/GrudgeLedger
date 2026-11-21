@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.58.1
+GRUDGE LEDGER — 0.58.2
+
+Règlement des primes. Quand une prime est remportée, celui qui doit payer reçoit une alerte « Prime à régler » (avec le montant, le nom du chasseur et un son de pièces), et le chasseur une alerte « Prime remportée ». À chaque connexion, la discussion rappelle ce que vous devez et ce qui vous est dû. Un paiement reçu est annoncé. Un règlement non confirmé (un /reload pendant l’envoi) se règle avec deux boutons sur la boîte aux lettres, sans commande à taper. La boîte aux lettres reconnaît les paiements même quand le jeu ne donne pas le nom du royaume.
 
 Corrections avant la diffusion. Deux membres qui se connectent à moins d’une minute d’écart connaissent bien les versions de chacun (plus de faux avertissement). Un contrat qui change pendant que vous le lisez ramène à la liste avec un message, au lieu d’afficher une autre prime. Un royaume illisible garde l’espace de guilde déjà connu. La page Primes ne relit plus tout l’historique à chaque lettre tapée. La séparation du carnet par faction attend que le jeu donne l’identifiant de votre personnage.
 

@@ -4,6 +4,20 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Le dernier règlement est parti"] = "El último pago ha salido",
+        ["Il n’est pas parti"] = "No ha salido",
+        ["Règlement enregistré."] = "Pago registrado.",
+        ["Le règlement reste à faire."] = "El pago queda pendiente.",
+        ["Un règlement n’a pas été confirmé. Vérifiez vos courriers envoyés, puis répondez avec les boutons au-dessus de la boîte aux lettres."] = "Un pago no se ha confirmado. Comprueba tus correos enviados y responde con los botones sobre el buzón.",
+        ["Primes à régler : vous devez %s. À une boîte aux lettres, le bouton « Régler la prime » prépare chaque courrier."] = "Recompensas por pagar: debes %s. En un buzón, el botón «Pagar la recompensa» prepara cada correo.",
+        ["Primes à recevoir : %s vous sont dus."] = "Recompensas por cobrar: te deben %s.",
+        ["%s a remporté la prime. Vous lui devez %s : une boîte aux lettres prépare le courrier."] = "%s ha ganado la recompensa. Le debes %s: un buzón prepara el correo.",
+        ["%d chasseurs ont remporté la prime. Vous leur devez %s : une boîte aux lettres prépare les courriers."] = "%d cazadores han ganado la recompensa. Les debes %s: un buzón prepara los correos.",
+        ["Prime à régler"] = "Recompensa por pagar",
+        ["Clic : la prime  •  clic droit : fermer"] = "Clic: la recompensa  •  clic derecho: cerrar",
+        ["Prime remportée"] = "Recompensa ganada",
+        ["La guilde vous doit %s. Le courrier arrivera dans votre boîte aux lettres."] = "La hermandad te debe %s. El correo llegará a tu buzón.",
+        ["Paiement reçu pour la prime sur %s."] = "Pago recibido por la recompensa sobre %s.",
         ["Le contrat que vous lisiez a changé : il n’est plus dans cette liste."] = "El contrato que leías ha cambiado: ya no está en esta lista.",
         ["%s utilise une version de Grudge Ledger antérieure à la 0.58 : une partie des échanges de guilde ne lui parvient pas."] = "%s usa una versión de Grudge Ledger anterior a la 0.58: parte de los intercambios de hermandad no le llega.",
         ["%s utilise une ancienne version de Grudge Ledger (%s, la vôtre : %s) : une partie des échanges de guilde ne lui parvient pas."] = "%s usa una versión antigua de Grudge Ledger (%s, la tuya: %s): parte de los intercambios de hermandad no le llega.",
@@ -1918,6 +1932,20 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Le dernier règlement est parti"] = "The last payment was sent",
+        ["Il n’est pas parti"] = "It was not sent",
+        ["Règlement enregistré."] = "Payment recorded.",
+        ["Le règlement reste à faire."] = "The payment is still to do.",
+        ["Un règlement n’a pas été confirmé. Vérifiez vos courriers envoyés, puis répondez avec les boutons au-dessus de la boîte aux lettres."] = "A payment was not confirmed. Check your sent mail, then answer with the buttons above the mailbox.",
+        ["Primes à régler : vous devez %s. À une boîte aux lettres, le bouton « Régler la prime » prépare chaque courrier."] = "Bounties to pay: you owe %s. At a mailbox, the “Pay the bounty” button prepares each mail.",
+        ["Primes à recevoir : %s vous sont dus."] = "Bounties to receive: you are owed %s.",
+        ["%s a remporté la prime. Vous lui devez %s : une boîte aux lettres prépare le courrier."] = "%s won the bounty. You owe them %s: a mailbox prepares the mail.",
+        ["%d chasseurs ont remporté la prime. Vous leur devez %s : une boîte aux lettres prépare les courriers."] = "%d hunters won the bounty. You owe them %s: a mailbox prepares the mails.",
+        ["Prime à régler"] = "Bounty to pay",
+        ["Clic : la prime  •  clic droit : fermer"] = "Click: the bounty  •  right-click: close",
+        ["Prime remportée"] = "Bounty won",
+        ["La guilde vous doit %s. Le courrier arrivera dans votre boîte aux lettres."] = "The guild owes you %s. The mail will arrive in your mailbox.",
+        ["Paiement reçu pour la prime sur %s."] = "Payment received for the bounty on %s.",
         ["Le contrat que vous lisiez a changé : il n’est plus dans cette liste."] = "The contract you were reading changed: it is no longer in this list.",
         ["%s utilise une version de Grudge Ledger antérieure à la 0.58 : une partie des échanges de guilde ne lui parvient pas."] = "%s runs a version of Grudge Ledger older than 0.58: part of the guild exchanges does not reach them.",
         ["%s utilise une ancienne version de Grudge Ledger (%s, la vôtre : %s) : une partie des échanges de guilde ne lui parvient pas."] = "%s runs an old version of Grudge Ledger (%s, yours: %s): part of the guild exchanges does not reach them.",
