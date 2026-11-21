@@ -21,12 +21,17 @@ assert(GL.version==version)
 GetNormalizedRealmName=function() return "Realm" end
 mock.units.player.guild="Première"
 mock.Fire("PLAYER_GUILD_UPDATE")
-assert(f.shareFights:IsEnabled() and not f.shareFights:GetChecked() and not f.shareDeaths:GetChecked())
+-- Sharing is on by default since 0.51.0; unticking is the way to stop.
+assert(f.shareFights:IsEnabled() and f.shareFights:GetChecked() and f.shareDeaths:GetChecked())
+f.shareFights:SetChecked(false); click(f.shareFights)
+f.shareDeaths:SetChecked(false); click(f.shareDeaths)
+assert(not f.shareFights:GetChecked() and not f.shareDeaths:GetChecked())
 f.shareFights:SetChecked(true); click(f.shareFights)
 assert(select(1,GL.Bounties.Sharing()) and not select(2,GL.Bounties.Sharing()))
 mock.units.player.guild="Deuxième"; mock.Fire("PLAYER_GUILD_UPDATE")
-assert(not f.shareFights:GetChecked() and f.shareGuild:GetText():find("Deuxième",1,true))
-f.shareDeaths:SetChecked(true); click(f.shareDeaths)
+-- Each guild has its own switches: in a new guild sharing is on again, until switched off there.
+assert(f.shareFights:GetChecked() and f.shareDeaths:GetChecked() and f.shareGuild:GetText():find("Deuxième",1,true))
+f.shareFights:SetChecked(false); click(f.shareFights)
 assert(not select(1,GL.Bounties.Sharing()) and select(2,GL.Bounties.Sharing()))
 mock.units.player.guild=nil; mock.Fire("PLAYER_GUILD_UPDATE")
 assert(not f.shareFights:IsEnabled() and not f.shareDeaths:IsEnabled())

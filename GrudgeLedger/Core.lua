@@ -22,14 +22,14 @@ local lastInteraction = setmetatable({}, { __mode = "k" })
 local openingProofs = setmetatable({}, { __mode = "k" })
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false, guildSightings = true,
-    grudgeAggression = 5, grudgeDeath = 5,
+    grudgeAggression = 2, grudgeDeath = 5, grudgeVictory = 5,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
     groupTracking = true, socialTracking = true, tradeTracking = false, minimapAngle = 225, readableFont = false,
     quickGestures = true, detectionLog = true, partyWarnings = false, tagReminders = true, chatBadges = false, compactTooltips = false,
-    listSort = "recent", listDetail = "identity", readingScale = 1, compactMode = false, guideSeen = false,
+    listSort = "recent", listDetail = "seen", readingScale = 1, compactMode = false, guideSeen = false,
 }
 local listSorts = { recent = true, name = true, reputation = true, kills = true, deaths = true, encounters = true }
-local listDetails = { identity = true, guild = true, pvp = true, notes = true }
+local listDetails = { seen = true, identity = true, guild = true, pvp = true, notes = true }
 local function invalidateJournal()
     journalIndex, journalSorted, personalStatistics, breakdownStatistics = nil, nil, nil, {}
 end
@@ -256,14 +256,15 @@ local function provoked(record)
     return math.min(n, total)
 end
 GL.ProvokedAggressions = provoked
--- The player chooses how much an aggression and a death weigh (settings, 0 to 10; 5 by default).
--- A reply to your own attack weighs 1 at most, a victory always repays 1.
-local VICTORY = 1
+-- The player chooses what an aggression, a death and a victory weigh (settings, 0 to 10). Since
+-- 0.42.0 the default is "a life for a life": a death costs 5 and a victory repays 5, so one revenge
+-- settles one death; an aggression costs 2. A reply to your own attack weighs 1 at most.
 local function weights()
     local settings = GL.db and GL.db.settings or defaults
-    local aggression = type(settings.grudgeAggression) == "number" and settings.grudgeAggression or 5
-    local death = type(settings.grudgeDeath) == "number" and settings.grudgeDeath or 5
-    return aggression, math.min(1, aggression), death
+    local aggression = type(settings.grudgeAggression) == "number" and settings.grudgeAggression or defaults.grudgeAggression
+    local death = type(settings.grudgeDeath) == "number" and settings.grudgeDeath or defaults.grudgeDeath
+    local victory = type(settings.grudgeVictory) == "number" and settings.grudgeVictory or defaults.grudgeVictory
+    return aggression, math.min(1, aggression), death, victory
 end
 -- "2 agressions × −5  ·  2 morts × −5": the automatic balance with today's weights.
 function GL.BalanceFormula(record)
@@ -273,11 +274,11 @@ function GL.BalanceFormula(record)
     local function term(n, one, many, weight)
         if n > 0 then terms[#terms + 1] = n .. " " .. L(n > 1 and many or one) .. " × " .. weight end
     end
-    local aggression, reply, death = weights()
+    local aggression, reply, death, victory = weights()
     term((pvp.aggressions or 0) - replies, "agression", "agressions", "−" .. aggression)
     term(replies, "riposte", "ripostes", "−" .. reply)
     term(pvp.deaths or 0, "mort", "morts", "−" .. death)
-    term(pvp.kills or 0, "victoire", "victoires", "+1")
+    term(pvp.kills or 0, "victoire", "victoires", "+" .. victory)
     return table.concat(terms, "  ·  ")
 end
 -- What each fact weighs in the automatic balance.
@@ -301,9 +302,9 @@ function GL.AutomaticBalance(record)
     cached.total, cached.count = social, #events
     local pvp = record.pvp
     local replies = provoked(record)
-    -- An aggression weighs -5 from the first hit, a death -5 more: an aggression that kills is -10.
+    -- An aggression weighs from the first hit, a death weighs more on top of it, a victory repays.
     -- His reply to an attack you opened weighs only -1.
-    local AGGRESSION, PROVOKED, DEATH = weights()
+    local AGGRESSION, PROVOKED, DEATH, VICTORY = weights()
     local balance = VICTORY * (pvp.kills or 0)
         - DEATH * (pvp.deaths or 0)
         - AGGRESSION * ((pvp.aggressions or 0) - replies)
@@ -320,7 +321,7 @@ local function refreshReputation(record)
     if record.reactionSource == "emote" or record.reactionSource == "automatic" then record.reaction = scoreRelation(record.reputation) end
 end
 local interactionKinds = {kill=true, death=true, aggression=true, grouped=true, group=true,
-    reaction=true, reputation=true, trade=true, note=true, honor=true, opening=true}
+    reaction=true, reputation=true, trade=true, note=true, honor=true, opening=true, assist=true}
 local function interactionTime(value, now)
     return type(value) == "number" and value > 0 and value <= now and value or 0
 end
@@ -557,6 +558,18 @@ function GL.RequestArmory(key, name, guid)
     requests[key .. "|" .. identity.fullName:lower()] = GL.Now()
 end
 
+-- The game knows the class, race and sex of every player it has shown, from the GUID alone: a
+-- killer who struck from out of sight, never targeted, still gets them on his sheet at once.
+local raceFaction = { Human = "Alliance", Dwarf = "Alliance", NightElf = "Alliance", Gnome = "Alliance",
+    Orc = "Horde", Scourge = "Horde", Tauren = "Horde", Troll = "Horde" }
+local function factsFromGUID(guid)
+    if type(GetPlayerInfoByGUID) ~= "function" then return nil end
+    local ok, className, class, raceName, race, sex = pcall(GetPlayerInfoByGUID, guid)
+    if not ok or not cleanName(class) then return nil end
+    return { className = GL.Clean(className), class = GL.Clean(class), raceName = GL.Clean(raceName),
+        race = GL.Clean(race), sex = GL.Clean(sex) }
+end
+
 function GL.Remember(identity, inspect)
     if not GL.db or type(identity) ~= "table" then return nil end
     local clean = GL.IdentityFromName(identity.name, identity.surname, identity.guid)
@@ -587,9 +600,11 @@ function GL.Remember(identity, inspect)
     end
     record.fullName = record.name .. (record.surname and " " .. record.surname or "")
     local previousRace = record.race
+    local known = identity
+    if clean.guid and not record.class and not cleanName(identity.class) then known = factsFromGUID(clean.guid) or identity end
     for _, field in ipairs({ "class", "race" }) do
-        local value = cleanName(identity[field])
-        local name = cleanName(identity[field .. "Name"])
+        local value = cleanName(known[field])
+        local name = cleanName(known[field .. "Name"])
         if value and value ~= record[field] then record[field], record[field .. "Name"] = value, nil end
         if name and (not record[field] or value == record[field]) then record[field .. "Name"] = name end
     end
@@ -598,8 +613,8 @@ function GL.Remember(identity, inspect)
     if record.race and record.race == identity.race and raceID and raceID > 0 and raceID < math.huge and raceID == math.floor(raceID) then
         record.raceID = raceID
     end
-    record.faction = cleanName(identity.faction) or record.faction
-    local sex = GL.Clean(identity.sex, "number")
+    record.faction = cleanName(identity.faction) or record.faction or raceFaction[record.race]
+    local sex = GL.Clean(identity.sex, "number") or GL.Clean(known.sex, "number")
     if sex == 2 or sex == 3 then record.sex = sex end
     record.level = GL.ValidLevel(identity.level) or GL.ValidLevel(record.level)
     local previousGuild, previousRealm = record.guild, record.realm
@@ -688,6 +703,9 @@ local function effectiveRelation(record)
         return (record.reputation <= -death or aggressor) and "enemy" or "warning", "pvp"
     end
     local rule = GL.GetGuildRule(record)
+    -- An opinion on a whole guild never turns your own guildmates into enemies: another of your
+    -- characters may have judged the guild this one belongs to.
+    if rule and rule.key == GL.OwnGuildKey() then rule = nil end
     if rule and rule.reaction == "enemy" then return "enemy", "guild" end
     if aggressor then return "enemy", "pvp" end
     if opinion and record.reactionSource == "emote" then return record.reaction, "emote" end
@@ -760,6 +778,19 @@ local function history(record, kind, extra)
         entry.raceID = record.raceID
         entry.race, entry.raceName, entry.class, entry.className = record.race, record.raceName, record.class, record.className
     end
+    -- Where a fight happened on the map, for the map of fights (0.45.0). It stays in your journal.
+    -- The guild only learns the place of a victory or a death when you tick "Vision de guilde"
+    -- (GuildMap.lua, 0.49.0). Nothing is stored when the game hides or lacks the position.
+    if entry.time == now and (kind == "kill" or kind == "death" or kind == "aggression" or kind == "assist") then
+        local map = GL.Clean(GL.Safe(C_Map and C_Map.GetBestMapForUnit, "player"), "number")
+        local position = map and GL.Safe(C_Map.GetPlayerMapPosition, map, "player")
+        local x, y
+        if type(position) == "table" and type(position.GetXY) == "function" then x, y = GL.Safe(position.GetXY, position) end
+        x, y = GL.Clean(x, "number"), GL.Clean(y, "number")
+        if x and y and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
+            entry.mapID, entry.mapX, entry.mapY = map, math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000
+        end
+    end
     if record then
         table.insert(record.history, entry)
         if openingProofs[record] then indexOpeningEvidence(openingProofs[record], entry) end
@@ -778,6 +809,12 @@ local function guildIdentity(value, realm)
     realm = type(value) == "table" and value.realm or realm
     name, realm = cleanName(name), cleanName(realm) or cleanName(GL.Safe(GetRealmName)) or "Forever"
     if name then return realm:lower() .. ":" .. name:lower(), name, realm end
+end
+-- The key of the guild of the character you play, or nil without a guild.
+function GL.OwnGuildKey()
+    local name, _, _, realm = GL.Safe(GetGuildInfo, "player")
+    name, realm = GL.Clean(name, "string"), GL.Clean(realm, "string")
+    return name and guildIdentity(name, realm) or nil
 end
 function GL.GetGuildRule(value, realm)
     if not GL.db then return nil end
@@ -1087,14 +1124,14 @@ end
 -- minutes apart belong to the same fight; a death or a victory ends it, except a victory of your
 -- group within a minute of your death (he is avenged in the same fight).
 local FIGHT_GAP, AVENGE_GAP = 120, 60
-local fightKinds = { aggression = true, kill = true, death = true }
+local fightKinds = { aggression = true, kill = true, death = true, assist = true }
 local function fightEvent(e)
     return type(e) == "table" and fightKinds[e.kind] and not e.voided and e.voidReason ~= "battleground" and type(e.time) == "number"
 end
 local function joins(fight, e)
     if not fight or e.time - fight.last > FIGHT_GAP then return false end
     if not fight.ended then return true end
-    return fight.ended == "death" and e.kind == "kill" and e.time - fight.last <= AVENGE_GAP
+    return fight.ended == "death" and (e.kind == "kill" or e.kind == "assist") and e.time - fight.last <= AVENGE_GAP
 end
 -- Newest first. Each fight: at, last, events (oldest first), kills, deaths, aggressions, main.
 function GL.Fights(record)
@@ -1113,7 +1150,7 @@ function GL.Fights(record)
     local fights, current = {}, nil
     for _, e in ipairs(list) do
         if not joins(current, e) then
-            current = { at = e.time, events = {}, kills = 0, deaths = 0, aggressions = 0 }
+            current = { at = e.time, events = {}, kills = 0, deaths = 0, aggressions = 0, assists = 0 }
             fights[#fights + 1] = current
         end
         current.events[#current.events + 1] = e
@@ -1122,6 +1159,9 @@ function GL.Fights(record)
             current.kills, current.ended = current.kills + 1, "kill"
         elseif e.kind == "death" then
             current.deaths, current.ended = current.deaths + 1, "death"
+        elseif e.kind == "assist" then
+            -- A helping hand closes the fight like a victory, without being one or an aggression.
+            current.assists, current.ended = current.assists + 1, "assist"
         else
             current.aggressions = current.aggressions + 1
         end
@@ -1129,7 +1169,7 @@ function GL.Fights(record)
     local out = {}
     for i = #fights, 1, -1 do
         local fight = fights[i]
-        for _, kind in ipairs({ "death", "kill", "aggression" }) do
+        for _, kind in ipairs({ "death", "kill", "aggression", "assist" }) do
             for _, e in ipairs(fight.events) do
                 if not fight.main and e.kind == kind then fight.main = e end
             end
@@ -1312,6 +1352,38 @@ function GL.RecordGroup(identity, sessionId, zone)
     return record
 end
 
+-- A helping hand: you were fighting this player and the game gave you honor for his death, but
+-- someone outside your group landed the killing blow. Kept in the history and in one counter. It is
+-- not a victory: it never enters the balance and it settles no debt.
+function GL.RecordAssist(identity)
+    if GL.IsPvPInstance() then return nil end
+    local record = GL.Remember(identity)
+    if not record then return nil end
+    record.assists = (tonumber(record.assists) or 0) + 1
+    history(record, "assist")
+    GL.Emit("CHANGED", record)
+    return record
+end
+
+-- The victory was yours after all (the killing blow was announced late): the helping hand written
+-- for the same death in the last seconds is taken back.
+function GL.RetractAssist(identity, seconds)
+    local record = GL.Get(identity)
+    if not record then return false end
+    for i = #record.history, 1, -1 do
+        local e = record.history[i]
+        if type(e) == "table" and e.kind == "assist" then
+            if type(e.time) ~= "number" or GL.Now() - e.time > (seconds or 15) then return false end
+            table.remove(record.history, i)
+            record.assists = math.max(0, (tonumber(record.assists) or 1) - 1)
+            invalidateJournal()
+            GL.Emit("CHANGED", record)
+            return true
+        end
+    end
+    return false
+end
+
 -- A duel is a friendly fight: kept in the history and in two counters, never in the balance.
 function GL.RecordDuel(identity, won)
     if GL.IsPvPInstance() or type(won) ~= "boolean" then return nil end
@@ -1407,23 +1479,58 @@ function GL.Debt(record)
     if score >= 0 or (pvp.deaths or 0) + (pvp.aggressions or 0) == 0 or GL.Relation(record) == "friend" then return 0 end
     return -score
 end
--- Two titles that tell a story: your nemesis killed you most (twice at least); your best companion
--- grouped with you most (three times at least) and is not an enemy. Returns their record keys.
-function GL.Titles()
-    local nemesis, companion
-    for _, record in pairs(GL.db and GL.db.players or {}) do
-        local deaths, groups = record.pvp and record.pvp.deaths or 0, record.groupCount or 0
-        if deaths >= 2 and (not nemesis or deaths > nemesis.pvp.deaths
-            or deaths == nemesis.pvp.deaths and (record.reputation or 0) < (nemesis.reputation or 0)) then
-            nemesis = record
+-- Two titles that tell a story, and that fade with time. A fact weighs 1 when it happens and half
+-- as much every two weeks: five deaths last week outweigh twenty deaths two years ago.
+--   nemesis: at least three deaths to him, and a recent weight of 1.5 (three deaths in two weeks,
+--     or more of them further back);
+--   companion: not an enemy, and either a friend with a recent group weight of 1, or anyone with a
+--     recent group weight of 3 (three groups this week). A friend's groups count double.
+-- Returns their record keys.
+local TITLE_HALF_LIFE = 14 * 86400
+local function recentWeight(record, first, second)
+    local now, weight, events = GL.Now(), 0, 0
+    for _, e in ipairs(record.history or {}) do
+        if type(e) == "table" and (e.kind == first or e.kind == second) and not e.voided and e.voidReason ~= "battleground"
+            and type(e.time) == "number" then
+            events = events + 1
+            weight = weight + 0.5 ^ (math.max(0, now - e.time) / TITLE_HALF_LIFE)
         end
-        local relation = groups >= 3 and GL.Relation(record)
-        if relation and relation ~= "enemy" and relation ~= "warning" and (not companion or groups > companion.groupCount
-            or groups == companion.groupCount and record.key < companion.key) then
-            companion = record
+    end
+    return weight, events
+end
+function GL.Titles()
+    local nemesis, companion, worst, closest = nil, nil, 0, 0
+    for _, record in pairs(GL.db and GL.db.players or {}) do
+        if (record.pvp and record.pvp.deaths or 0) >= 3 then
+            local weight = recentWeight(record, "death")
+            if weight >= 1.5 and (weight > worst or weight == worst and nemesis and record.key < nemesis.key) then
+                nemesis, worst = record, weight
+            end
+        end
+        if (record.groupCount or 0) > 0 then
+            local relation = GL.Relation(record)
+            local weight = relation ~= "enemy" and relation ~= "warning" and recentWeight(record, "grouped", "group") or 0
+            local friend = relation == "friend"
+            if friend then weight = weight * 2 end
+            if weight >= (friend and 2 or 3) and (weight > closest or weight == closest and companion and record.key < companion.key) then
+                companion, closest = record, weight
+            end
         end
     end
     return nemesis and nemesis.key, companion and companion.key
+end
+-- The counts shown on the Journal's quick views, in one pass.
+function GL.JournalCounts()
+    local counts = { all = 0, debt = 0, friend = 0, any = 0 }
+    for _, record in pairs(GL.db and GL.db.players or {}) do
+        if not GL.IsGroupOnly(record) then
+            counts.all = counts.all + 1
+            if GL.Debt(record) > 0 then counts.debt = counts.debt + 1 end
+            if GL.Relation(record) == "friend" then counts.friend = counts.friend + 1 end
+            if GL.HasTag and GL.HasTag(record) then counts.any = counts.any + 1 end
+        end
+    end
+    return counts
 end
 function GL.SearchPlayers(options)
     options = type(options) == "table" and options or {}
@@ -1844,7 +1951,8 @@ local function settingValue(key, value)
         if value ~= value or value == math.huge or value == -math.huge then return nil end
         if key == "alertCooldown" then value = math.max(15, math.min(3600, value))
         elseif key == "iconSize" then value = math.max(12, math.min(40, value))
-        elseif key == "grudgeAggression" or key == "grudgeDeath" then value = math.max(0, math.min(10, math.floor(value + 0.5)))
+        elseif key == "grudgeAggression" or key == "grudgeDeath" or key == "grudgeVictory" then
+            value = math.max(0, math.min(10, math.floor(value + 0.5)))
         elseif key == "readingScale" then value = math.max(0.85, math.min(1.25, value))
         elseif key == "minimapAngle" then value = value % 360 end
     end
@@ -1857,7 +1965,7 @@ function GL.SetSetting(key, value)
     local previous = GL.db.settings[key]
     GL.db.settings[key] = value
     -- New weights apply to every automatic balance at once; notes, counters and history are untouched.
-    if (key == "grudgeAggression" or key == "grudgeDeath") and previous ~= value then
+    if (key == "grudgeAggression" or key == "grudgeDeath" or key == "grudgeVictory") and previous ~= value then
         for _, record in pairs(GL.db.players or {}) do
             if type(record) == "table" and type(record.pvp) == "table" then refreshReputation(record) end
         end
@@ -1866,45 +1974,142 @@ function GL.SetSetting(key, value)
     GL.Emit("SETTINGS")
     return true
 end
-function GL.InitDB()
-    invalidateJournal()
-    observations, observationCount, guildStatistics = {}, 0, nil
-    socialTotals = setmetatable({}, { __mode = "k" })
-    guildSightings, deletedGuildSightings = {}, {}
-    traceLast = {}
-    if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end
-    GL.db = GrudgeLedgerDB
-    -- Numbered migrations (audit 0.12.0, problem 6). The three older markers count as done:
-    -- 1 schema 2 (probable merged into confirmed), 2 battleground cleanup, 3 grimoire font.
-    GL.db.migrations = type(GL.db.migrations) == "table" and GL.db.migrations or {}
-    local migrations = GL.db.migrations
-    if GL.db.schema == 2 then migrations[1] = migrations[1] or 0 end
-    if GL.db.battlegroundCleanupVersion == 1 then migrations[2] = migrations[2] or 0 end
-    if GL.db.grimoireFontDefaultApplied then migrations[3] = migrations[3] or 0 end
-    local migratePvP = GL.db.schema ~= 2
-    GL.db.players = type(GL.db.players) == "table" and GL.db.players or {}
-    if GL.db.unassignedHonor ~= nil and type(GL.db.unassignedHonor) ~= "table" then
-        GL.db.quarantine = GL.db.quarantine or {}
-        GL.db.quarantine.unassignedHonor, GL.db.unassignedHonor = GL.db.unassignedHonor, nil
+-- One book per faction (0.54.0, the owner's rule: "si tu changes de faction, tu changes de tout").
+-- On a PvP realm an account only ever plays one faction, so nothing changes. On a PvE realm a
+-- Horde character and an Alliance character each keep their own book: players, names, opinions of
+-- guilds, honor without an opponent and archived battleground sheets. The book not in use waits,
+-- untouched, in GL.db.books. Settings, guild spaces and per-character data stay common to the
+-- account: they are already kept per guild or per character.
+local BOOK_KEYS = { "players", "aliases", "guilds", "unassignedHonor", "battlegroundArchive" }
+local OTHER_SIDE = { Alliance = "Horde", Horde = "Alliance" }
+local FACTION_NAMES = { Alliance = "Alliance", Horde = "Horde", Alianza = "Alliance", Horda = "Horde" }
+local function playerFaction()
+    local faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
+    return OTHER_SIDE[faction] and faction or nil
+end
+local function deepCopy(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for key, item in pairs(value) do copy[key] = deepCopy(item) end
+    return copy
+end
+-- The kinds of facts that tell a character's side: you fight the other faction, you group and
+-- trade with your own.
+local FOUGHT = { kill = true, death = true, aggression = true, assist = true, opening = true }
+local SIDED = { grouped = true, group = true, trade = true }
+-- Which faction each of your characters played, from the facts they signed. A character seen since
+-- 0.54.0 is known for sure; the others are worked out by a vote over all their facts.
+local function actorFactions()
+    local votes = {}
+    for _, record in pairs(GL.db.players) do
+        local side = type(record) == "table" and FACTION_NAMES[record.faction]
+        for _, e in ipairs(side and type(record.history) == "table" and record.history or {}) do
+            local actor = type(e) == "table" and type(e.actorGUID) == "string" and e.actorGUID
+            local vote = actor and (FOUGHT[e.kind] and OTHER_SIDE[side] or SIDED[e.kind] and side)
+            if vote then
+                votes[actor] = votes[actor] or { Alliance = 0, Horde = 0 }
+                votes[actor][vote] = votes[actor][vote] + 1
+            end
+        end
     end
-    GL.db.aliases = type(GL.db.aliases) == "table" and GL.db.aliases or {}
-    local now = GL.Now()
-    for key, stamp in pairs(type(GL.db.armoryRequests) == "table" and GL.db.armoryRequests or {}) do
-        if type(stamp) ~= "number" or now - stamp > 7 * 86400 then GL.db.armoryRequests[key] = nil end
+    local result = {}
+    for actor, count in pairs(votes) do
+        if count.Horde > count.Alliance then
+            result[actor] = "Horde"
+        elseif count.Alliance > count.Horde then
+            result[actor] = "Alliance"
+        end
     end
-    GL.db.guilds = type(GL.db.guilds) == "table" and GL.db.guilds or {}
-    GL.db.settings = type(GL.db.settings) == "table" and GL.db.settings or {}
-    -- Start the new reading style once per account, including older journals.
-    -- A later explicit choice of the native game font survives reloads.
-    if not GL.db.grimoireFontDefaultApplied then
-        GL.db.settings.readableFont = defaults.readableFont
-        GL.db.grimoireFontDefaultApplied = true
+    for actor, faction in pairs(GL.db.characterFactions) do
+        if OTHER_SIDE[faction] then result[actor] = faction end
     end
-    for key, value in pairs(defaults) do
-        local saved = settingValue(key, GL.db.settings[key])
-        if saved == nil then saved = value end
-        GL.db.settings[key] = saved
+    return result
+end
+-- A sheet's counters, counted again from its facts, after its history was cut in two.
+local function recount(record)
+    local pvp, seen, groups = { kills = 0, deaths = 0, aggressions = 0 }, {}, 0
+    for _, e in ipairs(record.history) do
+        if type(e) == "table" and not e.voided and e.voidReason ~= "battleground" then
+            local field = pvpFields[e.kind] and pvpFields[e.kind][e.confidence]
+            local id = field and e.eventId and (field .. ":" .. tostring(e.eventId))
+            if field and not (id and seen[id]) then
+                if id then seen[id] = true end
+                pvp[field] = pvp[field] + 1
+            end
+            if e.kind == "grouped" then groups = groups + 1 end
+        end
     end
+    record.pvp, record.groupCount = pvp, groups
+end
+-- Migration 5: a book written by characters of both factions is cut in two. Each fact and each note
+-- goes to the book of the character who wrote it; a sheet with facts on both sides is copied, each
+-- copy keeping its own facts. Facts without a known author stay in the current book. Nothing is
+-- deleted. Returns how many sheets moved or were cut.
+local function splitBook(current)
+    local factions, other = actorFactions(), OTHER_SIDE[current]
+    local away = { players = {}, aliases = {}, guilds = deepCopy(GL.db.guilds) }
+    local moved = 0
+    for key, record in pairs(GL.db.players) do
+        if type(record) == "table" then
+            local kept, sent, keptNotes, sentNotes = {}, {}, {}, {}
+            for _, e in ipairs(type(record.history) == "table" and record.history or {}) do
+                if type(e) == "table" and factions[e.actorGUID] == other then
+                    sent[#sent + 1] = e
+                else
+                    kept[#kept + 1] = e
+                end
+            end
+            for _, note in ipairs(type(record.notes) == "table" and record.notes or {}) do
+                if type(note) == "table" and factions[note.actorGUID] == other then
+                    sentNotes[#sentNotes + 1] = note
+                else
+                    keptNotes[#keptNotes + 1] = note
+                end
+            end
+            if #sent + #sentNotes > 0 then
+                moved = moved + 1
+                if #kept + #keptNotes == 0 then
+                    away.players[key] = record
+                    GL.db.players[key] = nil
+                else
+                    local copy = deepCopy(record)
+                    copy.history, copy.notes = sent, sentNotes
+                    record.history, record.notes = kept, keptNotes
+                    recount(copy)
+                    recount(record)
+                    away.players[key] = copy
+                end
+            end
+        end
+    end
+    GL.db.books[other] = away
+    return moved
+end
+-- Opens the book of the faction you play. True when the book in use changed.
+local function selectBook()
+    local faction = playerFaction()
+    local me = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    if not faction then return false end
+    if me then GL.db.characterFactions[me] = faction end
+    if GL.db.book == faction then return false end
+    if GL.db.book == nil then
+        local moved = splitBook(faction)
+        GL.db.book = faction
+        GL.db.migrations[5] = GL.Now()
+        return moved > 0
+    end
+    local stash = {}
+    for _, key in ipairs(BOOK_KEYS) do stash[key] = GL.db[key] end
+    GL.db.books[GL.db.book] = stash
+    local book = type(GL.db.books[faction]) == "table" and GL.db.books[faction] or {}
+    for _, key in ipairs(BOOK_KEYS) do GL.db[key] = book[key] end
+    GL.db.books[faction] = nil
+    GL.db.book = faction
+    return true
+end
+-- Reads the book in use: each sheet is checked, normalised and indexed by name. Run again when
+-- the book of the other faction is opened.
+local function loadBook(migratePvP)
     for key, record in pairs(GL.db.players) do
         if type(key) == "string" and type(record) == "table" then
             record.key = key
@@ -1956,16 +2161,104 @@ function GL.InitDB()
             GL.Debug(L("Entrée sauvegardée invalide conservée dans quarantine : ") .. tostring(key))
         end
     end
+end
+-- After the book changed: the caches of the previous one are dropped and the new one is read.
+local function reopenBook()
+    invalidateJournal()
+    guildStatistics = nil
+    for _, key in ipairs({ "players", "aliases", "guilds" }) do
+        GL.db[key] = type(GL.db[key]) == "table" and GL.db[key] or {}
+    end
+    -- A name that points to a sheet now in the other book is forgotten, so it can be given again.
+    for alias, key in pairs(GL.db.aliases) do
+        if type(key) == "string" and not GL.db.players[key] then GL.db.aliases[alias] = nil end
+    end
+    loadBook(false)
+end
+-- At login the faction is known for sure: the right book is opened if it was not yet.
+function GL.SelectBook()
+    if not GL.db or not selectBook() then return false end
+    reopenBook()
+    GL.Emit("CHANGED")
+    return true
+end
+function GL.InitDB()
+    invalidateJournal()
+    observations, observationCount, guildStatistics = {}, 0, nil
+    socialTotals = setmetatable({}, { __mode = "k" })
+    guildSightings, deletedGuildSightings = {}, {}
+    traceLast = {}
+    if type(GrudgeLedgerDB) ~= "table" then GrudgeLedgerDB = {} end
+    GL.db = GrudgeLedgerDB
+    -- Numbered migrations (audit 0.12.0, problem 6). The three older markers count as done:
+    -- 1 schema 2 (probable merged into confirmed), 2 battleground cleanup, 3 grimoire font.
+    GL.db.migrations = type(GL.db.migrations) == "table" and GL.db.migrations or {}
+    local migrations = GL.db.migrations
+    GL.db.books = type(GL.db.books) == "table" and GL.db.books or {}
+    GL.db.characterFactions = type(GL.db.characterFactions) == "table" and GL.db.characterFactions or {}
+    if GL.db.schema == 2 then migrations[1] = migrations[1] or 0 end
+    if GL.db.battlegroundCleanupVersion == 1 then migrations[2] = migrations[2] or 0 end
+    if GL.db.grimoireFontDefaultApplied then migrations[3] = migrations[3] or 0 end
+    local migratePvP = GL.db.schema ~= 2
+    GL.db.players = type(GL.db.players) == "table" and GL.db.players or {}
+    if GL.db.unassignedHonor ~= nil and type(GL.db.unassignedHonor) ~= "table" then
+        GL.db.quarantine = GL.db.quarantine or {}
+        GL.db.quarantine.unassignedHonor, GL.db.unassignedHonor = GL.db.unassignedHonor, nil
+    end
+    GL.db.aliases = type(GL.db.aliases) == "table" and GL.db.aliases or {}
+    local now = GL.Now()
+    for key, stamp in pairs(type(GL.db.armoryRequests) == "table" and GL.db.armoryRequests or {}) do
+        if type(stamp) ~= "number" or now - stamp > 7 * 86400 then GL.db.armoryRequests[key] = nil end
+    end
+    GL.db.guilds = type(GL.db.guilds) == "table" and GL.db.guilds or {}
+    GL.db.settings = type(GL.db.settings) == "table" and GL.db.settings or {}
+    -- Start the new reading style once per account, including older journals.
+    -- A later explicit choice of the native game font survives reloads.
+    if not GL.db.grimoireFontDefaultApplied then
+        GL.db.settings.readableFont = defaults.readableFont
+        GL.db.grimoireFontDefaultApplied = true
+    end
+    -- Migration 4 (0.42.0), "a life for a life". Weights left at the old defaults (aggression 5,
+    -- death 5, victory fixed at 1) move to the new ones; weights the player chose are kept, and only
+    -- the victory, which had no setting, takes its new default. What was replaced is kept.
+    local reweighed = false
+    if not migrations[4] then
+        local settings = GL.db.settings
+        if type(settings.grudgeAggression) == "number" or type(settings.grudgeDeath) == "number" then
+            GL.db.replacedWeights = { aggression = settings.grudgeAggression, death = settings.grudgeDeath, victory = 1 }
+            if settings.grudgeAggression == 5 and settings.grudgeDeath == 5 then settings.grudgeAggression = defaults.grudgeAggression end
+            reweighed = true
+        end
+        migrations[4] = GL.Now()
+    end
+    for key, value in pairs(defaults) do
+        local saved = settingValue(key, GL.db.settings[key])
+        if saved == nil then saved = value end
+        GL.db.settings[key] = saved
+    end
+    loadBook(migratePvP)
+    -- The book of the faction you play (migration 5 the first time). Read again when it changed.
+    if selectBook() then reopenBook() end
     GL.db.schema = 2
     migrations[1] = migrations[1] or GL.Now()
     cleanBattlegroundHistory()
     migrations[2] = migrations[2] or (GL.db.battlegroundCleanupVersion == 1 and GL.Now() or nil)
     migrations[3] = migrations[3] or (GL.db.grimoireFontDefaultApplied and GL.Now() or nil)
+    if reweighed then
+        for _, record in pairs(GL.db.players) do
+            if type(record) == "table" and type(record.pvp) == "table" then refreshReputation(record) end
+        end
+    end
     GL.Emit("READY")
 end
 local boot = CreateFrame("Frame")
 boot:RegisterEvent("ADDON_LOADED")
-boot:SetScript("OnEvent", function(_, _, name)
+boot:RegisterEvent("PLAYER_LOGIN")
+boot:SetScript("OnEvent", function(_, event, name)
+    if event == "PLAYER_LOGIN" then
+        GL.SelectBook()
+        return
+    end
     if name == ADDON then GL.InitDB() boot:UnregisterEvent("ADDON_LOADED") end
 end)
 

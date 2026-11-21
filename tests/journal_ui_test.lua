@@ -8,6 +8,8 @@ assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 local selfGUID = mock.units.player.guid
 local function click(control)
     assert(control.enabled ~= false, "cannot click a disabled control")
@@ -152,20 +154,20 @@ GrudgeLedgerGuide:Hide()
 GL.ShowLedger()
 assert(not GrudgeLedgerGuide:IsShown(), "later openings do not interrupt the journal")
 GL.ShowLedger(ra.key)
-click(ledger.detailTabs.matchup)
-assert(ledger.detailScroll:IsShown() and not ledger.tools:IsShown())
-assert(ledger.metrics.kills.value:GetText() == "1" and ledger.metrics.deaths.value:GetText() == "1"
-    and not ledger.metrics.kills.probable and not ledger.balancePanel:IsShown(),
+-- The Face-à-face page left the Journal in 0.38.0 (the sheet replaced it); the same reckoning
+-- still feeds the "Mes face-à-face" filter of the detailed history.
+local face = GL.ContactMatchup(ra)
+assert(face.kills == 1 and face.deaths == 1,
     "face-to-face separates probable results and excludes other characters, unknown authors and corrections")
-click(ledger.matchupHistory)
+assert(ledger.detailTabs.matchup == nil and ledger.detailTabs.dossier == nil and ledger.matchupHistory == nil)
+click(ledger.detailTabs.history)
+click(ledger.historyPage.options.matchup)
 assert(ledger.historyPage.kind == "matchup" and ledger.historyPage.total:GetText() == "1–2 sur 2")
 assert(ledger.historyPage.rows[1].event.eventId == "own-kill" and ledger.historyPage.rows[2].event.eventId == "own-death")
 GL.ShowLedger(rb.key)
-click(ledger.detailTabs.matchup)
-assert(ledger.detailScroll.fullText:find("Aucune victoire ni défaite", 1, true) and not ledger.matchupHistory:IsEnabled())
+assert(GL.ContactMatchup(rb).deaths == 0 and #GL.ContactMatchup(rb).recent == 0)
 local _, probableLoss = GL.RecordPvP(b, "death", "confirmed", "fixture", "uncertain")
-assert(ledger.metrics.deaths.value:GetText() == "1" and not ledger.metrics.deaths.probable)
-assert(ledger.detailScroll.fullText:find("Derniers résultats", 1, true) and ledger.matchupHistory:IsEnabled())
+assert(GL.ContactMatchup(rb).deaths == 1 and #GL.ContactMatchup(rb).recent == 1)
 local upgrade = {}
 for field, value in pairs(probableLoss) do upgrade[field] = value end
 upgrade.confidence = "confirmed"
@@ -216,6 +218,7 @@ ledger.search.scripts.OnEnterPressed(ledger.search)
 assert(ledger.rows[1].key == b.key and not ledger.rows[2]:IsShown())
 click(ledger.notesOnly)
 assert(ledger.rows[1].key == b.key)
+GL.SetSetting("listDetail", "identity")
 click(ledger.detail)
 assert(GL.Settings().listDetail == "guild" and ledger.rows[1].identity:GetText() == "Golden Library")
 click(ledger.sort) assert(GL.Settings().listSort == "name")
@@ -227,11 +230,11 @@ assert(not ledger.notesOnly.active and GL.Settings().listSort == "name" and GL.S
     "reset clears search filters without discarding display preferences")
 GL.SetSetting("listSort", "reputation")
 now = now + 1 GL.RecordPvP(a, "death", "confirmed", "witness", "chronology-test")
-assert(ledger.rows[1].key == a.key and ledger.sort:GetText() == "Dernière interaction" and not ledger.sort:IsEnabled())
+assert(ledger.rows[1].key == a.key and ledger.sort:GetText() == "Tri : Dernière interaction" and not ledger.sort:IsEnabled())
 ledger.search:SetText("Golden")
 assert(ledger.rows[1].key == a.key and not ledger.sort:IsEnabled(), "typing alone preserves chronology")
 click(ledger.searchButton)
-assert(ledger.sort:IsEnabled() and ledger.sort:GetText() == "Réputation" and ledger.rows[1].key ~= a.key)
+assert(ledger.sort:IsEnabled() and ledger.sort:GetText() == "Tri : Réputation" and ledger.rows[1].key ~= a.key)
 ledger.search:SetText(" ")
 assert(ledger.query == "" and ledger.rows[1].key == a.key and not ledger.sort:IsEnabled(), "clearing text immediately restores chronology")
 now = now + 601 GL.RecordSeen(b, true)

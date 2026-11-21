@@ -6,6 +6,8 @@ GetServerTime = function() return now end
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 local id = GL.IdentityFromName("Fighter", "Example", "Player-1-fighter")
 -- Fight 1: he attacks, hits again 40 s later, then kills you.
 GL.RecordAggression(id, "confirmed", "Observed", "f1-a")
@@ -72,10 +74,20 @@ GL.RecordPvP(paid, "death", "confirmed", "Direct", "paid-d")
 for i = 1, 5 do GL.RecordPvP(paid, "kill", "confirmed", "Direct", "paid-k" .. i) end
 local debts = GL.SearchPlayers({ relation = "debt" })
 assert(#debts == 2 and debts[1] == r and debts[2] == GL.Get(light), #debts)
--- Titles: the nemesis killed you at least twice.
+-- Titles follow time (0.41.1): two deaths are not a nemesis yet, three recent ones are, and the
+-- same three deaths two months old no longer are.
 GL.RecordPvP(light, "death", "confirmed", "Direct", "light-d2")
+assert(GL.Titles() == nil, "two deaths do not make a nemesis")
+GL.RecordPvP(light, "death", "confirmed", "Direct", "light-d3")
 local nemesis = GL.Titles()
 assert(nemesis == GL.Get(light).key, tostring(nemesis))
+for _, e in ipairs(GL.Get(light).history) do
+    if e.kind == "death" then e.time = e.time - 60 * 86400 end
+end
+assert(GL.Titles() == nil, "old deaths fade")
+for _, e in ipairs(GL.Get(light).history) do
+    if e.kind == "death" then e.time = e.time + 60 * 86400 end
+end
 
 -- Pre-merge review: events of the same second keep their order of arrival.
 local same = GL.IdentityFromName("Same", "Second", "Player-1-same")

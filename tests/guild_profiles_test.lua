@@ -7,6 +7,8 @@ local function client(i,saved)
     local mock=env.loadfile(TEST_WORK.."/tests/addon_mock.lua")()
     local c={env=env,GL=env.GrudgeLedger,g=env.GrudgeLedger.GuildProfiles,m=mock,online=true,
         id="Player-1-a"..i,name="Member"..i.."-Realm",guild="Guild"}
+    -- These assertions were written with the weights of before 0.42.0; they are pinned here.
+    c.GL.SetSetting("grudgeAggression",5) c.GL.SetSetting("grudgeDeath",5) c.GL.SetSetting("grudgeVictory",1)
     clients[i]=c
     mock.units.player={guid=c.id,name="Member"..i,surname="Example",guild=c.guild,realm="Realm"}
     env.GetServerTime=function() return now end
@@ -68,6 +70,7 @@ a.GL.ToggleTag(contact,"reliable")
 assert(record.tagHistory[1].actorGUID==a.id and record.tagHistory[1].enabled and record.tagHistory[1].time==now)
 assert(record.notes[1].actorAccount==record.creatorAccount)
 a.GL.ShowLedger(record.key)
+click(a.env.GrudgeLedgerWindow.openFilters)
 click(a.env.GrudgeLedgerWindow.sharedProfiles)
 local window=a.env.GrudgeLedgerGuildProfiles
 assert(window.publish:IsVisible() and not window.remove:IsVisible())
@@ -251,7 +254,8 @@ do
     assert(not b.GL.ArmoryProfile(identity))
     for _,p in ipairs(clients) do assert(#p.GL.errors==0,p.GL.errors[1] and p.GL.errors[1].text) end
 end
--- Social testimony is opt-in, attributed to its actual sender and never a personal record.
+-- Social testimony is shared unless switched off (0.51.0), attributed to its actual sender and
+-- never a personal record. It carries structured facts only: no evidence text, no reason, no note.
 do
     clients,wire={},{}
     local a,b=client(1),client(2)
@@ -263,8 +267,7 @@ do
     a.GL.AddNote(identity,"SECRET personal note")
     assert(record.reputation==-10 and a.g.Publish(record))
     flush()
-    assert(#b.GL.SharedDossiers.SocialReports(identity.guid)==0,"social sharing defaults off")
-    assert(not next(b.GL.Bounties.GuildScope().socialReports or {}),"never-enabled clients do not send empty social reports")
+    assert(a.GL.SharedDossiers.SharingSocial() and #b.GL.SharedDossiers.SocialReports(identity.guid)==1,"social sharing is on by default")
     a.env.SlashCmdList.GRUDGELEDGER("settings")
     local settings=a.env.GrudgeLedgerSettings
     click(settings.tabs.relations)
@@ -304,7 +307,10 @@ do
     local scope=c.GL.Bounties.GuildScope()
     scope.journal={cards=b.GL.Bounties.GuildScope().journal.cards,hidden={},withdrawn={},secrets={},seq=0}
     c.GL.SharedDossiers.Refresh();flush()
-    assert(#c.GL.SharedDossiers.SocialReports(identity.guid)==0,"peers cannot impersonate an offline witness")
+    -- B's own testimony may arrive (shared by default since 0.51.0); nothing arrives in A's name.
+    for _,heard in ipairs(c.GL.SharedDossiers.SocialReports(identity.guid)) do
+        assert(heard.actor~=a.id,"peers cannot impersonate an offline witness")
+    end
     a.online=true
     for i=1,40 do now=now+130; a.GL.RecordAggression(identity,"confirmed",nil,"social-extra-"..i) end
     now=now+31

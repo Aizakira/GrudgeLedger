@@ -1,6 +1,6 @@
 # Grudge Ledger — Le journal des rancunes
 
-**Alpha 0.11.6 :** [essayer le registre de primes, le dossier Équipement/Talents et les paiements de groupe par courrier](docs/alpha-fonctionnelle.fr.md).
+**0.58.0.** Version de test pour la guilde : onglet Guilde (journal de guilde, ennemis de la guilde, alerte « Tueur de guilde »), le Bilan en cartes dans Relations, des primes refaites avec l’avis de recherche gratuit, un carnet par faction. Notes de version : [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
 
 La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde ouvert, même si une créature porte le dernier coup. Les anciens compteurs sont réunis à la mise à jour. La résurrection réactive les alertes. Le journal conserve les portraits récemment vus pendant la session et affiche votre honneur enregistré dans la synthèse. Le gain adverse est inconnu.
 
@@ -365,6 +365,7 @@ Quelques commandes facultatives, également utilisables dans une macro :
 /gl settings
 /gl reperage
 /gl debug
+/gl sonde
 ```
 
 Les actions concernent le joueur ciblé. Le [guide complet](GrudgeLedger/README.txt) détaille les classements, les corrections et les sauvegardes.

@@ -10,6 +10,8 @@ local function client(i,saved)
     local mock=env.loadfile(TEST_WORK.."/tests/addon_mock.lua")()
     local c={env=env,GL=env.GrudgeLedger,g=env.GrudgeLedger.GuildProfiles,m=mock,online=true,
         id="Player-1-c"..i,name="Opinion"..i.."-Realm",guild="Guild"}
+    -- These assertions were written with the weights of before 0.42.0; they are pinned here.
+    c.GL.SetSetting("grudgeAggression",5) c.GL.SetSetting("grudgeDeath",5) c.GL.SetSetting("grudgeVictory",1)
     clients[i]=c
     mock.units.player={guid=c.id,name="Opinion"..i,surname="Example",guild=c.guild,realm="Realm"}
     env.GetServerTime=function() return now end
@@ -73,7 +75,9 @@ for _,member in ipairs({a,b}) do
     member.GL.RecordAggression(member.GL.IdentityFromName("Sneaky","Rogue",target),"confirmed",nil,"watch-attack")
 end
 now=now+300
--- Off by default: B sees the enemy, nothing leaves.
+-- On by default since 0.51.0. Switched off: B sees the enemy, nothing leaves.
+assert(b.GL.SharedDossiers.SharingSightings())
+for _,member in ipairs({a,b,c}) do member.GL.SharedDossiers.ShareSightings(false) end
 assert(not b.GL.SharedDossiers.SharingSightings())
 see(b,target,"Sneaky","Rogue")
 flush()

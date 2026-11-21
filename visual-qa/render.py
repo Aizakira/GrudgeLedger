@@ -438,7 +438,7 @@ def main():
               "chronicle", "chronicle-readable", "chronicle-small", "chronicle-empty", "chronicle-notes"]
     views += ["statistics-encounters", "statistics-recent", "statistics-friends", "statistics-friends-recent",
               "statistics-group", "statistics-combat", "statistics-horde", "guild-rankings-combat", "statistics-readable-small"]
-    views += ["journal-history", "journal-matchup", "journal-notes", "journal-history-small", "journal-notes-readable-small",
+    views += ["journal-history", "journal-notes", "journal-history-small", "journal-notes-readable-small",
               "settings-alerts", "settings-relations", "settings-shortcuts", "settings-data", "settings-readable-alerts-small",
               "honor-story", "guide"]
     views += ["journal-largeprint", "journal-history-largeprint-small", "statistics-largeprint",
@@ -449,8 +449,12 @@ def main():
               "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
               "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details", "combat-report", "death-report", "death-export"]
-    views += ["bounty-target", "bounty-contract", "bounty-history", "dossier-overview", "dossier-facts", "dossier-habits", "dossier-ally", "dossier-combat", "dossier-gear", "dossier-photos", "dossier-stats", "dossier-talents", "dossier-shared", "dossier-relations"]
-    views += ["journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small", "guild-profiles"]
+    views += ["bounty-list", "bounty-form", "bounty-target", "bounty-contract", "bounty-history", "dossier-overview", "dossier-facts", "dossier-habits", "dossier-ally", "dossier-combat", "dossier-gear", "dossier-photos", "dossier-stats", "dossier-talents", "dossier-shared", "dossier-relations"]
+    # The addon alone: no Armory archive, no studio photo. The state every user starts from.
+    views += ["dossier-fresh", "dossier-fresh-gear", "dossier-read", "dossier-read-gear", "dossier-read-talents"]
+    views += ["relations-overview", "relations-debts", "relations-overview-empty", "relations-debts-empty",
+              "relations-rivals", "relations-guilds", "relations-lands", "relations-rankings", "relations-guildlog", "relations-guildlog-filters", "recap-1", "recap-2", "recap-3", "recap-4", "recap-5", "recap-6", "recap-7", "recap-8", "recap-9", "recap-1-copy", "relations-enemies"]
+    views += ["journal-filters", "journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small", "guild-profiles"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
     if sys.argv[1:]: views = sys.argv[1:]

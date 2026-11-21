@@ -2,6 +2,8 @@ dofile(TEST_WORK .. "/tests/wow_mock.lua")
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 local id = GL.IdentityFromName("Balance", "Example", "Player-1-balance")
 local r = GL.RecordPvP(id, "kill", "confirmed", "Observed", "k1")
 assert(r.reputation == 0 and GL.Relation(r) == "neutral", "a victory never creates friendship")

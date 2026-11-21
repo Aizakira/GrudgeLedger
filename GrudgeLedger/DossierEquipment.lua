@@ -6,6 +6,9 @@ local inventorySlots = {"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSl
     "HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot",
     "MainHandSlot","SecondaryHandSlot","RangedSlot"}
 
+-- Inventory slot numbers never changed; the game's lookup only adds the empty-slot picture.
+local slotNumbers = {1, 2, 3, 15, 5, 4, 19, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17, 18}
+
 local function closeTip(button)
     button.waitingForItem=nil
     if GameTooltip and GameTooltip.GetOwner and GameTooltip:GetOwner() == button then GameTooltip:Hide() end
@@ -63,6 +66,7 @@ local function slotButton(parent, slot, index)
     local b=CreateFrame("Button",nil,parent)
     b.slotName=L(slot[2])
     b.slotID,b.emptyIcon=GL.Safe(GetInventorySlotInfo or (C_PaperDollInfo and C_PaperDollInfo.GetInventorySlotInfo),inventorySlots[index])
+    b.slotID=GL.Clean(b.slotID,"number") or slotNumbers[index]
     b.trim=b:CreateTexture(nil,"BACKGROUND")
     b.icon=b:CreateTexture(nil,"ARTWORK")
     b.icon:SetPoint("TOPLEFT",b.trim,"TOPLEFT",1,-1)
@@ -105,6 +109,88 @@ local function poseList(photos)
     return list
 end
 
+-- Kept models. Measured in the game (0.34.1 probe): a PlayerModel set once from a player keeps his
+-- real look, gear included, after he is deselected and out of sight. The game refuses to inspect an
+-- enemy, so this is the one way the addon alone can show what the player who killed you wore.
+-- Twelve models, the oldest recycled first; a model is taken again after five minutes, since gear
+-- changes. Nothing is saved: the models are gone at the next reload.
+local KEPT_MAX, KEPT_FRESH = 12, 300
+local kept, keptOrder, keptHost, keptUnsupported = {}, {}, nil, false
+local function park(entry)
+    entry.shown = nil
+    entry.frame:SetParent(keptHost)
+    entry.frame:ClearAllPoints()
+    -- Parked on screen and fully transparent: a model outside the screen may never be loaded.
+    entry.frame:SetPoint("TOPLEFT", keptHost, "TOPLEFT", 0, 0)
+    entry.frame:SetSize(200, 400)
+    entry.frame:SetAlpha(0)
+end
+-- The stalest model that is not on a sheet gives its frame; a model taken in the last five minutes
+-- is never evicted, so a crowd of thirteen cannot make the pool retake models at every poll.
+local function recycled(now)
+    local oldest
+    for i, guid in ipairs(keptOrder) do
+        local entry = kept[guid]
+        if not entry.shown and (not oldest or entry.at < kept[keptOrder[oldest]].at) then oldest = i end
+    end
+    local entry = oldest and kept[keptOrder[oldest]]
+    if not entry or (entry.at > 0 and now - entry.at < KEPT_FRESH) then return nil end
+    kept[table.remove(keptOrder, oldest)] = nil
+    return entry
+end
+function GL.KeepModel(unit, guid)
+    if keptUnsupported or type(guid) ~= "string" then return false end
+    local now, entry = GL.Now(), kept[guid]
+    if entry and (entry.shown or now - entry.at < KEPT_FRESH) then return entry.at > 0 end
+    if GL.Safe(UnitGUID, unit) ~= guid or (IsUnitModelReadyForUI and not GL.Safe(IsUnitModelReadyForUI, unit)) then return false end
+    if not entry then
+        if #keptOrder >= KEPT_MAX then
+            entry = recycled(now)
+            if not entry then return false end
+        else
+            keptHost = keptHost or CreateFrame("Frame", nil, UIParent)
+            keptHost:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+            keptHost:SetSize(1, 1)
+            entry = { frame = CreateFrame("PlayerModel", nil, keptHost) }
+            if not entry.frame.SetUnit then
+                keptUnsupported = true
+                return false
+            end
+            entry.frame:EnableMouse(false)
+            GL.Safe(entry.frame.SetKeepModelOnHide, entry.frame, true)
+            park(entry)
+        end
+        kept[guid] = entry
+        keptOrder[#keptOrder + 1] = guid
+    end
+    GL.Safe(entry.frame.ClearModel, entry.frame)
+    local ok, loaded = pcall(entry.frame.SetUnit, entry.frame, unit)
+    entry.at = ok and loaded ~= false and now or 0
+    return entry.at > 0
+end
+-- When the model of this player was taken, or nil.
+function GL.KeptModelAt(guid)
+    local entry = kept[guid]
+    return entry and entry.at > 0 and entry.at or nil
+end
+local function showKept(view, guid)
+    local entry = guid and kept[guid]
+    if entry and entry.at == 0 then entry = nil end
+    if view.kept and view.kept ~= entry then
+        park(view.kept)
+        view.kept = nil
+    end
+    if entry and view.kept ~= entry then
+        entry.shown = true
+        entry.frame:SetParent(view.stage)
+        entry.frame:ClearAllPoints()
+        entry.frame:SetAllPoints(view.model)
+        entry.frame:SetAlpha(1)
+        entry.frame:Show()
+        view.kept = entry
+    end
+end
+
 local function clearModel(view)
     if view.modelUnit and view.model.ClearModel then view.model:ClearModel() end
     view.modelUnit,view.modelGUID=nil,nil
@@ -132,15 +218,17 @@ local function applyOutfit(view)
     end
 end
 
--- Three levels: the live model when the player is visible, then the studio photos, then the
--- standard model of the race wearing the recorded gear.
+-- Four levels: the live model when the player is visible, then the model kept from the last time
+-- he was seen this session, then the studio photos, then the standard model of the race wearing
+-- the recorded gear.
 local function layoutBody(view)
     local live=view.modelGUID~=nil
-    local poses=not live and view.photos and poseList(view.photos) or {}
+    local held=not live and view.kept
+    local poses=not live and not held and view.photos and poseList(view.photos) or {}
     local photo=poses[(view.photoIndex-1)%math.max(1,#poses)+1]
-    local outfit=not live and not photo and view.previewReady
+    local outfit=not live and not held and not photo and view.previewReady
     view.preview:SetAlpha(outfit and 1 or 0)
-    if live or outfit or photo then view.face:Hide() else view.face:Show() end
+    if live or held or outfit or photo then view.face:Hide() else view.face:Show() end
     if photo then
         view.photo:SetTexture(view.photos.poses[photo])
         view.photo:Show()
@@ -152,6 +240,9 @@ local function layoutBody(view)
     local caption=live and L("Modèle en jeu") or outfit and L("Tenue reconstituée") or L("Portrait")
     if photo then
         caption=L("Photo du studio · %s"):format(GL.Safe(date,"%d/%m/%Y",view.photos.at) or "?")
+    end
+    if held then
+        caption=L("Vu en jeu à %s"):format(GL.Safe(date,"%H:%M",held.at) or "?")
     end
     view.caption:SetText(caption)
     view.stage:Show()
@@ -187,6 +278,7 @@ local function paintBody(view)
     else
         clearModel(view)
     end
+    showKept(view,not view.modelGUID and record.guid)
     finishPreview(view)
     layoutBody(view)
 end
@@ -233,6 +325,7 @@ local function build(parent,slots)
     view:SetScript("OnHide",function(self)
         for _,b in ipairs(self.buttons) do closeTip(b) end
         clearModel(self)
+        showKept(self,nil)
     end)
     view:SetScript("OnShow",paintBody)
     -- ponytail: native models are needed only while the selected player is visible.

@@ -200,14 +200,15 @@ c.hook.BOUNTY_DEATH(rampage,"Enemy");flush()
 local n=0
 for _,o in pairs(a.b.List()) do if o.target==rampage then n=n+1 end end
 assert(n==1)
-a.b.ShareFights(true);b.b.ShareFights(true)
+-- Shared by default since 0.51.0: the totals of every member already count.
+local wins0,losses0=c.b.GuildFights(target)
 a.b.Kill(target);b.b.Death(target,"Target");flush()
 local wins,losses=c.b.GuildFights(target)
-assert(wins==1 and losses==1)
+assert(wins==wins0+1 and losses==losses0+1)
 local late=client(4);flush()
 assert(not late.b.History()[order])
 wins,losses=late.b.GuildFights(target)
-assert(wins==1 and losses==1)
+assert(wins==wins0+1 and losses==losses0+1)
 c.guild="Other";c.event(nil,"PLAYER_GUILD_UPDATE");assert(not next(c.b.List()))
 -- The hunter can collect mail before their local guild history has synchronized.
 local soloTarget="Player-8-solo"

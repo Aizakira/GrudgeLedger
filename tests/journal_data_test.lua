@@ -11,6 +11,8 @@ local function reset()
     mock.units.player.guid = selfGUID
     IsInInstance = function() return false, "none" end
     GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 end
 local function person(name, guid)
     return GL.IdentityFromName(name, "Example", "Player-1-" .. (guid or name:lower()))

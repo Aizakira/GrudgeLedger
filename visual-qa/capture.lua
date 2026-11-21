@@ -307,6 +307,15 @@ function QA.capture(name)
         GL.OpenGuildProfiles(records[10])
         return GrudgeLedgerGuildProfiles
     end
+    if name == "journal-filters" then
+        -- The filter panel open over the list, with two filters on.
+        GL.ShowLedger(records[1].key)
+        local f = GrudgeLedgerWindow
+        f.openFilters:Click()
+        f.filters.enemy:Click()
+        f.factions.Alliance:Click()
+        return f
+    end
     if name:find("^journal%-tags") then
         local contact = records[10]
         contact.tags = {reliable=true}
@@ -333,6 +342,22 @@ function QA.capture(name)
                 GL.Bounties.Kill(target.guid)
             end
             return GL.OpenBounties(target.guid,"view")
+        end
+        if name=="bounty-list" or name=="bounty-form" then
+            -- The list of the guild's bounties, and the creation of a bounty in gold on a known target.
+            for _,i in ipairs({5,6,8}) do
+                local opponent=records[i]
+                if opponent and not GL.Bounties.OpenFor(opponent.guid) then
+                    GL.Bounties.Post(opponent.guid,opponent.fullName,i==6 and 0 or i*50000,{quota=i==5 and 3 or 1,group=i==8 and "party" or "solo",
+                        split="winner",souvenir="none",note=""}) -- (records 3 and 7 serve the other views)
+                end
+            end
+            if name=="bounty-form" then
+                local f=GL.OpenBounties(records[7].guid,"create")
+                f.form.gift.scripts.OnClick(f.form.gift,"LeftButton")
+                return f
+            end
+            return GL.OpenBounties()
         end
         if name=="bounty-contract" then
             local opponent=records[7]
@@ -361,6 +386,44 @@ function QA.capture(name)
         end
         assert(GL.OpenPlayerDossier(guid))
         local f=GrudgeLedgerPlayerDossier
+        if name:find("^dossier%-fresh") or name:find("^dossier%-read") then
+            -- What every user gets with the addon alone: no Armory archive, no studio photo.
+            -- fresh: a killer who struck from out of sight, a minute ago. read: the in-game
+            -- reading succeeded during the fight (example values).
+            local killer="Player-999-00F4E5"
+            if not GL.Get("guid:"..killer) then
+                GetPlayerInfoByGUID=function(id) if id==killer then return "Voleur","ROGUE","Mort-vivant","Scourge",2 end end
+                local id=GL.IdentityFromName("Helvard","Lamenoire",killer)
+                GL.RecordAggression(id,"confirmed","Combat log","qa-fresh-a")
+                GL.RecordPvP(id,"death","confirmed","Combat log","qa-fresh-d")
+                local me=UnitGUID("player")
+                for _,e in ipairs(GL.Get("guid:"..killer).history) do
+                    if e.kind=="death" then
+                        e.report={live={{src=killer,dst=me,spell="Embuscade",amount=412,at=1},
+                            {src=killer,dst=me,spell="Attaque pernicieuse",amount=188,at=2},
+                            {src=killer,dst=me,spell="Éviscération",amount=356,at=4,fatal=true}}}
+                    end
+                end
+            end
+            local fresh=GL.Get("guid:"..killer)
+            fresh.inspection,fresh.level=nil,nil
+            if name:find("^dossier%-read") then
+                fresh.level=38
+                local function item(id,label) return "|cff1eff00|Hitem:"..id.."::::::::38:::::|h["..label.."]|h|r" end
+                fresh.inspection={stats={HEALTH=2140,ENERGY=100,AGILITY=152,STAMINA=118,ARMOR=1240},statsAt=qaClock,
+                    gearAt=qaClock,talentsAt=qaClock,averageItemLevel=34,
+                    gear={[1]=item(10008,"Coiffe d’ombrecuir"),[3]=item(7477,"Spallières en cuir"),[5]=item(2800,"Cotte noire"),
+                        [7]=item(9624,"Jambières de l’embusqué"),[8]=item(9406,"Bottes du rôdeur"),[10]=item(7348,"Gants d’escarmouche"),
+                        [16]=item(2244,"Lame de Krol"),[17]=item(3187,"Dague sacrificielle")},
+                    trees={{id="assassination",name="Assassinat",points=8,talents={{135252,"Malice",5,132277},{135251,"Némésis",3,132122}}},
+                        {id="combat",name="Combat",points=0,talents={}},
+                        {id="subtlety",name="Finesse",points=21,talents={}}}}
+            end
+            GL.OpenPlayerDossier(killer)
+            local page=name:match("^dossier%-%a+%-(%a+)")
+            if page then f.tabs[page]:Click() end
+            return f
+        end
         if name=="dossier-gear" then
             -- A character seen over a week: level, guild and two pieces changed (example values).
             local day=86400
@@ -479,6 +542,46 @@ function QA.capture(name)
         f.search:SetText("Aucune correspondance QA")
         f.search.scripts.OnEnterPressed(f.search)
         return f
+    elseif name:find("^recap") then
+        -- The Bilan's five cards, on the example journal.
+        GL.Recap.Open(tonumber(name:match("^recap%-(%d)")) or 1)
+        local recap = GrudgeLedgerRelations.host.pages.recap
+        if name:find("%-copy") then recap.copy.scripts.OnClick(recap.copy, "LeftButton") end
+        return GrudgeLedgerRelations
+    elseif name:find("^relations") then
+        -- The Relations book, with the example journal. "-empty" shows a new player's book.
+        local page = name:match("^relations%-(%a+)")
+        if name:find("%-empty") then
+            local saved = GL.db.players
+            GL.db.players = {}
+            GL.ShowRelations(page)
+            GL.db.players = saved
+            return GrudgeLedgerRelations
+        end
+        if (page == "guildlog" or page == "enemies") and GL.GuildMap then
+            -- Synthetic guild fights: the renderer has no guild.
+            local at = GL.Now()
+            GL.GuildMap.Enabled = function() return true, true end
+            GL.GuildMap.Points = function()
+                return {
+                    { actor = "Player-1-QA000001", time = at - 600, mapID = 1, kind = "death", target = "Player-1-QA0000E1", name = "Krogan Sombrelame" },
+                    { actor = "Player-1-QA000000", mine = true, time = at - 4200, mapID = 1, kind = "kill", target = "Player-1-QA0000E1", name = "Krogan Sombrelame" },
+                    { actor = "Player-1-QA000002", time = at - 9000, mapID = 1, kind = "kill", target = "Player-1-QA0000E2", name = "Zulrak" },
+                    { actor = "Player-1-QA000001", time = at - 90000, mapID = 1, kind = "death", name = "Vexa la Très Longue Lame du Crépuscule Éternel" },
+                    { actor = "Player-1-QA000000", mine = true, time = at - 200000, mapID = 1, kind = "death", target = "Player-1-QA0000E3", name = "Morgash" },
+                    { actor = "Player-1-QA000003", time = at - 400000, mapID = 1, kind = "death" },
+                    { actor = "Player-1-QA000002", time = at - 500000, mapID = 1, kind = "kill", target = "Player-1-QA0000E4", name = "Thazdin" },
+                    { actor = "Player-1-QA000002", time = at - 600000, mapID = 1, kind = "kill", target = "Player-1-QA0000E4", name = "Thazdin" },
+                }
+            end
+        end
+        GL.ShowRelations(page)
+        if name == "relations-guildlog-filters" then
+            local log = GrudgeLedgerGuild.host.pages.guildlog
+            log.openFilters.scripts.OnClick(log.openFilters, "LeftButton")
+        end
+        if page == "guildlog" or page == "enemies" or page == "guilds" then return GrudgeLedgerGuild end
+        return GrudgeLedgerRelations
     elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
         local guild = name:find("^guild") ~= nil

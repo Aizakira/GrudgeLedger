@@ -27,14 +27,37 @@ assert(GL.ContactBountyMode(GL.Get(a))=="create")
 
 assert(GL.Bounties.Post(b.guid,b.fullName,10000))
 local f=GL.OpenBounties()
-click(f.new); f.search:SetText("GuildAlly")
-assert(f.count==0 and not f.form.publish:IsEnabled())
+-- The narrow book (0.56.0): the lists and the key figures on the left, the list on the page, the
+-- Journal's three controls above it. A click on a line opens the contract.
+assert(f.list:IsShown() and not f.detail:IsShown() and f.count==1 and f.rows[1].amount:GetText()=="1 PO")
+assert(f.tally[1].label:GetText()=="Primes ouvertes" and f.tally[1].value:GetText()=="1" and f.tally[2].value:GetText()=="1 PO")
+assert(f.viewCycle:GetText()=="En cours · 1" and f.openFilters:GetText()=="Filtres" and f.heading:GetText()=="Primes de la guilde")
+assert(f.rows[1].meta:GetText():find("0/1 victoires",1,true))
+local function filter(group,i)
+    if not f.filters:IsShown() then click(f.openFilters) end
+    click(f.filterGroups[group].choices[i])
+end
+local function view(key)
+    for _=1,6 do
+        if f.filterKey==key then return end
+        click(f.viewCycle)
+    end
+    assert(f.filterKey==key,key)
+end
+click(f.new)
+-- Without a target the page first lists the players of the book: a click chooses one.
+assert(f.choosing and f.list:IsShown() and f.heading:GetText()=="Choisir la cible" and not f.viewCycle:IsShown(), tostring(f.target and f.target.guid).."|"..f.form.quota:GetText().."|"..f.form.target:GetText())
+f.search:SetText("GuildAlly")
+assert(f.count==0)
 f.search:SetText("Alpha")
 assert(f.count==1 and f.rows[1].raceIcon and not f.target)
 click(f.rows[1])
-assert(not GrudgeLedgerPlayerDossier and f.rows[1].selected:IsShown() and f.form:IsVisible())
-assert(f.form:IsShown() and f.target.guid==a.guid and f.form.quota:GetText()=="1")
-assert(not f.form.equal:IsEnabled())
+assert(not GrudgeLedgerPlayerDossier and f.form:IsVisible() and not f.list:IsShown())
+assert(f.target.guid==a.guid and f.form.quota:GetText()=="1" and f.form.target:GetText()=="Alpha Example")
+-- A free wanted notice is the first choice: no gold, no split. The bounty in gold shows them.
+assert(f.draft.kind=="free" and not f.form.gold:IsShown() and not f.form.equal:IsShown() and f.form.publish:GetText()=="Publier l’avis")
+click(f.form.gift)
+assert(f.form.gold:IsShown() and f.form.publish:GetText()=="Publier la prime" and not f.form.equal:IsShown())
 f.form.gold:SetText("120"); f.form.quota:SetText("3"); f.form.note:SetText("Screenshot for the guild.")
 for _,pair in ipairs(f.form.options) do
     if pair.value=="party" or pair.value=="equal" or pair.value=="screenshot" then click(pair.control) end
@@ -47,6 +70,9 @@ f.form.note:SetText("Screenshot for the guild.")
 click(f.form.publish)
 local o=f.order
 assert(o and o.target==a.guid and o.quota==3 and o.group=="party" and o.split=="equal" and o.souvenir=="screenshot")
+-- The contract: the rules as four short lines, the price on the right.
+assert(f.detail:IsShown() and not f.list:IsShown() and f.detail.price:GetText()=="120 PO" and f.detail.rewardLabel:GetText()=="Récompense totale")
+assert(f.detail.keys.group:GetText()=="Groupe autorisé" and f.detail.keys.split:GetText()=="Parts égales" and f.detail.keys.souvenir:GetText()=="Capture d’écran")
 assert(f.detail.rules:GetText():find("même chasseur",1,true) and f.detail.rules:GetText():find("Capture",1,true))
 assert(o.pot[o.owner]==1200000 and o.note=="Screenshot for the guild.")
 assert(f.detail.progress:GetText():find("0/3",1,true) and not f.form:IsShown())
@@ -55,9 +81,10 @@ assert(f.order.pot[o.owner]==1230000)
 click(f.tools.note); f.editor.field:SetText("New instructions"); click(f.editor.ok)
 assert(f.detail.note:GetText()=="New instructions")
 now=now+60; click(f.tools.renew); assert(f.order.expires>o.expires)
-f.search:SetText("BeTa"); assert(f.count==1 and f.order.target==b.guid)
+-- Typing a search goes back to the list.
+f.search:SetText("BeTa"); assert(f.count==1 and f.order.target==b.guid and f.list:IsShown() and not f.detail:IsShown())
 click(f.rows[1])
-assert(f:IsShown() and f.order.target==b.guid and f.detail.dossier:IsVisible())
+assert(f:IsShown() and f.order.target==b.guid and f.detail.dossier:IsVisible() and f.detail.price:GetText()=="1 PO")
 click(f.detail.face)
 assert(not f:IsShown() and GrudgeLedgerPlayerDossier:IsShown())
 local dossier=GrudgeLedgerPlayerDossier
@@ -70,13 +97,17 @@ for _,button in ipairs({f.detail.nameLink,f.detail.dossier}) do
 end
 assert(f.detail.owner:GetText():find("Créée par ",1,true))
 click(f.detail.ownerLink); assert(dossier.guid==f.order.owner); dossier.onReturn()
-f.search:SetText(""); click(f.tools.pin)
-click(f.filter); click(f.filterChoices[2])
-assert(f.count==1 and f.order.target==b.guid)
+click(f.tools.pin)
+f.search:SetText("")
+view("pinned")
+assert(f.count==1 and f.order.target==b.guid and f.viewCycle:GetText()=="Épinglées · 1")
+-- The line's own "Fiche" opens the sheet without opening the contract.
+click(f.rows[1].sheet); assert(dossier:IsShown() and dossier.guid==b.guid); dossier.onReturn()
 click(f.new)
 f.search:SetText("Alpha")
 assert(f.count==1)
 click(f.rows[1]); assert(f.target.guid==a.guid)
+click(f.form.gift)
 f.form.gold:SetText("1"); f.form.quota:SetText("100"); click(f.form.publish)
 assert(f.form:IsShown() and f.feedback:GetText():find("99",1,true))
 f.form.quota:SetText("1"); click(f.form.publish)
@@ -101,15 +132,20 @@ GL.OpenBounties(b.guid,"view")
 assert(f.order.state=="fulfilled" and f.tab=="history" and f.detail.kicker:GetText():find("Prime faite",1,true))
 assert(f.detail.people[2].guid=="Player-77-Helper" and f.detail.payment:GetText():find("50 pa",1,true))
 local completed=f.order.id
-assert(f.detail.stars:IsVisible() and f.rows[1].gold:IsShown())
-click(f.roles.hunted); assert(f.count==1)
-click(f.roles.issued); assert(f.count==2)
-click(f.filter); click(f.filterChoices[4]); assert(f.count==1)
+assert(f.detail.stars:IsVisible())
+click(f.detail.back)
+assert(f.list:IsShown() and f.rows[1].gold:IsShown() and f.rows[1].amount:GetText()=="1 PO")
+-- "Mon rôle" lives in the panel of filters, shown in the history only.
+filter(3,2); assert(f.count==1 and f.openFilters:GetText()=="Filtres · 1")
+filter(3,3); assert(f.count==2)
+view("due"); assert(f.count==1)
 assert(GL.Bounties.ConfirmPayment(f.order.id,"Player-77-Helper",5000))
 f:GetScript("OnUpdate")(f,0.016)
 assert(f.count==0 and not f.detail:IsShown())
-click(f.filter); click(f.filterChoices[3]); assert(f.order.state=="sent" and f.count==1 and f.detail.stars:IsVisible())
-click(f.filter); click(f.filterChoices[5]); assert(f.count==0)
+view("transit"); assert(f.order.state=="sent" and f.count==1)
+click(f.rows[1]); assert(f.detail.stars:IsVisible())
+click(f.detail.back)
+view("paid"); assert(f.count==0)
 local publisher,helper=mock.units.player.guid,"Player-77-Helper"
 C_ChatInfo={RegisterAddonMessagePrefix=function() end,SendAddonMessage=function() end}
 C_Timer=C_Timer or {}; C_Timer.NewTicker=function() end
@@ -119,26 +155,33 @@ GetGuildRosterInfo=function(i)
 end
 mock.units.player.guid=helper
 mock.Fire("GUILD_ROSTER_UPDATE")
-GL.OpenBounties(b.guid,"view"); click(f.roles.hunted)
+GL.OpenBounties(b.guid,"view"); click(f.detail.back); filter(3,2)
+click(f.rows[1])
 assert(f.order.id==completed and f.detail.kicker:GetText():find("À recevoir",1,true) and f.detail.stars:IsVisible())
-click(f.roles.issued); assert(f.count==0); click(f.roles.hunted)
+click(f.detail.back); filter(3,3); assert(f.count==0); filter(3,2)
 GetInboxNumItems=function() return 1 end
 GetInboxHeaderInfo=function() return nil,nil,"Testeur","[GL:"..completed.."/0] Beta",5000,0 end
 mock.Fire("MAIL_INBOX_UPDATE"); f:GetScript("OnUpdate")(f,0.016)
 assert(f.detail.kicker:GetText():find("Payée",1,true) and not f.detail.stars:IsShown() and not f.rows[1].gold:IsShown())
 mock.units.player.guid=publisher
-GL.OpenBounties(b.guid,"view"); click(f.roles.issued); click(f.filter); click(f.filterChoices[5])
+GL.OpenBounties(b.guid,"view"); click(f.detail.back); filter(3,3); view("paid")
 assert(f.count==1 and f.order.id==completed and not f.detail.stars:IsShown())
 for i=1,8 do
     local person=add("Test"..i); assert(GL.Bounties.Post(person.guid,person.fullName,0))
 end
 GL.OpenBounties()
-assert(f.count==8 and f.next:IsEnabled() and not f.prev:IsEnabled()); click(f.next)
+-- A wanted notice reads "Avis" where a bounty shows its gold.
+assert(f.count==8 and f.rows[1].amount:GetText()=="Avis" and f.next:IsEnabled() and not f.prev:IsEnabled()); click(f.next)
 assert(f.offset==2 and not f.next:IsEnabled())
 click(f.prev); assert(f.offset==0)
+filter(1,2); assert(f.count==0, "the type filter keeps bounties in gold")
+filter(1,3); assert(f.count==8)
+click(f.filters.clear); click(f.filters.close)
 -- Expiry moves an issued order to history. Repost keeps rules and the issuer's own pledge only.
 local fresh=f.order
 assert(fresh and fresh.state=="open"); GL.OpenBounties(a.guid,"create")
+assert(f.form:IsShown() and not f.choosing and f.target.guid==a.guid)
+click(f.form.gift)
 f.form.gold:SetText("120"); f.form.quota:SetText("3"); f.form.note:SetText("Keep a screenshot")
 for _,pair in ipairs(f.form.options) do
     if pair.value=="party" or pair.value=="equal" or pair.value=="screenshot" then click(pair.control) end
@@ -160,9 +203,42 @@ assert(f.order.id==old.id and f.order.state=="expired" and f.detail.repost:IsVis
 click(f.detail.repost); click(f.form.cancel)
 assert(f.tab=="history" and f.order.id==old.id)
 click(f.detail.repost)
-assert(f.form:IsVisible() and f.target.guid==a.guid and f.form.gold:GetText()=="120" and f.form.quota:GetText()=="3")
+assert(f.form:IsVisible() and f.target.guid==a.guid and f.form.gold:GetText()=="120" and f.form.quota:GetText()=="3" and f.draft.kind=="gold")
 assert(f.draft.group=="party" and f.draft.split=="equal" and f.draft.souvenir=="screenshot" and f.form.note:GetText()=="Keep a screenshot")
 click(f.form.publish)
 assert(f.order.id~=old.id and f.order.state=="open" and f.order.pot[issuer]==1200000 and not f.order.pot["Player-77-Partner"])
 assert(GL.Bounties.History()[old.id].state=="expired" and GL.Bounties.Progress(f.order)==0)
 print("PASS bounty UI: create, target and dossier return, rules, contribution, search, paging, update, hunt finished, history, payout states and guild change")
+
+-- Owner report (0.47.0): "Créer la prime" did nothing and only said "check the contract". A
+-- refusal now names its cause, and a client without GetNormalizedRealmName still has a guild scope.
+do
+    local B = GL.Bounties
+    local rules = { quota = 1, group = "solo", split = "winner", souvenir = "none", note = "" }
+    local id, err, why = B.Post(nil, "No Guid", 10000, rules)
+    assert(id == nil and err == "invalid" and why == "target", tostring(why))
+    id, err, why = B.Post(issuer, "My Self", 10000, rules)
+    assert(id == nil and why == "self", tostring(why))
+    GetNormalizedRealmName = nil
+    id, err, why = B.Post("Player-77-Fresh0001", "Fresh Target", 10000, rules)
+    assert(id and B.GuildScope().guildKey == "Forever/Test Guild", tostring(err) .. " " .. tostring(why))
+    print("PASS bounty refusal: the cause is named, and the plain realm name serves when no normalized one exists")
+    -- Owner report (0.47.1): "Guilde ou royaume illisible". The refusal says which part, a player
+    -- without a guild is told so, and the realm number of your own identifier is the last resort.
+    local realGuild, realRealm = GetGuildInfo, GetRealmName
+    GetRealmName = function() return nil end
+    GetGuildInfo = function() return "Test Guild" end
+    id, err, why = B.Post("Player-77-Fresh0002", "Other Target", 10000, rules)
+    assert(id and B.GuildScope().guildKey == "1/Test Guild", tostring(why) .. " " .. tostring(B.GuildScope() and B.GuildScope().guildKey))
+    local asked = 0
+    GuildRoster = function() asked = asked + 1 end
+    GetGuildInfo = function() return nil end
+    IsInGuild = function() return true end
+    id, err, why = B.Post("Player-77-Fresh0003", "Third Target", 10000, rules)
+    assert(id == nil and why == "scope:guild" and asked == 1, tostring(why))
+    IsInGuild = function() return false end
+    id, err, why = B.Post("Player-77-Fresh0003", "Third Target", 10000, rules)
+    assert(id == nil and why == "scope:noguild" and asked == 1, tostring(why))
+    GetGuildInfo, GetRealmName, IsInGuild, GuildRoster = realGuild, realRealm, nil, nil
+    print("PASS bounty refusal: no guild, a guild name not yet arrived and an unreadable realm are told apart")
+end

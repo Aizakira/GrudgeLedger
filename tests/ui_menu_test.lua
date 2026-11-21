@@ -10,6 +10,8 @@ assert(loadfile(addon .. "/UI.lua"))()
 assert(loadfile(addon .. "/Menu.lua"))()
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 assert(GrudgeLedgerMinimapButton and not GrudgeLedgerWindow, "login must not open the journal")
 
 local function open(context, tag)

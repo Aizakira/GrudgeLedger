@@ -36,6 +36,15 @@ Today's exceptions are frozen in that test; a list may only shrink.
    Migrations are numbered, keep what they replace, and are tested on a synthetic
    journal from the previous version.
 
+6. **The addon alone.** Every feature states, when it is proposed, whether it works
+   with the addon alone. Data that needs a program outside the game (Armory
+   archive, studio photos) is optional: it is never the only way to fill a page,
+   and it is named as optional the first time it is offered. `tests/addon_alone_test.lua`
+   and the offline views `dossier-fresh` and `dossier-read` show the sheet with
+   nothing from outside the game; a page change is compared in that state too.
+   What the client lets an addon read is measured in the game (`/gl sonde`)
+   before a feature is built on it.
+
 Extract a module when a fix needs it, not as a separate rewrite.
 
 # Definition of done

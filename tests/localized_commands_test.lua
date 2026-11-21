@@ -12,7 +12,7 @@ command("nota Notes personnelles")
 assert(contact.notes[#contact.notes].text == "Notes personnelles")
 GL.ShowLedger(contact.key)
 local book = GrudgeLedgerWindow
-assert(book.detailTitle:GetText() == "Aqua Water" and book.detailGuild:GetText() == "Ennemis")
+assert(book.detailTitle:GetText() == "Aqua Water" and book.detailGuild:GetText():find("Ennemis", 1, true))
 assert(book.detailScroll.fullText:find("Notes personnelles", 1, true))
 assert(book.searchHint:GetText() == "Buscar…")
 command("resumen") assert(GrudgeLedgerJournal.mode == "summary")

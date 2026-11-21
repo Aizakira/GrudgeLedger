@@ -41,7 +41,7 @@ Les règles actives sont consultables dans [Repository rules](https://github.com
 
 ## Règles de structure
 
-Cinq règles gardent l'addon modulaire pendant qu'il grandit. Le contrôle
+Six règles gardent l'addon modulaire pendant qu'il grandit. Le contrôle
 `tests/structure_test.lua` les vérifie à chaque lancement des tests ; s'il échoue,
 on corrige le code, pas le contrôle. Le texte de référence est dans
 [AGENTS.md](AGENTS.md).
@@ -56,6 +56,13 @@ on corrige le code, pas le contrôle. Le texte de référence est dans
    de 160 caractères au plus.
 5. **Un seul document de référence.** Toute donnée sauvegardée et tout message de
    guilde figurent dans [docs/protocole-et-sauvegarde.fr.md](docs/protocole-et-sauvegarde.fr.md).
+
+6. **L'addon seul.** Chaque fonction dit, dès sa proposition, si elle marche avec
+   l'addon seul. Ce qui demande un programme extérieur au jeu (archive Armurerie,
+   photos du studio) est facultatif : ce n'est jamais le seul moyen de remplir une
+   page. `tests/addon_alone_test.lua` et les vues hors jeu `dossier-fresh` et
+   `dossier-read` montrent la fiche sans rien d'extérieur. Ce que le jeu laisse
+   lire à un addon se mesure en jeu (`/gl sonde`) avant de construire dessus.
 
 Les écarts d'aujourd'hui sont figés dans le contrôle : leur liste peut seulement
 raccourcir. Un module s'extrait quand une correction en a besoin, pas dans un

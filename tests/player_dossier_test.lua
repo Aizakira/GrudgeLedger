@@ -72,10 +72,11 @@ assert(f.pills[2].label:GetText()=="Aucun avis" and f.pills[2].note:GetText()=="
 assert(f.portrait.portraitOverlay and f.portrait.portraitRim and f.portrait.portraitOverlay:IsShown())
 local cells={}
 for _,c in ipairs(f.statCells) do if c:IsVisible() then cells[c.label:GetText()]=c.value:GetText() end end
--- Seven lines: health, power, item level, the three statistics of the class, honorable kills.
+-- Up to seven lines: health, power, item level, the three statistics of the class, honorable
+-- kills. A value nobody read has no line: a dash says nothing.
 local shown=0
 for _ in pairs(cells) do shown=shown+1 end
-assert(shown==7 and cells.Vie=="1721" and cells.Mana=="—" and cells["Niv. objet"]=="24" and cells["Vict. honorables"]=="396")
+assert(shown==5 and cells.Vie=="1721" and cells.Mana==nil and cells["Niv. objet"]=="24" and cells["Vict. honorables"]=="396")
 assert(cells.Critique=="5,6 %",cells.Critique)
 -- Tiles: you against them, the guild, the last encounter, bounties.
 assert(o.tiles[1].value:GetText()=="1 V / 0 D" and o.tiles[2].value:GetText()=="3 V / 5 D" and o.tiles[2].detail:GetText()=="1 membres")
@@ -131,7 +132,9 @@ local other="Player-42-000B"
 assert(GL.OpenPlayerDossier(other,nil,"Other | captain"))
 assert(f.nameLabel:GetText()=="Other || captain" and not GL.Get("guid:"..other))
 click(f.tabs.gear)
-assert(not eq.buttons[4].item and f.statCells[1].value:GetText()=="—" and f.pills[1].label:GetText()=="Aucune rencontre")
+assert(not eq.buttons[4].item and f.pills[1].label:GetText()=="Aucune rencontre")
+-- Nothing read at all: no column of dashes, one sentence on how the reading happens.
+assert(not f.statCells[1]:IsShown() and f.keyHeading:GetText()=="" and f.observed:GetText():find("la lecture se fait seule",1,true))
 GrudgeLedgerArmory.profiles[other]={identity={name="Public name",class="Hunter",race="Orc",faction="Horde",guild="Archive guild"},gear={back=999}}
 assert(GL.OpenPlayerDossier(other))
 click(f.tabs.gear)
@@ -157,7 +160,7 @@ assert(named.armorySnapshot and named.armorySnapshot.stats.HEALTH==123, "manual 
 GL.Settings().guideSeen=true
 GL.ShowLedger(named.key)
 assert(GrudgeLedgerWindow.detailIdentity:GetText():find("Gnome",1,true))
-click(GrudgeLedgerWindow.detailTabs.dossier)
+click(GrudgeLedgerWindow.openSheet)
 click(f.tabs.gear)
 assert(f:IsShown() and f.nameLabel:GetText()=="Named Friend" and eq.buttons[4].itemName=="Woven mantle")
 assert(GL.Relation(named)=="enemy" and named.armorySnapshot.gear.back.name=="Woven mantle")
@@ -203,6 +206,7 @@ assert(all():find("Vos rencontres",1,true) and all():find("Signalements de la gu
 -- Key figures follow the class: a priest shows Intelligence and Spirit, a warrior Strength.
 local priest=GL.Remember(GL.IdentityFromName("Shadow","Priest","Player-42-00C1"))
 priest.class="PRIEST"
+GrudgeLedgerArmory={profiles={[priest.guid]={stats={HEALTH=1500,INTELLECT=80,SPIRIT=70,STRENGTH=40,ARMOR=900}}}}
 assert(GL.OpenPlayerDossier(priest.guid))
 local labels={}
 for _,c in ipairs(f.statCells) do if c:IsVisible() then labels[c.label:GetText()]=true end end

@@ -8,10 +8,16 @@ Ce document est la seule référence pour deux choses : ce que l'addon enregistr
 
 Le jeu écrit cette table sur le disque au `/reload` et à la déconnexion. Elle est commune à tous les personnages du compte.
 
+Depuis la 0.54.0, le carnet est tenu **par faction** : `players`, `aliases`, `guilds`, `unassignedHonor` et `battlegroundArchive` sont ceux de la faction du personnage joué. Le carnet de l'autre faction attend dans `books`, intact. Le reste est commun au compte (réglages) ou déjà rangé par guilde ou par personnage.
+
 ### Clés de premier niveau
 
 | Clé | Contenu | Module qui écrit | Borne ou durée |
 | --- | --- | --- | --- |
+| `sharingNotice` | Ancien marqueur du message de partage (0.51.0, un par compte). Plus lu depuis la 0.54.0 : le message est noté dans l'espace de chaque guilde (`noticed`) | `GuildMap.lua` | — |
+| `book` | Faction du carnet en cours (`Alliance` ou `Horde`), depuis la 0.54.0. Absent avant la migration 5 | `Core.lua` | — |
+| `books` | Carnets des autres factions, par faction : mêmes clés (`players`, `aliases`, `guilds`, `unassignedHonor`, `battlegroundArchive`) | `Core.lua` | Jamais purgé |
+| `characterFactions` | Faction de chaque personnage du compte vu depuis la 0.54.0, par GUID | `Core.lua` | Un par personnage |
 | `schema` | Numéro de schéma du carnet, actuellement 2 | `Core.lua` | — |
 | `players` | Fiches du carnet personnel, par clé `guid:Player-…` ou `name:prénom nom` | `Core.lua`, seul | Aucune : les souvenirs ne sont jamais supprimés en silence |
 | `aliases` | Nom complet en minuscules → clé de fiche ; `false` quand deux personnages portent le même nom | `Core.lua` | — |
@@ -25,6 +31,7 @@ Le jeu écrit cette table sur le disque au `/reload` et à la déconnexion. Elle
 | `battlegroundCleanupVersion` | Marqueur de la migration 2 | `Core.lua` | — |
 | `grimoireFontDefaultApplied` | Marqueur de la migration 3 | `Core.lua` | — |
 | `migrations` | Migrations exécutées, par numéro, avec leur date | `Core.lua` | Une entrée par migration |
+| `replacedWeights` | Poids de rancune d'avant la migration 4 (`aggression`, `death`, `victory`), gardés pour mémoire | `Core.lua` | Écrit une seule fois |
 | `authorAccount` | Identifiant aléatoire du compte, 16 caractères hexadécimaux. Jamais diffusé tel quel : depuis la 0.22.0, les fiches de guilde portent une empreinte propre à chaque guilde (SHA-256 de l'identifiant et de la clé de guilde, 16 caractères), qui ne relie pas les personnages d'une guilde à l'autre | `Core.lua`, `GuildProfiles.lua` | — |
 | `journalEdition` | Compteur des fiches de guilde publiées | `GuildProfiles.lua` | — |
 | `bountyGuilds` | Un espace par guilde, par `royaume/guilde`. Détail plus bas | `Bounties.lua`, `GuildProfiles.lua`, `SharedDossiers.lua` | Jamais purgé à ce jour, même après un départ de guilde |
@@ -47,11 +54,12 @@ Chaque entrée de `players` regroupe quatre familles de champs.
 | --- | --- |
 | Identité | `key`, `guid`, `name`, `surname`, `fullName`, `class`, `className`, `race`, `raceName`, `raceID`, `sex`, `faction`, `level`, `guild`, `realm`, `guildSeenAt` |
 | Avis | `reaction`, `reactionSource`, `reputation`, `tags`, `tagHistory`, `notes` |
+| Coups de main | `assists` (nombre), depuis la 0.36.0 : vous combattiez ce joueur, le jeu vous a donné de l'honneur pour sa mort, le coup fatal venait d'un joueur hors de votre groupe. Compté à part, jamais dans le solde ni dans les victoires. Chaque coup de main ajoute un événement `assist` à `history` |
 | Duels | `duels` (`wins`, `losses`), depuis la 0.31.0 : comptés à part, jamais dans le solde. Chaque duel ajoute un événement `duel` (`won`) à `history` |
 | Faits | `history`, `pvp` (victoires, morts, agressions), `groupCount`, `encounters`, `firstSeen`, `lastSeen`, `lastEncounterAt`, `lastDirectEncounterAt` |
 | Relevés | `inspection` (équipement, talents et caractéristiques vus en jeu, chacun avec sa date), `armorySnapshot` (copie du relevé Web importé) |
 
-Un événement de `history` porte toujours sa date, sa zone, son auteur (`actorGUID`, `actorName`) et son type : `kill`, `death`, `aggression`, `opening`, `honor`, `reputation`, `reaction`, `grouped` ou `trade`. Depuis la 0.13.1, une victoire, une mort ou une agression porte aussi `build` : `opponent` et `me`, le build de chaque joueur au moment du combat (`level`, `ilvl`, `spec`, `specName`, `stats`, `gear` par emplacement, et pour l'adversaire `at`, `source`, `by`, la date et l'origine du relevé). Depuis la 0.18.0, `me` porte aussi `spec` et `specName`, lus dans nos arbres de talents. Il n'est jamais réécrit. Une correction ne supprime rien : elle marque l'événement `voided` et garde la preuve d'origine. Depuis la 0.27.0, le contexte `combat` d'une victoire peut porter `assist`, le nom du membre du groupe qui a porté le coup fatal. Les combats affichés (`GL.Fights`) sont calculés à la lecture : des événements à moins de deux minutes d'écart forment un combat, une mort ou une victoire le termine, sauf une victoire du groupe dans la minute qui suit votre mort. Les membres d'un groupe absents du carnet sont gardés en mémoire pour la session seulement, jamais sauvegardés.
+Depuis la 0.45.0, un combat (`kill`, `death`, `aggression`, `assist`) garde aussi sa position quand le jeu la donne : `mapID`, `mapX`, `mapY` (0 à 1, trois décimales). Elle reste dans le journal. La guilde n'apprend l'endroit d'une victoire ou d'une mort que si le joueur coche « Vision de guilde » (0.49.0, message `M`). Un événement de `history` porte toujours sa date, sa zone, son auteur (`actorGUID`, `actorName`) et son type : `kill`, `death`, `aggression`, `opening`, `honor`, `assist`, `reputation`, `reaction`, `grouped` ou `trade`. Depuis la 0.13.1, une victoire, une mort ou une agression porte aussi `build` : `opponent` et `me`, le build de chaque joueur au moment du combat (`level`, `ilvl`, `spec`, `specName`, `stats`, `gear` par emplacement, et pour l'adversaire `at`, `source`, `by`, la date et l'origine du relevé). Depuis la 0.18.0, `me` porte aussi `spec` et `specName`, lus dans nos arbres de talents. Il n'est jamais réécrit. Une correction ne supprime rien : elle marque l'événement `voided` et garde la preuve d'origine. Depuis la 0.27.0, le contexte `combat` d'une victoire peut porter `assist`, le nom du membre du groupe qui a porté le coup fatal. Les combats affichés (`GL.Fights`) sont calculés à la lecture : des événements à moins de deux minutes d'écart forment un combat, une mort ou une victoire le termine, sauf une victoire du groupe dans la minute qui suit votre mort. Les membres d'un groupe absents du carnet sont gardés en mémoire pour la session seulement, jamais sauvegardés.
 
 ### Espace d'une guilde
 
@@ -63,8 +71,12 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `events` | Journal des événements de primes, tels que reçus, par `auteur:numéro` | 38 jours, sauf reçus encore utiles |
 | `seq` | Dernier numéro d'événement émis par ce client | — |
 | `scores` | Victoires et morts cumulées, par cible puis par membre | — |
-| `shareFights`, `shareDeaths`, `shareSocial` | Accords de partage, par personnage. Absents ou faux par défaut | — |
-| `shareSightings` | Accord d'envoi des repérages (veille de guilde, 0.30.0), par personnage. Absent ou faux par défaut : l'envoi révèle la zone où l'on se trouve. Les repérages reçus ne sont jamais sauvegardés | — |
+| `shareFights`, `shareDeaths`, `shareSocial` | Partages, par personnage. Depuis la 0.51.0 ils sont actifs tant que la valeur n'est pas `false` : seul un refus explicite les coupe | — |
+| `shareSightings` | Accord d'envoi des repérages (veille de guilde, 0.30.0), par personnage. Actif depuis la 0.51.0 tant que la valeur n'est pas `false` : l'envoi révèle la zone où l'on se trouve. Les repérages reçus ne sont jamais sauvegardés | — |
+| `noticed` | Date du message unique qui prévient qu'on partage avec cette guilde (0.54.0) | — |
+| `shareMap` | « Vision de guilde » (0.49.0), par personnage. Active depuis la 0.51.0 tant que la valeur n'est pas `false` : cochée, le personnage envoie l'endroit de ses victoires et de ses morts et garde ceux des autres | — |
+| `places` | Combats partagés, par membre : lignes `date;carte;x;y;genre;adversaire;nom` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée. Sert à la carte et à l'alerte « Tueur de guilde » | 150 membres, 40 lignes par membre, 38 jours |
+| `mapForgot` | Date du dernier `MX` de chaque membre : un relais plus ancien de ses combats est refusé. Effacée dès qu'il partage à nouveau | Un par membre |
 | `mailUncertain` | Envoi de courrier dont l'accusé n'a pas été reçu | Un par personnage |
 | `journal` | Fiches de guilde. Détail ci-dessous | — |
 | `dossiers` | Relevés publics, par cible : `fields` (une entrée par champ, avec `data`, `at`, `source`, `by`, `via` et, pour l'équipement, l'identité et les caractéristiques, `dates`), `received`, `sender`, `senderName`. Une inspection d'une cible sans fiche personnelle y est aussi gardée | 256 cibles, la plus ancienne est évincée |
@@ -85,6 +97,7 @@ Depuis la 0.23.0, les migrations sont numérotées dans `migrations` (numéro �
 | 1 | `schema` = 2 | Les compteurs et événements « probables » sont fondus dans les « confirmés » ; les doublons d'un même identifiant d'événement sont annulés | Oui depuis la 0.23.0 : `migrated1` garde les valeurs remplacées. Non pour un carnet migré avant |
 | 2 | `battlegroundCleanupVersion` = 1 | Les événements des champs de bataille connus sont annulés ; les fiches devenues vides vont dans `battlegroundArchive` | Oui : rien n'est effacé |
 | 3 | `grimoireFontDefaultApplied` | Le réglage de police revient une fois à sa valeur par défaut | Sans objet |
+| 4 | `migrations[4]` | « Une vie pour une vie » (0.42.0) : `grudgeVictory` apparaît (5 ; une victoire valait toujours 1) et une agression laissée à l'ancienne valeur par défaut (5, avec une mort à 5) passe à 2. Les poids choisis par le joueur sont conservés, tous les soldes automatiques sont recalculés | Oui : `replacedWeights` garde les anciennes valeurs, à remettre dans les réglages |
 
 **Règle pour la migration 4 et les suivantes.**
 
@@ -92,6 +105,8 @@ Depuis la 0.23.0, les migrations sont numérotées dans `migrations` (numéro �
 2. Elle conserve dans la sauvegarde les valeurs qu'elle remplace.
 3. Elle a un test qui charge un carnet synthétique de la version précédente et vérifie que chaque valeur d'origine reste retrouvable.
 4. Elle ne s'exécute qu'une fois et peut être rejouée sans dommage.
+
+Migration 5 (0.54.0), un carnet par faction. À la première connexion, la faction de chaque personnage qui a signé des faits est retrouvée : connue pour les personnages vus depuis la 0.54.0, sinon déduite de ses faits (on combat l'autre faction, on groupe et on échange avec la sienne). Chaque fait et chaque note va au carnet de la faction de son auteur. Une fiche qui a des faits des deux côtés est copiée, chaque copie gardant les siens et recomptant ses victoires, morts et agressions. Les faits sans auteur connu restent dans le carnet en cours. Les avis sur les guildes sont copiés dans les deux carnets. Rien n'est effacé.
 
 ## 2. Messages de guilde
 
@@ -110,6 +125,10 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | --- | --- |
 | `type;auteur;numéro;date;objet;valeur;détail` | Événement de prime, 250 octets au plus. Types ci-dessous |
 | `G;auteur;cible;victoires;morts` | Totaux cumulés d'un membre contre une cible, si `shareFights` est accordé |
+| `M;1;auteur;date;carte;x;y;genre;adversaire;nom` | Victoire (`k`) ou mort (`d`) de l'auteur : endroit et adversaire (identifiant et nom, 48 octets au plus, vides si inconnus), si `shareMap` est accordé. Gardé seulement par un membre qui a lui aussi coché la case. Reçu de l'auteur, il est tenu pour le sien. Reçu en relais (`R;M;…`), c'est un témoignage de guilde, refusé s'il précède un `MX` de l'auteur |
+| `MQ` | Demande de ce que la guilde sait, quand un membre coche la case : chaque membre qui partage renvoie ses propres combats (40 au plus), et l'un d'eux, après 4 à 20 secondes et si personne ne l'a fait avant lui, relaie les 120 combats les plus récents des autres. Une réponse par demandeur toutes les 30 secondes. Depuis la 0.58.0, `Q` (connexion) ne déclenche que le relais, qui comprend alors aussi les combats du membre qui relaie |
+| `GLV;version` | Version de l'addon du membre (0.58.0), envoyée à la connexion et en réponse à celle d'un autre membre, une fois par minute au plus. Gardée en mémoire seulement, jamais sauvegardée. Un membre entendu sans cette annonce a une version antérieure à la 0.58.0 |
+| `MX` | Le membre a décoché la case : ses combats sont effacés chez les autres et la date est notée dans `mapForgot` |
 | `Q` | Demande de rattrapage à la connexion |
 | `R;…` | Relais d'un événement ou d'un total, en réponse à `Q` |
 | `J;C;cible;empreinte;date;compte;nom` | Publication d'une fiche de guilde |

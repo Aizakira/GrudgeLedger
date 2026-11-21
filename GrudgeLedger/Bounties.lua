@@ -27,12 +27,31 @@ local function rules(opts)
     return quota,groups[group]..shares[split]..souvenirs[media]
 end
 local function scope()
-    if not GL.db or not GetGuildInfo or not GetNormalizedRealmName then return end
+    if not GL.db or not GetGuildInfo then return end
     local name, _, _, realm = GL.Safe(GetGuildInfo,"player")
     realm = realm or GL.Safe(GetNormalizedRealmName)
+    -- Some clients give no normalized realm name: the plain one, without spaces, is the same key.
+    if type(realm)~="string" or realm=="" then
+        local plainRealm=GL.Clean(GL.Safe(GetRealmName),"string")
+        realm=plainRealm and plainRealm:gsub("[%s%-]","") or realm
+    end
     local me = GL.Clean(UnitGUID("player"),"string")
     name,realm=GL.Clean(name,"string"),GL.Clean(realm,"string")
-    if not plain(name,120) or name == "" or not plain(realm,80) or realm == "" or not guid(me) then return end
+    -- Owner report (0.47.1): on his client neither realm name could be read, and no bounty could be
+    -- posted. The realm number carried by your own identifier always exists and is the same for
+    -- every member of the guild on that realm.
+    if (type(realm)~="string" or realm=="" or not plain(realm,80)) and guid(me) then realm=me:match("^Player%-(%w+)%-") end
+    -- Says which part cannot be read, for the message shown to the player.
+    if not guid(me) then return nil,"player" end
+    -- No guild at all is not a reading failure: bounties live in a guild, and the player is told so.
+    if (name==nil or name=="") and IsInGuild and GL.Safe(IsInGuild)==false then return nil,"noguild" end
+    if not plain(name,120) or name == "" then
+        -- The guild exists but its name has not arrived yet: ask the game for it, for the next try.
+        local roster=C_GuildInfo and C_GuildInfo.GuildRoster or GuildRoster
+        if type(roster)=="function" then GL.Safe(roster) end
+        return nil,"guild"
+    end
+    if not plain(realm,80) or realm == "" then return nil,"realm" end
     GL.db.bountyGuilds = GL.db.bountyGuilds or {}
     local key = realm.."/"..name
     local s = GL.db.bountyGuilds[key] or {events={}, seq=0}
@@ -498,9 +517,15 @@ end
 local function scoreMessage(actor,target,wins,losses)
     return table.concat({"G",actor,target,wins,losses},";")
 end
+-- Sharing with the guild is on unless the member switched it off (0.51.0): the addon is about
+-- sharing, and nobody should have to tick boxes for it to work. Only an explicit "false" stops it.
+local function shared(consent,me)
+    return not (type(consent)=="table" and consent[me]==false)
+end
+B.Shared=shared
 local function countFight(target,index)
     local s,me=scope()
-    if not (s and s.shareFights and s.shareFights[me] and guid(target)) then return end
+    if not (s and shared(s.shareFights,me) and guid(target)) then return end
     local totals=s.scores and s.scores[target] and s.scores[target][me] or {0,0}
     local wins,losses=totals[1],totals[2]
     if index==1 then wins=wins+1 else losses=losses+1 end
@@ -513,7 +538,7 @@ function B.ShareFights(enabled)
 end
 function B.Sharing()
     local s,me=scope()
-    return (s and s.shareFights and s.shareFights[me])==true, (s and s.shareDeaths and s.shareDeaths[me])==true
+    return (s and shared(s.shareFights,me))==true, (s and shared(s.shareDeaths,me))==true
 end
 function B.GuildFights(target)
     local s=scope()
@@ -557,7 +582,12 @@ function GL.BountyTargetEligible(record)
 end
 function B.Post(target,name,copper,opts)
     local s,me=scope()
-    if not s or not guid(target) or target==me or not plain(name,64) or name=="" or not number(copper,0,1000*GOLD) then return nil,"invalid" end
+    -- The third value says which check refused, so the window can tell the player what to do.
+    if not s then return nil,"invalid","scope:"..tostring(me) end
+    if not guid(target) then return nil,"invalid","target" end
+    if target==me then return nil,"invalid","self" end
+    if not plain(name,64) or name=="" then return nil,"invalid","name" end
+    if not number(copper,0,1000*GOLD) then return nil,"invalid","amount" end
     local candidate=GL.Get and GL.Get("guid:"..target) or {guid=target}
     if not candidate.faction and UnitFactionGroup and GL.Safe(UnitGUID,"target")==target then
         candidate={guid=target,faction=GL.Clean(GL.Safe(UnitFactionGroup,"target"),"string")}
@@ -577,7 +607,7 @@ function B.Post(target,name,copper,opts)
     local kind,value
     if type(opts)=="table" then
         local quota,flags=rules(opts)
-        if not quota then return nil,"invalid" end
+        if not quota then return nil,"invalid","rules" end
         -- Legacy clients ignore N/H, so a one-kill claim cannot close a multi-kill order.
         kind,value="N",copper..","..quota..","..flags
     elseif opts==nil or type(opts)=="boolean" then kind,value=opts and "A" or "O",copper
@@ -654,6 +684,7 @@ local function finalize(s,me)
     end
 end
 function B.Kill(target,combat)
+    if GL.GuildMap then GL.GuildMap.Fight("k",target) end
     countFight(target,1)
     local s,me=scope()
     if not s then return end
@@ -696,9 +727,10 @@ function B.ShareDeaths(enabled)
     if s then s.shareDeaths=s.shareDeaths or {}; s.shareDeaths[me]=enabled==true; return true end
 end
 function B.Death(target,name)
+    if GL.GuildMap then GL.GuildMap.Fight("d",target,name) end
     countFight(target,2)
     local s,me=scope()
-    if s and s.shareDeaths and s.shareDeaths[me] and guid(target) and plain(name,64) then
+    if s and shared(s.shareDeaths,me) and guid(target) and plain(name,64) then
         if declare("D",target,"",name) then autoOrder(s,me,target,name) end
     end
 end
@@ -727,6 +759,7 @@ local function receive(msg,sender)
         if budget.lastQ and now-budget.lastQ<10 then return end
         budget.lastQ=now
         if sender~=me and GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me) end
+        if sender~=me and GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
         for target,scores in pairs(s.scores or {}) do
             for actor,n in pairs(scores) do schedule(s,"R;"..scoreMessage(actor,target,n[1],n[2])) end
         end
@@ -736,8 +769,19 @@ local function receive(msg,sender)
         end
         return
     end
+    if sender~=me and GL.GuildMap then GL.GuildMap.Heard(sender) end
     local relay=msg:sub(1,2)=="R;"
     local raw=relay and msg:sub(3) or msg
+    -- The version each member runs (GuildMap.lua, 0.58.0).
+    if raw:sub(1,4)=="GLV;" then
+        if GL.GuildMap then GL.GuildMap.Version(s,me,sender,raw:sub(5),relay) end
+        return
+    end
+    -- Places of fights for the guild vision of the map (GuildMap.lua).
+    if raw=="MQ" or raw=="MX" or raw:sub(1,2)=="M;" then
+        if GL.GuildMap then GL.GuildMap.Receive(s,me,sender,raw,relay) end
+        return
+    end
     if raw:sub(1,2)=="G;" then
         local actor,target,wins,losses=raw:match("^G;([^;]+);([^;]+);(%d+);(%d+)$")
         wins,losses=number(wins,0,10000000),number(losses,0,10000000)
@@ -1061,6 +1105,7 @@ local function join()
         if s then
             finalize(s,me)
             schedule(s,"Q")
+            if GL.GuildMap then GL.GuildMap.Announce(s) end
             if GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me,true) end
             for _,raw in pairs(s.events) do
                 local e=unpackEvent(raw)
@@ -1126,6 +1171,7 @@ frame:SetScript("OnEvent",function(_,event)
     end
     refreshRoster()
     join()
+    if GL.GuildMap then GL.GuildMap.Join() end
     if GL.db then reconcileInbox(scope(),GL.Safe(UnitGUID,"player")) end
 end)
 GL.On("BOUNTY_KILL",B.Kill)
