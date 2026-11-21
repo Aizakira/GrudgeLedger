@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.48.0
+GRUDGE LEDGER — 0.49.0
+
+Carte des combats (l’onglet s’appelait Terres). Nouvelle case « Vision de guilde » sur la carte : cochée, vous voyez les victoires et les morts des membres qui l’ont cochée, et ils voient les vôtres (la zone et l’endroit, un petit message par combat). Décochée, rien n’est envoyé ni gardé. Les zones meurtrières ressortent enfin : la carte s’assombrit sous elles et chaque chiffre est posé sur une plaque rouge ou verte. Les petits carrés marrons ont disparu : seules les morts et les victoires sont dessinées.
 
 Carte des terres dangereuses refaite sur une seule toile : la molette va du monde entier jusqu’à une zone sans jamais changer de carte. L’image des continents arrive en zoomant, puis le détail des zones que vous avez explorées, toujours au même endroit. Les régions ne sont plus des carrés noirs : la forme de la zone s’allume en rouge selon votre part de morts. Une flèche montre où vous êtes et vers où vous regardez. Deux boutons : Monde et Ma position. Un clic sur le chiffre d’une zone y glisse.
 

@@ -868,7 +868,7 @@ local function loadArt(view, id, rect, level, feathered)
     end
     return art
 end
-local function placeArt(view, art, alpha)
+local function placeArt(view, art, alpha, shade)
     if alpha <= 0 then
         if not art.hidden then
             for _, piece in ipairs(art.textures) do piece:Hide() end
@@ -885,6 +885,10 @@ local function placeArt(view, art, alpha)
         piece:SetPoint("TOPLEFT", view.canvas, "TOPLEFT", x0 + ((i - 1) % art.columns) * w, -(y0 + math.floor((i - 1) / art.columns) * h))
         piece:SetSize(w * piece.fx, h * piece.fy)
         piece:SetAlpha(alpha)
+        if piece.shade ~= shade then
+            piece.shade = shade
+            piece:SetVertexColor(shade or 1, shade or 1, shade or 1)
+        end
         piece:Show()
     end
     art.hidden = nil
@@ -1024,7 +1028,7 @@ local function describe(view)
     end
     local title, deaths, kills, inside = nil, 0, 0, nil
     if best then
-        local entry = view.byName[best.name]
+        local entry = view.tallyOf and view.tallyOf[best.mapID]
         return best.name, entry and entry.deaths or 0, entry and entry.kills or 0
     end
     if view.zoom >= CONTINENT_IN[2] then
@@ -1107,7 +1111,8 @@ function R.MapPoints(id, zones)
     for _, record in pairs(players()) do
         for _, e in ipairs(record.history or {}) do
             local rect = type(e) == "table" and where[e.mapID]
-            if rect ~= nil and not e.voided and type(e.mapX) == "number" and type(e.mapY) == "number" and type(e.time) == "number" then
+            if rect ~= nil and not e.voided and type(e.mapX) == "number" and type(e.mapY) == "number" and type(e.time) == "number"
+                and (e.kind == "death" or e.kind == "kill" or e.kind == "assist") then
                 local x, y = e.mapX, e.mapY
                 if rect then x, y = rect.left + x * (rect.right - rect.left), rect.top + y * (rect.bottom - rect.top) end
                 points[#points + 1] = { record = record, event = e, x = x, y = y }
@@ -1126,14 +1131,19 @@ function R.MapLayout()
     clampCentre(view)
     local zoom, canvas = view.zoom, view.canvas
     view.stamp = view.stamp + 1
-    placeArt(view, world.art, 1)
+    -- A light added to a bright map hardly shows (owner report, 0.48.0: no zone looked red). While
+    -- the regions speak, the map under them is dimmed, so a lit zone stands out; closing in on a
+    -- zone gives the map its full colours back.
+    local mute = view.shapes and #view.shapes > 0 and 1 - between(world.zoneWidth * view.width * zoom, DETAIL_IN) or 0
+    local shade = 1 - 0.45 * mute
+    placeArt(view, world.art, 1, shade)
     local continentAlpha = between(zoom, CONTINENT_IN)
     local half = 0.5 / zoom
     local left, right, top, bottom = view.cx - half, view.cx + half, view.cy - half, view.cy + half
     for _, continent in ipairs(world.continents) do
         local rect = continent.rect
         local seen = rect.right > left and rect.left < right and rect.bottom > top and rect.top < bottom
-        if continent.art then placeArt(view, continent.art, seen and continentAlpha or 0) end
+        if continent.art then placeArt(view, continent.art, seen and continentAlpha or 0, shade) end
     end
     -- The detail of the zones in sight, once they are wide enough on screen.
     for _, zone in ipairs(world.zones) do
@@ -1243,11 +1253,32 @@ local function paintMap(view, byName)
     -- Every zone you fought in, tinted by its share of your deaths: the worst zone is bright red
     -- whatever its count, a zone where you only won is green.
     local tallies, shapes, worst = {}, {}, 1
+    -- Guild vision: the fights of the members who share theirs are counted and drawn with yours.
+    local extra, guildPlaced, zoneOf = {}, {}, {}
+    for _, zone in ipairs(zones) do zoneOf[zone.mapID] = zone end
+    for _, point in ipairs(view.guildOn and GL.GuildMap and GL.GuildMap.Points() or {}) do
+        local zone = zoneOf[point.mapID]
+        if zone then
+            local more = extra[zone.mapID] or { deaths = 0, kills = 0 }
+            extra[zone.mapID] = more
+            if point.kind == "death" then more.deaths = more.deaths + 1 else more.kills = more.kills + 1 end
+            if #guildPlaced < MAP_POINTS then
+                local rect = zone.rect
+                guildPlaced[#guildPlaced + 1] = { guild = point.actor, event = { kind = point.kind, time = point.time },
+                    x = rect.left + point.x * (rect.right - rect.left), y = rect.top + point.y * (rect.bottom - rect.top) }
+            end
+        end
+    end
+    view.tallyOf = {}
     for _, zone in ipairs(zones) do
-        local entry = byName[zone.name]
-        if entry and entry.deaths + entry.kills > 0 then
-            tallies[#tallies + 1] = { zone = zone, deaths = entry.deaths, kills = entry.kills }
-            worst = math.max(worst, entry.deaths)
+        local entry, more = byName[zone.name], extra[zone.mapID]
+        local deaths = (entry and entry.deaths or 0) + (more and more.deaths or 0)
+        local kills = (entry and entry.kills or 0) + (more and more.kills or 0)
+        if deaths + kills > 0 then
+            local tally = { zone = zone, deaths = deaths, kills = kills }
+            tallies[#tallies + 1] = tally
+            view.tallyOf[zone.mapID] = tally
+            worst = math.max(worst, deaths)
         end
     end
     for _, region in ipairs(view.regions) do region:Hide() end
@@ -1274,18 +1305,17 @@ local function paintMap(view, byName)
                 region:SetVertexColor(0.10, 0.75, 0.20)
             end
             region:Show()
-            shapes[n] = { zone = entry.zone, alpha = entry.deaths > 0 and 0.35 + 0.65 * share or 0.5 }
+            shapes[n] = { zone = entry.zone, alpha = entry.deaths > 0 and 0.5 + 0.5 * share or 0.6 }
         end
         local label = marker(view, view.labels, i)
         label.used = true
-        label:SetSize(26, 20)
-        -- Without the game's shape for a zone, the count sits on a small tinted plate instead.
-        if entry.zone.shape then
-            label.fill:SetColorTexture(0, 0, 0, 0)
-        elseif entry.deaths > 0 then
-            label.fill:SetColorTexture(0.62, 0.10, 0.10, 0.45 + 0.5 * share)
+        label:SetSize(24, 17)
+        -- The count always sits on a tinted plate: redder as the zone is deadlier, green when you
+        -- only won there. It reads even where the game gives no shape for the zone.
+        if entry.deaths > 0 then
+            label.fill:SetColorTexture(0.50 + 0.25 * share, 0.07, 0.05, 0.6 + 0.35 * share)
         else
-            label.fill:SetColorTexture(0.16, 0.42, 0.20, 0.8)
+            label.fill:SetColorTexture(0.12, 0.40, 0.16, 0.85)
         end
         label.count:SetText(tostring(entry.deaths > 0 and entry.deaths or entry.kills))
         label.zone = entry.zone.mapID
@@ -1295,6 +1325,8 @@ local function paintMap(view, byName)
         label:SetScript("OnClick", function(self) R.MapFocus(self.zone) end)
     end
     local points = R.MapPoints(root, zones)
+    local own = #points
+    for _, entry in ipairs(guildPlaced) do points[#points + 1] = entry end
     for _, point in ipairs(view.points) do
         point.used = nil
         point:Hide()
@@ -1304,27 +1336,35 @@ local function paintMap(view, byName)
         local kind = entry.event.kind
         point.used = true
         point:SetSize(16, 16)
+        -- Yours: a red skull, a green sword. The guild's: an orange skull, a blue sword.
         if kind == "death" then
             point.fill:SetTexture(SKULL)
-            point.fill:SetVertexColor(1, 0.35, 0.3)
-        elseif kind == "kill" then
-            point.fill:SetTexture(SWORD)
-            point.fill:SetVertexColor(0.5, 1, 0.5)
+            if entry.guild then point.fill:SetVertexColor(1, 0.72, 0.25) else point.fill:SetVertexColor(1, 0.35, 0.3) end
         else
-            point.fill:SetColorTexture(0.45, 0.30, 0.08)
-            point:SetSize(8, 8)
+            point.fill:SetTexture(SWORD)
+            if entry.guild then point.fill:SetVertexColor(0.55, 0.8, 1) else point.fill:SetVertexColor(0.5, 1, 0.5) end
+            if kind == "assist" then point:SetSize(12, 12) end
         end
         point.count:SetText("")
         point:SetScript("OnEnter", function(self)
-            tip(self, name(entry.record), (GL.HistoryTitle and GL.HistoryTitle(entry.event) or "") .. " · " .. day(entry.event.time))
+            if entry.guild then
+                local member = GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(entry.guild)
+                tip(self, UI.plain(member or L("Un membre de la guilde")),
+                    (kind == "death" and L("Mort d’un membre de la guilde") or L("Victoire d’un membre de la guilde")) .. " · " .. day(entry.event.time))
+            else
+                tip(self, name(entry.record), (GL.HistoryTitle and GL.HistoryTitle(entry.event) or "") .. " · " .. day(entry.event.time))
+            end
         end)
         point:SetScript("OnClick", function()
+            if entry.guild then return end
             if GL.InspectEvent then GL.InspectEvent(entry.record, entry.event) else openSheet(entry.record) end
         end)
     end
     locate(view)
     view.tallies, view.shapes, view.placed = tallies, shapes, points
-    view.hint:SetText(L("Molette : zoomer · glisser : se déplacer · %d combats placés"):format(#points))
+    local hint = L("Molette : zoomer · glisser : se déplacer · %d combats placés"):format(own)
+    if view.guildOn then hint = hint .. " · " .. L("guilde : %d"):format(#guildPlaced) end
+    view.hint:SetText(hint)
     R.MapLayout()
     return true
 end
@@ -1396,6 +1436,20 @@ local function buildLands(host)
         page.mode = page.mode == "map" and "list" or "map"
         R.Refresh()
     end, nil, true)
+    -- Guild vision: one box. Ticked, you see the fights of the members who ticked it and they see yours.
+    page.guild = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
+    page.guild:SetPoint("TOPLEFT", X(286), -19)
+    page.guild:SetSize(24, 24)
+    page.guildLabel = Panels.Text(page, X(312), -25, S(110), 12, true)
+    page.guild:SetScript("OnClick", function(self)
+        if GL.GuildMap then GL.GuildMap.Enable(self:GetChecked() and true or false) end
+        R.Refresh()
+    end)
+    page.guild:SetScript("OnEnter", function(self)
+        tip(self, L("Vision de guilde"), L("Cochée : vous voyez sur la carte les victoires et les morts des membres qui l’ont cochée, et ils voient "
+            .. "les vôtres (la zone et l’endroit). Décochée : rien n’est envoyé, rien n’est gardé, et la guilde oublie vos combats."))
+    end)
+    page.guild:SetScript("OnLeave", hideTip)
     page.rows = {}
     for i = 1, LAND_ROWS do
         local row = CreateFrame("Frame", nil, page)
@@ -1427,9 +1481,14 @@ local function buildLands(host)
     return page
 end
 local function paintLands(page)
-    page.title:SetText(L("Terres dangereuses"))
+    page.title:SetText(L("Carte des combats"))
     local lands = R.Lands()
-    page.lead:SetText(#lands > 0 and L("Où vous mourez, et à cause de qui.") or "")
+    local guildOn, inGuild = false, false
+    if GL.GuildMap then guildOn, inGuild = GL.GuildMap.Enabled() end
+    page.map.guildOn = guildOn
+    page.lead:SetText(guildOn and L("Vos combats et ceux de la guilde.") or #lands > 0 and L("Où vous mourez, et à cause de qui.") or "")
+    page.guildLabel:SetText(L("Vision de guilde"))
+    GL.Safe(page.guild.SetChecked, page.guild, guildOn)
     -- The map first, when the game gives its pictures. The list is one click away and is all there is
     -- on a client without them.
     local mapped = false
@@ -1439,6 +1498,13 @@ local function paintLands(page)
         mapped = paintMap(page.map, byName)
     end
     if mapped then page.map:Show() else page.map:Hide() end
+    if mapped and inGuild then
+        page.guild:Show()
+        page.guildLabel:Show()
+    else
+        page.guild:Hide()
+        page.guildLabel:Hide()
+    end
     page.toggle:SetText(mapped and L("Voir la liste") or L("Voir la carte"))
     if C_Map then page.toggle:Show() else page.toggle:Hide() end
     local worst = lands[1] and math.max(1, lands[1].deaths) or 1
@@ -1681,6 +1747,11 @@ function R.MapProbe()
     local explored = map and C_MapExplorationInfo and GL.Safe(C_MapExplorationInfo.GetExploredMapTextures, map)
     GL.Print(L("Détail des zones : %s morceaux explorés ici · masque : %s"):format(type(explored) == "table" and #explored or L("absent"),
         type(UIParent) == "table" and type(UIParent.CreateMaskTexture) == "function" and L("oui") or L("non")))
+    local above = type(info) == "table" and info.parentMapID
+    local zoneRect = above and map and rectOn(map, above)
+    local shape = zoneRect and zoneShape(above, map, zoneRect)
+    GL.Print(L("Surbrillance de la zone : %s"):format(shape and (tostring(shape.atlas or shape.file) .. " · "
+        .. ("%.2f × %.2f"):format(shape.usedX, shape.usedY)) or L("absent")))
     if tiles == 0 or not layer then return true end
     -- The zone, drawn from the game's own pieces in our window, and the dot.
     local w = GrudgeLedgerMapProbe or UI.window("GrudgeLedgerMapProbe", L("Sonde : carte"), 468, 372)
@@ -1722,7 +1793,7 @@ end
 -- The book: the narrow format of the player sheet. Left, the six entries and a few figures. Right,
 -- the page.
 local entries = { { "overview", "Vue d’ensemble" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "guilds", "Guildes" },
-    { "lands", "Terres" }, { "rankings", "Classements" } }
+    { "lands", "Carte" }, { "rankings", "Classements" } }
 local function book()
     if R.window then return R.window end
     local f = UI.bookWindow("GrudgeLedgerRelations", "Grudge Ledger", true)

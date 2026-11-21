@@ -678,6 +678,7 @@ local function finalize(s,me)
     end
 end
 function B.Kill(target,combat)
+    if GL.GuildMap then GL.GuildMap.Fight("k") end
     countFight(target,1)
     local s,me=scope()
     if not s then return end
@@ -720,6 +721,7 @@ function B.ShareDeaths(enabled)
     if s then s.shareDeaths=s.shareDeaths or {}; s.shareDeaths[me]=enabled==true; return true end
 end
 function B.Death(target,name)
+    if GL.GuildMap then GL.GuildMap.Fight("d") end
     countFight(target,2)
     local s,me=scope()
     if s and s.shareDeaths and s.shareDeaths[me] and guid(target) and plain(name,64) then
@@ -751,6 +753,7 @@ local function receive(msg,sender)
         if budget.lastQ and now-budget.lastQ<10 then return end
         budget.lastQ=now
         if sender~=me and GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me) end
+        if sender~=me and GL.GuildMap then GL.GuildMap.CatchUp(s,me) end
         for target,scores in pairs(s.scores or {}) do
             for actor,n in pairs(scores) do schedule(s,"R;"..scoreMessage(actor,target,n[1],n[2])) end
         end
@@ -762,6 +765,11 @@ local function receive(msg,sender)
     end
     local relay=msg:sub(1,2)=="R;"
     local raw=relay and msg:sub(3) or msg
+    -- Places of fights for the guild vision of the map (GuildMap.lua).
+    if raw=="MQ" or raw=="MX" or raw:sub(1,2)=="M;" then
+        if GL.GuildMap then GL.GuildMap.Receive(s,me,sender,raw,relay) end
+        return
+    end
     if raw:sub(1,2)=="G;" then
         local actor,target,wins,losses=raw:match("^G;([^;]+);([^;]+);(%d+);(%d+)$")
         wins,losses=number(wins,0,10000000),number(losses,0,10000000)

@@ -203,7 +203,7 @@ for _, key in ipairs(sortedKeys(savedKeys)) do
     documented(key, "Saved key")
 end
 local guildFields = {}
-for _, name in ipairs({ "Bounties.lua", "GuildProfiles.lua", "SharedDossiers.lua" }) do
+for _, name in ipairs({ "Bounties.lua", "GuildProfiles.lua", "SharedDossiers.lua", "GuildMap.lua" }) do
     for field in code[name]:gmatch("%f[%w_]s%.([%a_]+)") do
         guildFields[field] = true
     end

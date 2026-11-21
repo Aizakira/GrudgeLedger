@@ -775,9 +775,9 @@ local function history(record, kind, extra)
         entry.raceID = record.raceID
         entry.race, entry.raceName, entry.class, entry.className = record.race, record.raceName, record.class, record.className
     end
-    -- Where a fight happened on the map, for the map of dangerous lands (0.45.0). It stays in your
-    -- journal: guild messages name the zone, never the position. Nothing is stored when the game
-    -- hides or lacks the position (instances).
+    -- Where a fight happened on the map, for the map of fights (0.45.0). It stays in your journal.
+    -- The guild only learns the place of a victory or a death when you tick "Vision de guilde"
+    -- (GuildMap.lua, 0.49.0). Nothing is stored when the game hides or lacks the position.
     if entry.time == now and (kind == "kill" or kind == "death" or kind == "aggression" or kind == "assist") then
         local map = GL.Clean(GL.Safe(C_Map and C_Map.GetBestMapForUnit, "player"), "number")
         local position = map and GL.Safe(C_Map.GetPlayerMapPosition, map, "player")

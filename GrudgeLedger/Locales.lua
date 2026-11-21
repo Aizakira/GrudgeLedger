@@ -4,6 +4,16 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Carte"] = "Mapa",
+        ["Carte des combats"] = "Mapa de combates",
+        ["Vision de guilde"] = "Visión de hermandad",
+        ["Vos combats et ceux de la guilde."] = "Tus combates y los de la hermandad.",
+        ["Un membre de la guilde"] = "Un miembro de la hermandad",
+        ["Mort d’un membre de la guilde"] = "Muerte de un miembro de la hermandad",
+        ["Victoire d’un membre de la guilde"] = "Victoria de un miembro de la hermandad",
+        ["guilde : %d"] = "hermandad: %d",
+        ["Surbrillance de la zone : %s"] = "Resaltado de la zona: %s",
+        ["Cochée : vous voyez sur la carte les victoires et les morts des membres qui l’ont cochée, et ils voient les vôtres (la zone et l’endroit). Décochée : rien n’est envoyé, rien n’est gardé, et la guilde oublie vos combats."] = "Marcada: ves en el mapa las victorias y las muertes de los miembros que la han marcado, y ellos ven las tuyas (la zona y el lugar). Desmarcada: no se envía nada, no se guarda nada, y la hermandad olvida tus combates.",
         ["Monde"] = "Mundo",
         ["Ma position"] = "Mi posición",
         ["Détail des zones : %s morceaux explorés ici · masque : %s"] = "Detalle de las zonas: %s piezas exploradas aquí · máscara: %s",
@@ -1732,6 +1742,16 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Carte"] = "Map",
+        ["Carte des combats"] = "Map of fights",
+        ["Vision de guilde"] = "Guild vision",
+        ["Vos combats et ceux de la guilde."] = "Your fights and the guild’s.",
+        ["Un membre de la guilde"] = "A guild member",
+        ["Mort d’un membre de la guilde"] = "Death of a guild member",
+        ["Victoire d’un membre de la guilde"] = "Victory of a guild member",
+        ["guilde : %d"] = "guild: %d",
+        ["Surbrillance de la zone : %s"] = "Zone highlight: %s",
+        ["Cochée : vous voyez sur la carte les victoires et les morts des membres qui l’ont cochée, et ils voient les vôtres (la zone et l’endroit). Décochée : rien n’est envoyé, rien n’est gardé, et la guilde oublie vos combats."] = "Ticked: you see on the map the victories and deaths of the members who ticked it, and they see yours (the zone and the place). Unticked: nothing is sent, nothing is kept, and the guild forgets your fights.",
         ["Monde"] = "World",
         ["Ma position"] = "My position",
         ["Détail des zones : %s morceaux explorés ici · masque : %s"] = "Zone detail: %s explored pieces here · mask: %s",

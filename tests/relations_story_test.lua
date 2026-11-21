@@ -266,6 +266,38 @@ do
     click(view.mine)
     settle()
     assert(view.zoom > 7 and view.caption:GetText():find("^Tanaris · "))
+    -- Only finished fights are drawn: an attack without an outcome was a brown square (owner report).
+    event.kind = "aggression"
+    assert(#R.MapPoints(947, view.world.zones) == 0)
+    event.kind = "death"
+    -- While the regions speak the map under them is dimmed, so a lit zone stands out; every count
+    -- sits on a tinted plate.
+    R.MapOut()
+    settle()
+    assert(view.world.art.textures[1].vertex[1] < 0.7 and view.labels[1].fill.color and view.labels[1].fill.color[1] > 0.7)
+    -- Guild vision (0.49.0): one box on the page; the guild's fights are counted and drawn with yours.
+    local realEnabled, realPoints, realEnable = GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable
+    local ticked = false
+    GL.GuildMap.Enabled = function() return ticked, true end
+    GL.GuildMap.Enable = function(value) ticked = value end
+    GL.GuildMap.Points = function()
+        if not ticked then return {} end
+        return { { actor = "Player-1-Mate0001", time = 1700000300, mapID = 1444, x = 0.5, y = 0.5, kind = "death" },
+            { actor = "Player-1-Mate0001", time = 1700000200, mapID = 1444, x = 0.2, y = 0.4, kind = "kill" },
+            { actor = "Player-1-Mate0002", time = 1700000100, mapID = 99999, x = 0.2, y = 0.4, kind = "death" } }
+    end
+    R.Refresh()
+    assert(landsPage.guild:IsShown() and not landsPage.guild:GetChecked() and #view.tallies == 1 and #view.placed == 1)
+    landsPage.guild:SetChecked(true)
+    landsPage.guild.scripts.OnClick(landsPage.guild)
+    assert(ticked == true and landsPage.guild:GetChecked() and landsPage.lead:GetText() == "Vos combats et ceux de la guilde.")
+    assert(#view.tallies == 2 and view.tallyOf[1444].deaths == 1 and view.tallyOf[1444].kills == 1, #view.tallies)
+    assert(#view.placed == 3 and view.placed[2].guild == "Player-1-Mate0001" and view.hint:GetText():find("guilde : 2", 1, true), view.hint:GetText())
+    assert(math.abs(view.placed[2].x - (0.1 + 0.2 * 0.4)) < 0.001, "placed through the zone's rectangle; an unknown map is left out")
+    landsPage.guild:SetChecked(false)
+    landsPage.guild.scripts.OnClick(landsPage.guild)
+    assert(#view.tallies == 1 and #view.placed == 1)
+    GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable = realEnabled, realPoints, realEnable
     -- "Voir la liste" gives the list back; a client without map pictures only has the list.
     click(landsPage.toggle)
     assert(landsPage.mode == "list" and not view:IsShown() and landsPage.rows[1]:IsShown() and landsPage.toggle:GetText() == "Voir la carte")
