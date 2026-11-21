@@ -27,6 +27,9 @@ end
 local function plainName(text)
     return type(text) == "string" and #text <= 48 and not text:find(";", 1, true) and not GL.ContainsControlOrMarkup(text)
 end
+local function UI_plain(text)
+    return GL.UITheme and GL.UITheme.plain and (GL.UITheme.plain(text)) or tostring(text)
+end
 local function scope()
     if not GL.Bounties or not GL.Bounties.GuildScope then return nil end
     return GL.Bounties.GuildScope()
@@ -97,19 +100,21 @@ end
 local function message(actor, text)
     return "M;1;" .. actor .. ";" .. text
 end
--- Answers a member who asks: your own fights, then, a little later and unless another member
--- does it first, the latest fights of the others. Sent behind the urgent guild messages.
-local function answer(s, me)
+-- Answers a member who asks. "full" (a member ticked the box): your own fights at once, then the
+-- relay. A login (0.58.0): only the relay, so that a guild of a hundred does not answer a hundred
+-- times. The relay holds the latest fights of everyone, yours included; it leaves after a random
+-- delay and is dropped when another member started one first. Sent behind the urgent messages.
+local function answer(s, me, full)
     local T = GL.Transport
     local own = {}
-    for _, text in ipairs(type(s.places) == "table" and type(s.places[me]) == "table" and s.places[me] or {}) do
+    for _, text in ipairs(full and type(s.places) == "table" and type(s.places[me]) == "table" and s.places[me] or {}) do
         if read(text) then own[#own + 1] = message(me, text) end
     end
     local sent = false
     if #own > 0 and not T.State(s, "map:own") then sent = T.SendBatch(s, own, { key = "map:own" }) == true end
     local others = {}
     for actor, list in pairs(type(s.places) == "table" and s.places or {}) do
-        if actor ~= me and guid(actor) and type(list) == "table" then
+        if (actor ~= me or not full) and guid(actor) and type(list) == "table" then
             for _, text in ipairs(list) do
                 local at = read(text)
                 if at then others[#others + 1] = { at = at, text = "R;" .. message(actor, text) } end
@@ -178,7 +183,7 @@ function M.Enable(enabled)
     forgetIndex()
     if enabled == true then
         seed(s, me)
-        answer(s, me)
+        answer(s, me, true)
         GL.Transport.Send(s, "MQ")
     else
         -- Nothing is kept while the box is unticked, and the guild is asked to forget yours.
@@ -231,7 +236,7 @@ function M.Receive(s, me, sender, raw, relay)
     if not on(s, me) then return false end
     if raw == "MQ" then
         if relay then return false end
-        M.CatchUp(s, me, sender)
+        M.CatchUp(s, me, sender, true)
         return true
     end
     local actor, rest = raw:match("^M;1;([^;]+);(.+)$")
@@ -251,13 +256,81 @@ function M.Receive(s, me, sender, raw, relay)
     refresh()
     return true
 end
--- A member asked what the guild knows (MQ when ticking the box, Q at login).
-function M.CatchUp(s, me, sender)
+-- A member asked what the guild knows: MQ when ticking the box ("full"), Q at login (the relay).
+function M.CatchUp(s, me, sender, full)
     if not on(s, me) then return end
     local now = GL.Now()
     if sender and asked[sender] and now - asked[sender] < ASK_GAP then return end
     -- An answer that had nothing to say does not use up the member's turn.
-    if answer(s, me) and sender then asked[sender] = now end
+    if answer(s, me, full) and sender then asked[sender] = now end
+end
+
+-- Versions (0.58.0): each member tells the guild which version of the addon it runs, at login, and
+-- answers a newcomer once a minute at most. A member heard from without a version runs one older
+-- than 0.58.0. Kept in memory only, never saved.
+local versions, heard, warned = {}, {}, {}
+local announcedAt = 0
+local function numbers(value)
+    local a, b, c = tostring(value):match("^(%d+)%.(%d+)%.?(%d*)")
+    return tonumber(a) or 0, tonumber(b) or 0, tonumber(c) or 0
+end
+local function older(value, than)
+    local a, b, c = numbers(value)
+    local x, y, z = numbers(than)
+    if a ~= x then return a < x end
+    if b ~= y then return b < y end
+    return c < z
+end
+local function memberName(id)
+    return GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(id) or GL.L("Un membre de la guilde")
+end
+function M.Announce(s)
+    if type(s) ~= "table" or type(GL.version) ~= "string" or not GL.version:match("^%d+%.%d+") then return false end
+    announcedAt = GL.Now()
+    GL.Transport.Send(s, "GLV;" .. GL.version)
+    return true
+end
+-- Any guild message of the addon: its sender runs Grudge Ledger. Without a version a minute later,
+-- it runs one older than 0.58.0, and the player is told once.
+function M.Heard(sender)
+    if not guid(sender) or heard[sender] then return end
+    heard[sender] = GL.Now()
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(60, function()
+            if versions[sender] or warned[sender] then return end
+            warned[sender] = true
+            GL.Print(GL.L("%s utilise une version de Grudge Ledger antérieure à la 0.58 : une partie des échanges de guilde ne lui parvient pas.")
+                :format(UI_plain(memberName(sender))))
+        end)
+    end
+end
+function M.Version(s, me, sender, value, relay)
+    if relay or not guid(sender) or sender == me or type(value) ~= "string" or #value > 16 or not value:match("^%d+%.%d+[%.%d]*$") then
+        return false
+    end
+    heard[sender] = heard[sender] or GL.Now()
+    versions[sender] = value
+    -- A newcomer learns the versions of the others: each answers once a minute at most.
+    if GL.Now() - announcedAt >= 60 then M.Announce(s) end
+    if older(value, GL.version) and not warned[sender] then
+        warned[sender] = true
+        GL.Print(GL.L("%s utilise une ancienne version de Grudge Ledger (%s, la vôtre : %s) : une partie des échanges de guilde ne lui parvient pas.")
+            :format(UI_plain(memberName(sender)), value, GL.version))
+    elseif older(GL.version, value) and not warned.self then
+        warned.self = true
+        GL.Print(GL.L("Votre guilde utilise une version plus récente de Grudge Ledger (%s). Pensez à mettre à jour."):format(value))
+    end
+    refresh()
+    return true
+end
+-- The members heard this session: how many run your version or a newer one, out of how many.
+function M.Versions()
+    local current, total = 0, 0
+    for sender in pairs(heard) do
+        total = total + 1
+        if versions[sender] and not older(versions[sender], GL.version) then current = current + 1 end
+    end
+    return current, total
 end
 -- The guild's fights, the latest first: who, when, which map, where (0 to 1), death or kill, and
 -- against whom. Yours are left out (the map reads them in your journal) unless asked for.

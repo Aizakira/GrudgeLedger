@@ -2266,6 +2266,13 @@ local function book(key)
     f.host = host
     return f
 end
+-- How many members heard this session run your version or a newer one (0.58.0).
+local function versionLine()
+    local current, total = 0, 0
+    if GL.GuildMap and GL.GuildMap.Versions then current, total = GL.GuildMap.Versions() end
+    if total == 0 then return nil end
+    return { L("Versions à jour"), current .. "/" .. total, "guildlog" }
+end
 -- The key figures of a book's left column, each with the page it opens. Relations: what is owed,
 -- the debts and the rivalries. Guilde: the guild's week, when it shares its fights.
 function R.Tally(key)
@@ -2282,7 +2289,8 @@ function R.Tally(key)
         end
         return { { L("Morts · 7 j"), #R.GuildLog({ view = "death", period = week }), "guildlog" },
             { L("Victoires · 7 j"), #R.GuildLog({ view = "kill", period = week }), "guildlog" },
-            { L("Ennemis · 7 j"), #R.GuildEnemies(week), "enemies" }, { L("Membres partageant"), sharing, "guildlog" } }
+            { L("Ennemis · 7 j"), #R.GuildEnemies(week), "enemies" }, { L("Membres partageant"), sharing, "guildlog" },
+            versionLine() }
     end
     local open, settled, total = R.Debts()
     return { { L("Reste dû"), total, "debts" }, { L("Dettes ouvertes"), #open, "debts" },

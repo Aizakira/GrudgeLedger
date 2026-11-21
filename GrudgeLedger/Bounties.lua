@@ -759,7 +759,7 @@ local function receive(msg,sender)
         if budget.lastQ and now-budget.lastQ<10 then return end
         budget.lastQ=now
         if sender~=me and GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me) end
-        if sender~=me and GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender) end
+        if sender~=me and GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
         for target,scores in pairs(s.scores or {}) do
             for actor,n in pairs(scores) do schedule(s,"R;"..scoreMessage(actor,target,n[1],n[2])) end
         end
@@ -769,8 +769,14 @@ local function receive(msg,sender)
         end
         return
     end
+    if sender~=me and GL.GuildMap then GL.GuildMap.Heard(sender) end
     local relay=msg:sub(1,2)=="R;"
     local raw=relay and msg:sub(3) or msg
+    -- The version each member runs (GuildMap.lua, 0.58.0).
+    if raw:sub(1,4)=="GLV;" then
+        if GL.GuildMap then GL.GuildMap.Version(s,me,sender,raw:sub(5),relay) end
+        return
+    end
     -- Places of fights for the guild vision of the map (GuildMap.lua).
     if raw=="MQ" or raw=="MX" or raw:sub(1,2)=="M;" then
         if GL.GuildMap then GL.GuildMap.Receive(s,me,sender,raw,relay) end
@@ -1099,6 +1105,7 @@ local function join()
         if s then
             finalize(s,me)
             schedule(s,"Q")
+            if GL.GuildMap then GL.GuildMap.Announce(s) end
             if GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me,true) end
             for _,raw in pairs(s.events) do
                 local e=unpackEvent(raw)

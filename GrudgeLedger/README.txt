@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.57.0
+GRUDGE LEDGER — 0.58.0
+
+Guilde : à la connexion d’un membre, un seul autre membre lui transmet les combats de la guilde (les siens compris), au lieu de tous les membres à la fois. Chaque membre annonce sa version de Grudge Ledger : la page Guilde affiche « Versions à jour », et la discussion prévient une fois quand un membre a une version ancienne ou quand la vôtre l’est.
 
 Alertes : croiser un joueur mis à prix donne une alerte dorée avec un son de pièces, qui dit la récompense (ou « avis de recherche, sans or ») et qui l’a demandée. L’alerte « Tueur de guilde » est orange et porte un bouton « Rechercher » : un avis de recherche gratuit en un clic. Le portrait d’un contrat de prime garde son cadre, son niveau et sa classe devant la tête.
 

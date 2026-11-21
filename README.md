@@ -1,6 +1,6 @@
 # Grudge Ledger
 
-**0.10.3.** Outdoor combat now credits each contributing opponent once per death, even when a creature lands the final blow. Previous attributions are combined on upgrade. Resurrecting enables a fresh nearby warning. The journal keeps recently seen portraits during the session and shows your recorded honor on the contact summary. Enemy honor is unknown.
+**0.58.0.** Guild test release: a Guild tab (guild journal, guild enemies, guild killer alert), the Summary as cards inside Relations, redesigned bounties with free wanted notices, one book per faction. Release notes (French): [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
 
 
 <img src="docs/red-book.png" alt="Grudge Ledger's red book" width="96" align="right">

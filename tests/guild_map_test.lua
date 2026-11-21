@@ -7,6 +7,7 @@ local function client(i)
     local env = setmetatable({ _G = false }, { __index = _G })
     env._G = env
     env.loadfile = function(p) return setfenv(assert(loadfile(p)), env) end
+    env.GetAddOnMetadata = function() return "0.58.0" end
     local mock = env.loadfile(TEST_WORK .. "/tests/addon_mock.lua")()
     local c = { env = env, GL = env.GrudgeLedger, m = mock, id = "Player-1-a" .. i, name = "Member" .. i .. "-Realm", guild = "Guild",
         log = {}, online = true, sounds = {} }
@@ -204,12 +205,38 @@ assert(C.Fight("d", enemy, "Bad Guy") == true)
 flush()
 assert(from(A.Points(), third.id) == 1 and from(B.Points(), third.id) == 1)
 third.online = false
+local ownA, ownB = sentAbout(a, "^M;1;"), sentAbout(b, "^M;1;")
+local relayA, relayB = sentAbout(a, "^R;M;1;"), sentAbout(b, "^R;M;1;")
 local fourth = client(4)
 flush()
+-- A login (0.58.0): nobody resends their own fights; one relay, the relayer's own fights included,
+-- gives the newcomer what the guild knows.
+assert(sentAbout(a, "^M;1;") == ownA and sentAbout(b, "^M;1;") == ownB, "no member answers a login with its own fights")
+local relayed = sentAbout(a, "^R;M;1;") - relayA + sentAbout(b, "^R;M;1;") - relayB
+assert(relayed > 0 and relayed <= 2 * 120, relayed)
+local known = fourth.GL.GuildMap.Points()
+assert(from(known, a.id) == 40 and from(known, b.id) == 1 and from(known, third.id) == 1, #known)
+-- The versions: each member announced its own at login and answered the newcomer.
+assert(select(2, fourth.GL.GuildMap.Versions()) == 2 and select(1, fourth.GL.GuildMap.Versions()) == 2)
+assert(sentAbout(fourth, "^GLV;") == 1 and sentAbout(a, "^GLV;") >= 1)
+-- A member with an older version is named once in the chat; a newer one in the guild is told too.
+local printed = #a.m.messages
+fourth.GL.version = "0.10.0"
+fourth.GL.GuildMap.Announce(fourth.GL.Bounties.GuildScope())
+flush()
+assert(#a.m.messages > printed and a.m.messages[#a.m.messages]:find("ancienne version", 1, true), tostring(a.m.messages[#a.m.messages]))
+assert(select(1, a.GL.GuildMap.Versions()) < select(2, a.GL.GuildMap.Versions()))
+fourth.GL.version = "9.0.0"
+now = now + 61
+printed = #b.m.messages
+fourth.GL.GuildMap.Announce(fourth.GL.Bounties.GuildScope())
+flush()
+assert(b.m.messages[#b.m.messages]:find("plus récente", 1, true), tostring(b.m.messages[#b.m.messages]))
+fourth.GL.version = a.GL.version
 now = now + 60
 assert(fourth.GL.GuildMap.Enable(true) == true)
 flush()
-local known = fourth.GL.GuildMap.Points()
+known = fourth.GL.GuildMap.Points()
 assert(from(known, a.id) == 40 and from(known, b.id) == 1 and from(known, third.id) == 1, #known)
 assert(sentAbout(a, "^R;M;1;") + sentAbout(b, "^R;M;1;") >= 1, "someone passed on the absent member's fights")
 assert(fourth.GL.GuildMap.Killer(enemy).deaths == 42, fourth.GL.GuildMap.Killer(enemy).deaths)
