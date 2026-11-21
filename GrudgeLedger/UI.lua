@@ -551,7 +551,7 @@ local function bookNavigation(f, selected)
     for i, entry in ipairs({
         { "ledger", L("Journal"), function() GL.ShowLedger() end },
         { "players", L("Relations"), function() GL.ShowRelations() end },
-        { "journal", L("Bilan"), function() GL.ShowJournal("summary") end },
+        { "journal", L("Bilan"), function() if GL.Recap then GL.Recap.Open() else GL.ShowJournal("summary") end end },
         { "bounties", L("Primes"), function() GL.OpenBounties() end },
     }) do
         local b = button(f, entry[2], 72 + (i - 1) * 208, -96, 192, entry[3], true)

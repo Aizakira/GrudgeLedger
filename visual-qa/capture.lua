@@ -526,6 +526,11 @@ function QA.capture(name)
         f.search:SetText("Aucune correspondance QA")
         f.search.scripts.OnEnterPressed(f.search)
         return f
+    elseif name:find("^recap") then
+        -- The Bilan's five cards, on the example journal.
+        GL.Recap.Open(tonumber(name:match("^recap%-(%d)")) or 1)
+        if name:find("%-copy") then GrudgeLedgerRecap.copy.scripts.OnClick(GrudgeLedgerRecap.copy, "LeftButton") end
+        return GrudgeLedgerRecap
     elseif name:find("^relations") then
         -- The Relations book, with the example journal. "-empty" shows a new player's book.
         local page = name:match("^relations%-(%a+)")

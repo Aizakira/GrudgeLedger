@@ -5,7 +5,7 @@
 ## Notes-esMX: Diario personal de amistades, rencores, encuentros e historial JcJ.
 ## Notes-frFR: Journal personnel des amis et des rancunes : notes, rencontres et historique PvP.
 ## Author: Grudge Ledger contributors
-## Version: 0.52.1
+## Version: 0.53.0
 ## OptionalDeps: GrudgeLedgerPortraits
 ## SavedVariables: GrudgeLedgerDB
 ## IconTexture: Interface\AddOns\GrudgeLedger\Media\LedgerBook
@@ -45,4 +45,5 @@ DeathReport.lua
 DossierPanels.lua
 PlayerDossier.lua
 Relations.lua
+Recap.lua
 BountyUI.lua

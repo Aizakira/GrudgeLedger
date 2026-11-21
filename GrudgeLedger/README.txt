@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.52.1
+GRUDGE LEDGER — 0.53.0
+
+Nouveau Bilan : votre carte de joueur en cinq pages qu’on tourne avec les flèches. Qui vous êtes (votre style de combat et votre titre), vos chiffres, vos deux personnes (votre némésis et votre proie favorite), votre territoire (là où vous mourez et là où vous gagnez), votre guilde (votre part de ses victoires et son pire ennemi). Une seule chose à choisir : la période. « Copier le bilan » donne le texte à coller dans la discussion. Les anciens tableaux restent derrière « Tableaux détaillés ».
 
 Journal de guilde : les filtres fonctionnent maintenant comme ceux du Journal. Une recherche (un membre ou un ennemi), un bouton qui fait défiler les listes (Tous, Morts, Victoires, Mes combats) avec leur nombre, et « Filtres » qui ouvre le même panneau que dans le Journal (période, membre, ennemi, Effacer, Fermer). Relations : les chiffres sous les onglets deviennent des « Chiffres clés » comme sur la fiche d’un joueur, et chacun ouvre sa page.
 

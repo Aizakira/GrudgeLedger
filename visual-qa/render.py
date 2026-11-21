@@ -453,7 +453,7 @@ def main():
     # The addon alone: no Armory archive, no studio photo. The state every user starts from.
     views += ["dossier-fresh", "dossier-fresh-gear", "dossier-read", "dossier-read-gear", "dossier-read-talents"]
     views += ["relations-overview", "relations-debts", "relations-overview-empty", "relations-debts-empty",
-              "relations-rivals", "relations-guilds", "relations-lands", "relations-rankings", "relations-guildlog", "relations-guildlog-filters"]
+              "relations-rivals", "relations-guilds", "relations-lands", "relations-rankings", "relations-guildlog", "relations-guildlog-filters", "recap-1", "recap-2", "recap-3", "recap-4", "recap-5", "recap-1-copy"]
     views += ["journal-filters", "journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small", "guild-profiles"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
