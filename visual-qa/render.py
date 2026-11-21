@@ -438,7 +438,7 @@ def main():
               "chronicle", "chronicle-readable", "chronicle-small", "chronicle-empty", "chronicle-notes"]
     views += ["statistics-encounters", "statistics-recent", "statistics-friends", "statistics-friends-recent",
               "statistics-group", "statistics-combat", "statistics-horde", "guild-rankings-combat", "statistics-readable-small"]
-    views += ["journal-history", "journal-matchup", "journal-notes", "journal-history-small", "journal-notes-readable-small",
+    views += ["journal-history", "journal-notes", "journal-history-small", "journal-notes-readable-small",
               "settings-alerts", "settings-relations", "settings-shortcuts", "settings-data", "settings-readable-alerts-small",
               "honor-story", "guide"]
     views += ["journal-largeprint", "journal-history-largeprint-small", "statistics-largeprint",

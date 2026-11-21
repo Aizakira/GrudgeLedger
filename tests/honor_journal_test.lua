@@ -70,12 +70,11 @@ contains(book.storyText, "Honneur reçu : 43")
 contains(book.storyText, "3 gains")
 GL.ShowLedger(id.key)
 local ledger = GrudgeLedgerWindow
-click(ledger.detailTabs.matchup)
-contains(ledger.detailText, "Honneur reçu : 31")
-contains(ledger.detailText, "2 gains · Gain maximal : 31")
-contains(ledger.detailText, "Honneur adverse inconnu")
-assert(ledger.metrics.kills.value:GetText() == "0")
-click(ledger.matchupHistory)
+-- The Face-à-face page left the Journal in 0.38.0; its filter of the detailed history remains.
+local duel = GL.ContactMatchup(GL.Get(id.key))
+assert(duel.honor == 31 and duel.honorAwards == 2 and duel.bestHonor == 31 and duel.kills == 0)
+click(ledger.detailTabs.history)
+click(ledger.historyPage.options.matchup)
 local history = ledger.historyPage
 assert(history.rows[1].event == receipt and history.rows[2].event == zero and not history.rows[3]:IsShown())
 click(history.rows[1].details)

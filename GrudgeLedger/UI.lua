@@ -2145,7 +2145,7 @@ local function renderDetail()
         UI.selectButton(control, record and GL.Relation(record) == reaction)
     end
     local showHistory, showNotes = record and tab == "history", record and tab == "notes"
-    local summary, matchup = tab == "summary" and record ~= nil, tab == "matchup" and record ~= nil
+    local summary = tab == "summary" and record ~= nil
     if showHistory then ledger.historyPage:Show() else ledger.historyPage:Hide() end
     if not showNotes and noteWindow then noteWindow:Hide() end
     if showHistory or showNotes or not record then ledger.detailScroll:Hide() else ledger.detailScroll:Show() end
@@ -2155,12 +2155,11 @@ local function renderDetail()
     end
     if not summary then ledger.hint:Hide() ledger.tools:Hide() ledger.toolsMenu:Hide() ledger.openSheet:Hide()
     else ledger.hint:Show() ledger.tools:Show() ledger.openSheet:Show() end
-    showIf(ledger.counters, summary or matchup)
+    showIf(ledger.counters, summary)
     showIf(ledger.balancePanel, summary)
-    showIf(ledger.matchupHistory, matchup)
     ledger.detailScroll:ClearAllPoints()
-    ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -417 or matchup and -380 or -283)
-    ledger.detailScroll:SetHeight(summary and 165 or matchup and 220 or 293)
+    ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -417 or -283)
+    ledger.detailScroll:SetHeight(summary and 165 or 293)
     ledger.detailTitle:SetTextColor(unpack(theme.ink))
     local profile = GL.ArmoryProfile(record)
     local public = profile and profile.identity
@@ -2198,16 +2197,12 @@ local function renderDetail()
         local guildName = record.guild or (public and public.guild)
         ledger.detailGuild:SetText(guildName and L("Guilde : %s"):format(plain(guildName)) or L("Guilde non renseignée"))
         ledger.raceIcon:Show() ledger.classIcon:Show() identityIcons(ledger, record)
-        local duels = matchup and GL.ContactMatchup(record)
-        if summary or matchup then
-            local counts = duels or pvp
+        if summary then
             for _, field in ipairs({ "kills", "deaths" }) do
                 local card = ledger.metrics[field]
-                local n = counts[field] or 0
-                local kills = field == "kills"
-                card.caption:SetText(matchup and (kills and L("Victoires") or L("Morts"))
-                    or (kills and L("Vous l’avez vaincu") or L("Vos morts")))
-                card.value:SetText(matchup and tostring(n) or (n == 1 and L("1 fois") or L("%d fois"):format(n)))
+                local n = pvp[field] or 0
+                card.caption:SetText(field == "kills" and L("Vous l’avez vaincu") or L("Vos morts"))
+                card.value:SetText(n == 1 and L("1 fois") or L("%d fois"):format(n))
             end
         end
         if summary then
@@ -2277,24 +2272,6 @@ local function renderDetail()
             lines[#lines + 1] = L("Honneur adverse inconnu")
             if guildRule and guildRule.note and guildRule.note ~= "" then lines[#lines + 1] = L("Note de guilde : %s"):format(plain(guildRule.note)) end
             if (record.groupCount or 0) > 0 then lines[#lines + 1] = subdued(L("Sessions de groupe : %d"):format(record.groupCount)) end
-        elseif matchup then
-            local confirmed = duels.kills + duels.deaths
-            ledger.matchupHistory:SetEnabled(confirmed + duels.honorAwards > 0)
-            lines = { subdued(L("Ce personnage · Monde ouvert")), honorTotal(duels) }
-            if duels.honorAwards > 0 then lines[#lines + 1] = honorDetail(duels) end
-            lines[#lines + 1] = subdued(L("Honneur adverse inconnu"))
-            if duels.run > 1 then
-                lines[#lines + 1] = L("Série en cours : %s de suite."):format(counted(duels.run, duels.lastKind == "kill" and "victoire" or "défaite"))
-            end
-            if duels.comeback then lines[#lines + 1] = L("Dernière victoire après une défaite : %s"):format(eventDate(duels.comeback)) end
-            if duels.closeDeaths then lines[#lines + 1] = L("Deux défaites à trois minutes d’intervalle ou moins le %s."):format(eventDate(duels.closeDeaths)) end
-            if #duels.recent > 0 then
-                lines[#lines + 1] = "\n|cff653c20" .. L("Derniers résultats datés") .. "|r"
-                for _, event in ipairs(duels.recent) do
-                    lines[#lines + 1] = eventDate(event) .. "   ·   " .. (event.kind == "kill" and L("Victoire") or L("Défaite")) .. "   ·   " .. plain(eventPlace(event))
-                end
-            elseif confirmed > 0 then lines[#lines + 1] = "\n" .. L("Aucun combat daté pour ce personnage.")
-            else lines[#lines + 1] = "\n" .. L("Aucune victoire ni défaite enregistrée avec ce joueur pour ce personnage.") end
         elseif tab == "history" then
             renderHistory(ledger.historyPage, record)
         elseif tab == "notes" then
@@ -2975,13 +2952,13 @@ local function buildLedger()
         if r then GL.OpenContactBounty(r.guid) end
     end, nil, true)
     f.detailTabs = {}
-    for i, entry in ipairs({ { "summary", L("Synthèse") }, { "history", L("Histoire") }, { "notes", L("Notes") }, { "matchup", L("Face-à-face") } }) do
+    -- Never shown since 0.33.0: these three stay as the internal switches of the right page.
+    for i, entry in ipairs({ { "summary", L("Synthèse") }, { "history", L("Histoire") }, { "notes", L("Notes") } }) do
         local key = entry[1]
         f.detailTabs[key] = button(f, entry[2], 354 + (i - 1) * 112, -234, 108, function()
             f.detailTab = key f.detailScroll.page = 1 renderDetail()
         end, true, true)
     end
-    f.detailTabs.dossier = button(f, L("Armurerie"), 802, -234, 111, dossier, true, true)
     f.counters = CreateFrame("Frame", nil, f)
     f.counters:SetPoint("TOPLEFT", 354, -236) f.counters:SetSize(558, 160)
     f.backToSummary = button(f, "‹ " .. L("Retour au résumé"), 354, -234, 190, function()
@@ -3014,10 +2991,6 @@ local function buildLedger()
     -- Pages instead of a scroll bar.
     f.detailScroll = UI.textPages(f, 544, 230)
     f.detailScroll:SetPoint("TOPLEFT", 356, -379)
-    f.matchupHistory = button(f, L("Voir les combats dans l’histoire"), 356, -619, 293, function()
-        f.detailTab, f.historyPage.kind, f.historyPage.offset = "history", "matchup", 0
-        renderDetail()
-    end, nil, true)
     local p = CreateFrame("Frame", nil, f)
     f.historyPage = p
     p:SetPoint("TOPLEFT", 353, -278) p:SetSize(561, 382)

@@ -152,20 +152,20 @@ GrudgeLedgerGuide:Hide()
 GL.ShowLedger()
 assert(not GrudgeLedgerGuide:IsShown(), "later openings do not interrupt the journal")
 GL.ShowLedger(ra.key)
-click(ledger.detailTabs.matchup)
-assert(ledger.detailScroll:IsShown() and not ledger.tools:IsShown())
-assert(ledger.metrics.kills.value:GetText() == "1" and ledger.metrics.deaths.value:GetText() == "1"
-    and not ledger.metrics.kills.probable and not ledger.balancePanel:IsShown(),
+-- The Face-à-face page left the Journal in 0.38.0 (the sheet replaced it); the same reckoning
+-- still feeds the "Mes face-à-face" filter of the detailed history.
+local face = GL.ContactMatchup(ra)
+assert(face.kills == 1 and face.deaths == 1,
     "face-to-face separates probable results and excludes other characters, unknown authors and corrections")
-click(ledger.matchupHistory)
+assert(ledger.detailTabs.matchup == nil and ledger.detailTabs.dossier == nil and ledger.matchupHistory == nil)
+click(ledger.detailTabs.history)
+click(ledger.historyPage.options.matchup)
 assert(ledger.historyPage.kind == "matchup" and ledger.historyPage.total:GetText() == "1–2 sur 2")
 assert(ledger.historyPage.rows[1].event.eventId == "own-kill" and ledger.historyPage.rows[2].event.eventId == "own-death")
 GL.ShowLedger(rb.key)
-click(ledger.detailTabs.matchup)
-assert(ledger.detailScroll.fullText:find("Aucune victoire ni défaite", 1, true) and not ledger.matchupHistory:IsEnabled())
+assert(GL.ContactMatchup(rb).deaths == 0 and #GL.ContactMatchup(rb).recent == 0)
 local _, probableLoss = GL.RecordPvP(b, "death", "confirmed", "fixture", "uncertain")
-assert(ledger.metrics.deaths.value:GetText() == "1" and not ledger.metrics.deaths.probable)
-assert(ledger.detailScroll.fullText:find("Derniers résultats", 1, true) and ledger.matchupHistory:IsEnabled())
+assert(GL.ContactMatchup(rb).deaths == 1 and #GL.ContactMatchup(rb).recent == 1)
 local upgrade = {}
 for field, value in pairs(probableLoss) do upgrade[field] = value end
 upgrade.confidence = "confirmed"

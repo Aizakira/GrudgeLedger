@@ -160,7 +160,7 @@ assert(named.armorySnapshot and named.armorySnapshot.stats.HEALTH==123, "manual 
 GL.Settings().guideSeen=true
 GL.ShowLedger(named.key)
 assert(GrudgeLedgerWindow.detailIdentity:GetText():find("Gnome",1,true))
-click(GrudgeLedgerWindow.detailTabs.dossier)
+click(GrudgeLedgerWindow.openSheet)
 click(f.tabs.gear)
 assert(f:IsShown() and f.nameLabel:GetText()=="Named Friend" and eq.buttons[4].itemName=="Woven mantle")
 assert(GL.Relation(named)=="enemy" and named.armorySnapshot.gear.back.name=="Woven mantle")
