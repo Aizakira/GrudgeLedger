@@ -255,14 +255,17 @@ assert(fourth.GL.GuildMap.Killer(enemy).deaths == 42, fourth.GL.GuildMap.Killer(
 now = now + 60
 local scopeA = a.GL.Bounties.GuildScope()
 assert(A.Receive(scopeA, a.id, fourth.id, "MQ", false) == true)
+local askedAt = now
 local _, queued = a.GL.Transport.Pending(scopeA)
 assert(queued >= 40, queued)
 flush()
 local before = sentAbout(a, "^M;1;")
-now = now - 20
+-- Ten seconds after the first question, whatever the random delays of the sending took.
+local afterFlush = now
+now = askedAt + 10
 A.Receive(scopeA, a.id, fourth.id, "MQ", false)
 local _, again = a.GL.Transport.Pending(scopeA)
-now = now + 20
+now = afterFlush
 assert(again == 0 and sentAbout(a, "^M;1;") == before, "one answer every thirty seconds")
 
 -- Unticking: nothing is kept here, the guild forgets your fights, and a relay cannot bring them back.

@@ -69,15 +69,18 @@ local function members(o)
 end
 local function account(o,me)
     local a={due=0,incoming=0,received=0,transit=0,amount=0,remaining=0}
-    -- Once the guild roster is read, what is still owed to someone gone from the guild is set
-    -- aside: it can no longer be mailed. What they received stays counted.
+    -- Once the guild roster is read, what is still to send to someone gone from the guild is set
+    -- aside: the mailbox no longer offers it. Mail already sent and what they received stay counted.
     local roster=B.IsMember(me)
     for _,h in ipairs(members(o)) do
         if h==me then a.hunted=true end
         local gone=roster and not B.IsMember(h)
         for payer in pairs(o.pot) do
             local send,waiting,received=B.Payment(o,payer,h)
-            if gone then send,waiting=0,0 end
+            if gone then
+                waiting=waiting-send
+                send=0
+            end
             if payer==me then a.due=a.due+send end
             if h==me then a.incoming=a.incoming+waiting; a.received=a.received+received end
             if payer==me or h==me or o.owner==me then

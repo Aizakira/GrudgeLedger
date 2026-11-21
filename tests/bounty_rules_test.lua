@@ -177,6 +177,9 @@ now=now+60
 event(nil,"CHAT_MSG_ADDON","GLBounty1","Q","GUILD",names[partner])
 assert(gl.Transport.State(busy,"bounty:own")~=nil, "your own events still go out")
 assert(gl.Transport.State(busy,"bounty:relay")==nil, "no room left: no relay")
+-- A second arrival while your batch still waits adds nothing: it is covered (0.58.11).
+event(nil,"CHAT_MSG_ADDON","GLBounty1","Q","GUILD",names[hunter])
+assert(gl.Transport.State(busy,"bounty:own:2")==nil, "no pile of copies")
 gl.Transport.Cancel(busy,"filler")
 gl.Transport.Cancel(busy,"bounty:own")
 print("PASS guild alpha rules: personal quota, replay, legacy claims, solo/group, split, notification and durable history")

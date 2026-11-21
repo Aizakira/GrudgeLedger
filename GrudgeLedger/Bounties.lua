@@ -823,11 +823,15 @@ local function receive(msg,sender)
         table.sort(own,function(x,y) return x.at>y.at end)
         local ownBatch={}
         for i=1,math.min(150,#own) do ownBatch[i]=own[i].text end
-        local ownState=GL.Transport.State(s,"bounty:own")
-        if #ownBatch>0 and ownState~="queued" then
+        -- Two places at most: the batch leaving now and the next one. A third arrival is covered by
+        -- the one already waiting (review 0.58.10).
+        local first,second=GL.Transport.State(s,"bounty:own"),GL.Transport.State(s,"bounty:own:2")
+        local key=(first==nil and second~="queued" and "bounty:own") or (second==nil and first~="queued" and "bounty:own:2") or nil
+        -- The map relay keeps its room when it is shared and not already waiting.
+        local mapRoom=GL.GuildMap and GL.GuildMap.Enabled() and not GL.Transport.State(s,"map:relay") and 120 or 0
+        if #ownBatch>0 and key then
             local _,queued=GL.Transport.Pending(s)
-            while #ownBatch>math.max(0,508-queued) do ownBatch[#ownBatch]=nil end
-            local key=ownState=="sending" and "bounty:own:"..now or "bounty:own"
+            while #ownBatch>math.max(0,508-queued-mapRoom) do ownBatch[#ownBatch]=nil end
             if #ownBatch>0 then GL.Transport.SendBatch(s,ownBatch,{key=key,delay=1+math.random(0,4)}) end
         end
         if GL.Transport.State(s,"bounty:relay") then
@@ -863,7 +867,6 @@ local function receive(msg,sender)
         -- What the queue still holds, with room kept for the map relay when it is shared: the totals
         -- go first, then the oldest events. A small guild's relay is short and still sent.
         local _,waiting=GL.Transport.Pending(s)
-        local mapRoom=GL.GuildMap and GL.GuildMap.Enabled() and 120 or 0
         local room=math.max(0,480-waiting-mapRoom)
         while #batch>room do batch[#batch]=nil end
         -- The fuller the relay, the sooner it answers: a small one waits and is cancelled by a big
