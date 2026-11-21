@@ -146,6 +146,22 @@ assert(#a.sounds == 1 and a.sounds[1] == 77, "its own sound")
 toast:Hide()
 a.GL.Display.OnEvent(nil, "PLAYER_TARGET_CHANGED")
 assert(not toast:IsShown() and #a.sounds == 1 and a.GL.Get("guid:" .. enemy) == nil, "once per cooldown, nothing enters the journal")
+-- The guild killer alert is orange and carries "Rechercher" (0.57.0): a free wanted notice in one click.
+a.env.UnitFactionGroup = function(unit) return unit == "player" and "Alliance" or "Horde" end
+a.env.SOUNDKIT.LOOT_WINDOW_COIN_SOUND = 88
+now = now + 600
+a.GL.Display.OnEvent(nil, "PLAYER_TARGET_CHANGED")
+assert(toast:IsShown() and toast.title:GetText() == "Tueur de guilde" and toast.accent[1] > 0.8 and toast.accent[2] < 0.5)
+assert(toast.action:IsShown() and toast.action:GetText() == "Rechercher")
+toast.action.scripts.OnClick(toast.action, "LeftButton")
+local wanted = a.GL.Bounties.OpenFor(enemy)
+assert(wanted and a.GL.BountyTotal(wanted) == 0, "a wanted notice without gold")
+-- The player is still there: the alert turns at once into the wanted one, gold, with the sound of
+-- coins and what the guild offers.
+assert(toast:IsShown() and toast.bounty and toast.title:GetText() == "Cible de prime à proximité", toast.title:GetText())
+assert(toast.note:GetText():find("Avis de recherche, sans or", 1, true) and toast.accent[2] > 0.6 and not toast.action:IsShown(), toast.note:GetText())
+assert(a.sounds[#a.sounds] == 88, tostring(a.sounds[#a.sounds]))
+toast:Hide()
 -- The victim has their own journal and their own alert: no guild banner for them.
 b.m.units.target = { name = "Bad", surname = "Guy", guid = enemy }
 b.GL.Display.OnEvent(nil, "PLAYER_TARGET_CHANGED")

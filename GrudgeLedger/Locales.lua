@@ -4,6 +4,9 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Récompense : %s"] = "Recompensa: %s",
+        ["Avis de recherche, sans or"] = "Aviso de búsqueda, sin oro",
+        ["demandé par %s"] = "pedido por %s",
         ["%d/%d victoires"] = "%d/%d victorias",
         ["Aucune cible choisie"] = "Ningún objetivo elegido",
         ["Avis de recherche"] = "Aviso de búsqueda",
@@ -1910,6 +1913,9 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Récompense : %s"] = "Reward: %s",
+        ["Avis de recherche, sans or"] = "Wanted notice, no gold",
+        ["demandé par %s"] = "asked by %s",
         ["%d/%d victoires"] = "%d/%d victories",
         ["Aucune cible choisie"] = "No target chosen",
         ["Avis de recherche"] = "Wanted notice",

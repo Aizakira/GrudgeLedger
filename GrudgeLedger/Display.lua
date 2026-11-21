@@ -161,7 +161,15 @@ local function refreshToastText(frame, record)
     local hint = frame.bounty and L("Aucune consigne particulière.")
         or L("Déjà rencontré : %s"):format(record.lastZone or L("lieu inconnu"))
     local note = frame.bounty and frame.bounty.note
-    frame.note:SetText(note and note ~= "" and note:gsub("|", "||") or recordNote(record) or hint)
+    -- A wanted player: what the guild offers and who asked, before the issuer's note.
+    local price = ""
+    if frame.bounty and GL.BountyTotal and GL.BountyMoney then
+        local pot = GL.BountyTotal(frame.bounty)
+        local issuer = GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(frame.bounty.owner)
+        price = (pot > 0 and L("Récompense : %s"):format(GL.BountyMoney(pot)) or L("Avis de recherche, sans or"))
+            .. (issuer and (" · " .. L("demandé par %s"):format(issuer)) or "") .. "\n"
+    end
+    frame.note:SetText(price .. (note and note ~= "" and note:gsub("|", "||") or recordNote(record) or hint))
 end
 
 local function validateToast()
@@ -411,8 +419,19 @@ local function makeToast(preview)
     frame.divider:SetColorTexture(0.48, 0.35, 0.18, 0.6)
     frame.hint = textLine("GameFontHighlightSmall", 16, 95, 384, 14, 1, 0.65, 0.59, 0.48)
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
+    -- An action of its own on some alerts ("Rechercher" on a guild killer), beside the hint.
+    if GL.UITheme and GL.UITheme.button then
+        frame.action = GL.UITheme.button(frame, "", 294, -90, 106, function()
+            local action = frame.banner and frame.banner.action
+            frame:Hide()
+            if action then action.run() end
+        end)
+        frame.action:SetHeight(20)
+        frame.action:Hide()
+    end
+    frame.accent = { 0.48, 0.35, 0.18 }
     frame:SetScript("OnEnter", function(self) self.border:SetColorTexture(0.68, 0.51, 0.28, 1) end)
-    frame:SetScript("OnLeave", function(self) self.border:SetColorTexture(0.48, 0.35, 0.18, 1) end)
+    frame:SetScript("OnLeave", function(self) self.border:SetColorTexture(self.accent[1], self.accent[2], self.accent[3], 1) end)
     frame:SetScript("OnClick", function(self, button)
         local key = self.key
         self:Hide()
@@ -432,11 +451,18 @@ local function makeToast(preview)
     return frame
 end
 
-local function styleToast(frame, style)
+-- The two special alerts: their frame, stripe and title in their own colour (the art will come later).
+local accents = { wanted = { 0.88, 0.66, 0.20 }, killer = { 0.85, 0.40, 0.10 } }
+local function styleToast(frame, style, accent)
+    local color = accents[accent] or style.color
     frame.icon:SetTexture(style.icon)
     frame.icon:SetVertexColor(1, 1, 1)
-    frame.stripe:SetColorTexture(style.color[1], style.color[2], style.color[3], 1)
-    frame.title:SetTextColor(unpack(style.color))
+    frame.stripe:SetColorTexture(color[1], color[2], color[3], 1)
+    frame.stripe:SetWidth(accent and 6 or 3)
+    frame.title:SetTextColor(unpack(color))
+    frame.accent = accents[accent] or { 0.48, 0.35, 0.18 }
+    frame.border:SetColorTexture(frame.accent[1], frame.accent[2], frame.accent[3], 1)
+    if frame.action then frame.action:Hide() end
 end
 
 local function alertSound(relation)
@@ -522,12 +548,14 @@ alert = function(identity, unit)
     frame.bounty, frame.bountyIdentity = bounty, bounty and identity or nil
     frame.guildKey, frame.guildBurst = guildKey, burst
     frame.hint:SetText(L(bounty and "Clic : prime  •  clic droit : fermer" or "Clic : fiche  •  clic droit : fermer"))
-    styleToast(frame, style)
+    styleToast(frame, style, bounty and "wanted" or nil)
     refreshToastText(frame, record)
     frame:Show()
     GL.Trace("shown", identity, unit)
     if settings.sounds then
-        local sound = alertSound(relation)
+        -- A wanted player sounds like coins: the bounty, not the usual warning.
+        local sounds = SOUNDKIT or {}
+        local sound = bounty and (sounds.LOOT_WINDOW_COIN_SOUND or sounds.IG_BACKPACK_COIN_SELECT or sounds.RAID_WARNING) or alertSound(relation)
         if sound and (not lastSound or now - lastSound.time >= 2 or style.priority > lastSound.priority) then
             GL.Safe(PlaySound, sound, "Master")
             lastSound = { time = now, priority = style.priority }
@@ -592,16 +620,20 @@ end
 -- suspicious, a bounty target, disliked by the guild), or when a guildmate's enemy is in your zone.
 local watchAlerts = {}
 -- A moment of your story, shown like an alert: revenge taken, a score settled, a good group.
-local function banner(key, relation, title, name, note, hint, onClick)
+local function banner(key, relation, title, name, note, hint, onClick, accent, action)
     if GL.IsPvPInstance() then return end
     if previewToast and previewToast:IsShown() then previewToast:Hide() end
     local frame = makeToast()
     frame.key, frame.relation, frame.source, frame.expires = key, relation, "banner", GL.Now() + 8
     frame.guildKey, frame.guildBurst, frame.signal, frame.signalAt, frame.sighting = nil, nil, nil, nil, nil
     frame.bounty, frame.bountyIdentity = nil, nil
-    frame.banner = { title = title, name = name, note = note, onClick = onClick }
+    frame.banner = { title = title, name = name, note = note, onClick = onClick, action = action }
     frame.hint:SetText(hint or L("Clic : fiche  •  clic droit : fermer"))
-    styleToast(frame, styles[relation])
+    styleToast(frame, styles[relation], accent)
+    if action and frame.action then
+        frame.action:SetText(action.label)
+        frame.action:Show()
+    end
     refreshToastText(frame)
     frame:Show()
     return frame
@@ -642,11 +674,24 @@ guildKiller = function(identity, record)
     local note = L("A tué %s %s."):format(victim, since(killer.time))
     if killer.deaths > 1 then note = note .. " " .. L("%d morts dans la guilde."):format(killer.deaths) end
     local who = identity.fullName or identity.name or killer.name or L("Joueur connu")
-    local frame = banner(identity.key, "enemy", L("Tueur de guilde"), who, note, nil, function()
+    -- "Rechercher": a wanted notice without gold, posted from the alert itself.
+    local action = GL.Bounties and GL.Bounties.Post and {
+        label = L("Rechercher"),
+        run = function()
+            local id, err = GL.Bounties.Post(identity.guid, who, 0)
+            if id then
+                GL.Print(L("Avis de recherche publié : %s. Sans or, valable 7 jours."):format(who))
+            elseif err == "duplicate" then
+                GL.Print(L("Une prime ou un avis de recherche existe déjà sur ce joueur."))
+            else
+                GL.Print(L("L’avis de recherche n’a pas pu être publié."))
+            end
+        end,
+    } or nil
+    local frame = banner(identity.key, "enemy", L("Tueur de guilde"), who, note, L("Clic : fiche  •  clic droit : fermer"), function()
         if GL.OpenPlayerDossier then GL.OpenPlayerDossier(identity.guid, nil, who) end
-    end)
+    end, "killer", action)
     if not frame then return true end
-    frame.title:SetTextColor(1, 0.55, 0.1)
     -- The horn of a battleground that opens: not the sound of any other alert.
     local sounds = SOUNDKIT or {}
     local sound = sounds.PVP_THROUGH_QUEUE or sounds.RAID_BOSS_EMOTE_WARNING or sounds.ALARM_CLOCK_WARNING_3 or sounds.RAID_WARNING

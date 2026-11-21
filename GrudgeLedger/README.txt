@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.56.0
+GRUDGE LEDGER — 0.57.0
+
+Alertes : croiser un joueur mis à prix donne une alerte dorée avec un son de pièces, qui dit la récompense (ou « avis de recherche, sans or ») et qui l’a demandée. L’alerte « Tueur de guilde » est orange et porte un bouton « Rechercher » : un avis de recherche gratuit en un clic. Le portrait d’un contrat de prime garde son cadre, son niveau et sa classe devant la tête.
 
 Page Primes refaite au format de Relations et de Guilde. À gauche : À chasser, Historique, Nouvelle prime et les chiffres clés (primes ouvertes, or en jeu, à recevoir, à envoyer). Sur la page : les primes en lignes (cible, montant ou « Avis », victoires, chasse, échéance), avec la recherche, le bouton de liste et « Filtres » du Journal (type, chasse, mon rôle). Un clic ouvre le contrat : les règles en quatre lignes, une seule barre d’actions, les actions du commanditaire à part. La création commence par un choix : « Avis de recherche · gratuit » ou « Prime en or » ; seuls les champs utiles s’affichent.
 

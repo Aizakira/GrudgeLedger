@@ -420,12 +420,16 @@ local function makeDetail(host)
     local rim=face:CreateTexture(nil,"OVERLAY")
     rim:SetAllPoints(face)
     rim:SetTexture(media.."PortraitBezel")
+    -- The 3D head is drawn in a child frame. Named like the Journal's, the frame and the level
+    -- medallion are kept above it by the shared portrait overlay (owner report, 0.56.0).
+    face.portraitRim=rim
     face.classIcon=face:CreateTexture(nil,"OVERLAY")
     face.classIcon:SetSize(19,19)
     face.classIcon:SetPoint("BOTTOMRIGHT",-3,3)
     p.level=CreateFrame("Frame",nil,face)
     p.level:SetPoint("BOTTOMLEFT",-3,-3)
     p.level:SetSize(28,28)
+    face.levelBadge=p.level
     local medallion=p.level:CreateTexture(nil,"ARTWORK")
     medallion:SetAllPoints(p.level)
     medallion:SetTexture(media.."LevelMedallion")
