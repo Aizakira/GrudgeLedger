@@ -16,6 +16,12 @@ local SCOPES = { { "character", L("Ce personnage") }, { "all", L("Tout le compte
 local SCOPE_BUTTONS = { character = L("Personnage : celui-ci"), all = L("Personnages : tout le compte") }
 local DAY = 86400
 
+-- "1 mort", "2 morts": the right form for a count (review 0.58.5).
+local function count(n, one, many)
+    return (n == 1 and L(one) or L(many)):format(n)
+end
+local function wins(n) return count(n, "%d victoire", "%d victoires") end
+local function deaths(n) return count(n, "%d mort", "%d morts") end
 local function plain(text)
     return (UI.plain(text or ""))
 end
@@ -97,20 +103,20 @@ function R.Facts(period, scope)
         sentence = L("Vous n’oubliez rien : %d de vos victoires sont des revanches."):format(revenge)
     elseif k >= 2 * d and opened >= answered then
         archetype = L("Le Prédateur")
-        sentence = L("Vous frappez le premier, et vous gagnez : %d victoires pour %d morts."):format(k, d)
+        sentence = L("Vous frappez le premier, et vous gagnez : %s pour %s."):format(wins(k), deaths(d))
         -- Who struck first is not known for these fights: say only what is.
         if opened + answered == 0 then
-            sentence = L("Vous gagnez bien plus que vous ne tombez : %d victoires pour %d morts."):format(k, d)
+            sentence = L("Vous gagnez bien plus que vous ne tombez : %s pour %s."):format(wins(k), deaths(d))
         end
     elseif k >= 2 * d then
         archetype = L("Le Rempart")
-        sentence = L("On vous attaque, et vous tenez : %d victoires pour %d morts."):format(k, d)
+        sentence = L("On vous attaque, et vous tenez : %s pour %s."):format(wins(k), deaths(d))
     elseif d >= 2 * k then
         archetype = L("La Cible")
-        sentence = L("On vous chasse : %d morts pour %d victoires. Les dettes s’accumulent."):format(d, k)
+        sentence = L("On vous chasse : %s pour %s. Les dettes s’accumulent."):format(deaths(d), wins(k))
     else
         archetype = L("Le Duelliste")
-        sentence = L("Combat après combat, l’équilibre : %d victoires, %d morts."):format(k, d)
+        sentence = L("Combat après combat, l’équilibre : %s, %s."):format(wins(k), deaths(d))
     end
     facts.archetype, facts.sentence = archetype, sentence
     -- A title earned in one place: most of your victories in the same zone.
@@ -137,7 +143,7 @@ function R.Facts(period, scope)
     elseif d > 0 then
         local comma = not GetLocale or GL.Safe(GetLocale) ~= "enUS" and GL.Safe(GetLocale) ~= "enGB"
         local ratio = ("%.1f"):format(k / d):gsub("%.", comma and "," or ".")
-        facts.ratio = L("%s victoire par mort."):format(ratio)
+        facts.ratio = (k / d >= 2 and L("%s victoires par mort.") or L("%s victoire par mort.")):format(ratio)
     else
         facts.ratio = ""
     end
@@ -434,9 +440,10 @@ local function paintGuild(card, facts)
     local share = guild.kills > 0 and math.floor(guild.mine * 100 / guild.kills + 0.5) or 0
     card.share:SetText(share .. " %")
     card.shareCaption:SetText(L("des victoires de la guilde sont les vôtres"))
-    card.totals:SetText(L("La guilde : %d victoires · %d morts · %d membres"):format(guild.kills, guild.deaths, guild.members))
-    card.enemy:SetText(guild.enemy and L("Son pire ennemi : %s, %d morts"):format(plain(guild.enemy.name or L("un joueur inconnu")),
-        guild.enemy.deaths) or "")
+    card.totals:SetText(L("La guilde : %s · %s · %s"):format(wins(guild.kills), deaths(guild.deaths),
+        count(guild.members, "%d membre", "%d membres")))
+    card.enemy:SetText(guild.enemy and L("Son pire ennemi : %s, %s"):format(plain(guild.enemy.name or L("un joueur inconnu")),
+        deaths(guild.enemy.deaths)) or "")
 end
 local cards = {
     { build = buildWho, paint = paintWho }, { build = buildNumbers, paint = paintNumbers },

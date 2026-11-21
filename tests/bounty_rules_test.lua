@@ -145,4 +145,28 @@ relayed("P",owner,79,later,"7000","")
 assert(b.List()[later].pot[owner]==100 and notices==beforeForgery+1, "told once, and the pot is yours")
 relayed("P",partner,80,later,"5000","")
 assert(b.List()[later].pot[partner]==5000, "a real member's pledge still travels")
+-- 0.58.6: the message in your name is taken back for the whole guild (Z).
+local denial=false
+for _,raw in pairs(b.GuildScope().events) do denial=denial or raw:sub(1,#owner+3)=="Z;"..owner..";" end
+assert(denial, "a Z is sent")
+-- A relay from another member cancels yours, even when you knew what it says.
+local scopeNow=b.GuildScope()
+assert(gl.Transport.SendBatch(scopeNow,{"R;x"},{key="bounty:relay",delay=100}))
+relayed("P",partner,80,later,"5000","")
+assert(gl.Transport.State(scopeNow,"bounty:relay")==nil, "the other relay cancels yours")
+local function stamped(stamp,kind,actor,seq,id,value,detail)
+    local msg=table.concat({kind,actor,seq,stamp,id,value,detail},";")
+    event(nil,"CHAT_MSG_ADDON","GLBounty1",msg,"GUILD",names[actor])
+end
+-- A claim heard two hours after its own date is not confirmed by itself: the issuer confirms it.
+now=now+3*3600
+stamped(now-7200,"K",hunter,81,later,"","")
+o=b.List()[later]
+assert(o.state=="claimed" and b.LateClaim(o), o.state)
+assert(b.Award(later) and b.List()[later].state~="claimed" and b.List()[later].winner.actor==hunter)
+-- A bounty back-dated by an hour never replaces the one heard in time.
+local contested="Player-2-contested"
+stamped(now,"O",partner,82,contested,"100","Contested")
+stamped(now-7200,"O",hunter,83,contested,"100","Contested")
+assert(b.OpenFor(contested).id==partner..":82", b.OpenFor(contested).id)
 print("PASS guild alpha rules: personal quota, replay, legacy claims, solo/group, split, notification and durable history")

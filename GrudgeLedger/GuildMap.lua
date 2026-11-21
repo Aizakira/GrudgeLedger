@@ -326,6 +326,15 @@ function M.Version(s, me, sender, value, relay, reply)
     if not reply and GL.Now() - (answered[sender] or 0) >= 10 then
         answered[sender] = GL.Now()
         M.Announce(s, true)
+    elseif not reply and not answered["later:" .. sender] and C_Timer and C_Timer.After then
+        -- A second arrival within ten seconds (two /reload): answered once, a little later, instead of
+        -- never; otherwise the member believes everyone runs an old version (review 0.58.5).
+        answered["later:" .. sender] = true
+        C_Timer.After(10, function()
+            answered["later:" .. sender] = nil
+            answered[sender] = GL.Now()
+            M.Announce(s, true)
+        end)
     end
     if older(value, GL.version) and not warned[sender] then
         warned[sender] = true

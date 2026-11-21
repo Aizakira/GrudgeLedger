@@ -523,6 +523,14 @@ local function makeDetail(host)
             message(L("La prime retenue est déjà terminée."))
         end
     end,true)
+    -- A claim that reached you late waits for your hand (0.58.6): the same place as "Republier".
+    p.award=button(p,L("Valider la victoire"),26,446,260,function()
+        local o=f.order
+        if not (o and B.LateClaim(o)) then return end
+        if B.Award(o.id) then message(L("Victoire validée : les payeurs sont prévenus.")) end
+        f.cachedOrders=nil
+        refresh()
+    end,true)
     p.repost=button(p,L("Republier la prime"),26,446,260,function()
         local o=f.order
         if not B.CanRepost(o) then return end
@@ -636,6 +644,7 @@ local function renderDetail(o)
     p.note:SetText(o.note and o.note~="" and UI.plain(o.note) or L("Aucune consigne particulière."))
     visible(p.retained,o.state=="superseded")
     visible(p.repost,o.state~="superseded" and B.CanRepost(o))
+    visible(p.award,B.LateClaim and B.LateClaim(o) or false)
     if o.state~="open" then f.editing=nil end
     visible(f.tools,isOpen(o) and not f.editing)
     visible(f.editor,f.editing~=nil)
@@ -1092,7 +1101,11 @@ local function watched(me)
     if type(w[me])~="table" then w[me]={} end
     return w[me]
 end
-local function plural(n,one,many) return n==1 and one or many:format(n) end
+-- The form for one or for several; the caller fills it (review 0.58.5: "many" holds two values).
+local function plural(n,one,many) return n==1 and one or many end
+-- Between your login and its reminder, the guild's catch-up arrives in batches: it is not news.
+-- After a /reload the reminder is told in the chat only, without banner or coins.
+local loginPending,waitingLogin,reloaded=false,false,false
 local function ledger()
     local me=mine()
     local dues,incomes={},{}
@@ -1108,7 +1121,8 @@ local function ledger()
             if (o.winner or o.priorWinner) and not o.supersededBy and not counted[id] then
                 counted[id]=true
                 for _,h in ipairs(members(o)) do
-                    local due=h~=me and B.Due(o,me,h) or 0
+                    -- A hunter gone from the guild cannot be paid by mail: no reminder for it.
+                    local due=h~=me and B.IsMember(h) and B.Due(o,me,h) or 0
                     if due>0 then
                         local entry=dues[id] or {o=o,amount=0,hunters={}}
                         dues[id]=entry
@@ -1148,8 +1162,11 @@ local function total(entries)
 end
 function GL.BountyPaymentsCheck(first)
     if not GL.db then return end
+    if first then loginPending=true end
     local dues,incomes,known=ledger()
+    -- No guild yet: the login reminder waits for the next check that can read it.
     if not dues then return end
+    first=loginPending
     local me=mine()
     if offlineBase==nil then
         offlineBase={}
@@ -1160,9 +1177,11 @@ function GL.BountyPaymentsCheck(first)
     local owe,count=total(dues)
     GL.bountyDue={amount=owe,count=count,text=money(owe)}
     if GL.PaintBountyReminder then GL.PaintBountyReminder() end
-    if first or not owedSeen then
+    if first or not owedSeen or waitingLogin then
         -- At login: one line in the chat for each side, nothing when nothing is due.
         if first then
+            loginPending,waitingLogin=false,false
+            local loud=not reloaded
             local owing=total(incomes)
             -- Sent while you were away: the gold not yet sent dropped on a contract still known.
             local received,paidCount=0,0
@@ -1182,22 +1201,25 @@ function GL.BountyPaymentsCheck(first)
                     L("Pendant votre absence, %s vous ont été envoyés pour %d primes. Les courriers vous attendent à la boîte aux lettres."))
                     :format(money(received),paidCount)
                 GL.Print(note)
-                if GL.ShowStoryBanner then
+                if loud and GL.ShowStoryBanner then
                     GL.ShowStoryBanner("bounty:received","friend",L("Paiement envoyé"),L("Primes"),note,
                         L("Clic : la prime  •  clic droit : fermer"),function() GL.OpenBounties(nil,"incoming") end,"wanted")
                 end
-                coins()
+                if loud then coins() end
             end
             if owe>0 then
                 local line=L("Primes à régler : vous devez %s. À une boîte aux lettres, le bouton « Régler la prime » prépare chaque courrier.")
                 GL.Print(line:format(money(owe)))
-                if GL.ShowStoryBanner then
-                    local note=plural(count,L("Vous devez %s pour une prime. Une boîte aux lettres prépare le courrier."),
-                        L("Vous devez %s pour %d primes. Une boîte aux lettres prépare les courriers.")):format(money(owe),count)
+                local note=plural(count,L("Vous devez %s pour une prime. Une boîte aux lettres prépare le courrier."),
+                    L("Vous devez %s pour %d primes. Une boîte aux lettres prépare les courriers.")):format(money(owe),count)
+                local function show()
+                    if not GL.ShowStoryBanner then return end
                     GL.ShowStoryBanner("bounty:due","warning",L("Prime à régler"),L("Primes"),note,
                         L("Clic : la prime  •  clic droit : fermer"),function() GL.OpenBounties(nil,"due") end,"wanted")
                 end
-                if received==0 then coins() end
+                -- One banner at a time: the gold sent to you first, what you owe a few seconds later.
+                if loud and received>0 and C_Timer and C_Timer.After then C_Timer.After(8,show) elseif loud then show() end
+                if loud and received==0 then coins() end
             end
             if owing>0 then GL.Print(L("Primes à recevoir : %s vous sont dus."):format(money(owing))) end
         end
@@ -1268,11 +1290,23 @@ GL.On("BOUNTIES_CHANGED",function()
 end)
 local reminder=CreateFrame("Frame")
 reminder:RegisterEvent("PLAYER_LOGIN")
-reminder:SetScript("OnEvent",function()
+reminder:RegisterEvent("PLAYER_ENTERING_WORLD")
+reminder:SetScript("OnEvent",function(_,event,_,reloading)
+    if event=="PLAYER_ENTERING_WORLD" then
+        if reloading==true then reloaded=true end
+        return
+    end
     -- A new session: the next check reads what was saved at the end of the last one.
     offlineBase=nil
     -- After the guild's catch-up, so that the reminder counts what arrived while you were away.
-    if C_Timer and C_Timer.After then C_Timer.After(20,function() GL.BountyPaymentsCheck(true) end) end
+    if C_Timer and C_Timer.After then
+        waitingLogin=true
+        C_Timer.After(20,function()
+            GL.BountyPaymentsCheck(true)
+            -- Guild not readable yet: once more, later.
+            if loginPending then C_Timer.After(40,function() if loginPending then GL.BountyPaymentsCheck(true) end end) end
+        end)
+    end
 end)
 
 -- A burst of sync events repaints the visible panel only once on the next frame.

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.58.5
+GRUDGE LEDGER — 0.58.6
+
+Corrections avant la diffusion, après trois relectures. Le rappel de connexion ne plante plus quand vous devez plusieurs primes, ne se répète plus à chaque /reload et ne s’emballe plus pendant le rattrapage de la guilde. À la connexion d’un membre, un seul membre lui envoie les primes de la guilde (avant, tous le faisaient), et ce rattrapage n’est plus refusé dans une guilde active. Une victoire réclamée en retard, ou après un retrait, attend la validation du publieur (bouton « Valider la victoire »). Une prime antidatée ne remplace plus celle d’un autre. Un message à votre nom que votre carnet ne connaît pas est annulé pour toute la guilde. Les parts d’une prime ne vont qu’à des membres de la guilde. La séparation du carnet par faction garde l’avis de chaque faction. Pluriels corrigés dans le Bilan et les Relations.
 
 Contrôles contre les faux messages. Un membre ne peut plus relayer une contribution, une victoire ou un paiement au nom de quelqu’un qui n’est pas dans la guilde. Si un membre fait passer en votre nom un message que vous n’avez jamais envoyé, il est ignoré et la discussion vous dit qui l’a fait. Deux victoires d’un même chasseur sur une prime doivent être espacées d’au moins une minute. Un membre ne peut pas remplir votre carnet : 600 messages au plus sur 38 jours, et les totaux de combats de la guilde sont bornés. La liste de ce qui peut être relayé n’est plus modifiable par un autre addon.
 

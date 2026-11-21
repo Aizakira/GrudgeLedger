@@ -1,6 +1,6 @@
 # Grudge Ledger
 
-**0.58.0.** Guild test release: a Guild tab (guild journal, guild enemies, guild killer alert), the Summary as cards inside Relations, redesigned bounties with free wanted notices, one book per faction. Release notes (French): [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
+**0.58.6.** A Guild tab (guild journal, guild enemies, guild killer alert), the Summary as cards inside Relations, redesigned bounties with free wanted notices and payment reminders, checks against forged guild messages, one book per faction. Release notes (French): [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
 
 
 <img src="docs/red-book.png" alt="Grudge Ledger's red book" width="96" align="right">
@@ -9,9 +9,9 @@
 
 A small personal player journal for **World of Warcraft Forever**: friends, enemies, notes, guild opinions and PvP encounters, brought together in one addon.
 
-[Français](README.fr.md) · [Download](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.6) · [Report a bug or suggest an idea](https://github.com/Aizakira/GrudgeLedger/issues)
+[Français](README.fr.md) · [Download](https://github.com/Aizakira/GrudgeLedger/releases) · [Report a bug or suggest an idea](https://github.com/Aizakira/GrudgeLedger/issues)
 
-**[Try the guild bounties alpha (0.11.6)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.6)** to post contracts, track a hunt, split the gold by mail and compare dated guild opinions. The release includes the installable ZIP and playtest notes.
+Post bounties, track a hunt, split the gold by mail and share your fights with your guild. Every guild member should use the same version.
 
 ## Why this exists
 
@@ -343,7 +343,7 @@ Remove/disable the previous temporary `GrudgeLedgerProbe` addon to avoid command
 
 ## Install
 
-1. Download the **`GrudgeLedger-<version>.zip`** addon package from [Releases](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.6).
+1. Download the **`GrudgeLedger-<version>.zip`** addon package from [Releases](https://github.com/Aizakira/GrudgeLedger/releases).
 2. Extract the `GrudgeLedger` folder into your Forever client's `Interface/AddOns` folder. The final path must be `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Restart WoW and enable Grudge Ledger in the addon list.
 

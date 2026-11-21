@@ -343,6 +343,9 @@ local function normalize(record)
     socialTotals[record] = nil
     record.notes = type(record.notes) == "table" and record.notes or {}
     record.history = type(record.history) == "table" and record.history or {}
+    for i = #record.history, 1, -1 do
+        if type(record.history[i]) ~= "table" then table.remove(record.history, i) end
+    end
     local seen = GL.Clean(record.lastEncounterAt, "number")
     record.lastEncounterAt = seen and seen >= 0 and seen < math.huge and seen or nil
     record.lastEncounterZone = record.lastEncounterAt and cleanName(record.lastEncounterZone) or nil
@@ -2065,14 +2068,30 @@ local function recount(kept, copy)
     kept.pvp, kept.groupCount, kept.assists = keptPvp, keptGroups, keptAssists > 0 and keptAssists or nil
     copy.pvp, copy.groupCount, copy.assists = copyPvp, copyGroups, copyAssists > 0 and copyAssists or nil
     kept.migrated5, copy.migrated5 = before, before
-    -- An opinion given by hand belongs to the side whose history holds it.
-    local function hasOpinion(record)
-        for _, e in ipairs(record.history) do
-            if type(e) == "table" and (e.kind == "reaction" or e.kind == "reputation") then return true end
+    -- An opinion belongs to the side whose history holds it (review 0.58.5): each copy takes its
+    -- own last opinion, or none, and the score follows the facts of that side.
+    local function ownOpinion(record)
+        for i = #record.history, 1, -1 do
+            local e = record.history[i]
+            if type(e) == "table" and e.kind == "reaction" and e.reaction then
+                record.reaction = e.reaction
+                record.reactionSource = e.source == "automatic" and "automatic" or "manual"
+                return
+            elseif type(e) == "table" and e.kind == "reputation" and e.source ~= "emote" then
+                local score = GL.Clean(e.reputation, "number")
+                if score then
+                    record.reputation = score
+                    record.reaction = score > 0 and "friend" or score <= -10 and "enemy" or score < 0 and "warning" or "neutral"
+                    record.reactionSource = "manual"
+                    return
+                end
+            end
         end
+        record.reaction, record.reactionSource = nil, "automatic"
+        record.reputation = GL.AutomaticBalance(record)
     end
-    if kept.reactionSource == "manual" and not hasOpinion(copy) then copy.reactionSource = "automatic" end
-    if kept.reactionSource == "manual" and hasOpinion(copy) and not hasOpinion(kept) then kept.reactionSource = "automatic" end
+    ownOpinion(kept)
+    ownOpinion(copy)
 end
 -- Migration 5: a book written by characters of both factions is cut in two. Each fact and each note
 -- goes to the book of the character who wrote it; a sheet with facts on both sides is copied, each
@@ -2080,7 +2099,8 @@ end
 -- deleted. Returns how many sheets moved or were cut.
 local function splitBook(current)
     local factions, other = actorFactions(), OTHER_SIDE[current]
-    local away = { players = {}, aliases = {}, guilds = deepCopy(GL.db.guilds) }
+    local away = { players = {}, aliases = {}, guilds = deepCopy(GL.db.guilds), unassignedHonor = {} }
+    GL.db.books[other] = away
     -- Facts without a known author (older versions) go by the opponent's faction: you fight the
     -- other side and group with your own. Unknown both ways: they stay in the current book.
     local function sideOf(record, e)
@@ -2118,14 +2138,25 @@ local function splitBook(current)
                 else
                     local copy = deepCopy(record)
                     copy.history, copy.notes = sent, sentNotes
+                    away.players[key] = copy
                     record.history, record.notes = kept, keptNotes
                     recount(record, copy)
-                    away.players[key] = copy
                 end
             end
         end
     end
-    GL.db.books[other] = away
+    -- Honor without an opponent follows the character who earned it.
+    if type(GL.db.unassignedHonor) == "table" then
+        local stay = {}
+        for _, e in ipairs(GL.db.unassignedHonor) do
+            if type(e) == "table" and factions[e.actorGUID] == other then
+                away.unassignedHonor[#away.unassignedHonor + 1] = e
+            else
+                stay[#stay + 1] = e
+            end
+        end
+        GL.db.unassignedHonor = stay
+    end
     -- Names are indexed again in both books: two players of the same name may now be apart.
     if moved > 0 then GL.db.aliases = {} end
     return moved
@@ -2307,10 +2338,11 @@ end
 local boot = CreateFrame("Frame")
 boot:RegisterEvent("ADDON_LOADED")
 boot:RegisterEvent("PLAYER_LOGIN")
+boot:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- Not every client knows this event: registering an unknown one raises an error.
 pcall(boot.RegisterEvent, boot, "NEUTRAL_FACTION_SELECT_RESULT")
 boot:SetScript("OnEvent", function(_, event, name)
-    if event == "PLAYER_LOGIN" or event == "NEUTRAL_FACTION_SELECT_RESULT" then
+    if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "NEUTRAL_FACTION_SELECT_RESULT" then
         GL.SelectBook()
         return
     end
