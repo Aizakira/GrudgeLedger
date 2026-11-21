@@ -2093,6 +2093,8 @@ local function selectBook()
     if me then GL.db.characterFactions[me] = faction end
     if GL.db.book == faction then return false end
     if GL.db.book == nil then
+        -- Not before the game gives your own identifier: your facts are never left to a vote.
+        if not me then return false end
         local moved = splitBook(faction)
         GL.db.book = faction
         GL.db.migrations[5] = GL.Now()

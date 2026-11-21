@@ -268,8 +268,7 @@ end
 -- Versions (0.58.0): each member tells the guild which version of the addon it runs, at login, and
 -- answers a newcomer once a minute at most. A member heard from without a version runs one older
 -- than 0.58.0. Kept in memory only, never saved.
-local versions, heard, warned = {}, {}, {}
-local announcedAt = 0
+local versions, heard, warned, answered = {}, {}, {}, {}
 local function numbers(value)
     local a, b, c = tostring(value):match("^(%d+)%.(%d+)%.?(%d*)")
     return tonumber(a) or 0, tonumber(b) or 0, tonumber(c) or 0
@@ -284,10 +283,10 @@ end
 local function memberName(id)
     return GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(id) or GL.L("Un membre de la guilde")
 end
-function M.Announce(s)
+-- GLV: "I arrive, here is my version". GLVR: the answer of a member already there.
+function M.Announce(s, reply)
     if type(s) ~= "table" or type(GL.version) ~= "string" or not GL.version:match("^%d+%.%d+") then return false end
-    announcedAt = GL.Now()
-    GL.Transport.Send(s, "GLV;" .. GL.version)
+    GL.Transport.Send(s, (reply and "GLVR;" or "GLV;") .. GL.version)
     return true
 end
 -- Any guild message of the addon: its sender runs Grudge Ledger. Without a version a minute later,
@@ -304,14 +303,18 @@ function M.Heard(sender)
         end)
     end
 end
-function M.Version(s, me, sender, value, relay)
+function M.Version(s, me, sender, value, relay, reply)
     if relay or not guid(sender) or sender == me or type(value) ~= "string" or #value > 16 or not value:match("^%d+%.%d+[%.%d]*$") then
         return false
     end
     heard[sender] = heard[sender] or GL.Now()
     versions[sender] = value
-    -- A newcomer learns the versions of the others: each answers once a minute at most.
-    if GL.Now() - announcedAt >= 60 then M.Announce(s) end
+    -- A member arriving learns the versions of the others: each answers it once a minute at most.
+    -- An answer is never answered, so the guild does not echo.
+    if not reply and GL.Now() - (answered[sender] or 0) >= 60 then
+        answered[sender] = GL.Now()
+        M.Announce(s, true)
+    end
     if older(value, GL.version) and not warned[sender] then
         warned[sender] = true
         GL.Print(GL.L("%s utilise une ancienne version de Grudge Ledger (%s, la vôtre : %s) : une partie des échanges de guilde ne lui parvient pas.")

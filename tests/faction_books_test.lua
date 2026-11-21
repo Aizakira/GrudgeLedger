@@ -40,6 +40,19 @@ local grok = GL.Get("guid:Player-1-E0000001")
 assert(grok.pvp.deaths == 1 and grok.pvp.kills == 1 and #grok.history == 2, "a sheet of one side is never cut")
 assert(GL.Get(GL.IdentityFromName("Amie", nil, "Player-1-F0000001")) ~= nil, "names still lead to their sheets")
 
+-- 1b. The split waits for the player's own identifier (review 0.58.0): at ADDON_LOADED without it,
+-- nothing moves; at login it runs.
+local savedMe = me
+me = nil
+GrudgeLedgerDB = { schema = 2, players = {
+    ["guid:Player-1-E0000002"] = sheet("Player-1-E0000002", "Lumi", "Alliance", { fact("death", H1, now - 90) }, nil, { deaths = 1 }),
+}, aliases = {}, guilds = {} }
+GL.InitDB()
+assert(GL.db.book == nil and GL.Get("guid:Player-1-E0000002"), "no split without the player's identifier")
+me = savedMe
+mock.Fire("PLAYER_LOGIN")
+assert(GL.db.book == "Alliance" and not GL.Get("guid:Player-1-E0000002") and GL.db.books.Horde.players["guid:Player-1-E0000002"])
+
 -- 2. A PvE realm: an Alliance character and a Horde one wrote in the same book. The Horde
 -- character's facts go to the Horde book, a sheet with facts on both sides is copied.
 GrudgeLedgerDB = { schema = 2, players = {

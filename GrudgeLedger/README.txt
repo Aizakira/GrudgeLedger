@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.58.0
+GRUDGE LEDGER — 0.58.1
+
+Corrections avant la diffusion. Deux membres qui se connectent à moins d’une minute d’écart connaissent bien les versions de chacun (plus de faux avertissement). Un contrat qui change pendant que vous le lisez ramène à la liste avec un message, au lieu d’afficher une autre prime. Un royaume illisible garde l’espace de guilde déjà connu. La page Primes ne relit plus tout l’historique à chaque lettre tapée. La séparation du carnet par faction attend que le jeu donne l’identifiant de votre personnage.
 
 Guilde : à la connexion d’un membre, un seul autre membre lui transmet les combats de la guilde (les siens compris), au lieu de tous les membres à la fois. Chaque membre annonce sa version de Grudge Ledger : la page Guilde affiche « Versions à jour », et la discussion prévient une fois quand un membre a une version ancienne ou quand la vôtre l’est.
 

@@ -127,7 +127,19 @@ mock.units.player.guild="Test Guild"
 mock.units.party1={guid="Player-77-Helper",name="Helper",surname="Example"}
 GetNumGroupMembers=function() return 2 end
 UnitIsVisible=function(unit) return UnitExists(unit) end
+-- Typing in the search does not replay the history for the key figures (review 0.58.0).
+GL.OpenBounties(b.guid,"view")
+local realHistory, replays = GL.Bounties.History, 0
+GL.Bounties.History = function(...) replays = replays + 1 return realHistory(...) end
+f.search:SetText("B"); f.search:SetText("Be"); f.search:SetText("")
+assert(replays == 0, replays)
+GL.Bounties.History = realHistory
+-- The contract being read is won meanwhile: back to the list, with a message, not another bounty.
+GL.OpenBounties(b.guid,"view")
+assert(f.detail:IsShown() and f.order.target==b.guid)
 GL.Bounties.Kill(b.guid)
+f:GetScript("OnUpdate")(f,0.016)
+assert(not f.detail:IsShown() and f.list:IsShown() and f.feedback:GetText():find("a changé",1,true), f.feedback:GetText())
 GL.OpenBounties(b.guid,"view")
 assert(f.order.state=="fulfilled" and f.tab=="history" and f.detail.kicker:GetText():find("Prime faite",1,true))
 assert(f.detail.people[2].guid=="Player-77-Helper" and f.detail.payment:GetText():find("50 pa",1,true))
@@ -227,9 +239,13 @@ do
     -- without a guild is told so, and the realm number of your own identifier is the last resort.
     local realGuild, realRealm = GetGuildInfo, GetRealmName
     GetRealmName = function() return nil end
+    -- The guild space already known for this guild is kept (review 0.58.0): nothing seems lost.
     GetGuildInfo = function() return "Test Guild" end
+    assert(B.GuildScope().guildKey == "Forever/Test Guild", tostring(B.GuildScope() and B.GuildScope().guildKey))
+    -- A guild never seen before: the realm number of your identifier names its space.
+    GetGuildInfo = function() return "New Guild" end
     id, err, why = B.Post("Player-77-Fresh0002", "Other Target", 10000, rules)
-    assert(id and B.GuildScope().guildKey == "1/Test Guild", tostring(why) .. " " .. tostring(B.GuildScope() and B.GuildScope().guildKey))
+    assert(id and B.GuildScope().guildKey == "1/New Guild", tostring(why) .. " " .. tostring(B.GuildScope() and B.GuildScope().guildKey))
     local asked = 0
     GuildRoster = function() asked = asked + 1 end
     GetGuildInfo = function() return nil end

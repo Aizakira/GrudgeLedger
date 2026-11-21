@@ -669,6 +669,7 @@ local function currentOrders()
     -- The engine replays the guild log. Scrolling or typing must only filter its current result.
     if f.cachedTab~=f.tab or not f.cachedOrders or (f.nextExpiry and GL.Now()>f.nextExpiry) then
         f.cachedTab=f.tab
+        f.tallyLines=nil
         if f.tab=="history" then
             f.cachedOrders,f.nextExpiry=B.History()
         else
@@ -698,7 +699,8 @@ local function tally()
         {L("À recevoir"),incoming>0 and money(incoming) or "0","history","incoming"},{L("À envoyer"),due>0 and money(due) or "0","history","due"}}
 end
 local function paintTally()
-    local lines=tally()
+    f.tallyLines=f.tallyLines or tally()
+    local lines=f.tallyLines
     for i,cell in ipairs(f.tally) do
         local line=lines[i]
         cell.label:SetText(line[1])
@@ -741,6 +743,10 @@ refresh=function()
             end
         end
         f.reveal=nil
+        if f.viewing and f.selected and not selected then
+            f.viewing=nil
+            message(L("Le contrat que vous lisiez a changé : il n’est plus dans cette liste."))
+        end
         selected=selected or list[1]
         if not selected or f.selected~=selected.id then f.editing=nil end
         f.selected=selected and selected.id
