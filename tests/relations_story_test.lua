@@ -8,15 +8,19 @@ GetServerTime = function() return now end
 local function click(b) b.scripts.OnClick(b, "LeftButton") end
 local function person(first, last, id) return GL.IdentityFromName(first, last, "Player-9-" .. id) end
 
--- An empty book: every portrait says how it is earned, and nobody owes anything.
+-- An empty book opens on the Bilan (0.55.0): every portrait says how it is earned.
 GL.ShowRelations()
 local f = GrudgeLedgerRelations
-local overview, ledger = f.host.pages.overview, f.host.pages.debts
-assert(R.page == "overview" and overview:IsShown() and not ledger:IsShown() and f.tabs.overview.active)
--- The book has the sheet's format: a narrow column with the six entries, the page on the sheet.
-assert(f.tabs.rankings and f.host:GetWidth() > 600 and f.tabs.debts:GetWidth() < 200)
-assert(overview.cards[2].name:GetText() == "Personne pour l’instant" and overview.cards[2].line:GetText() == "Trois morts récentes face au même joueur.")
-assert(overview.noDebt:GetText() == "Personne ne vous doit rien." and overview.week:GetText() == "Rien de notable ces sept derniers jours.")
+local overview, ledger = f.host.pages.recap, f.host.pages.debts
+assert(R.page == "recap" and overview:IsShown() and not ledger:IsShown() and f.tabs.recap.active)
+-- The book has the sheet's format: a narrow column with the five entries, the page on the sheet.
+-- The guild's pages live in their own book, under the Guilde tab.
+assert(f.tabs.rankings and f.host:GetWidth() > 600 and f.tabs.debts:GetWidth() < 200 and not f.tabs.guilds and not f.tabs.guildlog)
+local people = overview.cards[3]
+overview.card = 3
+R.Refresh()
+assert(people:IsShown() and people.people[1].line:GetText() == "Personne ne vous a tué sur cette période.")
+assert(people.people[2].line:GetText() == "Un ami avec qui vous groupez, ou trois groupes cette semaine.")
 
 -- A nemesis who killed you twice in the same zone, a prey beaten three times, a debt already avenged.
 GetRealZoneText = function() return "Tanaris" end
@@ -42,12 +46,8 @@ assert(I.Nickname(GL.Get(prey)) == "Votre proie favorite" and R.Prey() == GL.Get
 assert(I.Nickname(GL.Get(person("Sans", "Histoire", "0009")) or {}) == nil, "no nickname without facts")
 
 GL.ShowRelations()
-assert(overview.cards[2].record == nemesis and overview.cards[2].nick:GetText() == "« Le Fléau de Tanaris »")
-assert(overview.cards[2].line:GetText() == "Vous a tué 3 fois · vous doit " .. GL.Debt(nemesis), overview.cards[2].line:GetText())
-assert(overview.cards[3].record == GL.Get(prey) and overview.cards[1].record == nil)
-assert(overview.debts[1].record == nemesis and overview.debts[1].amount:GetText() == tostring(GL.Debt(nemesis)) and not overview.debts[2]:IsShown())
-assert(overview.week:GetText():find("nouvel ennemi", 1, true) or overview.week:GetText():find("nouveaux ennemis", 1, true), overview.week:GetText())
-assert(overview.week:GetText():find("1 dette réglée.", 1, true), overview.week:GetText())
+assert(people.people[1].record == nemesis and people.people[1].line:GetText() == "Vous a tué 3 fois", people.people[1].line:GetText())
+assert(people.people[2].record == nil and people.people[3].record == GL.Get(avenged), "the period's most beaten opponent")
 
 -- The ledger: the open debt first with its amount and buttons, the avenged one struck through.
 click(f.tabs.debts)
@@ -59,7 +59,7 @@ click(f.tally[4])
 assert(R.page == "rivals")
 click(f.tally[1])
 assert(R.page == "debts")
-click(f.tabs.overview)
+click(f.tabs.recap)
 local open, settled, total = R.Debts()
 assert(#open == 1 and #settled == 1 and settled[1].record == GL.Get(avenged) and total == GL.Debt(nemesis))
 assert(ledger.total:GetText() == tostring(total) and ledger.count:GetText() == "1 dettes ouvertes · 1 réglées ce mois-ci")
@@ -89,9 +89,10 @@ assert(lands:IsShown() and #R.Lands() == 1 and R.Lands()[1].zone == "Tanaris" an
 assert(lands.rows[1].zone:GetText() == "Tanaris" and lands.rows[1].counts:GetText() == "4 morts · 9 victoires" and not lands.rows[2]:IsShown())
 assert(lands.rows[1].who:GetText() == "Noni Vachementop ×3, Siro Siro", lands.rows[1].who:GetText())
 
--- Guilds: without any guild known the page says so; "En guerre" needs your own rule.
-click(f.tabs.guilds)
-local crests = f.host.pages.guilds
+-- Guilds, in the guild's book: without any guild known the page says so; "En guerre" needs your rule.
+local g = R.OpenGuild("guilds")
+assert(g == GrudgeLedgerGuild and g.tabs.guilds.active and g.tabs.guildlog and g.tabs.enemies and not g.tabs.debts)
+local crests = g.host.pages.guilds
 assert(crests:IsShown() and #R.Guilds() == 0 and crests.empty:GetText():find("Aucune guilde", 1, true) and not crests.cards[1]:IsShown())
 local seen = person("Noni", "Vachementop", "0001")
 seen.guild, seen.guildSeenAt = "Ok Bodycount", now
@@ -130,13 +131,14 @@ click(rankings.tabs[3])
 click(rankings.chips[2])
 assert(rankings.title:GetText() == "Adversaires les plus vaincus" and rankings.rows[1].item.record == GL.Get(avenged) and rankings.rows[1].value:GetText() == "6")
 -- The crests lead to the guild tab; a guild line shows its initials and your rule.
-click(f.tabs.guilds)
+click(g.tabs.guilds)
 click(crests.cards[1])
 assert(R.page == "rankings" and rankings.tabs[4].active and rankings.rows[1].item.name == "Ok Bodycount" and rankings.rows[1].initials:GetText() == "OB")
 click(rankings.chips[6])
 assert(rankings.title:GetText() == "Mes règles de guilde" and rankings.rows[1].value:GetText() == "Ennemi", rankings.rows[1].value:GetText())
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
-print("PASS relations story: empty book, nicknames, three portraits, week, ledger with struck debts, rivalries, lands, guild crests, rankings one click away")
+print("PASS relations story: the Bilan first, nicknames, three people, ledger with struck debts, rivalries, lands, guild crests in the guild's book, "
+    .. "rankings one click away")
 
 -- /gl carte measures what the client allows with maps, and a fight keeps its position (0.45.0).
 do
@@ -318,8 +320,8 @@ do
         list[1].mine, list[1].actor = true, "Player-1-Me000001"
         return list
     end
-    click(f.tabs.guildlog)
-    local log = f.host.pages.guildlog
+    local gb = R.OpenGuild("guildlog")
+    local log = gb.host.pages.guildlog
     assert(log:IsShown() and log.title:GetText() == "Journal de guilde" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
     assert(log.rows[2].story:GetText() == "Un membre de la guilde a tué Bad Guy" and log.rows[2].where:GetText() == "Feralas · il y a 2 h")
     assert(log.rows[6]:IsShown() and log.count:GetText() == "9 combats · 5 morts" and log.next:IsEnabled() and not log.previous:IsEnabled())
@@ -382,6 +384,18 @@ do
     assert(log.count:GetText() == "9 combats · 5 morts" and log.openFilters:GetText() == "Filtres" and log.viewCycle:GetText() == "Tous · 9")
     click(panel.close)
     assert(not panel:IsShown())
+    -- The guild's book (0.55.0): the guild vision's box, the guild's week as key figures, and the
+    -- guild's enemies, the deadliest first.
+    assert(gb.vision:IsShown() and gb.vision:GetChecked() and gb.keyHeading:GetText() == "Chiffres clés")
+    assert(gb.tally[1].label:GetText() == "Morts · 7 j" and gb.tally[1].value:GetText() == "5" and gb.tally[4].value:GetText() == "2")
+    click(gb.tally[3])
+    local enemies = gb.host.pages.enemies
+    assert(R.page == "enemies" and enemies:IsShown() and enemies.viewCycle:GetText() == "Toujours · 1")
+    assert(enemies.rows[1].story:GetText() == "Bad Guy" and enemies.rows[1].deaths:GetText() == "4" and not enemies.rows[2]:IsShown())
+    assert(enemies.rows[1].where:GetText() == "2 membres tués · vaincu 4 fois par la guilde · Feralas, il y a 1 h", enemies.rows[1].where:GetText())
+    click(enemies.rows[1])
+    assert(opened == "Player-1-Foe0001/Bad Guy")
+    click(gb.tabs.guildlog)
     GL.OpenPlayerDossier = realDossier
     ticked = false
     R.Refresh()

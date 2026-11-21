@@ -43,7 +43,10 @@ click(stats.navigation.bounties)
 local primes = GrudgeLedgerBounties
 at(primes, 110, -48)
 drag(primes, -40, 32)
-click(primes.navigation.journal)
+-- The third tab is the guild's book (0.55.0); without Relations.lua it falls back to the rankings.
+click(primes.navigation.guild)
+at(stats, -40, 32)
+GL.ShowJournal("summary")
 at(GrudgeLedgerJournal, -40, 32)
 click(GrudgeLedgerJournal.navigation.ledger)
 at(ledger, -40, 32)

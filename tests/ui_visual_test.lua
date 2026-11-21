@@ -157,7 +157,7 @@ assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] > 0.9)
 assert(ledger.bookSurface.texture:find("JournalBookSurface", 1, true) and ledger.bookSurface.allPoints == ledger)
 local previousTab
 assert(not ledger.navigation.guilds, "guild rankings belong inside Rankings")
-for _, key in ipairs({"ledger", "players", "journal", "bounties"}) do
+for _, key in ipairs({"ledger", "players", "guild", "bounties"}) do
     local control = ledger.navigation[key]
     local x, y = control.anchor[2], control.anchor[3]
     assert(control.caption.anchor[1] == "CENTER" and control.caption.justifyV == "MIDDLE",

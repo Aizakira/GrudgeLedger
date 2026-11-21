@@ -1,6 +1,7 @@
--- The Bilan (0.53.0): your player's card, told in five pages you turn like stories. Who you are,
--- your numbers, your two people, your territory, your guild. One choice of period on the left,
--- nothing else to set. The detailed tables of the old Bilan stay one click away.
+-- The Bilan (0.53.0, first page of Relations since 0.55.0): your player's card, told in cards you
+-- turn like stories. Who you are, your numbers, your three people, your territory, the classes and
+-- the races that kill you, who strikes first, your honor, your guild. Above, the period and the
+-- characters. The detailed tables of the old Bilan stay one click away.
 -- Journal data only: it works with the addon alone. The guild page needs the guild vision.
 local GL = GrudgeLedger
 local L = GL.L
@@ -10,7 +11,6 @@ local R = {}
 GL.Recap = R
 
 local SHEET_W, SHEET_H = 664, 510
-local CARDS = 5
 local PERIODS = { { "week", L("Cette semaine") }, { "month", L("Ce mois-ci") }, { "year", L("Cette année") }, { "all", L("Depuis le début") } }
 local SCOPES = { { "character", L("Ce personnage") }, { "all", L("Tout le compte") } }
 local SCOPE_BUTTONS = { character = L("Personnage : celui-ci"), all = L("Personnages : tout le compte") }
@@ -54,6 +54,23 @@ function R.Facts(period, scope)
     local stats = GL.PersonalStatistics(options)
     local zones = GL.PvPBreakdown(options, "zone")
     local facts = { stats = stats, kills = stats.kills or 0, deaths = stats.deaths or 0, honor = stats.honor or 0 }
+    -- The classes and the races of your opponents, the deadliest first, five of each.
+    for field, dimension in pairs({ classes = "class", races = "race" }) do
+        local items = {}
+        for _, item in ipairs(GL.PvPBreakdown(options, dimension)) do
+            if item.key ~= "unknown" and item.key ~= "mixed" and item.kills + item.deaths > 0 then items[#items + 1] = item end
+        end
+        table.sort(items, function(x, y)
+            if x.deaths ~= y.deaths then return x.deaths > y.deaths end
+            if x.kills ~= y.kills then return x.kills > y.kills end
+            return x.label < y.label
+        end)
+        for i = #items, 6, -1 do items[i] = nil end
+        facts[field] = items
+    end
+    -- Your companion: the time-weighted title of the journal, the same as on the player sheet.
+    local _, companion = GL.Titles()
+    facts.companion = companion and GL.Get(companion) or nil
     -- The zones where you die and where you win most. When both are the same place, the second is
     -- the next zone where you won, so the card never says the same name twice.
     for _, zone in ipairs(zones) do
@@ -155,18 +172,27 @@ function R.Text(facts, period, who)
         L("%d victoires · %d morts · %d d’honneur"):format(facts.kills, facts.deaths, facts.honor) }
     local stats = facts.stats
     if stats.mostDeaths then
-        lines[#lines + 1] = L("Némésis : %s (%d morts)"):format(plain(stats.mostDeaths.record.fullName), stats.mostDeaths.value)
+        local value = stats.mostDeaths.value
+        local form = value == 1 and L("Némésis : %s (1 mort)") or L("Némésis : %s (%d morts)")
+        lines[#lines + 1] = form:format(plain(stats.mostDeaths.record.fullName), value)
     end
     if stats.mostKilled then
-        lines[#lines + 1] = L("Proie favorite : %s (%d victoires)"):format(plain(stats.mostKilled.record.fullName), stats.mostKilled.value)
+        local value = stats.mostKilled.value
+        local form = value == 1 and L("Proie favorite : %s (1 victoire)") or L("Proie favorite : %s (%d victoires)")
+        lines[#lines + 1] = form:format(plain(stats.mostKilled.record.fullName), value)
+    end
+    if facts.companion then
+        lines[#lines + 1] = L("Compagnon : %s"):format(plain(facts.companion.fullName))
     end
     if facts.deadly then
-        lines[#lines + 1] = L("Zone la plus dangereuse : %s (%d morts)"):format(plain(facts.deadly.label), facts.deadly.deaths)
+        local value = facts.deadly.deaths
+        local form = value == 1 and L("Zone la plus dangereuse : %s (1 mort)") or L("Zone la plus dangereuse : %s (%d morts)")
+        lines[#lines + 1] = form:format(plain(facts.deadly.label), value)
     end
     return table.concat(lines, "\n")
 end
 
--- The five cards.
+-- The cards. Each one has a heading and a few large lines, nothing to read twice.
 local function buildWho(card)
     card.eyebrow = centered(card, -36, 13, false, UI.theme.inkMuted)
     card.name = centered(card, -62, 18, true)
@@ -183,16 +209,19 @@ local function paintWho(card, facts, period, scope)
     card.title:SetText(facts.title and ("« " .. facts.title .. " »") or "")
     card.details:SetText(facts.details)
 end
-local function buildNumbers(card)
-    card.heading = centered(card, -36, 21, true)
+local function bigNumbers(card, y)
     card.values, card.captions = {}, {}
     for i = 1, 3 do
-        local x = 40 + (i - 1) * 200
-        card.values[i] = Panels.Text(card, x, -110, 196, 46, true)
+        local x = 32 + (i - 1) * 200
+        card.values[i] = Panels.Text(card, x, y, 196, 46, true)
         card.values[i]:SetJustifyH("CENTER")
-        card.captions[i] = Panels.Text(card, x, -172, 196, 14, false, UI.theme.inkMuted)
+        card.captions[i] = Panels.Text(card, x, y - 62, 196, 14, false, UI.theme.inkMuted)
         card.captions[i]:SetJustifyH("CENTER")
     end
+end
+local function buildNumbers(card)
+    card.heading = centered(card, -36, 21, true)
+    bigNumbers(card, -110)
     card.ratio = centered(card, -250, 17, true)
     card.extra = centered(card, -290, 13, false, UI.theme.inkMuted, 40)
 end
@@ -212,22 +241,25 @@ end
 local function person(card, x)
     local box = CreateFrame("Button", nil, card)
     box:SetPoint("TOPLEFT", x, -86)
-    box:SetSize(260, 230)
+    box:SetSize(200, 230)
     box.face = CreateFrame("Frame", nil, box)
-    box.face:SetSize(96, 96)
+    box.face:SetSize(88, 88)
     box.face:SetPoint("TOP", box, "TOP", 0, 0)
     box.face.raceIcon = box.face:CreateTexture(nil, "ARTWORK")
     box.face.raceIcon:SetAllPoints()
     box.face.classIcon = box.face:CreateTexture(nil, "OVERLAY")
     box.face.classIcon:SetSize(22, 22)
     box.face.classIcon:SetPoint("BOTTOMRIGHT")
-    box.tag = Panels.Text(box, 0, -108, 260, 13, true)
+    box.tag = Panels.Text(box, 0, -100, 200, 13, true)
     box.tag:SetJustifyH("CENTER")
-    box.name = Panels.Text(box, 0, -130, 260, 17, true)
+    box.name = Panels.Text(box, 0, -122, 200, 16, true)
     box.name:SetJustifyH("CENTER")
     GL.Safe(box.name.SetWordWrap, box.name, false)
-    box.line = Panels.Text(box, 0, -156, 260, 13, false, UI.theme.inkMuted)
+    box.line = Panels.Text(box, 0, -146, 200, 13, false, UI.theme.inkMuted)
     box.line:SetJustifyH("CENTER")
+    box.line:SetHeight(40)
+    GL.Safe(box.line.SetWordWrap, box.line, true)
+    GL.Safe(box.line.SetJustifyV, box.line, "TOP")
     box:SetScript("OnClick", function(self)
         if self.record and GL.ShowLedger then GL.ShowLedger(self.record.key) end
     end)
@@ -235,13 +267,15 @@ local function person(card, x)
 end
 local function buildPeople(card)
     card.heading = centered(card, -36, 21, true)
-    card.people = { person(card, 64), person(card, 352) }
+    card.people = { person(card, 22), person(card, 232), person(card, 442) }
 end
 local function paintPeople(card, facts)
-    card.heading:SetText(L("Vos deux personnes"))
-    local stats = facts.stats
+    card.heading:SetText(L("Vos trois personnes"))
+    local stats, companion = facts.stats, facts.companion
     local entries = {
         { stats.mostDeaths, L("Votre némésis"), { 0.55, 0.12, 0.12 }, L("Vous a tué %d fois"), L("Personne ne vous a tué sur cette période.") },
+        { companion and { record = companion, value = tonumber(companion.groupCount) or 0 }, L("Votre compagnon"), { 0.20, 0.35, 0.55 },
+            L("%d groupes ensemble"), L("Un ami avec qui vous groupez, ou trois groupes cette semaine.") },
         { stats.mostKilled, L("Votre proie favorite"), { 0.18, 0.37, 0.20 }, L("Vaincu %d fois"), L("Aucune victoire sur cette période.") },
     }
     for i, box in ipairs(card.people) do
@@ -251,7 +285,7 @@ local function paintPeople(card, facts)
         box.tag:SetText(entry[2])
         box.tag:SetTextColor(unpack(entry[3]))
         if item then
-            box.name:SetText(plain(item.record.fullName))
+            Panels.Fit(box.name, plain(item.record.fullName), 200, 16, 11, true)
             box.line:SetText(entry[4]:format(item.value))
             box.face:Show()
             if GL.PaintBookPortrait then GL.PaintBookPortrait(box.face, item.record) end
@@ -270,7 +304,7 @@ local function buildTerritory(card)
     card.winningCaption = centered(card, -226, 13, false, UI.theme.inkMuted)
     card.winning = centered(card, -250, 24, true, { 0.18, 0.37, 0.20 })
     card.winningCounts = centered(card, -286, 14)
-    card.map = UI.button(card, L("Voir sur la carte"), (SHEET_W - 220) / 2, -360, 220, function()
+    card.map = UI.button(card, L("Voir sur la carte"), (SHEET_W - 220) / 2, -350, 220, function()
         if GL.ShowRelations then GL.ShowRelations("lands") end
     end, nil, true)
 end
@@ -285,6 +319,86 @@ local function paintTerritory(card, facts)
     card.winningCounts:SetText(winning and L("%d victoires · %d morts"):format(winning.kills, winning.deaths) or "")
     if C_Map and (deadly or winning) then card.map:Show() else card.map:Hide() end
 end
+-- A card of five lines: the classes or the races of your opponents, the deadliest first.
+local LIST_ROWS = 5
+local function buildList(card)
+    card.heading = centered(card, -36, 21, true)
+    card.lead = centered(card, -66, 13, false, UI.theme.inkMuted)
+    card.rows = {}
+    for i = 1, LIST_ROWS do
+        local row = CreateFrame("Frame", nil, card)
+        row:SetPoint("TOPLEFT", 92, -100 - (i - 1) * 46)
+        row:SetSize(480, 44)
+        local rule = row:CreateTexture(nil, "BORDER")
+        rule:SetPoint("BOTTOMLEFT")
+        rule:SetPoint("BOTTOMRIGHT")
+        rule:SetHeight(1)
+        rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+        row.label = Panels.Text(row, 0, -10, 250, 17, true)
+        GL.Safe(row.label.SetWordWrap, row.label, false)
+        row.counts = Panels.Text(row, 250, -12, 230, 14)
+        row.counts:SetJustifyH("RIGHT")
+        card.rows[i] = row
+    end
+    card.empty = centered(card, -120, 14, false, UI.theme.inkMuted)
+end
+local function paintList(card, items, heading, lead)
+    card.heading:SetText(heading)
+    card.lead:SetText(lead)
+    for i, row in ipairs(card.rows) do
+        local item = items[i]
+        if item then
+            row.label:SetText(plain(item.label))
+            row.counts:SetText(L("%d morts · %d victoires"):format(item.deaths, item.kills))
+            if item.deaths > item.kills then row.label:SetTextColor(0.55, 0.12, 0.12) else row.label:SetTextColor(0.18, 0.37, 0.20) end
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    card.empty:SetText(#items == 0 and L("Aucun combat sur cette période.") or "")
+end
+local function paintClasses(card, facts)
+    paintList(card, facts.classes, L("Les classes qui vous tuent"), L("Vos morts et vos victoires par classe adverse."))
+end
+local function paintRaces(card, facts)
+    paintList(card, facts.races, L("Les races qui vous tuent"), L("Vos morts et vos victoires par race adverse."))
+end
+local function buildInitiative(card)
+    card.heading = centered(card, -36, 21, true)
+    card.value = centered(card, -100, 46, true, { 0.45, 0.30, 0.10 })
+    card.caption = centered(card, -160, 14, false, UI.theme.inkMuted)
+    card.lines = centered(card, -220, 15, false, nil, 120)
+end
+local function paintInitiative(card, facts)
+    local stats = facts.stats
+    local opened, answered = stats.initiated or 0, stats.responded or 0
+    card.heading:SetText(L("Qui frappe le premier"))
+    card.value:SetText(opened + answered > 0 and L("%d sur %d"):format(opened, opened + answered) or "—")
+    card.caption:SetText(L("combats où vous portez le premier coup"))
+    card.lines:SetText(table.concat({
+        L("Revanches : %d"):format(stats.revengeKills or 0),
+        L("Victoires après avoir été attaqué : %d"):format(stats.responseKills or 0),
+        L("Joueurs vaincus : %d · joueurs qui vous ont blessé : %d"):format(stats.victims or 0, stats.attackers or 0),
+    }, "\n"))
+end
+local function buildHonor(card)
+    card.heading = centered(card, -36, 21, true)
+    card.value = centered(card, -100, 46, true, { 0.45, 0.30, 0.10 })
+    card.caption = centered(card, -160, 14, false, UI.theme.inkMuted)
+    card.lines = centered(card, -220, 15, false, nil, 90)
+end
+local function paintHonor(card, facts)
+    local stats = facts.stats
+    card.heading:SetText(L("Votre honneur"))
+    card.value:SetText(tostring(stats.honor or 0))
+    card.caption:SetText(L("points d’honneur gagnés en combat"))
+    local lines = { L("%d gains · meilleur gain : %d"):format(stats.honorAwards or 0, stats.bestHonor or 0) }
+    if (stats.unassignedHonor or 0) > 0 then
+        lines[#lines + 1] = L("Dont %d sans adversaire identifié"):format(stats.unassignedHonor)
+    end
+    card.lines:SetText(table.concat(lines, "\n"))
+end
 local function buildGuild(card)
     card.heading = centered(card, -36, 21, true)
     card.share = centered(card, -100, 46, true, { 0.45, 0.30, 0.10 })
@@ -292,7 +406,7 @@ local function buildGuild(card)
     card.totals = centered(card, -220, 15, true)
     card.enemy = centered(card, -256, 15, false, { 0.55, 0.12, 0.12 })
     card.note = centered(card, -110, 15, false, nil, 80)
-    card.open = UI.button(card, L("Ouvrir le Journal de guilde"), (SHEET_W - 260) / 2, -360, 260, function()
+    card.open = UI.button(card, L("Ouvrir le Journal de guilde"), (SHEET_W - 260) / 2, -350, 260, function()
         if GL.ShowRelations then GL.ShowRelations("guildlog") end
     end, nil, true)
 end
@@ -308,7 +422,7 @@ local function paintGuild(card, facts)
         local _, inGuild = false, false
         if GL.GuildMap then _, inGuild = GL.GuildMap.Enabled() end
         card.note:SetText(not inGuild and L("Pas de guilde : cette page raconte ce que vous apportez à la vôtre.")
-            or not guild and L("La vision de guilde est décochée : cochez-la sur la carte pour voir cette page.")
+            or not guild and L("La vision de guilde est décochée : cochez-la dans l’onglet Guilde pour voir cette page.")
             or L("Aucun combat de la guilde sur cette période."))
         return
     end
@@ -323,126 +437,129 @@ end
 local cards = {
     { build = buildWho, paint = paintWho }, { build = buildNumbers, paint = paintNumbers },
     { build = buildPeople, paint = paintPeople }, { build = buildTerritory, paint = paintTerritory },
+    { build = buildList, paint = paintClasses }, { build = buildList, paint = paintRaces },
+    { build = buildInitiative, paint = paintInitiative }, { build = buildHonor, paint = paintHonor },
     { build = buildGuild, paint = paintGuild },
 }
+local CARDS = #cards
 
--- The book: the narrow format of Relations. Left, the four periods and the two choices. Right,
--- one card, turned with the arrows.
-local function book()
-    if R.window then return R.window end
-    local f = UI.bookWindow("GrudgeLedgerRecap", "Grudge Ledger", true)
-    R.window = f
-    f.period, f.scope, f.card = "month", "character", 1
-    GL.SetupBookNavigation(f, "journal")
-    f.periods = {}
-    for i, entry in ipairs(PERIODS) do
-        local key = entry[1]
-        local tab = UI.button(f, entry[2], 38, -158 - (i - 1) * 36, 168, function()
-            f.period = key
-            R.Refresh()
-        end, true)
-        tab:SetHeight(30)
-        f.periods[key] = tab
-    end
-    f.scopeButton = UI.button(f, "", 38, -318, 168, function()
-        f.scope = f.scope == "character" and "all" or "character"
-        R.Refresh()
-    end, true)
-    f.scopeButton:SetHeight(30)
-    f.copy = UI.button(f, L("Copier le bilan"), 38, -372, 168, function()
-        if f.copyBox:IsShown() then
-            f.copyBox:Hide()
+-- The page, first entry of the Relations book (0.55.0). Above the card, the Journal's kind of
+-- buttons: the period (a click shows the next one), the characters, the copy, the old tables.
+-- Below, the arrows and one dot a card.
+function R.BuildPage(host)
+    local page = CreateFrame("Frame", nil, host)
+    page:SetAllPoints()
+    page.period, page.scope, page.card = "month", "character", 1
+    page.periodButton = UI.button(page, "", 26, -14, 170, function()
+        for i, entry in ipairs(PERIODS) do
+            if entry[1] == page.period then
+                page.period = PERIODS[i % #PERIODS + 1][1]
+                break
+            end
+        end
+        GL.RelationsPages.Refresh()
+    end)
+    page.scopeButton = UI.button(page, "", 200, -14, 180, function()
+        page.scope = page.scope == "character" and "all" or "character"
+        GL.RelationsPages.Refresh()
+    end)
+    page.copy = UI.button(page, L("Copier"), 384, -14, 110, function()
+        if page.copyBox:IsShown() then
+            page.copyBox:Hide()
             return
         end
-        f.copyBox:Show()
-        f.copyField:SetText(f.copyText or "")
-        f.copyField:SetFocus()
-        f.copyField:HighlightText()
-    end, true)
-    f.copy:SetHeight(30)
-    f.details = UI.button(f, L("Tableaux détaillés"), 38, -408, 168, function() GL.ShowJournal("summary") end, true)
-    f.details:SetHeight(30)
-    f.copyBox = CreateFrame("Frame", nil, f)
-    f.copyBox:SetPoint("TOPLEFT", 38, -448)
-    f.copyBox:SetSize(168, 150)
-    f.copyField = CreateFrame("EditBox", nil, f.copyBox)
-    f.copyField:SetPoint("TOPLEFT")
-    f.copyField:SetSize(168, 124)
-    f.copyField:SetMultiLine(true)
-    f.copyField:SetAutoFocus(false)
-    UI.styleInput(f.copyField, true)
-    f.copyField:SetScript("OnEscapePressed", function() f.copyBox:Hide() end)
-    -- Hidden, the box keeps no text.
-    f.copyBox:SetScript("OnHide", function()
-        f.copyField:ClearFocus()
-        f.copyField:SetText("")
+        page.copyBox:Show()
+        page.copyBox:Raise()
+        page.copyField:SetText(page.copyText or "")
+        page.copyField:SetFocus()
+        page.copyField:HighlightText()
     end)
-    f.copyHint = UI.label(f.copyBox, L("Ctrl+C pour copier."), nil, 0, -128, 168)
-    f.copyHint:SetTextColor(unpack(UI.theme.muted))
-    f.copyBox:Hide()
-    local host = CreateFrame("Frame", nil, f)
-    host:SetPoint("TOPLEFT", 240, -152)
-    host:SetSize(SHEET_W, SHEET_H)
-    host.cards = {}
+    page.details = UI.button(page, L("Tableaux détaillés"), 498, -14, 140, function() GL.ShowJournal("summary") end)
+    page.cards = {}
     for i, entry in ipairs(cards) do
-        local card = CreateFrame("Frame", nil, host)
-        card:SetAllPoints()
+        local card = CreateFrame("Frame", nil, page)
+        card:SetPoint("TOPLEFT", 0, -30)
+        card:SetSize(SHEET_W, SHEET_H - 80)
         entry.build(card)
         card:Hide()
-        host.cards[i] = card
+        page.cards[i] = card
     end
-    f.host = host
-    f.previous = UI.button(host, "‹", 26, -464, 48, function()
-        f.card = (f.card - 2) % CARDS + 1
-        R.Refresh()
+    page.previous = UI.button(page, "‹", 26, -464, 48, function()
+        page.card = (page.card - 2) % CARDS + 1
+        GL.RelationsPages.Refresh()
     end, nil, true)
-    f.next = UI.button(host, "›", SHEET_W - 74, -464, 48, function()
-        f.card = f.card % CARDS + 1
-        R.Refresh()
+    page.next = UI.button(page, "›", SHEET_W - 74, -464, 48, function()
+        page.card = page.card % CARDS + 1
+        GL.RelationsPages.Refresh()
     end, nil, true)
     -- One dot a card, the current one in red: you see where you are in the story.
-    f.dots = {}
+    page.dots = {}
     for i = 1, CARDS do
-        local dot = CreateFrame("Button", nil, host)
+        local dot = CreateFrame("Button", nil, page)
         dot:SetPoint("TOPLEFT", SHEET_W / 2 - CARDS * 11 + (i - 1) * 22, -474)
         dot:SetSize(14, 14)
         dot.fill = dot:CreateTexture(nil, "ARTWORK")
         dot.fill:SetAllPoints()
         local index = i
         dot:SetScript("OnClick", function()
-            f.card = index
-            R.Refresh()
+            page.card = index
+            GL.RelationsPages.Refresh()
         end)
-        f.dots[i] = dot
+        page.dots[i] = dot
     end
-    return f
+    -- The copy box: the card as text, over the page, like the Journal's filter panel.
+    page.copyBox = CreateFrame("Frame", nil, page)
+    page.copyBox:SetPoint("TOPLEFT", 284, -44)
+    page.copyBox:SetSize(354, 176)
+    page.copyBox:SetFrameStrata("FULLSCREEN_DIALOG")
+    GL.Safe(page.copyBox.SetFrameLevel, page.copyBox, (GL.Safe(page.GetFrameLevel, page) or 1) + 20)
+    UI.surface(page.copyBox, UI.theme.gold)
+    UI.surface(page.copyBox, UI.theme.panel, 1)
+    page.copyField = CreateFrame("EditBox", nil, page.copyBox)
+    page.copyField:SetPoint("TOPLEFT", 8, -8)
+    page.copyField:SetSize(338, 136)
+    page.copyField:SetMultiLine(true)
+    page.copyField:SetAutoFocus(false)
+    UI.styleInput(page.copyField, true)
+    page.copyField:SetScript("OnEscapePressed", function() page.copyBox:Hide() end)
+    page.copyHint = UI.label(page.copyBox, L("Ctrl+C pour copier."), nil, 10, -152, 330)
+    page.copyHint:SetTextColor(unpack(UI.theme.muted))
+    -- Hidden, the box keeps no text.
+    page.copyBox:SetScript("OnHide", function()
+        page.copyField:ClearFocus()
+        page.copyField:SetText("")
+    end)
+    page.copyBox:Hide()
+    page:SetScript("OnHide", function() page.copyBox:Hide() end)
+    return page
 end
-function R.Open(card)
-    local f = book()
-    if type(card) == "number" and card >= 1 and card <= CARDS then f.card = card end
-    GL.ShowBookPage(f)
-    R.Refresh()
-    return f
-end
-function R.Refresh()
-    local f = R.window
-    if not f or not f:IsShown() then return end
-    for key, tab in pairs(f.periods) do UI.selectButton(tab, key == f.period) end
-    f.scopeButton:SetText(SCOPE_BUTTONS[f.scope])
-    local facts = R.Facts(f.period, f.scope)
-    for i, card in ipairs(f.host.cards) do
-        if i == f.card then
+function R.PaintPage(page)
+    page.periodButton:SetText(labelOf(PERIODS, page.period))
+    page.scopeButton:SetText(labelOf(SCOPES, page.scope))
+    UI.selectButton(page.scopeButton, page.scope ~= "character")
+    local facts = R.Facts(page.period, page.scope)
+    for i, card in ipairs(page.cards) do
+        if i == page.card then
             card:Show()
-            cards[i].paint(card, facts, f.period, f.scope)
+            cards[i].paint(card, facts, page.period, page.scope)
         else
             card:Hide()
         end
     end
-    for i, dot in ipairs(f.dots) do
-        if i == f.card then dot.fill:SetColorTexture(0.55, 0.12, 0.12, 1) else dot.fill:SetColorTexture(0.49, 0.32, 0.13, 0.45) end
+    for i, dot in ipairs(page.dots) do
+        if i == page.card then dot.fill:SetColorTexture(0.55, 0.12, 0.12, 1) else dot.fill:SetColorTexture(0.49, 0.32, 0.13, 0.45) end
     end
-    local who = plain(f.scope == "character" and facts.stats.actorName or L("Tous vos personnages"))
-    f.copyText = R.Text(facts, f.period, who)
-    if f.copyBox:IsShown() then f.copyField:SetText(f.copyText) end
+    local who = plain(page.scope == "character" and facts.stats.actorName or L("Tous vos personnages"))
+    page.copyText = R.Text(facts, page.period, who)
+    if page.copyBox:IsShown() then page.copyField:SetText(page.copyText) end
 end
-GL.On("CHANGED", function() R.Refresh() end)
+-- Opens the Bilan in the Relations book, on a card when one is asked for.
+function R.Open(card)
+    local f = GL.RelationsPages and GL.RelationsPages.Open("recap")
+    local page = f and f.host.pages.recap
+    if page and type(card) == "number" and card >= 1 and card <= CARDS then
+        page.card = card
+        GL.RelationsPages.Refresh()
+    end
+    return f
+end

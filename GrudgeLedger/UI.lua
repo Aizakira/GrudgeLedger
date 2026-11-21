@@ -551,7 +551,7 @@ local function bookNavigation(f, selected)
     for i, entry in ipairs({
         { "ledger", L("Journal"), function() GL.ShowLedger() end },
         { "players", L("Relations"), function() GL.ShowRelations() end },
-        { "journal", L("Bilan"), function() if GL.Recap then GL.Recap.Open() else GL.ShowJournal("summary") end end },
+        { "guild", L("Guilde"), function() GL.ShowGuild() end },
         { "bounties", L("Primes"), function() GL.OpenBounties() end },
     }) do
         local b = button(f, entry[2], 72 + (i - 1) * 208, -96, 192, entry[3], true)
@@ -1047,6 +1047,11 @@ local function refreshStatistics()
     f.footnote:SetText(choice[6])
 end
 -- Relations opens on its own book (Relations.lua); without it, on the rankings as before.
+-- The guild's book (Relations.lua), opened where it was left.
+function GL.ShowGuild(page)
+    if not GL.RelationsPages then return GL.ShowStatistics("guilds") end
+    return GL.RelationsPages.OpenGuild(page)
+end
 function GL.ShowRelations(page)
     if not GL.RelationsPages then return GL.ShowStatistics() end
     return GL.RelationsPages.Open(page)
@@ -1470,7 +1475,7 @@ function GL.ShowJournal(mode)
         local f = bookWindow("GrudgeLedgerJournal", "Grudge Ledger") journalWindow = f
         f.mode, f.period, f.scope, f.kind, f.offset, f.dimension, f.breakdownOffset = "summary", "all", "character", "all", 0, "opponents", 0
         f.year = GL.JournalYears()[1] or tonumber(date("%Y"))
-        bookNavigation(f, "journal")
+        bookNavigation(f, "players")
         f.tabs = {}
         for i, entry in ipairs({ { "summary", L("Vue d’ensemble") }, { "history", L("Chronique") }, { "year", L("Mon année") }, { "story", L("Récit") } }) do
             local key = entry[1]

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.54.0
+GRUDGE LEDGER — 0.55.0
+
+Nouvel onglet Guilde, à la place de Bilan : le Journal de guilde, les Ennemis de la guilde (les joueurs qui tuent vos compagnons, les plus meurtriers d’abord, avec « Rechercher ») et les Guildes, avec la case « Vision de guilde » et les chiffres clés de la semaine. Le Bilan devient la première page de Relations, à la place de la Vue d’ensemble, et passe à neuf cartes : qui vous êtes, vos chiffres, vos trois personnes (némésis, compagnon, proie), votre territoire, les classes et les races qui vous tuent, qui frappe le premier, votre honneur, votre guilde. La période, les personnages, la copie et les tableaux détaillés sont en haut de la page.
 
 Un carnet par faction. Sur un royaume JcJ, rien ne change : un compte n’y joue qu’une faction. Sur un royaume JcE, vos personnages Horde et vos personnages Alliance ont chacun leur carnet : changer de faction, c’est changer de tout. Un ancien carnet tenu par des personnages des deux factions est séparé une fois, chaque souvenir allant au carnet du personnage qui l’a vécu ; rien n’est effacé. Dans une même faction, vos personnages partagent le même carnet : un joueur qui a tué l’un d’eux est connu des autres. Un avis sur une guilde ne fait plus jamais de vos propres compagnons de guilde des ennemis. Le message sur le partage s’affiche une fois par guilde.
 

@@ -529,8 +529,9 @@ function QA.capture(name)
     elseif name:find("^recap") then
         -- The Bilan's five cards, on the example journal.
         GL.Recap.Open(tonumber(name:match("^recap%-(%d)")) or 1)
-        if name:find("%-copy") then GrudgeLedgerRecap.copy.scripts.OnClick(GrudgeLedgerRecap.copy, "LeftButton") end
-        return GrudgeLedgerRecap
+        local recap = GrudgeLedgerRelations.host.pages.recap
+        if name:find("%-copy") then recap.copy.scripts.OnClick(recap.copy, "LeftButton") end
+        return GrudgeLedgerRelations
     elseif name:find("^relations") then
         -- The Relations book, with the example journal. "-empty" shows a new player's book.
         local page = name:match("^relations%-(%a+)")
@@ -541,7 +542,7 @@ function QA.capture(name)
             GL.db.players = saved
             return GrudgeLedgerRelations
         end
-        if page == "guildlog" and GL.GuildMap then
+        if (page == "guildlog" or page == "enemies") and GL.GuildMap then
             -- Synthetic guild fights: the renderer has no guild.
             local at = GL.Now()
             GL.GuildMap.Enabled = function() return true, true end
@@ -560,9 +561,10 @@ function QA.capture(name)
         end
         GL.ShowRelations(page)
         if name == "relations-guildlog-filters" then
-            local log = GrudgeLedgerRelations.host.pages.guildlog
+            local log = GrudgeLedgerGuild.host.pages.guildlog
             log.openFilters.scripts.OnClick(log.openFilters, "LeftButton")
         end
+        if page == "guildlog" or page == "enemies" or page == "guilds" then return GrudgeLedgerGuild end
         return GrudgeLedgerRelations
     elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end

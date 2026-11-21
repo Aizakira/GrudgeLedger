@@ -112,7 +112,7 @@ for _, panel in ipairs(guildFilters) do assert(panel:IsVisible()) end
 guildFilters[2].choices[1]:Click()
 guildFilters[3].choices[1]:Click()
 assert(f.rows[1].item and f.choice == 1 and f.category == 3, "guild rules work even without combat")
-f.navigation.journal:Click()
+GL.ShowJournal("summary")
 GrudgeLedgerJournal.navigation.players:Click()
 -- This harness loads the book without the story pages (Relations.lua): the button then falls back
 -- to the rankings and their last state. tests/relations_story_test.lua covers the pages themselves.
