@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.42.0
+GRUDGE LEDGER — 0.43.0
+
+Relations au format de la fiche : la colonne de gauche ne prend plus qu’un cinquième de la fenêtre et porte les six entrées (Vue d’ensemble, Dettes, Rivalités, Guildes, Terres, Classements) avec trois chiffres : ce qui reste dû, le nombre de dettes et de rivalités. Les pages occupent toute la feuille. Les anciens classements s’ouvrent par « Classements » et gardent pour l’instant leur ancienne présentation.
 
 Une vie pour une vie. Une agression coûte maintenant 2, une mort 5, et une victoire rapporte 5 (elle ne valait que 1). Un joueur qui vous attaque et vous tue vous doit 7 : une revanche venge la mort, une seconde raye la dette. Avant, il en fallait dix. Les trois valeurs se règlent dans Réglages → Relations et JcJ. Si vous n’aviez pas touché aux curseurs, vos soldes sont recalculés avec la nouvelle règle ; si vous les aviez réglés, vos choix sont gardés et seule la victoire passe à 5.
 

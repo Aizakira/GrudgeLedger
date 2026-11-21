@@ -1,5 +1,5 @@
--- Relations, told as a story: the overview ("Votre monde") and the ledger of debts. Both are drawn
--- over the right page of the Relations book. The fourteen rankings stay underneath, one click away.
+-- Relations, told as a story, in its own book with the sheet's format: a narrow left column with
+-- the six entries, the page on the whole sheet. The fourteen rankings are the sixth entry.
 -- Everything here comes from the journal alone: no Armory archive, no studio photo, no guild needed.
 local GL = GrudgeLedger
 local UI, Panels, L = GL.UITheme, GL.DossierPanels, GL.L
@@ -7,6 +7,16 @@ local R = {}
 GL.RelationsPages = R
 
 local WEEK, MONTH = 7 * 86400, 30 * 86400
+-- The pages were drawn on a column of 540 pixels that began 26 pixels into its page. They now take
+-- the whole sheet of the narrow book: S() stretches a width, X() places from the sheet's left edge.
+local SHEET_W, SHEET_H = 664, 510
+local STRETCH = SHEET_W / 540
+local function S(value)
+    return math.floor(value * STRETCH + 0.5)
+end
+local function X(value)
+    return S(value - 26)
+end
 local DEBT_ROWS = 6 -- lines of the ledger shown at once. The rest turns as pages, never a scroll bar
 local media = "Interface\\AddOns\\GrudgeLedger\\Media\\"
 
@@ -168,31 +178,31 @@ end
 local function buildOverview(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, 26, -18, 540, 21, true)
-    page.lead = Panels.Text(page, 26, -47, 540, 13, false, UI.theme.inkMuted)
-    page.cards = { podiumCard(page, 26, 172), podiumCard(page, 210, 172), podiumCard(page, 394, 172) }
-    page.weekTitle = Panels.Text(page, 26, -284, 262, 16, true, UI.theme.red)
-    page.week = Panels.Text(page, 26, -308, 262, 13)
+    page.title = Panels.Text(page, X(26), -18, S(540), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
+    page.cards = { podiumCard(page, X(26), S(172)), podiumCard(page, X(210), S(172)), podiumCard(page, X(394), S(172)) }
+    page.weekTitle = Panels.Text(page, X(26), -284, S(262), 16, true, UI.theme.red)
+    page.week = Panels.Text(page, X(26), -308, S(262), 13)
     page.week:SetHeight(120)
     GL.Safe(page.week.SetWordWrap, page.week, true)
     GL.Safe(page.week.SetJustifyV, page.week, "TOP")
-    page.debtTitle = Panels.Text(page, 304, -284, 262, 16, true, UI.theme.red)
+    page.debtTitle = Panels.Text(page, X(304), -284, S(262), 16, true, UI.theme.red)
     page.debts = {}
     for i = 1, 3 do
         local row = CreateFrame("Button", nil, page)
-        row:SetPoint("TOPLEFT", 304, -308 - (i - 1) * 34)
-        row:SetSize(262, 32)
-        row.name = Panels.Text(row, 0, -2, 206, 13, true)
+        row:SetPoint("TOPLEFT", X(304), -308 - (i - 1) * 34)
+        row:SetSize(S(262), 32)
+        row.name = Panels.Text(row, S(0), -2, S(206), 13, true)
         GL.Safe(row.name.SetWordWrap, row.name, false)
-        row.nick = Panels.Text(row, 0, -17, 206, 11, false, UI.theme.inkMuted)
+        row.nick = Panels.Text(row, S(0), -17, S(206), 11, false, UI.theme.inkMuted)
         GL.Safe(row.nick.SetWordWrap, row.nick, false)
-        row.amount = Panels.Text(row, 208, -6, 54, 17, true, { 0.55, 0.12, 0.12 })
+        row.amount = Panels.Text(row, S(208), -6, S(54), 17, true, { 0.55, 0.12, 0.12 })
         row.amount:SetJustifyH("RIGHT")
         row:SetScript("OnClick", function(self) openSheet(self.record) end)
         page.debts[i] = row
     end
-    page.noDebt = Panels.Text(page, 304, -308, 262, 13, false, UI.theme.inkMuted)
-    page.allDebts = Panels.Link(page, 304, -416, 262, function() GL.ShowRelations("debts") end)
+    page.noDebt = Panels.Text(page, X(304), -308, S(262), 13, false, UI.theme.inkMuted)
+    page.allDebts = Panels.Link(page, X(304), -416, S(262), function() GL.ShowRelations("debts") end)
     return page
 end
 local function paintOverview(page)
@@ -216,8 +226,8 @@ local function paintOverview(page)
         local record = open[i]
         row.record = record
         if record then
-            Panels.Fit(row.name, name(record), 206, 13, 10, true)
-            Panels.Fit(row.nick, nickname(record), 206, 11, 8)
+            Panels.Fit(row.name, name(record), S(206), 13, 10, true)
+            Panels.Fit(row.nick, nickname(record), S(206), 11, 8)
             row.amount:SetText(tostring(GL.Debt(record)))
             row:Show()
         else
@@ -230,63 +240,63 @@ end
 
 local function debtRow(page, i)
     local row = CreateFrame("Button", nil, page)
-    row:SetPoint("TOPLEFT", 26, -112 - (i - 1) * 58)
-    row:SetSize(540, 56)
+    row:SetPoint("TOPLEFT", X(26), -112 - (i - 1) * 58)
+    row:SetSize(S(540), 56)
     local rule = row:CreateTexture(nil, "BORDER")
     rule:SetPoint("BOTTOMLEFT")
     rule:SetPoint("BOTTOMRIGHT")
     rule:SetHeight(1)
     rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
-    row.date = Panels.Text(row, 0, -8, 46, 12, false, UI.theme.inkMuted)
-    row.name = Panels.Text(row, 50, -6, 290, 15, true)
+    row.date = Panels.Text(row, S(0), -8, S(46), 12, false, UI.theme.inkMuted)
+    row.name = Panels.Text(row, S(50), -6, S(290), 15, true)
     GL.Safe(row.name.SetWordWrap, row.name, false)
-    row.detail = Panels.Text(row, 50, -28, 290, 12, false, UI.theme.inkMuted)
+    row.detail = Panels.Text(row, S(50), -28, S(290), 12, false, UI.theme.inkMuted)
     GL.Safe(row.detail.SetWordWrap, row.detail, false)
     -- A settled debt is struck through with the pen.
     row.strike = row:CreateTexture(nil, "OVERLAY")
     row.strike:SetPoint("LEFT", row.name, "LEFT", -2, -1)
     row.strike:SetHeight(2)
     row.strike:SetColorTexture(0.42, 0.23, 0.12, 0.9)
-    row.amount = Panels.Text(row, 344, -10, 56, 20, true)
+    row.amount = Panels.Text(row, S(344), -10, S(56), 20, true)
     row.amount:SetJustifyH("RIGHT")
-    row.state = Panels.Text(row, 410, -16, 130, 12, false, { 0.18, 0.37, 0.20 })
+    row.state = Panels.Text(row, S(410), -16, S(130), 12, false, { 0.18, 0.37, 0.20 })
     row.state:SetJustifyH("RIGHT")
-    row.bounty = UI.button(row, L("Prime"), 470, -13, 70, function()
+    row.bounty = UI.button(row, L("Prime"), S(470), -13, S(70), function()
         if row.record and row.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(row.record.guid) end
     end, nil, true)
-    row.sheet = UI.button(row, L("Fiche"), 410, -13, 56, function() openSheet(row.record) end, nil, true)
+    row.sheet = UI.button(row, L("Fiche"), S(410), -13, S(56), function() openSheet(row.record) end, nil, true)
     row:SetScript("OnClick", function(self) openSheet(self.record) end)
     return row
 end
 local function buildDebts(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, 26, -18, 400, 21, true)
-    page.lead = Panels.Text(page, 26, -47, 400, 13, false, UI.theme.inkMuted)
-    page.totalCaption = Panels.Text(page, 436, -18, 130, 11, false, UI.theme.inkMuted)
+    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(400), 13, false, UI.theme.inkMuted)
+    page.totalCaption = Panels.Text(page, X(436), -18, S(130), 11, false, UI.theme.inkMuted)
     page.totalCaption:SetJustifyH("RIGHT")
-    page.total = Panels.Text(page, 436, -32, 130, 26, true, { 0.55, 0.12, 0.12 })
+    page.total = Panels.Text(page, X(436), -32, S(130), 26, true, { 0.55, 0.12, 0.12 })
     page.total:SetJustifyH("RIGHT")
     local band = page:CreateTexture(nil, "BORDER")
-    band:SetPoint("TOPLEFT", 26, -84)
-    band:SetSize(540, 24)
+    band:SetPoint("TOPLEFT", X(26), -84)
+    band:SetSize(S(540), 24)
     band:SetColorTexture(0.44, 0.28, 0.13, 0.18)
-    page.columns = Panels.Text(page, 30, -89, 300, 12, false, UI.theme.inkMuted)
-    page.columnDebt = Panels.Text(page, 370, -89, 56, 12, false, UI.theme.inkMuted)
+    page.columns = Panels.Text(page, X(30), -89, S(300), 12, false, UI.theme.inkMuted)
+    page.columnDebt = Panels.Text(page, X(370), -89, S(56), 12, false, UI.theme.inkMuted)
     page.columnDebt:SetJustifyH("RIGHT")
     page.rows = {}
     for i = 1, DEBT_ROWS do page.rows[i] = debtRow(page, i) end
-    page.empty = Panels.Text(page, 26, -130, 540, 13, false, UI.theme.inkMuted)
+    page.empty = Panels.Text(page, X(26), -130, S(540), 13, false, UI.theme.inkMuted)
     page.offset = 0
-    page.previous = UI.button(page, "‹", 26, -474, 40, function()
+    page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
         page.offset = math.max(0, page.offset - DEBT_ROWS)
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", 526, -474, 40, function()
+    page.next = UI.button(page, "›", X(526), -474, S(40), function()
         page.offset = page.offset + DEBT_ROWS
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, 76, -480, 440, 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(76), -480, S(440), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
     return page
 end
@@ -330,10 +340,10 @@ local function paintDebts(page)
         if line then
             local record = line.record
             row.date:SetText(line.at and day(line.at) or "")
-            Panels.Fit(row.name, name(record), 290, 15, 11, true)
+            Panels.Fit(row.name, name(record), S(290), 15, 11, true)
             row.name:SetTextColor(unpack(line.settled and UI.theme.inkMuted or UI.theme.ink))
             if line.settled then
-                row.strike:SetWidth(math.min(290, (GL.Safe(row.name.GetStringWidth, row.name) or 120) + 4))
+                row.strike:SetWidth(math.min(S(290), (GL.Safe(row.name.GetStringWidth, row.name) or 120) + 4))
                 row.strike:Show()
                 local zone = type(line.zone) == "string" and line.zone ~= "?" and line.zone
                 row.detail:SetText(zone and L("Vengé le %s · %s"):format(day(line.at), UI.plain(zone)) or L("Vengé le %s"):format(day(line.at)))
@@ -343,7 +353,7 @@ local function paintDebts(page)
                 row.sheet:Hide()
             else
                 row.strike:Hide()
-                Panels.Fit(row.detail, debtDetail(record), 290, 12, 9)
+                Panels.Fit(row.detail, debtDetail(record), S(290), 12, 9)
                 row.amount:SetText(tostring(GL.Debt(record)))
                 row.amount:SetTextColor(0.55, 0.12, 0.12)
                 row.state:SetText("")
@@ -390,76 +400,76 @@ end
 local function buildRivals(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, 26, -18, 400, 21, true)
-    page.lead = Panels.Text(page, 26, -47, 540, 13, false, UI.theme.inkMuted)
+    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
     local card = CreateFrame("Frame", nil, page)
     page.card = card
-    card:SetPoint("TOPLEFT", 26, -76)
-    card:SetSize(540, 150)
+    card:SetPoint("TOPLEFT", X(26), -76)
+    card:SetSize(S(540), 150)
     UI.surface(card, { 0.79, 0.66, 0.42 })
     UI.surface(card, { 0.96, 0.91, 0.78 }, 1, 1)
-    page.you = Panels.Text(card, 14, -18, 150, 17, true)
-    page.yours = Panels.Text(card, 14, -42, 150, 12, false, UI.theme.inkMuted)
-    page.score = Panels.Text(card, 170, -10, 200, 30, true)
+    page.you = Panels.Text(card, S(14), -18, S(150), 17, true)
+    page.yours = Panels.Text(card, S(14), -42, S(150), 12, false, UI.theme.inkMuted)
+    page.score = Panels.Text(card, S(170), -10, S(200), 30, true)
     page.score:SetJustifyH("CENTER")
-    page.scoreCaption = Panels.Text(card, 170, -50, 200, 11, false, UI.theme.inkMuted)
+    page.scoreCaption = Panels.Text(card, S(170), -50, S(200), 11, false, UI.theme.inkMuted)
     page.scoreCaption:SetJustifyH("CENTER")
     page.face = face(card, 56)
     page.face:SetPoint("TOPRIGHT", card, "TOPRIGHT", -14, -12)
-    page.name = Panels.Text(card, 300, -14, 166, 15, true)
+    page.name = Panels.Text(card, S(300), -14, S(166), 15, true)
     page.name:SetJustifyH("RIGHT")
     GL.Safe(page.name.SetWordWrap, page.name, false)
-    page.nick = Panels.Text(card, 300, -34, 166, 11, false, UI.theme.red)
+    page.nick = Panels.Text(card, S(300), -34, S(166), 11, false, UI.theme.red)
     page.nick:SetJustifyH("RIGHT")
     GL.Safe(page.nick.SetWordWrap, page.nick, false)
-    page.identity = Panels.Text(card, 300, -50, 166, 11, false, UI.theme.inkMuted)
+    page.identity = Panels.Text(card, S(300), -50, S(166), 11, false, UI.theme.inkMuted)
     page.identity:SetJustifyH("RIGHT")
     GL.Safe(page.identity.SetWordWrap, page.identity, false)
-    page.bar = Panels.Bar(card, 512)
-    page.bar:SetPoint("TOPLEFT", 14, -84)
+    page.bar = Panels.Bar(card, S(512))
+    page.bar:SetPoint("TOPLEFT", S(14), -84)
     page.bar:SetHeight(10)
     page.facts = {}
     for i = 1, 3 do
-        local fact = Panels.Text(card, 14 + (i - 1) * 172, -108, 168, 12)
+        local fact = Panels.Text(card, S(14) + (i - 1) * S(172), -108, S(168), 12)
         fact:SetJustifyH(i == 1 and "LEFT" or i == 2 and "CENTER" or "RIGHT")
         GL.Safe(fact.SetWordWrap, fact, false)
         page.facts[i] = fact
     end
-    page.threadTitle = Panels.Text(page, 26, -244, 400, 16, true, UI.theme.red)
+    page.threadTitle = Panels.Text(page, X(26), -244, S(400), 16, true, UI.theme.red)
     local line = page:CreateTexture(nil, "BORDER")
-    line:SetPoint("TOPLEFT", 60, -283)
-    line:SetSize(472, 2)
+    line:SetPoint("TOPLEFT", X(60), -283)
+    line:SetSize(S(472), 2)
     line:SetColorTexture(0.52, 0.38, 0.20, 0.6)
     page.steps = {}
     for i = 1, RIVAL_STEPS do
         local step = CreateFrame("Frame", nil, page)
-        step:SetPoint("TOPLEFT", 26 + (i - 1) * 108, -274)
-        step:SetSize(104, 120)
+        step:SetPoint("TOPLEFT", X(26) + (i - 1) * S(108), -274)
+        step:SetSize(S(104), 120)
         step.dot = step:CreateTexture(nil, "ARTWORK")
         step.dot:SetSize(18, 18)
         step.dot:SetPoint("TOP", step, "TOP", 0, 0)
-        step.date = centered(step, -24, 104, 12, true)
-        step.story = centered(step, -42, 104, 11, false, UI.theme.inkMuted)
+        step.date = centered(step, -24, S(104), 12, true)
+        step.story = centered(step, -42, S(104), 11, false, UI.theme.inkMuted)
         step.story:SetHeight(64)
         GL.Safe(step.story.SetWordWrap, step.story, true)
         GL.Safe(step.story.SetJustifyV, step.story, "TOP")
         page.steps[i] = step
     end
-    page.empty = Panels.Text(page, 26, -86, 540, 13, false, UI.theme.inkMuted)
+    page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
     page.index = 1
-    page.bounty = UI.button(page, L("Poser une prime"), 26, -474, 150, function()
+    page.bounty = UI.button(page, L("Poser une prime"), X(26), -474, S(150), function()
         if page.record and page.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(page.record.guid) end
     end, nil, true)
-    page.sheet = UI.button(page, L("Ouvrir sa fiche"), 182, -474, 140, function() openSheet(page.record) end, nil, true)
-    page.previous = UI.button(page, "‹", 440, -474, 40, function()
+    page.sheet = UI.button(page, L("Ouvrir sa fiche"), X(182), -474, S(140), function() openSheet(page.record) end, nil, true)
+    page.previous = UI.button(page, "‹", X(440), -474, S(40), function()
         page.index = page.index - 1
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", 526, -474, 40, function()
+    page.next = UI.button(page, "›", X(526), -474, S(40), function()
         page.index = page.index + 1
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, 480, -480, 46, 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(480), -480, S(46), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
     return page
 end
@@ -484,12 +494,12 @@ local function paintRivals(page)
     page.score:SetText(("|cff2e5e33%d|r – |cff8b1e1e%d|r"):format(kills, deaths))
     page.scoreCaption:SetText(L("victoires · morts"))
     GL.PaintBookPortrait(page.face, record)
-    Panels.Fit(page.name, name(record), 166, 15, 10, true)
-    Panels.Fit(page.nick, nickname(record), 166, 11, 8)
+    Panels.Fit(page.name, name(record), S(166), 15, 10, true)
+    Panels.Fit(page.nick, nickname(record), S(166), 11, 8)
     local identity = {}
     if record.className then identity[#identity + 1] = UI.plain(record.className) end
     if record.guild then identity[#identity + 1] = UI.plain(record.guild) end
-    Panels.Fit(page.identity, table.concat(identity, " · "), 166, 11, 8)
+    Panels.Fit(page.identity, table.concat(identity, " · "), S(166), 11, 8)
     page.bar:Set(kills, deaths)
     local his, openings = openingShare(record)
     page.facts[1]:SetText(openings >= 2 and L("Il ouvre le combat %d fois sur %d"):format(his, openings) or "")
@@ -553,37 +563,37 @@ end
 local function buildGuilds(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, 26, -18, 400, 21, true)
-    page.lead = Panels.Text(page, 26, -47, 540, 13, false, UI.theme.inkMuted)
+    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
     page.cards = {}
     for i = 1, CRESTS do
         local card = CreateFrame("Button", nil, page)
-        card:SetPoint("TOPLEFT", 26 + ((i - 1) % 2) * 274, -80 - math.floor((i - 1) / 2) * 124)
-        card:SetSize(266, 116)
+        card:SetPoint("TOPLEFT", X(26) + ((i - 1) % 2) * S(274), -80 - math.floor((i - 1) / 2) * 124)
+        card:SetSize(S(266), 116)
         UI.surface(card, { 0.79, 0.66, 0.42 })
         UI.surface(card, { 0.96, 0.91, 0.78 }, 1, 1)
         card.crestRim = card:CreateTexture(nil, "ARTWORK")
-        card.crestRim:SetPoint("TOPLEFT", 12, -14)
+        card.crestRim:SetPoint("TOPLEFT", S(12), -14)
         card.crestRim:SetSize(44, 54)
         card.crestRim:SetColorTexture(0.52, 0.38, 0.20)
         card.crest = card:CreateTexture(nil, "OVERLAY")
-        card.crest:SetPoint("TOPLEFT", 14, -16)
+        card.crest:SetPoint("TOPLEFT", S(14), -16)
         card.crest:SetSize(40, 50)
-        card.initials = Panels.Text(card, 14, -28, 40, 20, true, UI.theme.brass)
+        card.initials = Panels.Text(card, S(14), -28, S(40), 20, true, UI.theme.brass)
         card.initials:SetJustifyH("CENTER")
         GL.Safe(card.initials.SetDrawLayer, card.initials, "OVERLAY", 7)
-        card.name = Panels.Text(card, 66, -12, 190, 15, true)
+        card.name = Panels.Text(card, S(66), -12, S(190), 15, true)
         GL.Safe(card.name.SetWordWrap, card.name, false)
-        card.stance = Panels.Text(card, 66, -33, 190, 12, true, UI.theme.red)
-        card.lines = Panels.Text(card, 66, -52, 190, 11, false, UI.theme.inkMuted)
+        card.stance = Panels.Text(card, S(66), -33, S(190), 12, true, UI.theme.red)
+        card.lines = Panels.Text(card, S(66), -52, S(190), 11, false, UI.theme.inkMuted)
         card.lines:SetHeight(54)
         GL.Safe(card.lines.SetWordWrap, card.lines, true)
         GL.Safe(card.lines.SetJustifyV, card.lines, "TOP")
         card:SetScript("OnClick", function() GL.ShowStatistics("guilds") end)
         page.cards[i] = card
     end
-    page.empty = Panels.Text(page, 26, -86, 540, 13, false, UI.theme.inkMuted)
-    page.all = Panels.Link(page, 304, -474, 262, function() GL.ShowStatistics("guilds") end)
+    page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
+    page.all = Panels.Link(page, X(304), -474, S(262), function() GL.ShowStatistics("guilds") end)
     return page
 end
 local function paintGuilds(page)
@@ -595,7 +605,7 @@ local function paintGuilds(page)
         local entry = guilds[i]
         if entry then
             local row = entry.row
-            Panels.Fit(card.name, UI.plain(row.name), 190, 15, 10, true)
+            Panels.Fit(card.name, UI.plain(row.name), S(190), 15, 10, true)
             card.crest:SetColorTexture(unpack(crestColors[entry.stance] or crestColors.neutral))
             card.initials:SetText(R.Initials(row.name))
             card.stance:SetText((stances[entry.stance] or stances.neutral) .. (entry.ruled and (" · " .. L("votre règle")) or ""))
@@ -662,36 +672,36 @@ end
 local function buildLands(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, 26, -18, 400, 21, true)
-    page.lead = Panels.Text(page, 26, -47, 540, 13, false, UI.theme.inkMuted)
+    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
     page.rows = {}
     for i = 1, LAND_ROWS do
         local row = CreateFrame("Frame", nil, page)
-        row:SetPoint("TOPLEFT", 26, -84 - (i - 1) * 46)
-        row:SetSize(540, 44)
+        row:SetPoint("TOPLEFT", X(26), -84 - (i - 1) * 46)
+        row:SetSize(S(540), 44)
         local rule = row:CreateTexture(nil, "BORDER")
         rule:SetPoint("BOTTOMLEFT")
         rule:SetPoint("BOTTOMRIGHT")
         rule:SetHeight(1)
         rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
-        row.zone = Panels.Text(row, 0, -5, 200, 14, true)
+        row.zone = Panels.Text(row, S(0), -5, S(200), 14, true)
         GL.Safe(row.zone.SetWordWrap, row.zone, false)
-        row.who = Panels.Text(row, 0, -24, 330, 11, false, UI.theme.inkMuted)
+        row.who = Panels.Text(row, S(0), -24, S(330), 11, false, UI.theme.inkMuted)
         GL.Safe(row.who.SetWordWrap, row.who, false)
         row.track = row:CreateTexture(nil, "BORDER")
-        row.track:SetPoint("TOPLEFT", 210, -10)
-        row.track:SetSize(200, 8)
+        row.track:SetPoint("TOPLEFT", S(210), -10)
+        row.track:SetSize(S(200), 8)
         row.track:SetColorTexture(0.85, 0.75, 0.55)
         row.fill = row:CreateTexture(nil, "ARTWORK")
-        row.fill:SetPoint("TOPLEFT", 210, -10)
+        row.fill:SetPoint("TOPLEFT", S(210), -10)
         row.fill:SetHeight(8)
         row.fill:SetColorTexture(0.55, 0.12, 0.12)
-        row.counts = Panels.Text(row, 420, -6, 120, 12, true)
+        row.counts = Panels.Text(row, S(420), -6, S(120), 12, true)
         row.counts:SetJustifyH("RIGHT")
         page.rows[i] = row
     end
-    page.empty = Panels.Text(page, 26, -86, 540, 13, false, UI.theme.inkMuted)
-    page.note = Panels.Text(page, 26, -480, 540, 11, false, UI.theme.inkMuted)
+    page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
+    page.note = Panels.Text(page, X(26), -480, S(540), 11, false, UI.theme.inkMuted)
     return page
 end
 local function paintLands(page)
@@ -702,9 +712,9 @@ local function paintLands(page)
     for i, row in ipairs(page.rows) do
         local entry = lands[i]
         if entry then
-            Panels.Fit(row.zone, UI.plain(entry.zone), 200, 14, 10, true)
-            Panels.Fit(row.who, killers(entry), 330, 11, 8)
-            row.fill:SetWidth(math.max(0.01, 200 * entry.deaths / worst))
+            Panels.Fit(row.zone, UI.plain(entry.zone), S(200), 14, 10, true)
+            Panels.Fit(row.who, killers(entry), S(330), 11, 8)
+            row.fill:SetWidth(math.max(0.01, S(200) * entry.deaths / worst))
             if entry.deaths > 0 then row.fill:Show() else row.fill:Hide() end
             row.counts:SetText(L("%d morts · %d victoires"):format(entry.deaths, entry.kills))
             row:Show()
@@ -716,44 +726,68 @@ local function paintLands(page)
     page.note:SetText(#lands > LAND_ROWS and L("Les %d zones les plus meurtrières sur %d."):format(LAND_ROWS, #lands) or "")
 end
 
--- The host covers the right page of the Relations book with the same parchment.
-local function hostFor(book)
-    if book.storyHost then return book.storyHost end
-    local host = CreateFrame("Frame", nil, book)
-    host:SetPoint("TOPLEFT", 345, -145)
-    host:SetSize(593, 525)
-    host:EnableMouse(true)
-    if host.SetFrameLevel and book.GetFrameLevel then host:SetFrameLevel(book:GetFrameLevel() + 20) end
-    local sheet = host:CreateTexture(nil, "BACKGROUND")
-    sheet:SetAllPoints()
-    sheet:SetTexture(media .. "JournalBookSurface")
-    sheet:SetTexCoord(345 / 960, 938 / 960, 145 / 700, 670 / 700)
+-- The book: the narrow format of the player sheet. Left, the six entries and a few figures; right,
+-- the page.
+local entries = { { "overview", "Vue d’ensemble" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "guilds", "Guildes" },
+    { "lands", "Terres" }, { "rankings", "Classements" } }
+local function book()
+    if R.window then return R.window end
+    local f = UI.bookWindow("GrudgeLedgerRelations", "Grudge Ledger", true)
+    R.window = f
+    GL.SetupBookNavigation(f, "players")
+    f.tabs = {}
+    for i, entry in ipairs(entries) do
+        local key = entry[1]
+        local tab = UI.button(f, L(entry[2]), 38, -158 - (i - 1) * 36, 168, function()
+            if key == "rankings" then GL.ShowStatistics("players") else R.Open(key) end
+        end, true)
+        tab:SetHeight(30)
+        f.tabs[key] = tab
+    end
+    f.figures = Panels.Text(f, 40, -396, 164, 12, false, UI.theme.muted)
+    f.figures:SetHeight(150)
+    GL.Safe(f.figures.SetWordWrap, f.figures, true)
+    GL.Safe(f.figures.SetJustifyV, f.figures, "TOP")
+    local host = CreateFrame("Frame", nil, f)
+    host:SetPoint("TOPLEFT", 240, -152)
+    host:SetSize(SHEET_W, SHEET_H)
     host.pages = { overview = buildOverview(host), debts = buildDebts(host), rivals = buildRivals(host),
         guilds = buildGuilds(host), lands = buildLands(host) }
-    book.storyHost = host
-    return host
+    f.host = host
+    return f
 end
-function R.Show(book, key)
-    local host = hostFor(book)
-    R.book, R.page = book, host.pages[key] and key or "overview"
-    for pageKey, page in pairs(host.pages) do
+-- The few figures of the left column: what is owed, how many debts and rivalries.
+local function figures()
+    local open, settled, total = R.Debts()
+    local lines = { L("Reste dû : %d"):format(total), L("%d dettes ouvertes · %d réglées ce mois-ci"):format(#open, #settled) }
+    local rivals = #R.Rivals()
+    if rivals == 1 then
+        lines[#lines + 1] = L("1 rivalité")
+    elseif rivals > 1 then
+        lines[#lines + 1] = L("%d rivalités"):format(rivals)
+    end
+    return table.concat(lines, "\n\n")
+end
+function R.Open(key)
+    local f = book()
+    R.page = f.host.pages[key] and key or "overview"
+    for pageKey, page in pairs(f.host.pages) do
         if pageKey == R.page then
             page:Show()
         else
             page:Hide()
         end
     end
-    host:Show()
+    for tabKey, tab in pairs(f.tabs) do UI.selectButton(tab, tabKey == R.page) end
+    GL.ShowBookPage(f)
     R.Refresh()
-end
-function R.Hide(book)
-    if book.storyHost then book.storyHost:Hide() end
-    if R.book == book then R.page = nil end
+    return f
 end
 function R.Refresh()
-    local host = R.book and R.book.storyHost
-    if not host or not R.page or not host:IsShown() then return end
+    local f = R.window
+    if not f or not R.page or not f:IsShown() then return end
     local painters = { overview = paintOverview, debts = paintDebts, rivals = paintRivals, guilds = paintGuilds, lands = paintLands }
-    painters[R.page](host.pages[R.page])
+    painters[R.page](f.host.pages[R.page])
+    f.figures:SetText(figures())
 end
 GL.On("CHANGED", function() R.Refresh() end)

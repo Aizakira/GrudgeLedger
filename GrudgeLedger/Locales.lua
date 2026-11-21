@@ -4,6 +4,9 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["1 rivalité"] = "1 rivalidad",
+        ["Reste dû : %d"] = "Queda por cobrar: %d",
+        ["%d rivalités"] = "%d rivalidades",
         ["Vous le tuez"] = "Lo matas",
         ["Par défaut, une vie pour une vie. Un agresseur reste ennemi même tué. Riposte : −1."] = "Por defecto, una vida por una vida. Un agresor sigue siendo enemigo aunque lo mates. Réplica: −1.",
         ["Trois morts récentes face au même joueur."] = "Tres muertes recientes ante el mismo jugador.",
@@ -1703,6 +1706,9 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["1 rivalité"] = "1 rivalry",
+        ["Reste dû : %d"] = "Still owed: %d",
+        ["%d rivalités"] = "%d rivalries",
         ["Vous le tuez"] = "You kill them",
         ["Par défaut, une vie pour une vie. Un agresseur reste ennemi même tué. Riposte : −1."] = "By default, a life for a life. An attacker stays an enemy even once killed. Reply: −1.",
         ["Trois morts récentes face au même joueur."] = "Three recent deaths to the same player.",

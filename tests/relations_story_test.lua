@@ -10,9 +10,11 @@ local function person(first, last, id) return GL.IdentityFromName(first, last, "
 
 -- An empty book: every portrait says how it is earned, and nobody owes anything.
 GL.ShowRelations()
-local f = GrudgeLedgerStatistics
-local overview, ledger = f.storyHost.pages.overview, f.storyHost.pages.debts
-assert(f.story == "overview" and overview:IsShown() and not ledger:IsShown() and f.storyTabs.overview.active)
+local f = GrudgeLedgerRelations
+local overview, ledger = f.host.pages.overview, f.host.pages.debts
+assert(R.page == "overview" and overview:IsShown() and not ledger:IsShown() and f.tabs.overview.active)
+-- The book has the sheet's format: a narrow column with the six entries, the page on the sheet.
+assert(f.tabs.rankings and f.host:GetWidth() > 600 and f.tabs.debts:GetWidth() < 200)
 assert(overview.cards[2].name:GetText() == "Personne pour l’instant" and overview.cards[2].line:GetText() == "Trois morts récentes face au même joueur.")
 assert(overview.noDebt:GetText() == "Personne ne vous doit rien." and overview.week:GetText() == "Rien de notable ces sept derniers jours.")
 
@@ -48,8 +50,9 @@ assert(overview.week:GetText():find("nouvel ennemi", 1, true) or overview.week:G
 assert(overview.week:GetText():find("1 dette réglée.", 1, true), overview.week:GetText())
 
 -- The ledger: the open debt first with its amount and buttons, the avenged one struck through.
-click(f.storyTabs.debts)
-assert(f.story == "debts" and ledger:IsShown() and not overview:IsShown())
+click(f.tabs.debts)
+assert(R.page == "debts" and ledger:IsShown() and not overview:IsShown())
+assert(f.figures:GetText():find("Reste dû : " .. GL.Debt(nemesis), 1, true), f.figures:GetText())
 local open, settled, total = R.Debts()
 assert(#open == 1 and #settled == 1 and settled[1].record == GL.Get(avenged) and total == GL.Debt(nemesis))
 assert(ledger.total:GetText() == tostring(total) and ledger.count:GetText() == "1 dettes ouvertes · 1 réglées ce mois-ci")
@@ -61,9 +64,9 @@ assert(second.detail:GetText():find("^Vengé le "), second.detail:GetText())
 assert(not ledger.rows[3]:IsShown() and not ledger.previous:IsEnabled() and not ledger.next:IsEnabled())
 
 -- Rivalries: the most fought first, the score, the debt and the dated thread, oldest to newest.
-click(f.storyTabs.rivals)
-local rivals = f.storyHost.pages.rivals
-assert(f.story == "rivals" and rivals:IsShown() and #R.Rivals() == 3 and R.Rivals()[1].record == GL.Get(avenged))
+click(f.tabs.rivals)
+local rivals = f.host.pages.rivals
+assert(R.page == "rivals" and rivals:IsShown() and #R.Rivals() == 3 and R.Rivals()[1].record == GL.Get(avenged))
 assert(rivals.record == GL.Get(avenged) and rivals.count:GetText() == "1 / 3" and not rivals.previous:IsEnabled())
 assert(rivals.score:GetText():find("6", 1, true) and rivals.facts[2]:GetText() == "Comptes réglés", rivals.score:GetText())
 assert(rivals.steps[1]:IsShown() and rivals.steps[1].story:GetText():find("Tanaris", 1, true), rivals.steps[1].story:GetText())
@@ -73,15 +76,15 @@ click(rivals.next)
 assert(rivals.record == GL.Get(prey) and rivals.nick:GetText() == "« Votre proie favorite »" and not rivals.next:IsEnabled())
 
 -- Dangerous lands: one line per zone, deaths first, with who killed you there.
-click(f.storyTabs.lands)
-local lands = f.storyHost.pages.lands
+click(f.tabs.lands)
+local lands = f.host.pages.lands
 assert(lands:IsShown() and #R.Lands() == 1 and R.Lands()[1].zone == "Tanaris" and R.Lands()[1].deaths == 4 and R.Lands()[1].kills == 9)
 assert(lands.rows[1].zone:GetText() == "Tanaris" and lands.rows[1].counts:GetText() == "4 morts · 9 victoires" and not lands.rows[2]:IsShown())
 assert(lands.rows[1].who:GetText() == "Noni Vachementop ×3, Siro Siro", lands.rows[1].who:GetText())
 
 -- Guilds: without any guild known the page says so; "En guerre" needs your own rule.
-click(f.storyTabs.guilds)
-local crests = f.storyHost.pages.guilds
+click(f.tabs.guilds)
+local crests = f.host.pages.guilds
 assert(crests:IsShown() and #R.Guilds() == 0 and crests.empty:GetText():find("Aucune guilde", 1, true) and not crests.cards[1]:IsShown())
 local seen = person("Noni", "Vachementop", "0001")
 seen.guild, seen.guildSeenAt = "Ok Bodycount", now
@@ -108,10 +111,11 @@ GL.SetReaction(person("Valf", "Gank", "0010"), "friend")
 _, companion = GL.Titles()
 assert(companion == GL.Get(person("Valf", "Gank", "0010")).key, "a friend you grouped with is")
 
--- "Classements" opens the fourteen rankings with a way back; the way back returns to the overview.
-click(f.storyTabs.rankings)
-assert(f.story == nil and not f.storyHost:IsShown() and not f.storyTabs.debts:IsShown() and f.backToStory:IsShown())
-click(f.backToStory)
-assert(f.story == "overview" and f.storyHost:IsShown())
+-- "Classements" opens the fourteen rankings, which carry a way back to the Relations book.
+click(f.tabs.rankings)
+local rankings = GrudgeLedgerStatistics
+assert(rankings:IsShown() and not f:IsShown() and rankings.backToStory:IsShown())
+click(rankings.backToStory)
+assert(f:IsShown() and not rankings:IsShown() and R.page == "overview")
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
 print("PASS relations story: empty book, nicknames, three portraits, week, ledger with struck debts, rivalries, lands, guild crests, rankings one click away")

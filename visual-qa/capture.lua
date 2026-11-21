@@ -527,16 +527,17 @@ function QA.capture(name)
         f.search.scripts.OnEnterPressed(f.search)
         return f
     elseif name:find("^relations") then
-        -- The story pages of Relations, with the example journal. "-empty" shows a new player's book.
+        -- The Relations book, with the example journal. "-empty" shows a new player's book.
+        local page = name:match("^relations%-(%a+)")
         if name:find("%-empty") then
             local saved = GL.db.players
             GL.db.players = {}
-            GL.ShowRelations(name:find("%-debts") and "debts" or "overview")
+            GL.ShowRelations(page)
             GL.db.players = saved
-            return GrudgeLedgerStatistics
+            return GrudgeLedgerRelations
         end
-        GL.ShowRelations(name:match("^relations%-(%a+)"))
-        return GrudgeLedgerStatistics
+        GL.ShowRelations(page)
+        return GrudgeLedgerRelations
     elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
         local guild = name:find("^guild") ~= nil
