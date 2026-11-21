@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.53.0
+GRUDGE LEDGER — 0.54.0
+
+Un carnet par faction. Sur un royaume JcJ, rien ne change : un compte n’y joue qu’une faction. Sur un royaume JcE, vos personnages Horde et vos personnages Alliance ont chacun leur carnet : changer de faction, c’est changer de tout. Un ancien carnet tenu par des personnages des deux factions est séparé une fois, chaque souvenir allant au carnet du personnage qui l’a vécu ; rien n’est effacé. Dans une même faction, vos personnages partagent le même carnet : un joueur qui a tué l’un d’eux est connu des autres. Un avis sur une guilde ne fait plus jamais de vos propres compagnons de guilde des ennemis. Le message sur le partage s’affiche une fois par guilde.
 
 Nouveau Bilan : votre carte de joueur en cinq pages qu’on tourne avec les flèches. Qui vous êtes (votre style de combat et votre titre), vos chiffres, vos deux personnes (votre némésis et votre proie favorite), votre territoire (là où vous mourez et là où vous gagnez), votre guilde (votre part de ses victoires et son pire ennemi). Une seule chose à choisir : la période. « Copier le bilan » donne le texte à coller dans la discussion. Les anciens tableaux restent derrière « Tableaux détaillés ».
 

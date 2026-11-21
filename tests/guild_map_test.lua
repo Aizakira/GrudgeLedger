@@ -93,7 +93,7 @@ local A, B, C = a.GL.GuildMap, b.GL.GuildMap, third.GL.GuildMap
 
 -- On by default since 0.51.0, and the player is told once in the chat. Switched off: a fight sends
 -- nothing, and nothing is kept.
-assert(select(1, A.Enabled()) == true and select(2, A.Enabled()) == true and a.GL.db.sharingNotice)
+assert(select(1, A.Enabled()) == true and select(2, A.Enabled()) == true and a.GL.Bounties.GuildScope().noticed)
 for _, member in ipairs({ A, B, C }) do assert(member.Enable(false) == true) end
 flush()
 assert(select(1, A.Enabled()) == false)

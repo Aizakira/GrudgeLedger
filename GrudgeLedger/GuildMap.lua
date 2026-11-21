@@ -154,8 +154,9 @@ local ready = {}
 function M.Join()
     local s, me = scope()
     if type(s) ~= "table" then return false end
-    if GL.db and not GL.db.sharingNotice then
-        GL.db.sharingNotice = GL.Now()
+    -- Once per guild, not once per account: another character may be in another guild.
+    if not s.noticed then
+        s.noticed = GL.Now()
         GL.Print(GL.L("Grudge Ledger partage avec votre guilde vos victoires, vos morts (avec l’endroit), vos repérages et vos avis. "
             .. "Pour arrêter : options, pages Relations et Alertes, et la case « Vision de guilde » de la carte."))
     end

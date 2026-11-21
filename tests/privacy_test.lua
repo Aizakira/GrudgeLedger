@@ -31,7 +31,8 @@ end
 serializable(saved, {})
 -- Guild realm is supplied by GetGuildInfo, not assumed to be the local realm.
 GetRealmName = function() return "Local Realm" end
-GetGuildInfo = function() return "Shared Name", "Member", 5, "Other Realm" end
+-- (The player is in no guild here: an opinion on one's own guild is ignored since 0.54.0.)
+GetGuildInfo = function(unit) if unit == "player" then return nil end return "Shared Name", "Member", 5, "Other Realm" end
 local foreign = GL.Identity("target")
 assert(foreign.realm == "Other Realm")
 GL.SetGuildReaction("Shared Name", "enemy", nil, "Local Realm")

@@ -8,11 +8,16 @@ Ce document est la seule référence pour deux choses : ce que l'addon enregistr
 
 Le jeu écrit cette table sur le disque au `/reload` et à la déconnexion. Elle est commune à tous les personnages du compte.
 
+Depuis la 0.54.0, le carnet est tenu **par faction** : `players`, `aliases`, `guilds`, `unassignedHonor` et `battlegroundArchive` sont ceux de la faction du personnage joué. Le carnet de l'autre faction attend dans `books`, intact. Le reste est commun au compte (réglages) ou déjà rangé par guilde ou par personnage.
+
 ### Clés de premier niveau
 
 | Clé | Contenu | Module qui écrit | Borne ou durée |
 | --- | --- | --- | --- |
-| `sharingNotice` | Date du message unique qui prévient le joueur que l'addon partage avec sa guilde (0.51.0) | `GuildMap.lua` | — |
+| `sharingNotice` | Ancien marqueur du message de partage (0.51.0, un par compte). Plus lu depuis la 0.54.0 : le message est noté dans l'espace de chaque guilde (`noticed`) | `GuildMap.lua` | — |
+| `book` | Faction du carnet en cours (`Alliance` ou `Horde`), depuis la 0.54.0. Absent avant la migration 5 | `Core.lua` | — |
+| `books` | Carnets des autres factions, par faction : mêmes clés (`players`, `aliases`, `guilds`, `unassignedHonor`, `battlegroundArchive`) | `Core.lua` | Jamais purgé |
+| `characterFactions` | Faction de chaque personnage du compte vu depuis la 0.54.0, par GUID | `Core.lua` | Un par personnage |
 | `schema` | Numéro de schéma du carnet, actuellement 2 | `Core.lua` | — |
 | `players` | Fiches du carnet personnel, par clé `guid:Player-…` ou `name:prénom nom` | `Core.lua`, seul | Aucune : les souvenirs ne sont jamais supprimés en silence |
 | `aliases` | Nom complet en minuscules → clé de fiche ; `false` quand deux personnages portent le même nom | `Core.lua` | — |
@@ -68,6 +73,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `scores` | Victoires et morts cumulées, par cible puis par membre | — |
 | `shareFights`, `shareDeaths`, `shareSocial` | Partages, par personnage. Depuis la 0.51.0 ils sont actifs tant que la valeur n'est pas `false` : seul un refus explicite les coupe | — |
 | `shareSightings` | Accord d'envoi des repérages (veille de guilde, 0.30.0), par personnage. Actif depuis la 0.51.0 tant que la valeur n'est pas `false` : l'envoi révèle la zone où l'on se trouve. Les repérages reçus ne sont jamais sauvegardés | — |
+| `noticed` | Date du message unique qui prévient qu'on partage avec cette guilde (0.54.0) | — |
 | `shareMap` | « Vision de guilde » (0.49.0), par personnage. Active depuis la 0.51.0 tant que la valeur n'est pas `false` : cochée, le personnage envoie l'endroit de ses victoires et de ses morts et garde ceux des autres | — |
 | `places` | Combats partagés, par membre : lignes `date;carte;x;y;genre;adversaire;nom` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée. Sert à la carte et à l'alerte « Tueur de guilde » | 150 membres, 40 lignes par membre, 38 jours |
 | `mapForgot` | Date du dernier `MX` de chaque membre : un relais plus ancien de ses combats est refusé. Effacée dès qu'il partage à nouveau | Un par membre |
@@ -99,6 +105,8 @@ Depuis la 0.23.0, les migrations sont numérotées dans `migrations` (numéro �
 2. Elle conserve dans la sauvegarde les valeurs qu'elle remplace.
 3. Elle a un test qui charge un carnet synthétique de la version précédente et vérifie que chaque valeur d'origine reste retrouvable.
 4. Elle ne s'exécute qu'une fois et peut être rejouée sans dommage.
+
+Migration 5 (0.54.0), un carnet par faction. À la première connexion, la faction de chaque personnage qui a signé des faits est retrouvée : connue pour les personnages vus depuis la 0.54.0, sinon déduite de ses faits (on combat l'autre faction, on groupe et on échange avec la sienne). Chaque fait et chaque note va au carnet de la faction de son auteur. Une fiche qui a des faits des deux côtés est copiée, chaque copie gardant les siens et recomptant ses victoires, morts et agressions. Les faits sans auteur connu restent dans le carnet en cours. Les avis sur les guildes sont copiés dans les deux carnets. Rien n'est effacé.
 
 ## 2. Messages de guilde
 
