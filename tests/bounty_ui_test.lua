@@ -180,4 +180,22 @@ do
     id, err, why = B.Post("Player-77-Fresh0001", "Fresh Target", 10000, rules)
     assert(id and B.GuildScope().guildKey == "Forever/Test Guild", tostring(err) .. " " .. tostring(why))
     print("PASS bounty refusal: the cause is named, and the plain realm name serves when no normalized one exists")
+    -- Owner report (0.47.1): "Guilde ou royaume illisible". The refusal says which part, a player
+    -- without a guild is told so, and the realm number of your own identifier is the last resort.
+    local realGuild, realRealm = GetGuildInfo, GetRealmName
+    GetRealmName = function() return nil end
+    GetGuildInfo = function() return "Test Guild" end
+    id, err, why = B.Post("Player-77-Fresh0002", "Other Target", 10000, rules)
+    assert(id and B.GuildScope().guildKey == "1/Test Guild", tostring(why) .. " " .. tostring(B.GuildScope() and B.GuildScope().guildKey))
+    local asked = 0
+    GuildRoster = function() asked = asked + 1 end
+    GetGuildInfo = function() return nil end
+    IsInGuild = function() return true end
+    id, err, why = B.Post("Player-77-Fresh0003", "Third Target", 10000, rules)
+    assert(id == nil and why == "scope:guild" and asked == 1, tostring(why))
+    IsInGuild = function() return false end
+    id, err, why = B.Post("Player-77-Fresh0003", "Third Target", 10000, rules)
+    assert(id == nil and why == "scope:noguild" and asked == 1, tostring(why))
+    GetGuildInfo, GetRealmName, IsInGuild, GuildRoster = realGuild, realRealm, nil, nil
+    print("PASS bounty refusal: no guild, a guild name not yet arrived and an unreadable realm are told apart")
 end

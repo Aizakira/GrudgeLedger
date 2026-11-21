@@ -165,6 +165,18 @@ local function actionResult(id,err,why)
         self=L("Vous ne pouvez pas poser une prime sur vous-même."),
         name=L("Le nom de ce joueur ne peut pas être envoyé à la guilde."),
     }
+    local part=type(why)=="string" and why:match("^scope:(%a+)$")
+    if part then
+        if part=="noguild" then
+            message(L("Vous n’êtes dans aucune guilde. Une prime se dépose dans une guilde : ses membres la voient et la chassent."))
+            return false
+        end
+        local parts={guild=L("Le nom de votre guilde n’est pas encore arrivé. Réessayez dans quelques secondes."),
+            realm=L("Le royaume ne peut pas être lu."),
+            player=L("Votre propre identifiant ne peut pas être lu.")}
+        message((parts[part] or causes.scope)..(part=="guild" and "" or " "..L("Faites une capture de ce message.")))
+        return false
+    end
     if err=="invalid" and causes[why] then
         message(causes[why])
         return false

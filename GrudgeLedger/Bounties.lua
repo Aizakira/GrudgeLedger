@@ -37,7 +37,21 @@ local function scope()
     end
     local me = GL.Clean(UnitGUID("player"),"string")
     name,realm=GL.Clean(name,"string"),GL.Clean(realm,"string")
-    if not plain(name,120) or name == "" or not plain(realm,80) or realm == "" or not guid(me) then return end
+    -- Owner report (0.47.1): on his client neither realm name could be read, and no bounty could be
+    -- posted. The realm number carried by your own identifier always exists and is the same for
+    -- every member of the guild on that realm.
+    if (type(realm)~="string" or realm=="" or not plain(realm,80)) and guid(me) then realm=me:match("^Player%-(%w+)%-") end
+    -- Says which part cannot be read, for the message shown to the player.
+    if not guid(me) then return nil,"player" end
+    -- No guild at all is not a reading failure: bounties live in a guild, and the player is told so.
+    if (name==nil or name=="") and IsInGuild and GL.Safe(IsInGuild)==false then return nil,"noguild" end
+    if not plain(name,120) or name == "" then
+        -- The guild exists but its name has not arrived yet: ask the game for it, for the next try.
+        local roster=C_GuildInfo and C_GuildInfo.GuildRoster or GuildRoster
+        if type(roster)=="function" then GL.Safe(roster) end
+        return nil,"guild"
+    end
+    if not plain(realm,80) or realm == "" then return nil,"realm" end
     GL.db.bountyGuilds = GL.db.bountyGuilds or {}
     local key = realm.."/"..name
     local s = GL.db.bountyGuilds[key] or {events={}, seq=0}
@@ -563,7 +577,7 @@ end
 function B.Post(target,name,copper,opts)
     local s,me=scope()
     -- The third value says which check refused, so the window can tell the player what to do.
-    if not s then return nil,"invalid","scope" end
+    if not s then return nil,"invalid","scope:"..tostring(me) end
     if not guid(target) then return nil,"invalid","target" end
     if target==me then return nil,"invalid","self" end
     if not plain(name,64) or name=="" then return nil,"invalid","name" end

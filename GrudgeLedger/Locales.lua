@@ -4,6 +4,11 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Vous n’êtes dans aucune guilde. Une prime se dépose dans une guilde : ses membres la voient et la chassent."] = "No estás en ninguna hermandad. Una recompensa se publica en una hermandad: sus miembros la ven y la cazan.",
+        ["Le nom de votre guilde n’est pas encore arrivé. Réessayez dans quelques secondes."] = "El nombre de tu hermandad aún no ha llegado. Inténtalo de nuevo en unos segundos.",
+        ["Le royaume ne peut pas être lu."] = "No se puede leer el reino.",
+        ["Votre propre identifiant ne peut pas être lu."] = "No se puede leer tu propio identificador.",
+        ["Faites une capture de ce message."] = "Haz una captura de este mensaje.",
         ["Guilde ou royaume illisible pour l’instant. Réessayez dans un instant, ou après un /reload."] = "Hermandad o reino ilegible por ahora. Inténtalo de nuevo en un momento, o tras un /reload.",
         ["Ce joueur n’a pas encore d’identifiant dans votre livre. Ciblez-le une fois, puis recommencez."] = "Este jugador aún no tiene identificador en tu libro. Selecciónalo una vez y vuelve a intentarlo.",
         ["Vous ne pouvez pas poser une prime sur vous-même."] = "No puedes poner una recompensa sobre ti mismo.",
@@ -1724,6 +1729,11 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Vous n’êtes dans aucune guilde. Une prime se dépose dans une guilde : ses membres la voient et la chassent."] = "You are not in a guild. A bounty is posted in a guild: its members see it and hunt it.",
+        ["Le nom de votre guilde n’est pas encore arrivé. Réessayez dans quelques secondes."] = "Your guild’s name has not arrived yet. Try again in a few seconds.",
+        ["Le royaume ne peut pas être lu."] = "The realm cannot be read.",
+        ["Votre propre identifiant ne peut pas être lu."] = "Your own identifier cannot be read.",
+        ["Faites une capture de ce message."] = "Take a screenshot of this message.",
         ["Guilde ou royaume illisible pour l’instant. Réessayez dans un instant, ou après un /reload."] = "Guild or realm unreadable for now. Try again in a moment, or after a /reload.",
         ["Ce joueur n’a pas encore d’identifiant dans votre livre. Ciblez-le une fois, puis recommencez."] = "This player has no identifier in your book yet. Target them once, then try again.",
         ["Vous ne pouvez pas poser une prime sur vous-même."] = "You cannot post a bounty on yourself.",

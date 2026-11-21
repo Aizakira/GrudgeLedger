@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.47.1
+GRUDGE LEDGER — 0.47.2
+
+Primes : quand une prime est refusée faute de guilde lisible, le message dit maintenant ce qui manque. Sans guilde, il le dit clairement (une prime se dépose dans une guilde). Si le nom de la guilde n’est pas encore arrivé, l’addon le redemande au jeu. Si le nom du royaume est illisible, le numéro de royaume de votre propre identifiant sert à sa place.
 
 Primes : quand la création est refusée, le message dit maintenant pourquoi (joueur sans identifiant dans votre livre, guilde ou royaume illisible, prime sur soi-même) au lieu de « Vérifiez le contrat ». Le nom du royaume est aussi lu d’une seconde façon quand le jeu ne donne pas la première, ce qui pouvait bloquer toutes les primes.
 
