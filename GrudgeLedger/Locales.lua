@@ -4,6 +4,8 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Personne dans ce classement pour l’instant."] = "Nadie en esta clasificación por ahora.",
+        ["%d à %d sur %d"] = "%d a %d de %d",
         ["1 rivalité"] = "1 rivalidad",
         ["Reste dû : %d"] = "Queda por cobrar: %d",
         ["%d rivalités"] = "%d rivalidades",
@@ -1706,6 +1708,8 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Personne dans ce classement pour l’instant."] = "No one in this ranking yet.",
+        ["%d à %d sur %d"] = "%d to %d of %d",
         ["1 rivalité"] = "1 rivalry",
         ["Reste dû : %d"] = "Still owed: %d",
         ["%d rivalités"] = "%d rivalries",

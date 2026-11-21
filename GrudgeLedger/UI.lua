@@ -867,6 +867,13 @@ local statisticsChoices = {
         } },
     },
 }
+-- The Relations book draws the same rankings on its own page: same choices, same wording of a value.
+GL.RankingChoices, GL.RelationNames, GL.RelationInks, GL.RealmLabel = statisticsChoices, relationNames, inkColors, realmLabel
+function GL.RankingValueText(choice, value)
+    if choice[4] == "date" then return date("%d/%m/%y %H:%M", value) end
+    if choice[4] == "durée" then return groupDurationText(value) end
+    return (choice[1] == "grudge" and "−" or choice[1] == "reputation" and "+" or "") .. tostring(value)
+end
 local function refreshStatistics()
     local f = statisticsWindow
     if not f or not f:IsShown() then return end

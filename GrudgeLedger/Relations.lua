@@ -24,7 +24,9 @@ local function players()
     return GL.db and GL.db.players or {}
 end
 local function name(record)
-    return UI.plain(record.fullName or record.name or "?")
+    -- One value only: the escaping helper also returns how many characters it replaced.
+    local escaped = UI.plain(record.fullName or record.name or "?")
+    return escaped
 end
 local function day(at)
     return GL.Safe(date, "%d/%m", at) or "?"
@@ -539,7 +541,7 @@ function R.Guilds()
         local weight = hostile + (row.friends or 0) + (row.kills or 0)
         if weight > 0 then
             local rule = GL.GetGuildRule(row.name, row.realm)
-            -- "En guerre" is your own word (a guild rule); without a rule the facts only say hostile or friendly.
+            -- "En guerre" is your own word (a guild rule). Without a rule the facts only say hostile or friendly.
             local stance = rule and rule.reaction or hostile > 0 and "hostile" or (row.friends or 0) > 0 and "friend" or "neutral"
             list[#list + 1] = { row = row, weight = weight, stance = stance, ruled = rule ~= nil }
         end
@@ -589,11 +591,11 @@ local function buildGuilds(host)
         card.lines:SetHeight(54)
         GL.Safe(card.lines.SetWordWrap, card.lines, true)
         GL.Safe(card.lines.SetJustifyV, card.lines, "TOP")
-        card:SetScript("OnClick", function() GL.ShowStatistics("guilds") end)
+        card:SetScript("OnClick", function() R.OpenRankings(true) end)
         page.cards[i] = card
     end
     page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
-    page.all = Panels.Link(page, X(304), -474, S(262), function() GL.ShowStatistics("guilds") end)
+    page.all = Panels.Link(page, X(304), -474, S(262), function() R.OpenRankings(true) end)
     return page
 end
 local function paintGuilds(page)
@@ -726,7 +728,187 @@ local function paintLands(page)
     page.note:SetText(#lands > LAND_ROWS and L("Les %d zones les plus meurtrières sur %d."):format(LAND_ROWS, #lands) or "")
 end
 
--- The book: the narrow format of the player sheet. Left, the six entries and a few figures; right,
+-- Rankings: the fourteen lists of the old Relations window, on one page of this book. Four tabs
+-- (three kinds of players, then guilds), the lists of the tab as chips, six lines, pages to turn.
+local RANK_ROWS = 6
+local function rankingGroups()
+    local choices = GL.RankingChoices
+    local groups = {}
+    for _, group in ipairs(choices.players) do
+        groups[#groups + 1] = { name = group.name, entries = group.entries }
+    end
+    local guilds = { name = L("Guildes"), entries = {}, guild = true }
+    for _, group in ipairs(choices.guilds) do
+        for _, entry in ipairs(group.entries) do guilds.entries[#guilds.entries + 1] = entry end
+    end
+    groups[#groups + 1] = guilds
+    return groups
+end
+function R.RankingRows(group, choice)
+    local rows = {}
+    if group.guild then
+        for _, row in ipairs(GL.GuildStatistics()) do
+            local kept
+            if choice[1] == "rules" then
+                kept = GL.GetGuildRule(row.name, row.realm) ~= nil
+            else
+                kept = (row[choice[1]] or 0) > 0
+            end
+            if kept then rows[#rows + 1] = row end
+        end
+        table.sort(rows, function(a, b)
+            if choice[1] ~= "rules" and a[choice[1]] ~= b[choice[1]] then return a[choice[1]] > b[choice[1]] end
+            if a.name ~= b.name then return a.name < b.name end
+            return tostring(a.key) < tostring(b.key)
+        end)
+        return rows
+    end
+    return GL.PlayerStatistics(choice[1])
+end
+local function buildRankings(host)
+    local page = CreateFrame("Frame", nil, host)
+    page:SetAllPoints()
+    page.group, page.choice, page.offset = 1, 1, 0
+    page.groups = rankingGroups()
+    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
+    page.lead:SetHeight(30)
+    page.tabs = {}
+    for i, group in ipairs(page.groups) do
+        page.tabs[i] = UI.button(page, group.name, X(26) + (i - 1) * S(136), -84, S(132), function()
+            page.group, page.choice, page.offset = i, 1, 0
+            R.Refresh()
+        end, true, true)
+    end
+    page.chips = {}
+    for i = 1, 6 do
+        page.chips[i] = UI.button(page, "", X(26) + ((i - 1) % 3) * S(181), -116 - math.floor((i - 1) / 3) * 30, S(178), function()
+            page.choice, page.offset = i, 0
+            R.Refresh()
+        end, true, true)
+    end
+    local band = page:CreateTexture(nil, "BORDER")
+    band:SetPoint("TOPLEFT", X(26), -180)
+    band:SetSize(S(540), 22)
+    band:SetColorTexture(0.44, 0.28, 0.13, 0.18)
+    page.columnName = Panels.Text(page, X(30), -184, S(300), 12, false, UI.theme.inkMuted)
+    page.columnValue = Panels.Text(page, X(416), -184, S(146), 12, false, UI.theme.inkMuted)
+    page.columnValue:SetJustifyH("RIGHT")
+    page.rows = {}
+    for i = 1, RANK_ROWS do
+        local row = CreateFrame("Button", nil, page)
+        row:SetPoint("TOPLEFT", X(26), -204 - (i - 1) * 44)
+        row:SetSize(S(540), 42)
+        local rule = row:CreateTexture(nil, "BORDER")
+        rule:SetPoint("BOTTOMLEFT")
+        rule:SetPoint("BOTTOMRIGHT")
+        rule:SetHeight(1)
+        rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+        row.rank = Panels.Text(row, S(0), -12, S(18), 12, false, UI.theme.inkMuted)
+        row.face = face(row, 34)
+        row.face:SetPoint("TOPLEFT", S(24), -4)
+        row.crest = row:CreateTexture(nil, "ARTWORK")
+        row.crest:SetPoint("TOPLEFT", S(24), -4)
+        row.crest:SetSize(34, 34)
+        row.initials = Panels.Text(row, S(24), -12, S(34), 14, true, UI.theme.brass)
+        row.initials:SetJustifyH("CENTER")
+        row.name = Panels.Text(row, S(60), -4, S(250), 14, true)
+        GL.Safe(row.name.SetWordWrap, row.name, false)
+        row.meta = Panels.Text(row, S(60), -23, S(330), 11, false, UI.theme.inkMuted)
+        GL.Safe(row.meta.SetWordWrap, row.meta, false)
+        row.value = Panels.Text(row, S(396), -10, S(142), 16, true)
+        row.value:SetJustifyH("RIGHT")
+        row:SetScript("OnClick", function(self)
+            local item = self.item
+            if not item then return end
+            if item.record then
+                openSheet(item.record)
+            elseif GL.ShowGuilds then
+                GL.ShowGuilds({ guild = item.name, realm = item.realm })
+            end
+        end)
+        page.rows[i] = row
+    end
+    page.empty = Panels.Text(page, X(26), -212, S(540), 13, false, UI.theme.inkMuted)
+    page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
+        page.offset = math.max(0, page.offset - RANK_ROWS)
+        R.Refresh()
+    end, nil, true)
+    page.next = UI.button(page, "›", X(526), -474, S(40), function()
+        page.offset = page.offset + RANK_ROWS
+        R.Refresh()
+    end, nil, true)
+    page.count = Panels.Text(page, X(76), -480, S(440), 12, false, UI.theme.inkMuted)
+    page.count:SetJustifyH("CENTER")
+    return page
+end
+local function paintRankings(page)
+    local group = page.groups[page.group] or page.groups[1]
+    page.choice = math.max(1, math.min(page.choice, #group.entries))
+    local choice = group.entries[page.choice]
+    page.title:SetText(choice[2])
+    page.lead:SetText(choice[3])
+    for i, tab in ipairs(page.tabs) do UI.selectButton(tab, i == page.group) end
+    for i, chip in ipairs(page.chips) do
+        local entry = group.entries[i]
+        if entry then
+            chip:SetText(entry[2])
+            Panels.Fit(chip.caption, entry[2], S(166), 12, 8)
+            UI.selectButton(chip, i == page.choice)
+            chip:Show()
+        else
+            chip:Hide()
+        end
+    end
+    page.columnName:SetText(group.guild and L("Guilde") or L("Joueur"))
+    page.columnValue:SetText(choice[5])
+    local rows = R.RankingRows(group, choice)
+    page.offset = math.min(page.offset, math.max(0, math.floor((#rows - 1) / RANK_ROWS) * RANK_ROWS))
+    local inks, names = GL.RelationInks, GL.RelationNames
+    for i, row in ipairs(page.rows) do
+        local item = rows[page.offset + i]
+        row.item = item
+        if item then
+            row.rank:SetText(tostring(page.offset + i))
+            if group.guild then
+                row.face:Hide()
+                row.crest:Show()
+                local rule = GL.GetGuildRule(item.name, item.realm)
+                row.crest:SetColorTexture(unpack(crestColors[rule and rule.reaction or "neutral"] or crestColors.neutral))
+                row.initials:SetText(R.Initials(item.name))
+                Panels.Fit(row.name, UI.plain(item.name), S(250), 14, 10, true)
+                row.name:SetTextColor(unpack(UI.theme.ink))
+                row.meta:SetText(GL.RealmLabel(item.realm))
+                row.value:SetText(choice[1] == "rules" and (names[rule and rule.reaction] or "") or tostring(item[choice[1]] or 0))
+            else
+                local record = item.record
+                local relation = GL.Relation(record)
+                row.crest:Hide()
+                row.initials:SetText("")
+                row.face:Show()
+                GL.PaintBookPortrait(row.face, record)
+                Panels.Fit(row.name, name(record), S(250), 14, 10, true)
+                row.name:SetTextColor(unpack(inks[relation] or UI.theme.ink))
+                local faction, _, class = GL.IdentityLabels(record)
+                local meta = { (UI.plain(faction)), (UI.plain(class)) }
+                if record.guild then meta[#meta + 1] = UI.plain(record.guild) end
+                local nick = nickname(record)
+                if nick ~= "" then meta[#meta + 1] = nick end
+                Panels.Fit(row.meta, table.concat(meta, " · "), S(330), 11, 8)
+                row.value:SetText(GL.RankingValueText(choice, item.value or 0))
+            end
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    page.empty:SetText(#rows == 0 and L("Personne dans ce classement pour l’instant.") or "")
+    page.previous:SetEnabled(page.offset > 0)
+    page.next:SetEnabled(page.offset + RANK_ROWS < #rows)
+    page.count:SetText(#rows > 0 and L("%d à %d sur %d"):format(page.offset + 1, math.min(page.offset + RANK_ROWS, #rows), #rows) or "")
+end
+
+-- The book: the narrow format of the player sheet. Left, the six entries and a few figures. Right,
 -- the page.
 local entries = { { "overview", "Vue d’ensemble" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "guilds", "Guildes" },
     { "lands", "Terres" }, { "rankings", "Classements" } }
@@ -739,7 +921,7 @@ local function book()
     for i, entry in ipairs(entries) do
         local key = entry[1]
         local tab = UI.button(f, L(entry[2]), 38, -158 - (i - 1) * 36, 168, function()
-            if key == "rankings" then GL.ShowStatistics("players") else R.Open(key) end
+            R.Open(key)
         end, true)
         tab:SetHeight(30)
         f.tabs[key] = tab
@@ -752,7 +934,7 @@ local function book()
     host:SetPoint("TOPLEFT", 240, -152)
     host:SetSize(SHEET_W, SHEET_H)
     host.pages = { overview = buildOverview(host), debts = buildDebts(host), rivals = buildRivals(host),
-        guilds = buildGuilds(host), lands = buildLands(host) }
+        guilds = buildGuilds(host), lands = buildLands(host), rankings = buildRankings(host) }
     f.host = host
     return f
 end
@@ -783,10 +965,18 @@ function R.Open(key)
     R.Refresh()
     return f
 end
+-- Opens the rankings on the guild tab (from the crests) or where they were left.
+function R.OpenRankings(guilds)
+    local f = book()
+    local page = f.host.pages.rankings
+    if guilds then page.group, page.choice, page.offset = #page.groups, 1, 0 end
+    return R.Open("rankings")
+end
 function R.Refresh()
     local f = R.window
     if not f or not R.page or not f:IsShown() then return end
-    local painters = { overview = paintOverview, debts = paintDebts, rivals = paintRivals, guilds = paintGuilds, lands = paintLands }
+    local painters = { overview = paintOverview, debts = paintDebts, rivals = paintRivals, guilds = paintGuilds, lands = paintLands,
+        rankings = paintRankings }
     painters[R.page](f.host.pages[R.page])
     f.figures:SetText(figures())
 end

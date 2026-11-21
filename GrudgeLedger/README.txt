@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.43.0
+GRUDGE LEDGER — 0.44.0
+
+Les classements rejoignent le livre Relations, au même format : quatre onglets (Menaces, Amis, Combats, Guildes), les listes de l’onglet en boutons au-dessus du tableau, six lignes par page avec portrait, surnom et valeur. Un clic sur un joueur ouvre sa fiche, un clic sur une guilde ouvre ses règles. Les blasons de la page Guildes mènent à l’onglet Guildes des classements.
 
 Relations au format de la fiche : la colonne de gauche ne prend plus qu’un cinquième de la fenêtre et porte les six entrées (Vue d’ensemble, Dettes, Rivalités, Guildes, Terres, Classements) avec trois chiffres : ce qui reste dû, le nombre de dettes et de rivalités. Les pages occupent toute la feuille. Les anciens classements s’ouvrent par « Classements » et gardent pour l’instant leur ancienne présentation.
 
