@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.58.3
+GRUDGE LEDGER — 0.58.4
+
+Rappels de paiement. L’onglet Primes compte les primes que vous devez encore payer (« Primes · 2 »), et l’infobulle du livre de la mini-carte le rappelle en rouge. À la connexion, une bannière « Prime à régler » ouvre directement l’or à envoyer. Un paiement envoyé pendant votre absence est annoncé à la connexion suivante, avec une bannière : le courrier vous attend à la boîte aux lettres.
 
 Corrections après trois relectures indépendantes. Une dette se rembourse aussi quand vous avez donné votre avis à la main, et sans plafond. Un membre ne peut plus, en relayant un message, engager l’or d’un autre (contribution, gagnant, paiement, retrait). À la connexion, un seul membre transmet les primes de la guilde. La vision de guilde n’accepte que les combats de vrais membres. Le partage d’une prime simple ne compte que les chasseurs de la guilde, qui peuvent tous être payés. La séparation du carnet par faction garde tous les compteurs et range aussi les faits anciens. Vos gagnants, reçus et retraits sont renvoyés par vous seul à la connexion d’un membre. Les alertes de paiement ne se trompent plus quand la guilde n’est pas encore chargée, et un contrat remplacé n’est plus annoncé comme payé. Les pages de guilde ne se redessinent plus à chaque combat reçu pendant une synchronisation. Sur la carte, la molette attend que vous lâchiez le bouton. Le Bilan n’affirme plus que vous frappez le premier quand ce n’est pas connu.
 

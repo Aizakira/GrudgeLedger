@@ -546,6 +546,16 @@ local function showBook(frame)
     frame:Raise()
 end
 
+-- The Primes tab of every book counts the bounties you still have to pay, as "Filtres · n" counts
+-- the filters (0.58.4).
+local bountyTabs = {}
+function GL.PaintBountyReminder()
+    local due = GL.bountyDue
+    local n = due and due.count or 0
+    for _, b in ipairs(bountyTabs) do
+        b.caption:SetText(n > 0 and L("Primes · %d"):format(n) or L("Primes"))
+    end
+end
 local function bookNavigation(f, selected)
     f.navigation = {}
     for i, entry in ipairs({
@@ -560,7 +570,9 @@ local function bookNavigation(f, selected)
         b.caption:SetHeight(32)
         f.navigation[entry[1]] = b
         UI.selectButton(b, entry[1] == selected)
+        if entry[1] == "bounties" then bountyTabs[#bountyTabs + 1] = b end
     end
+    GL.PaintBountyReminder()
     f.settingsButton = UI.iconButton(f, "JournalSettings", L("Réglages et aide"), 869, -45, 32, showSettings)
     if selected == "settings" then f.settingsButton:LockHighlight() end
 end
@@ -3480,6 +3492,10 @@ GL.On("READY", function()
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Grudge Ledger")
         GameTooltip:AddLine(L("Clic : journal • Clic droit : réglages"), 1, 1, 1)
+        local due = GL.bountyDue
+        if due and due.count > 0 then
+            GameTooltip:AddLine(L("Primes à régler : %s"):format(due.text), 1, 0.35, 0.3)
+        end
         GameTooltip:AddLine(L("Glisser : déplacer le bouton"), 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end)

@@ -306,7 +306,37 @@ local toastA = a.env.GrudgeLedgerNearbyAlert
 assert(toastA:IsShown() and toastA.title:GetText() == "Prime remportée" and toastA.note:GetText():find("5 PO", 1, true), toastA.title:GetText())
 local before = #b.m.messages
 b.GL.BountyPaymentsCheck(true)
-assert(#b.m.messages > before and b.m.messages[#b.m.messages]:find("Primes à régler", 1, true), tostring(b.m.messages[#b.m.messages]))
+local remind = false
+for i = before + 1, #b.m.messages do remind = remind or b.m.messages[i]:find("Primes à régler", 1, true) ~= nil end
+assert(remind, tostring(b.m.messages[#b.m.messages]))
+-- 0.58.4: the login banner opens the gold to send, and the Primes tab counts what B owes.
+assert(toastB:IsShown() and toastB.title:GetText() == "Prime à régler" and toastB.note:GetText():find("pour une prime", 1, true), toastB.note:GetText())
+assert(b.GL.bountyDue.count == 1 and b.GL.bountyDue.amount == 50000)
+local book = b.GL.OpenBounties(nil, "due")
+assert(book.navigation.bounties.caption:GetText() == "Primes · 1" and book.filterKey == "due" and book.tab == "history")
+-- What A is still owed is kept per character for the next login.
+assert((a.GL.db.bountyPaymentWatch[a.id] or {})[order] == 50000, "A's snapshot")
+-- B pays while A is away: A's next login tells it once, with a banner.
+a.online = false
+assert(b.GL.Bounties.ConfirmPayment(order, a.id, 50000))
+flush()
+a.online = true
+local beforeA = #a.m.messages
+a.m.Fire("PLAYER_LOGIN")
+a.m.Fire("GUILD_ROSTER_UPDATE")
+flush()
+a.GL.BountyPaymentsCheck(true)
+a.GL.BountyPaymentsCheck(false)
+local told = 0
+for i = beforeA + 1, #a.m.messages do
+    if a.m.messages[i]:find("Pendant votre absence", 1, true) then told = told + 1 end
+end
+assert(told == 1, "told once at login")
+local toastSent = a.env.GrudgeLedgerNearbyAlert
+assert(toastSent:IsShown() and toastSent.title:GetText() == "Paiement envoyé", toastSent.title:GetText())
+assert(next(a.GL.db.bountyPaymentWatch[a.id]) == nil, "nothing left to send")
+b.GL.BountyPaymentsCheck(false)
+assert(b.GL.bountyDue.count == 0 and book.navigation.bounties.caption:GetText() == "Primes")
 for _, c in ipairs(clients) do assert(#c.GL.errors == 0, (c.GL.errors[1] or {}).text) end
 print("PASS guild vision: off by default, one message a fight with its opponent, kept only by members who share, borrowed fights "
     .. "refused, forty a member, a newcomer receives the guild's fights, guild killer alert with its own sound, forgotten when unticked")
