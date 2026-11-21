@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.44.0
+GRUDGE LEDGER — 0.45.0
+
+Préparation de la carte des terres dangereuses. Chaque combat enregistré garde maintenant l’endroit où il a eu lieu sur la carte (dans votre journal seulement : la guilde ne reçoit jamais la position). Nouvelle commande /gl carte : elle écrit ce que le jeu laisse faire avec les cartes et dessine la zone où vous êtes dans une petite fenêtre, avec un point rouge sur vous.
 
 Les classements rejoignent le livre Relations, au même format : quatre onglets (Menaces, Amis, Combats, Guildes), les listes de l’onglet en boutons au-dessus du tableau, six lignes par page avec portrait, surnom et valeur. Un clic sur un joueur ouvre sa fiche, un clic sur une guilde ouvre ses règles. Les blasons de la page Guildes mènent à l’onglet Guildes des classements.
 

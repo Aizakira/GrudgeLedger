@@ -4,6 +4,15 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Carte : le jeu n’offre pas les fonctions de carte à un addon."] = "Mapa: el juego no ofrece las funciones de mapa a un addon.",
+        ["Carte · zone n° %s · %s · type %s · dans %s"] = "Mapa · zona n.º %s · %s · tipo %s · en %s",
+        ["Position : le jeu ne la donne pas ici."] = "Posición: el juego no la da aquí.",
+        ["Position : %s · en combat : %s"] = "Posición: %s · en combate: %s",
+        ["cachée ou absente"] = "oculta o ausente",
+        ["Image de la carte : %d morceaux · %s × %s · morceau de %s"] = "Imagen del mapa: %d piezas · %s × %s · pieza de %s",
+        ["Carte du dessus : %s zones · rectangle de cette zone : %s"] = "Mapa superior: %s zonas · rectángulo de esta zona: %s",
+        ["Sonde : carte"] = "Sonda: mapa",
+        ["Carte dessinée dans la petite fenêtre : dites-moi si l’image est juste et si le point rouge est sur vous."] = "Mapa dibujado en la ventana pequeña: dime si la imagen es correcta y si el punto rojo está sobre ti.",
         ["Personne dans ce classement pour l’instant."] = "Nadie en esta clasificación por ahora.",
         ["%d à %d sur %d"] = "%d a %d de %d",
         ["1 rivalité"] = "1 rivalidad",
@@ -1708,6 +1717,15 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Carte : le jeu n’offre pas les fonctions de carte à un addon."] = "Map: the game does not offer map functions to an addon.",
+        ["Carte · zone n° %s · %s · type %s · dans %s"] = "Map · zone no. %s · %s · type %s · in %s",
+        ["Position : le jeu ne la donne pas ici."] = "Position: the game does not give it here.",
+        ["Position : %s · en combat : %s"] = "Position: %s · in combat: %s",
+        ["cachée ou absente"] = "hidden or missing",
+        ["Image de la carte : %d morceaux · %s × %s · morceau de %s"] = "Map image: %d pieces · %s × %s · piece of %s",
+        ["Carte du dessus : %s zones · rectangle de cette zone : %s"] = "Parent map: %s zones · rectangle of this zone: %s",
+        ["Sonde : carte"] = "Probe: map",
+        ["Carte dessinée dans la petite fenêtre : dites-moi si l’image est juste et si le point rouge est sur vous."] = "Map drawn in the small window: tell me whether the picture is right and whether the red dot is on you.",
         ["Personne dans ce classement pour l’instant."] = "No one in this ranking yet.",
         ["%d à %d sur %d"] = "%d to %d of %d",
         ["1 rivalité"] = "1 rivalry",

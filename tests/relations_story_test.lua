@@ -130,3 +130,35 @@ click(rankings.chips[6])
 assert(rankings.title:GetText() == "Mes règles de guilde" and rankings.rows[1].value:GetText() == "Ennemi", rankings.rows[1].value:GetText())
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
 print("PASS relations story: empty book, nicknames, three portraits, week, ledger with struck debts, rivalries, lands, guild crests, rankings one click away")
+
+-- /gl carte measures what the client allows with maps, and a fight keeps its position (0.45.0).
+do
+    local shown = #mock.messages
+    C_Map = nil
+    assert(R.MapProbe() == false and mock.messages[shown + 1]:find("fonctions de carte", 1, true))
+    C_Map = {
+        GetBestMapForUnit = function() return 1446 end,
+        GetMapInfo = function(id) return id == 1446 and { name = "Tanaris", mapType = 3, parentMapID = 1414 } or { name = "Kalimdor", mapType = 2 } end,
+        GetPlayerMapPosition = function() return { GetXY = function() return 0.5124, 0.2876 end } end,
+        GetMapArtLayers = function() return { { layerWidth = 1002, layerHeight = 668, tileWidth = 256, tileHeight = 256 } } end,
+        GetMapArtLayerTextures = function() return { 11, 12, 13, 14, 21, 22, 23, 24, 31, 32, 33, 34 } end,
+        GetMapChildrenInfo = function() return { {}, {}, {} } end,
+        GetMapRectOnMap = function() return 0.4, 0.6, 0.5, 0.7 end,
+    }
+    shown = #mock.messages
+    assert(R.MapProbe() == true)
+    local report = table.concat(mock.messages, "\n", shown + 1)
+    assert(report:find("zone n° 1446 · Tanaris · type 3 · dans Kalimdor", 1, true), report)
+    assert(report:find("Position : 0.512 ; 0.288", 1, true) and report:find("12 morceaux · 1002 × 668 · morceau de 256", 1, true), report)
+    assert(report:find("3 zones · rectangle de cette zone : 0.4", 1, true), report)
+    assert(GrudgeLedgerMapProbe:IsShown() and #GrudgeLedgerMapProbe.pieces == 12)
+    -- A fight recorded now keeps where it happened; the guild message format does not carry it.
+    local placed = GL.RecordPvP(person("Carte", "Test", "0042"), "death", "confirmed", "fixture", "map-1")
+    local event = placed.history[#placed.history]
+    assert(event.mapID == 1446 and event.mapX == 0.512 and event.mapY == 0.288, tostring(event.mapX))
+    C_Map.GetPlayerMapPosition = function() return nil end
+    GL.RecordPvP(person("Carte", "Test", "0042"), "death", "confirmed", "fixture", "map-2")
+    assert(placed.history[#placed.history].mapID == nil, "no position, nothing stored")
+    assert(#GL.errors == 0, (GL.errors[1] or {}).text)
+    print("PASS map probe: facts printed, zone drawn from the game's pieces, position kept on fights when the game gives it")
+end

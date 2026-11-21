@@ -775,6 +775,19 @@ local function history(record, kind, extra)
         entry.raceID = record.raceID
         entry.race, entry.raceName, entry.class, entry.className = record.race, record.raceName, record.class, record.className
     end
+    -- Where a fight happened on the map, for the map of dangerous lands (0.45.0). It stays in your
+    -- journal: guild messages name the zone, never the position. Nothing is stored when the game
+    -- hides or lacks the position (instances).
+    if entry.time == now and (kind == "kill" or kind == "death" or kind == "aggression" or kind == "assist") then
+        local map = GL.Clean(GL.Safe(C_Map and C_Map.GetBestMapForUnit, "player"), "number")
+        local position = map and GL.Safe(C_Map.GetPlayerMapPosition, map, "player")
+        local x, y
+        if type(position) == "table" and type(position.GetXY) == "function" then x, y = GL.Safe(position.GetXY, position) end
+        x, y = GL.Clean(x, "number"), GL.Clean(y, "number")
+        if x and y and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
+            entry.mapID, entry.mapX, entry.mapY = map, math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000
+        end
+    end
     if record then
         table.insert(record.history, entry)
         if openingProofs[record] then indexOpeningEvidence(openingProofs[record], entry) end

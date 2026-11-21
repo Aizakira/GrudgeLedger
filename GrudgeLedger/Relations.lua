@@ -908,6 +908,82 @@ local function paintRankings(page)
     page.count:SetText(#rows > 0 and L("%d à %d sur %d"):format(page.offset + 1, math.min(page.offset + RANK_ROWS, #rows), #rows) or "")
 end
 
+-- /gl carte: what this client lets an addon do with maps, measured in the game before the map of
+-- dangerous lands is built. It prints the facts and draws the current zone in a small window of
+-- ours, with a dot where you stand.
+local function answerOf(value)
+    if value == nil then return L("absent") end
+    if type(value) == "table" then return L("oui") end
+    return tostring(value)
+end
+function R.MapProbe()
+    local api = C_Map
+    if type(api) ~= "table" then
+        GL.Print(L("Carte : le jeu n’offre pas les fonctions de carte à un addon."))
+        return false
+    end
+    local map = GL.Clean(GL.Safe(api.GetBestMapForUnit, "player"), "number")
+    local info = map and GL.Safe(api.GetMapInfo, map)
+    local parent = type(info) == "table" and GL.Safe(api.GetMapInfo, info.parentMapID)
+    GL.Print(L("Carte · zone n° %s · %s · type %s · dans %s"):format(tostring(map), UI.plain(type(info) == "table" and info.name or "?"),
+        tostring(type(info) == "table" and info.mapType), UI.plain(type(parent) == "table" and parent.name or "?")))
+    local x, y
+    if map and type(api.GetPlayerMapPosition) == "function" then
+        local ok, position = pcall(api.GetPlayerMapPosition, map, "player")
+        if ok and type(position) == "table" and type(position.GetXY) == "function" then x, y = GL.Safe(position.GetXY, position) end
+        if not ok or position == nil then GL.Print(L("Position : le jeu ne la donne pas ici.")) end
+    end
+    x, y = GL.Clean(x, "number"), GL.Clean(y, "number")
+    GL.Print(L("Position : %s · en combat : %s"):format(x and y and ("%.3f ; %.3f"):format(x, y) or L("cachée ou absente"),
+        GL.Safe(InCombatLockdown) == true and L("oui") or L("non")))
+    local layers = map and GL.Safe(api.GetMapArtLayers, map)
+    local layer = type(layers) == "table" and layers[1]
+    local textures = map and GL.Safe(api.GetMapArtLayerTextures, map, 1)
+    local tiles = type(textures) == "table" and #textures or 0
+    GL.Print(L("Image de la carte : %d morceaux · %s × %s · morceau de %s"):format(tiles, tostring(layer and layer.layerWidth),
+        tostring(layer and layer.layerHeight), tostring(layer and layer.tileWidth)))
+    local children = type(info) == "table" and GL.Safe(api.GetMapChildrenInfo, info.parentMapID)
+    local rectangle = type(info) == "table" and { GL.Safe(api.GetMapRectOnMap, map, info.parentMapID) }
+    GL.Print(L("Carte du dessus : %s zones · rectangle de cette zone : %s"):format(type(children) == "table" and #children or 0,
+        answerOf(rectangle and rectangle[1])))
+    if tiles == 0 or not layer then return true end
+    -- The zone, drawn from the game's own pieces in our window, and the dot.
+    local w = GrudgeLedgerMapProbe or UI.window("GrudgeLedgerMapProbe", L("Sonde : carte"), 468, 372)
+    if not w.canvas then
+        w.canvas = CreateFrame("Frame", nil, w)
+        w.canvas:SetPoint("TOPLEFT", 14, -50)
+        w.canvas:SetSize(440, 300)
+        GL.Safe(w.canvas.SetClipsChildren, w.canvas, true)
+        w.pieces = {}
+        w.dot = w.canvas:CreateTexture(nil, "OVERLAY")
+        w.dot:SetSize(10, 10)
+        w.dot:SetColorTexture(0.85, 0.1, 0.1)
+    end
+    local scale = 440 / math.max(1, tonumber(layer.layerWidth) or 1)
+    local size = (tonumber(layer.tileWidth) or 256) * scale
+    local columns = math.max(1, math.ceil((tonumber(layer.layerWidth) or 1) / (tonumber(layer.tileWidth) or 256)))
+    for i, piece in ipairs(w.pieces) do piece:Hide() end
+    for i = 1, tiles do
+        local piece = w.pieces[i] or w.canvas:CreateTexture(nil, "ARTWORK")
+        w.pieces[i] = piece
+        piece:ClearAllPoints()
+        piece:SetPoint("TOPLEFT", ((i - 1) % columns) * size, -math.floor((i - 1) / columns) * size)
+        piece:SetSize(size, size)
+        piece:SetTexture(textures[i])
+        piece:Show()
+    end
+    if x and y then
+        w.dot:ClearAllPoints()
+        w.dot:SetPoint("CENTER", w.canvas, "TOPLEFT", x * 440, -y * (tonumber(layer.layerHeight) or 1) * scale)
+        w.dot:Show()
+    else
+        w.dot:Hide()
+    end
+    w:Show()
+    GL.Print(L("Carte dessinée dans la petite fenêtre : dites-moi si l’image est juste et si le point rouge est sur vous."))
+    return true
+end
+
 -- The book: the narrow format of the player sheet. Left, the six entries and a few figures. Right,
 -- the page.
 local entries = { { "overview", "Vue d’ensemble" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "guilds", "Guildes" },
