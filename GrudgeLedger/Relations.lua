@@ -359,6 +359,347 @@ local function paintDebts(page)
     page.count:SetText(L("%d dettes ouvertes · %d réglées ce mois-ci"):format(#open, #settled))
 end
 
+-- Rivalries: the players you fought most, one at a time, with the score and the dated thread.
+local RIVAL_STEPS = 5 -- fights shown on the thread, the latest ones
+function R.Rivals()
+    local list = {}
+    for _, record in pairs(players()) do
+        local fights = count(record, "kills") + count(record, "deaths")
+        if fights >= 2 then
+            list[#list + 1] = { record = record, weight = fights * 10 + count(record, "aggressions") }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.weight ~= b.weight then return a.weight > b.weight end
+        return a.record.key < b.record.key
+    end)
+    return list
+end
+local function openingShare(record)
+    local total, his = 0, 0
+    for _, e in ipairs(record.history or {}) do
+        if type(e) == "table" and e.kind == "opening" and not e.voided then
+            total = total + 1
+            his = his + (e.opener == "opponent" and 1 or 0)
+        end
+    end
+    return his, total
+end
+local function buildRivals(host)
+    local page = CreateFrame("Frame", nil, host)
+    page:SetAllPoints()
+    page.title = Panels.Text(page, 26, -18, 400, 21, true)
+    page.lead = Panels.Text(page, 26, -47, 540, 13, false, UI.theme.inkMuted)
+    local card = CreateFrame("Frame", nil, page)
+    page.card = card
+    card:SetPoint("TOPLEFT", 26, -76)
+    card:SetSize(540, 150)
+    UI.surface(card, { 0.79, 0.66, 0.42 })
+    UI.surface(card, { 0.96, 0.91, 0.78 }, 1, 1)
+    page.you = Panels.Text(card, 14, -18, 150, 17, true)
+    page.yours = Panels.Text(card, 14, -42, 150, 12, false, UI.theme.inkMuted)
+    page.score = Panels.Text(card, 170, -10, 200, 30, true)
+    page.score:SetJustifyH("CENTER")
+    page.scoreCaption = Panels.Text(card, 170, -50, 200, 11, false, UI.theme.inkMuted)
+    page.scoreCaption:SetJustifyH("CENTER")
+    page.face = face(card, 56)
+    page.face:SetPoint("TOPRIGHT", card, "TOPRIGHT", -14, -12)
+    page.name = Panels.Text(card, 300, -14, 166, 15, true)
+    page.name:SetJustifyH("RIGHT")
+    GL.Safe(page.name.SetWordWrap, page.name, false)
+    page.nick = Panels.Text(card, 300, -34, 166, 11, false, UI.theme.red)
+    page.nick:SetJustifyH("RIGHT")
+    GL.Safe(page.nick.SetWordWrap, page.nick, false)
+    page.identity = Panels.Text(card, 300, -50, 166, 11, false, UI.theme.inkMuted)
+    page.identity:SetJustifyH("RIGHT")
+    GL.Safe(page.identity.SetWordWrap, page.identity, false)
+    page.bar = Panels.Bar(card, 512)
+    page.bar:SetPoint("TOPLEFT", 14, -84)
+    page.bar:SetHeight(10)
+    page.facts = {}
+    for i = 1, 3 do
+        local fact = Panels.Text(card, 14 + (i - 1) * 172, -108, 168, 12)
+        fact:SetJustifyH(i == 1 and "LEFT" or i == 2 and "CENTER" or "RIGHT")
+        GL.Safe(fact.SetWordWrap, fact, false)
+        page.facts[i] = fact
+    end
+    page.threadTitle = Panels.Text(page, 26, -244, 400, 16, true, UI.theme.red)
+    local line = page:CreateTexture(nil, "BORDER")
+    line:SetPoint("TOPLEFT", 60, -283)
+    line:SetSize(472, 2)
+    line:SetColorTexture(0.52, 0.38, 0.20, 0.6)
+    page.steps = {}
+    for i = 1, RIVAL_STEPS do
+        local step = CreateFrame("Frame", nil, page)
+        step:SetPoint("TOPLEFT", 26 + (i - 1) * 108, -274)
+        step:SetSize(104, 120)
+        step.dot = step:CreateTexture(nil, "ARTWORK")
+        step.dot:SetSize(18, 18)
+        step.dot:SetPoint("TOP", step, "TOP", 0, 0)
+        step.date = centered(step, -24, 104, 12, true)
+        step.story = centered(step, -42, 104, 11, false, UI.theme.inkMuted)
+        step.story:SetHeight(64)
+        GL.Safe(step.story.SetWordWrap, step.story, true)
+        GL.Safe(step.story.SetJustifyV, step.story, "TOP")
+        page.steps[i] = step
+    end
+    page.empty = Panels.Text(page, 26, -86, 540, 13, false, UI.theme.inkMuted)
+    page.index = 1
+    page.bounty = UI.button(page, L("Poser une prime"), 26, -474, 150, function()
+        if page.record and page.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(page.record.guid) end
+    end, nil, true)
+    page.sheet = UI.button(page, L("Ouvrir sa fiche"), 182, -474, 140, function() openSheet(page.record) end, nil, true)
+    page.previous = UI.button(page, "‹", 440, -474, 40, function()
+        page.index = page.index - 1
+        R.Refresh()
+    end, nil, true)
+    page.next = UI.button(page, "›", 526, -474, 40, function()
+        page.index = page.index + 1
+        R.Refresh()
+    end, nil, true)
+    page.count = Panels.Text(page, 480, -480, 46, 12, false, UI.theme.inkMuted)
+    page.count:SetJustifyH("CENTER")
+    return page
+end
+local function paintRivals(page)
+    page.title:SetText(L("Rivalités"))
+    local rivals = R.Rivals()
+    page.index = math.max(1, math.min(page.index, #rivals))
+    local rival = rivals[page.index]
+    local record = rival and rival.record
+    page.record = record
+    for _, region in ipairs({ page.card, page.threadTitle, page.bounty, page.sheet, page.previous, page.next, page.count }) do
+        if record then region:Show() else region:Hide() end
+    end
+    page.empty:SetText(record and "" or L("Aucune rivalité pour l’instant. Il en faut deux combats terminés contre le même joueur."))
+    page.lead:SetText(record and L("Vos adversaires les plus tenaces, un par un.") or "")
+    for _, step in ipairs(page.steps) do step:Hide() end
+    if not record then return end
+    local kills, deaths = count(record, "kills"), count(record, "deaths")
+    page.you:SetText(L("Vous"))
+    local mine = GL.Safe(UnitClass, "player")
+    page.yours:SetText(type(mine) == "string" and UI.plain(mine) or "")
+    page.score:SetText(("|cff2e5e33%d|r – |cff8b1e1e%d|r"):format(kills, deaths))
+    page.scoreCaption:SetText(L("victoires · morts"))
+    GL.PaintBookPortrait(page.face, record)
+    Panels.Fit(page.name, name(record), 166, 15, 10, true)
+    Panels.Fit(page.nick, nickname(record), 166, 11, 8)
+    local identity = {}
+    if record.className then identity[#identity + 1] = UI.plain(record.className) end
+    if record.guild then identity[#identity + 1] = UI.plain(record.guild) end
+    Panels.Fit(page.identity, table.concat(identity, " · "), 166, 11, 8)
+    page.bar:Set(kills, deaths)
+    local his, openings = openingShare(record)
+    page.facts[1]:SetText(openings >= 2 and L("Il ouvre le combat %d fois sur %d"):format(his, openings) or "")
+    local debt = GL.Debt(record)
+    page.facts[2]:SetText(debt > 0 and L("Il vous doit encore %d"):format(debt) or L("Comptes réglés"))
+    local fights = GL.Fights(record)
+    page.facts[3]:SetText(fights[1] and L("Dernier combat le %s"):format(day(fights[1].last or fights[1].at)) or "")
+    page.threadTitle:SetText(L("Le fil de la rivalité"))
+    local shown = math.min(RIVAL_STEPS, #fights)
+    for i = 1, shown do
+        local fight, step = fights[shown - i + 1], page.steps[i]
+        if fight.deaths > 0 then
+            step.dot:SetColorTexture(0.55, 0.12, 0.12)
+        elseif fight.kills > 0 then
+            step.dot:SetColorTexture(0.18, 0.37, 0.20)
+        else
+            step.dot:SetColorTexture(0.42, 0.29, 0.08)
+        end
+        step.date:SetText(day(fight.at))
+        local zone = fight.main and type(fight.main.zone) == "string" and fight.main.zone ~= "?" and fight.main.zone
+        step.story:SetText(GL.FightTitle(fight) .. (zone and ("\n" .. UI.plain(zone)) or ""))
+        step:Show()
+    end
+    page.previous:SetEnabled(page.index > 1)
+    page.next:SetEnabled(page.index < #rivals)
+    page.count:SetText(("%d / %d"):format(page.index, #rivals))
+end
+
+-- Guild crests: the guilds that weigh in your book, hostile or friendly, six at most.
+local CRESTS = 6
+local crestColors = { enemy = { 0.35, 0.08, 0.08 }, hostile = { 0.45, 0.16, 0.10 }, warning = { 0.42, 0.29, 0.08 },
+    friend = { 0.18, 0.37, 0.20 }, neutral = { 0.23, 0.16, 0.11 } }
+function R.Guilds()
+    local list = {}
+    for _, row in ipairs(GL.GuildStatistics()) do
+        local hostile = (row.deaths or 0) + (row.aggressions or 0) + (row.grudges or 0)
+        local weight = hostile + (row.friends or 0) + (row.kills or 0)
+        if weight > 0 then
+            local rule = GL.GetGuildRule(row.name, row.realm)
+            -- "En guerre" is your own word (a guild rule); without a rule the facts only say hostile or friendly.
+            local stance = rule and rule.reaction or hostile > 0 and "hostile" or (row.friends or 0) > 0 and "friend" or "neutral"
+            list[#list + 1] = { row = row, weight = weight, stance = stance, ruled = rule ~= nil }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.weight ~= b.weight then return a.weight > b.weight end
+        return tostring(a.row.key) < tostring(b.row.key)
+    end)
+    return list
+end
+local function buildGuilds(host)
+    local page = CreateFrame("Frame", nil, host)
+    page:SetAllPoints()
+    page.title = Panels.Text(page, 26, -18, 400, 21, true)
+    page.lead = Panels.Text(page, 26, -47, 540, 13, false, UI.theme.inkMuted)
+    page.cards = {}
+    for i = 1, CRESTS do
+        local card = CreateFrame("Button", nil, page)
+        card:SetPoint("TOPLEFT", 26 + ((i - 1) % 2) * 274, -80 - math.floor((i - 1) / 2) * 124)
+        card:SetSize(266, 116)
+        UI.surface(card, { 0.79, 0.66, 0.42 })
+        UI.surface(card, { 0.96, 0.91, 0.78 }, 1, 1)
+        card.crestRim = card:CreateTexture(nil, "ARTWORK")
+        card.crestRim:SetPoint("TOPLEFT", 12, -14)
+        card.crestRim:SetSize(44, 54)
+        card.crestRim:SetColorTexture(0.52, 0.38, 0.20)
+        card.crest = card:CreateTexture(nil, "OVERLAY")
+        card.crest:SetPoint("TOPLEFT", 14, -16)
+        card.crest:SetSize(40, 50)
+        card.name = Panels.Text(card, 66, -12, 190, 15, true)
+        GL.Safe(card.name.SetWordWrap, card.name, false)
+        card.stance = Panels.Text(card, 66, -33, 190, 12, true, UI.theme.red)
+        card.lines = Panels.Text(card, 66, -52, 190, 11, false, UI.theme.inkMuted)
+        card.lines:SetHeight(54)
+        GL.Safe(card.lines.SetWordWrap, card.lines, true)
+        GL.Safe(card.lines.SetJustifyV, card.lines, "TOP")
+        card:SetScript("OnClick", function() GL.ShowStatistics("guilds") end)
+        page.cards[i] = card
+    end
+    page.empty = Panels.Text(page, 26, -86, 540, 13, false, UI.theme.inkMuted)
+    page.all = Panels.Link(page, 304, -474, 262, function() GL.ShowStatistics("guilds") end)
+    return page
+end
+local function paintGuilds(page)
+    page.title:SetText(L("Guildes"))
+    local guilds = R.Guilds()
+    page.lead:SetText(#guilds > 0 and L("Celles qui pèsent dans votre livre, en mal comme en bien.") or "")
+    local stances = { enemy = L("En guerre"), hostile = L("Hostile"), warning = L("Méfiance"), friend = L("Amie"), neutral = L("Neutre") }
+    for i, card in ipairs(page.cards) do
+        local entry = guilds[i]
+        if entry then
+            local row = entry.row
+            Panels.Fit(card.name, UI.plain(row.name), 190, 15, 10, true)
+            card.crest:SetColorTexture(unpack(crestColors[entry.stance] or crestColors.neutral))
+            card.stance:SetText((stances[entry.stance] or stances.neutral) .. (entry.ruled and (" · " .. L("votre règle")) or ""))
+            local lines = {}
+            if (row.grudges or 0) > 0 then lines[#lines + 1] = L("%d membres vous doivent quelque chose"):format(row.grudges) end
+            if (row.deaths or 0) + (row.aggressions or 0) > 0 then
+                lines[#lines + 1] = L("%d morts · %d agressions"):format(row.deaths or 0, row.aggressions or 0)
+            end
+            if (row.kills or 0) > 0 then lines[#lines + 1] = L("Vaincue %d fois"):format(row.kills) end
+            if (row.friends or 0) > 0 then lines[#lines + 1] = L("%d amis parmi eux"):format(row.friends) end
+            card.lines:SetText(table.concat(lines, "\n"))
+            card:Show()
+        else
+            card:Hide()
+        end
+    end
+    page.empty:SetText(#guilds == 0 and L("Aucune guilde ne pèse encore dans votre livre.") or "")
+    page.all:SetText(#guilds > 0 and L("Tous les classements de guildes") or "")
+end
+
+-- Dangerous lands: where you die, zone by zone, and to whom. A list today, the world map later.
+local LAND_ROWS = 8
+function R.Lands()
+    local zones, list = {}, {}
+    for _, record in pairs(players()) do
+        for _, e in ipairs(record.history or {}) do
+            local zone = type(e) == "table" and not e.voided and e.voidReason ~= "battleground" and type(e.zone) == "string" and e.zone
+            if zone and zone ~= "" and zone ~= "?" and (e.kind == "death" or e.kind == "kill") then
+                local entry = zones[zone]
+                if not entry then
+                    entry = { zone = zone, deaths = 0, kills = 0, killers = {} }
+                    zones[zone] = entry
+                    list[#list + 1] = entry
+                end
+                if e.kind == "death" then
+                    entry.deaths = entry.deaths + 1
+                    entry.killers[record] = (entry.killers[record] or 0) + 1
+                else
+                    entry.kills = entry.kills + 1
+                end
+            end
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.deaths ~= b.deaths then return a.deaths > b.deaths end
+        if a.kills ~= b.kills then return a.kills > b.kills end
+        return a.zone < b.zone
+    end)
+    return list
+end
+local function killers(entry)
+    local ranked = {}
+    for record, times in pairs(entry.killers) do ranked[#ranked + 1] = { record = record, times = times } end
+    table.sort(ranked, function(a, b)
+        if a.times ~= b.times then return a.times > b.times end
+        return a.record.key < b.record.key
+    end)
+    local parts = {}
+    for i = 1, math.min(2, #ranked) do
+        parts[i] = name(ranked[i].record) .. (ranked[i].times > 1 and (" ×" .. ranked[i].times) or "")
+    end
+    return table.concat(parts, ", ")
+end
+local function buildLands(host)
+    local page = CreateFrame("Frame", nil, host)
+    page:SetAllPoints()
+    page.title = Panels.Text(page, 26, -18, 400, 21, true)
+    page.lead = Panels.Text(page, 26, -47, 540, 13, false, UI.theme.inkMuted)
+    page.rows = {}
+    for i = 1, LAND_ROWS do
+        local row = CreateFrame("Frame", nil, page)
+        row:SetPoint("TOPLEFT", 26, -84 - (i - 1) * 46)
+        row:SetSize(540, 44)
+        local rule = row:CreateTexture(nil, "BORDER")
+        rule:SetPoint("BOTTOMLEFT")
+        rule:SetPoint("BOTTOMRIGHT")
+        rule:SetHeight(1)
+        rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+        row.zone = Panels.Text(row, 0, -5, 200, 14, true)
+        GL.Safe(row.zone.SetWordWrap, row.zone, false)
+        row.who = Panels.Text(row, 0, -24, 330, 11, false, UI.theme.inkMuted)
+        GL.Safe(row.who.SetWordWrap, row.who, false)
+        row.track = row:CreateTexture(nil, "BORDER")
+        row.track:SetPoint("TOPLEFT", 210, -10)
+        row.track:SetSize(200, 8)
+        row.track:SetColorTexture(0.85, 0.75, 0.55)
+        row.fill = row:CreateTexture(nil, "ARTWORK")
+        row.fill:SetPoint("TOPLEFT", 210, -10)
+        row.fill:SetHeight(8)
+        row.fill:SetColorTexture(0.55, 0.12, 0.12)
+        row.counts = Panels.Text(row, 420, -6, 120, 12, true)
+        row.counts:SetJustifyH("RIGHT")
+        page.rows[i] = row
+    end
+    page.empty = Panels.Text(page, 26, -86, 540, 13, false, UI.theme.inkMuted)
+    page.note = Panels.Text(page, 26, -480, 540, 11, false, UI.theme.inkMuted)
+    return page
+end
+local function paintLands(page)
+    page.title:SetText(L("Terres dangereuses"))
+    local lands = R.Lands()
+    page.lead:SetText(#lands > 0 and L("Où vous mourez, et à cause de qui.") or "")
+    local worst = lands[1] and math.max(1, lands[1].deaths) or 1
+    for i, row in ipairs(page.rows) do
+        local entry = lands[i]
+        if entry then
+            Panels.Fit(row.zone, UI.plain(entry.zone), 200, 14, 10, true)
+            Panels.Fit(row.who, killers(entry), 330, 11, 8)
+            row.fill:SetWidth(math.max(0.01, 200 * entry.deaths / worst))
+            if entry.deaths > 0 then row.fill:Show() else row.fill:Hide() end
+            row.counts:SetText(L("%d morts · %d victoires"):format(entry.deaths, entry.kills))
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    page.empty:SetText(#lands == 0 and L("Aucun combat terminé pour l’instant : cette page se remplit avec vos morts et vos victoires.") or "")
+    page.note:SetText(#lands > LAND_ROWS and L("Les %d zones les plus meurtrières sur %d."):format(LAND_ROWS, #lands) or "")
+end
+
 -- The host covers the right page of the Relations book with the same parchment.
 local function hostFor(book)
     if book.storyHost then return book.storyHost end
@@ -371,7 +712,8 @@ local function hostFor(book)
     sheet:SetAllPoints()
     sheet:SetTexture(media .. "JournalBookSurface")
     sheet:SetTexCoord(345 / 960, 938 / 960, 145 / 700, 670 / 700)
-    host.pages = { overview = buildOverview(host), debts = buildDebts(host) }
+    host.pages = { overview = buildOverview(host), debts = buildDebts(host), rivals = buildRivals(host),
+        guilds = buildGuilds(host), lands = buildLands(host) }
     book.storyHost = host
     return host
 end
@@ -395,6 +737,7 @@ end
 function R.Refresh()
     local host = R.book and R.book.storyHost
     if not host or not R.page or not host:IsShown() then return end
-    if R.page == "debts" then paintDebts(host.pages.debts) else paintOverview(host.pages.overview) end
+    local painters = { overview = paintOverview, debts = paintDebts, rivals = paintRivals, guilds = paintGuilds, lands = paintLands }
+    painters[R.page](host.pages[R.page])
 end
 GL.On("CHANGED", function() R.Refresh() end)

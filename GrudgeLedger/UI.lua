@@ -1045,10 +1045,15 @@ function GL.ShowRelations(page)
     GL.ShowStatistics("players")
     local f = statisticsWindow
     if not f then return end
-    f.story = page == "debts" and "debts" or "overview"
+    f.story = f.storyTabs[page] and page ~= "rankings" and page or "overview"
     GL.RelationsPages.Show(f, f.story)
-    for key, tab in pairs(f.storyTabs) do UI.selectButton(tab, key == f.story) end
-    for _, tab in ipairs(f.sections) do UI.selectButton(tab, false) end
+    for key, tab in pairs(f.storyTabs) do
+        tab:Show()
+        UI.selectButton(tab, key == f.story)
+    end
+    for _, tab in ipairs(f.sections) do tab:Hide() end
+    f.backToStory:Hide()
+    f.manage:Hide()
     for _, panel in ipairs(f.filters.players) do panel:Hide() end
     for _, panel in ipairs(f.filters.guilds) do panel:Hide() end
     f.helpHeading:Hide()
@@ -1062,8 +1067,8 @@ function GL.ShowStatistics(mode, category)
     if statisticsWindow and statisticsWindow.story then
         statisticsWindow.story = nil
         if GL.RelationsPages then GL.RelationsPages.Hide(statisticsWindow) end
-        for _, tab in pairs(statisticsWindow.storyTabs) do UI.selectButton(tab, false) end
         statisticsWindow.helpHeading:Show()
+        statisticsWindow.manage:Show()
     end
     if not statisticsWindow then
         local f = bookWindow("GrudgeLedgerStatistics", "Grudge Ledger")
@@ -1071,13 +1076,19 @@ function GL.ShowStatistics(mode, category)
         f.rows, f.sections, f.filters, f.guildActions = {}, {}, {}, {}
         bookNavigation(f, "players")
         f.storyTabs = {}
-        for i, entry in ipairs({ { "overview", L("Vue d’ensemble") }, { "debts", L("Dettes") } }) do
-            local tab = button(f, entry[2], 36 + (i - 1) * 140, -157, 134, function() GL.ShowRelations(entry[1]) end, true)
+        -- Six entries tell the story; the last one opens the fourteen rankings, which bring their own tabs.
+        for i, entry in ipairs({ { "overview", L("Vue d’ensemble") }, { "debts", L("Dettes") }, { "rivals", L("Rivalités") },
+            { "guilds", L("Guildes") }, { "lands", L("Terres") }, { "rankings", L("Classements") } }) do
+            local tab = button(f, entry[2], 36 + ((i - 1) % 2) * 140, -157 - math.floor((i - 1) / 2) * 35, 134, function()
+                if entry[1] == "rankings" then GL.ShowStatistics("players") else GL.ShowRelations(entry[1]) end
+            end, true)
             tab:SetHeight(30)
             tab.caption:SetWidth(126)
             journalFont(tab.caption, "GameFontNormalLarge", 14)
             f.storyTabs[entry[1]] = tab
         end
+        f.backToStory = button(f, "‹ " .. L("Relations"), 36, -157, 274, function() GL.ShowRelations() end)
+        f.backToStory:SetHeight(30)
         local playerGroups = statisticsChoices.players
         for i = 1, #playerGroups + 1 do
             local group = playerGroups[i]
@@ -1240,6 +1251,10 @@ function GL.ShowStatistics(mode, category)
         f.offset, f.selected = 0, nil
     end
     f.faction = f.faction or "all"
+    -- Ranking mode: the story entries give way to the way back and to the four ranking tabs.
+    for _, tab in pairs(f.storyTabs) do tab:Hide() end
+    for _, tab in ipairs(f.sections) do tab:Show() end
+    if GL.RelationsPages then f.backToStory:Show() else f.backToStory:Hide() end
     showBook(f)
     refreshStatistics()
 end

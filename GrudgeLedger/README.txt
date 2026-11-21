@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.40.0
+GRUDGE LEDGER — 0.41.0
+
+Relations, suite : trois nouvelles pages. « Rivalités » montre vos adversaires les plus tenaces un par un, avec le score, ce qu’il vous doit et le fil daté de vos combats. « Guildes » affiche en blasons celles qui pèsent dans votre livre (« En guerre » si vous avez posé cette règle, sinon « Hostile » ou « Amie » selon les faits). « Terres » liste où vous mourez, zone par zone, et à cause de qui. La colonne de gauche a six entrées ; « Classements » ouvre les quatorze classements d’avant, avec un bouton de retour.
 
 Relations raconte une histoire. La page s’ouvre sur « Votre monde » : votre compagnon, votre némésis et votre proie favorite en grand, ce qui s’est passé cette semaine et les dettes à régler en premier. Nouvelle page « Dettes » : le registre de ce qu’on vous doit, la plus lourde en tête, et les dettes réglées rayées à la plume. Les joueurs gagnent un surnom tiré des faits (« Le Fléau de Tanaris », « Frappe dans le dos », « Chasse en meute », « Votre proie favorite », « Fidèle compagnon »). Les classements d’avant restent accessibles par Menaces, Amis, Combats et Guildes. Un fichier est ajouté : relancez le jeu une fois, un /reload ne suffit pas.
 

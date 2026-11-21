@@ -535,7 +535,7 @@ function QA.capture(name)
             GL.db.players = saved
             return GrudgeLedgerStatistics
         end
-        GL.ShowRelations(name:find("%-debts") and "debts" or "overview")
+        GL.ShowRelations(name:match("^relations%-(%a+)"))
         return GrudgeLedgerStatistics
     elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
