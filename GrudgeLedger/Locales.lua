@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré."] = "Un mensaje a tu nombre (%s), transmitido por %s, no está en tu diario: fallo del juego, otro ordenador o invención. Se ignora.",
         ["Valider la victoire"] = "Validar la victoria",
         ["Victoire validée : les payeurs sont prévenus."] = "Victoria validada: se avisa a quienes pagan.",
         ["Une victoire sur %s attend votre validation : elle est arrivée tard. Ouvrez la prime pour la valider."] = "Una victoria sobre %s espera tu validación: llegó tarde. Abre la recompensa para validarla.",
@@ -1971,6 +1972,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré."] = "A message in your name (%s), passed on by %s, is not in your book: a game crash, another computer or made up. Ignored.",
         ["Valider la victoire"] = "Confirm the win",
         ["Victoire validée : les payeurs sont prévenus."] = "Win confirmed: the payers are told.",
         ["Une victoire sur %s attend votre validation : elle est arrivée tard. Ouvrez la prime pour la valider."] = "A win on %s waits for you: it arrived late. Open the bounty to confirm it.",

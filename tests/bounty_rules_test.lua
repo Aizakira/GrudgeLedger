@@ -145,10 +145,9 @@ relayed("P",owner,79,later,"7000","")
 assert(b.List()[later].pot[owner]==100 and notices==beforeForgery+1, "told once, and the pot is yours")
 relayed("P",partner,80,later,"5000","")
 assert(b.List()[later].pot[partner]==5000, "a real member's pledge still travels")
--- 0.58.6: the message in your name is taken back for the whole guild (Z).
-local denial=false
-for _,raw in pairs(b.GuildScope().events) do denial=denial or raw:sub(1,#owner+3)=="Z;"..owner..";" end
-assert(denial, "a Z is sent")
+-- 0.58.7: nothing is cancelled for the guild in your name (the same character on another computer,
+-- or a crash, would lose real bounties): the message is only ignored here.
+for _,raw in pairs(b.GuildScope().events) do assert(raw:sub(1,2)~="Z;", "no automatic cancellation") end
 -- A relay from another member cancels yours, even when you knew what it says.
 local scopeNow=b.GuildScope()
 assert(gl.Transport.SendBatch(scopeNow,{"R;x"},{key="bounty:relay",delay=100}))
@@ -164,6 +163,10 @@ stamped(now-7200,"K",hunter,81,later,"","")
 o=b.List()[later]
 assert(o.state=="claimed" and b.LateClaim(o), o.state)
 assert(b.Award(later) and b.List()[later].state~="claimed" and b.List()[later].winner.actor==hunter)
+-- A claim naming a helper outside the guild still counts (0.58.7): that share is only never asked.
+local withFriend=assert(b.Post("Player-2-friendly","Friendly",100))
+stamped(now,"K",hunter,84,withFriend,"","Player-9-outsider")
+assert(b.List()[withFriend].winner and b.List()[withFriend].winner.actor==hunter, b.List()[withFriend].state)
 -- A bounty back-dated by an hour never replaces the one heard in time.
 local contested="Player-2-contested"
 stamped(now,"O",partner,82,contested,"100","Contested")

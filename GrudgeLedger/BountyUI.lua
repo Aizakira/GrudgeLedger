@@ -1110,7 +1110,7 @@ local function ledger()
     local me=mine()
     local dues,incomes={},{}
     -- No guild space for a moment (roster not arrived): nothing is known, not "nothing is due".
-    if not me or not B.GuildScope() then return nil end
+    if not me or not B.GuildScope() or not B.IsMember(me) then return nil end
     -- (B.History returns the orders and their next expiry: only the first counts here.)
     local active=B.List()
     local closed=B.History()
