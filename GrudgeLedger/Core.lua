@@ -320,7 +320,7 @@ local function refreshReputation(record)
     if record.reactionSource == "emote" or record.reactionSource == "automatic" then record.reaction = scoreRelation(record.reputation) end
 end
 local interactionKinds = {kill=true, death=true, aggression=true, grouped=true, group=true,
-    reaction=true, reputation=true, trade=true, note=true, honor=true, opening=true}
+    reaction=true, reputation=true, trade=true, note=true, honor=true, opening=true, assist=true}
 local function interactionTime(value, now)
     return type(value) == "number" and value > 0 and value <= now and value or 0
 end
@@ -1101,7 +1101,7 @@ end
 -- minutes apart belong to the same fight; a death or a victory ends it, except a victory of your
 -- group within a minute of your death (he is avenged in the same fight).
 local FIGHT_GAP, AVENGE_GAP = 120, 60
-local fightKinds = { aggression = true, kill = true, death = true }
+local fightKinds = { aggression = true, kill = true, death = true, assist = true }
 local function fightEvent(e)
     return type(e) == "table" and fightKinds[e.kind] and not e.voided and e.voidReason ~= "battleground" and type(e.time) == "number"
 end
@@ -1143,7 +1143,7 @@ function GL.Fights(record)
     local out = {}
     for i = #fights, 1, -1 do
         local fight = fights[i]
-        for _, kind in ipairs({ "death", "kill", "aggression" }) do
+        for _, kind in ipairs({ "death", "kill", "aggression", "assist" }) do
             for _, e in ipairs(fight.events) do
                 if not fight.main and e.kind == kind then fight.main = e end
             end
@@ -1322,6 +1322,19 @@ function GL.RecordGroup(identity, sessionId, zone)
     end
     record.groupCount = record.groupCount + 1
     history(record, "grouped", { sessionId = sessionId, zone = zone })
+    GL.Emit("CHANGED", record)
+    return record
+end
+
+-- A helping hand: you were fighting this player and the game gave you honor for his death, but
+-- someone outside your group landed the killing blow. Kept in the history and in one counter. It is
+-- not a victory: it never enters the balance and it settles no debt.
+function GL.RecordAssist(identity)
+    if GL.IsPvPInstance() then return nil end
+    local record = GL.Remember(identity)
+    if not record then return nil end
+    record.assists = (tonumber(record.assists) or 0) + 1
+    history(record, "assist")
     GL.Emit("CHANGED", record)
     return record
 end

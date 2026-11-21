@@ -1219,6 +1219,9 @@ local function encountersPage(f,d,row)
         row(L("Croisé %d fois · dernière fois : %s"):format(math.max(seen,1),place),nil,nil,nil,nil,
             {time=r.lastEncounterAt and GL.Safe(date,"%d/%m",r.lastEncounterAt) or nil,chip={L("Vous"),true}})
     end
+    if r and (tonumber(r.assists) or 0)>0 then
+        row(L("Coups de main"),L("%d fois, sans le coup fatal"):format(r.assists))
+    end
     local duels=object(r and r.duels)
     if (duels.wins or 0)+(duels.losses or 0)>0 then
         row(L("Duels"),L("%d gagnés · %d perdus"):format(duels.wins or 0,duels.losses or 0))
@@ -1264,6 +1267,9 @@ local function combatPage(f,d,row)
             row(L("Solde %+d = %s"):format(fightBalance or 0,formula))
         end
         row(L("Honneur attribué"),p.honorAwards>0 and text(p.honor) or unknown)
+        if (tonumber(record.assists) or 0)>0 then
+            row(L("Coups de main"),L("%d fois, sans le coup fatal"):format(record.assists))
+        end
         local duels=object(record.duels)
         if (duels.wins or 0)+(duels.losses or 0)>0 then
             row(L("Duels"),L("%d gagnés · %d perdus"):format(duels.wins or 0,duels.losses or 0))

@@ -531,6 +531,7 @@ local function eventTitle(event)
             or L("Vous l'avez marqué : ") .. (relationNames[event.reaction] or L("avis personnel"))
     end
     if event.kind == "grouped" or event.kind == "group" then return L("Vous avez partagé un groupe") end
+    if event.kind == "assist" then return L("Coup de main : d’autres l’ont achevé") end
     return event.kind == "note" and L("Vous avez ajouté une note") or L("Événement enregistré")
 end
 local activeBook
@@ -1725,7 +1726,7 @@ function GL.FightTitle(fight)
     if fight.aggressions > 0 and fight.main and fight.main.kind ~= "aggression" then parts[1] = L("Agression") end
     for _, e in ipairs(fight.events) do
         if e.kind == "kill" and type(e.combat) == "table" and e.combat.assist then
-            parts[#parts + 1] = e.combat.assist == "+" and L("Victoire partagée") or L("Vaincu avec votre groupe")
+            parts[#parts + 1] = L("Vaincu avec votre groupe")
         elseif e.kind ~= "aggression" then
             parts[#parts + 1] = eventTitle(e)
         end

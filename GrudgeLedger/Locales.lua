@@ -4,7 +4,9 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
-        ["Victoire partagée"] = "Victoria compartida",
+        ["Coup de main : d’autres l’ont achevé"] = "Ayuda: otros lo remataron",
+        ["Coups de main"] = "Ayudas",
+        ["%d fois, sans le coup fatal"] = "%d veces, sin el golpe fatal",
         ["Vu en jeu à %s"] = "Visto en el juego a las %s",
         ["modèle 3D gardé"] = "modelo 3D guardado",
         ["modèle 3D non pris"] = "modelo 3D no tomado",
@@ -1636,7 +1638,9 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
-        ["Victoire partagée"] = "Shared victory",
+        ["Coup de main : d’autres l’ont achevé"] = "Helping hand: others finished them",
+        ["Coups de main"] = "Helping hands",
+        ["%d fois, sans le coup fatal"] = "%d times, without the killing blow",
         ["Vu en jeu à %s"] = "Seen in game at %s",
         ["modèle 3D gardé"] = "3D model kept",
         ["modèle 3D non pris"] = "3D model not taken",

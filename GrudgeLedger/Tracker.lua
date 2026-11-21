@@ -709,6 +709,22 @@ local function recordHonorReceipt(message, lineID, f)
     end
 end
 
+-- Owner's rule (0.36.0): honor named for a player you were fighting, without a killing blow from
+-- you or your group, is a helping hand, not a victory. The killing blow can be announced just after
+-- the honor line, and a solo victory is inferred up to three seconds after the death: the decision waits four seconds, and a victory credited within ten seconds wins.
+local recentHelp = {}
+local function helped(identity)
+    local key = identity.guid or identity.key
+    local function settle()
+        local now, credit, last = GL.Now(), recentCredits[key], recentHelp[key]
+        if credit and now - credit.at <= 10 and not credit.event.voided then return end
+        if last and now >= last and now - last <= 10 then return end
+        recentHelp[key] = now
+        GL.RecordAssist(identity)
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(4, settle) else settle() end
+end
+
 function T.OnHonorMessage(message, lineID)
     message = GL.Clean(message, "string")
     if not enabled() or not message then return end
@@ -717,11 +733,7 @@ function T.OnHonorMessage(message, lineID)
         local identity = recordHonorReceipt(message, lineID, f)
         local enemy = identity and f and (f.enemies[identity.key] or f.enemies[identity.alias])
         if enemy then enemy.signalAt = GL.Now() tryKills() end
-        -- Owner's rule (0.35.1): honor named for a player you were fighting is your victory too, even
-        -- when a stranger lands the killing blow. "+" marks a victory shared outside your group.
-        if identity and (enemy or GL.FoughtRecently(identity)) then
-            creditKill(identity, "confirmed", "Victoire partagée : honneur reçu pour sa mort, après l'avoir combattu.", nil, "+")
-        end
+        if identity and (enemy or GL.FoughtRecently(identity)) then helped(identity) end
         return
     end
     -- Compatibility with clients missing all named formats: this old signal

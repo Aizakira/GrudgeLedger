@@ -545,14 +545,11 @@ test("shared awards use the received integer exactly once independently of kills
     local stats = GL.PersonalStatistics()
     assert(stats.honor == 40 and stats.honorAwards == 3 and stats.bestHonor == 18 and stats.unassignedHonor == 0)
     local contact = GL.ContactMatchup(GL.Get("guid:" .. e.guid))
-    -- Owner's rule (0.35.1): honor named for a player you were fighting is one shared victory, even
-    -- when a bystander lands the killing blow. Three awards at the same instant are one victory.
-    assert(contact.honor == 40 and contact.kills == 1 and contact.probableKills == nil, contact.kills)
-    local shared
-    for _, event in ipairs(GL.Get("guid:" .. e.guid).history) do
-        if event.kind == "kill" then shared = event end
-    end
-    assert(shared and shared.combat.assist == "+", "marked as shared outside the group")
+    -- Owner's rule (0.36.0): honor named for a player you were fighting, with the killing blow from
+    -- a bystander, is one helping hand and no victory. Three awards at the same instant are one.
+    assert(contact.honor == 40 and contact.kills == 0 and contact.probableKills == nil)
+    local helped = GL.Get("guid:" .. e.guid)
+    assert(helped.assists == 1 and helped.reputation == 0, helped.assists)
     assert(count() == 1 and GL.Get("guid:Player-1-sender") == nil and GL.Get("guid:" .. unitData.focus.guid) == nil)
 end)
 
@@ -597,9 +594,7 @@ test("only a new verified named receipt signals an isolated probable kill when t
     honorChat(COMBATLOG_HONORGAIN:format("Alex enemy", "Leader", 7), 20)
     honorChat("Alex enemy dies.", 21)
     now = now + 1 T.Poll()
-    -- Since 0.35.1 the first verified named receipt for a player you were fighting is the victory;
-    -- a replayed line, a faction leader's line and an unnamed line add nothing.
-    assert(GL.PersonalStatistics().honorAwards == 1 and total("kills") == 1)
+    assert(GL.PersonalStatistics().honorAwards == 1 and total("kills") == 0)
     honorChat(msg, 22)
     assert(GL.PersonalStatistics().honorAwards == 2 and GL.PersonalStatistics().honor == 0 and total("kills") == 1)
     fixture(nil, {unavailable=true})
