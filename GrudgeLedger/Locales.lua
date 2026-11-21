@@ -4,6 +4,8 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Trois morts récentes face au même joueur."] = "Tres muertes recientes ante el mismo jugador.",
+        ["Un ami avec qui vous groupez, ou trois groupes cette semaine."] = "Un amigo con quien agrupas, o tres grupos esta semana.",
         ["Rivalités"] = "Rivalidades",
         ["Terres"] = "Tierras",
         ["Poser une prime"] = "Poner recompensa",
@@ -38,9 +40,7 @@ if locale == "esES" or locale == "esMX" then
         ["Votre némésis"] = "Tu némesis",
         ["Votre proie favorite"] = "Tu presa favorita",
         ["Personne pour l’instant"] = "Nadie por ahora",
-        ["Trois groupes avec le même joueur."] = "Tres grupos con el mismo jugador.",
         ["Vous a tué %d fois · vous doit %d"] = "Te mató %d veces · te debe %d",
-        ["Deux morts face au même joueur."] = "Dos muertes ante el mismo jugador.",
         ["Vaincu %d fois, jamais l’inverse"] = "Vencido %d veces, nunca al revés",
         ["Trois victoires sans une seule mort."] = "Tres victorias sin una sola muerte.",
         ["Cette semaine"] = "Esta semana",
@@ -1702,6 +1702,8 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Trois morts récentes face au même joueur."] = "Three recent deaths to the same player.",
+        ["Un ami avec qui vous groupez, ou trois groupes cette semaine."] = "A friend you group with, or three groups this week.",
         ["Rivalités"] = "Rivalries",
         ["Terres"] = "Lands",
         ["Poser une prime"] = "Post a bounty",
@@ -1736,9 +1738,7 @@ else
         ["Votre némésis"] = "Your nemesis",
         ["Votre proie favorite"] = "Your favourite prey",
         ["Personne pour l’instant"] = "No one yet",
-        ["Trois groupes avec le même joueur."] = "Three groups with the same player.",
         ["Vous a tué %d fois · vous doit %d"] = "Killed you %d times · owes you %d",
-        ["Deux morts face au même joueur."] = "Two deaths to the same player.",
         ["Vaincu %d fois, jamais l’inverse"] = "Beaten %d times, never the reverse",
         ["Trois victoires sans une seule mort."] = "Three victories without a single death.",
         ["Cette semaine"] = "This week",

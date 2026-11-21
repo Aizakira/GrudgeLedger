@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.41.0
+GRUDGE LEDGER — 0.41.1
+
+Premiers retours en jeu sur Relations. Les titres suivent le temps : un fait pèse moitié moins toutes les deux semaines. Votre némésis doit vous avoir tué au moins trois fois, récemment ; votre compagnon est un ami avec qui vous groupez, ou un joueur groupé trois fois cette semaine (plus un inconnu croisé il y a longtemps). Les blasons de guilde portent les initiales de la guilde. Correction : dans les classements de guildes, « Mes règles de guilde » chevauchait « Comment lire ce classement ».
 
 Relations, suite : trois nouvelles pages. « Rivalités » montre vos adversaires les plus tenaces un par un, avec le score, ce qu’il vous doit et le fil daté de vos combats. « Guildes » affiche en blasons celles qui pèsent dans votre livre (« En guerre » si vous avez posé cette règle, sinon « Hostile » ou « Amie » selon les faits). « Terres » liste où vous mourez, zone par zone, et à cause de qui. La colonne de gauche a six entrées ; « Classements » ouvre les quatorze classements d’avant, avec un bouton de retour.
 

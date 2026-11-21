@@ -201,9 +201,11 @@ local function paintOverview(page)
     local nemesisKey, companionKey = GL.Titles()
     local nemesis, companion, prey = nemesisKey and GL.Get(nemesisKey), companionKey and GL.Get(companionKey), R.Prey()
     fillCard(page.cards[1], L("Votre compagnon"), companion,
-        companion and L("%d groupes ensemble"):format(tonumber(companion.groupCount) or 0), L("Trois groupes avec le même joueur."))
+        companion and L("%d groupes ensemble"):format(tonumber(companion.groupCount) or 0),
+        L("Un ami avec qui vous groupez, ou trois groupes cette semaine."))
     fillCard(page.cards[2], L("Votre némésis"), nemesis,
-        nemesis and L("Vous a tué %d fois · vous doit %d"):format(count(nemesis, "deaths"), GL.Debt(nemesis)), L("Deux morts face au même joueur."))
+        nemesis and L("Vous a tué %d fois · vous doit %d"):format(count(nemesis, "deaths"), GL.Debt(nemesis)),
+        L("Trois morts récentes face au même joueur."))
     fillCard(page.cards[3], L("Votre proie favorite"), prey,
         prey and L("Vaincu %d fois, jamais l’inverse"):format(count(prey, "kills")), L("Trois victoires sans une seule mort."))
     page.weekTitle:SetText(L("Cette semaine"))
@@ -538,6 +540,16 @@ function R.Guilds()
     end)
     return list
 end
+-- "Ok Bodycount" gives "OB", "ducks" gives "D": the first letter of the first two words, whole
+-- UTF-8 letters only.
+function R.Initials(guild)
+    local letters = {}
+    for word in tostring(guild or ""):gmatch("%S+") do
+        local letter = word:match("^[%z\1-\127\194-\244][\128-\191]*")
+        if letter and #letters < 2 and not letter:match("^[%p%d]$") then letters[#letters + 1] = letter:upper() end
+    end
+    return UI.plain(table.concat(letters))
+end
 local function buildGuilds(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
@@ -557,6 +569,9 @@ local function buildGuilds(host)
         card.crest = card:CreateTexture(nil, "OVERLAY")
         card.crest:SetPoint("TOPLEFT", 14, -16)
         card.crest:SetSize(40, 50)
+        card.initials = Panels.Text(card, 14, -28, 40, 20, true, UI.theme.brass)
+        card.initials:SetJustifyH("CENTER")
+        GL.Safe(card.initials.SetDrawLayer, card.initials, "OVERLAY", 7)
         card.name = Panels.Text(card, 66, -12, 190, 15, true)
         GL.Safe(card.name.SetWordWrap, card.name, false)
         card.stance = Panels.Text(card, 66, -33, 190, 12, true, UI.theme.red)
@@ -582,6 +597,7 @@ local function paintGuilds(page)
             local row = entry.row
             Panels.Fit(card.name, UI.plain(row.name), 190, 15, 10, true)
             card.crest:SetColorTexture(unpack(crestColors[entry.stance] or crestColors.neutral))
+            card.initials:SetText(R.Initials(row.name))
             card.stance:SetText((stances[entry.stance] or stances.neutral) .. (entry.ruled and (" · " .. L("votre règle")) or ""))
             local lines = {}
             if (row.grudges or 0) > 0 then lines[#lines + 1] = L("%d membres vous doivent quelque chose"):format(row.grudges) end

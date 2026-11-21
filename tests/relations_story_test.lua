@@ -13,7 +13,7 @@ GL.ShowRelations()
 local f = GrudgeLedgerStatistics
 local overview, ledger = f.storyHost.pages.overview, f.storyHost.pages.debts
 assert(f.story == "overview" and overview:IsShown() and not ledger:IsShown() and f.storyTabs.overview.active)
-assert(overview.cards[2].name:GetText() == "Personne pour l’instant" and overview.cards[2].line:GetText() == "Deux morts face au même joueur.")
+assert(overview.cards[2].name:GetText() == "Personne pour l’instant" and overview.cards[2].line:GetText() == "Trois morts récentes face au même joueur.")
 assert(overview.noDebt:GetText() == "Personne ne vous doit rien." and overview.week:GetText() == "Rien de notable ces sept derniers jours.")
 
 -- A nemesis who killed you twice in the same zone, a prey beaten three times, a debt already avenged.
@@ -22,6 +22,8 @@ local noni, prey, avenged = person("Noni", "Vachementop", "0001"), person("Pist"
 GL.RecordPvP(noni, "death", "confirmed", "fixture", "n1")
 now = now + 600
 GL.RecordPvP(noni, "death", "confirmed", "fixture", "n2")
+now = now + 600
+GL.RecordPvP(noni, "death", "confirmed", "fixture", "n3")
 for i = 1, 3 do
     now = now + 600
     GL.RecordPvP(prey, "kill", "confirmed", "fixture", "p" .. i)
@@ -39,7 +41,7 @@ assert(I.Nickname(GL.Get(person("Sans", "Histoire", "0009")) or {}) == nil, "no 
 
 GL.ShowRelations()
 assert(overview.cards[2].record == nemesis and overview.cards[2].nick:GetText() == "« Le Fléau de Tanaris »")
-assert(overview.cards[2].line:GetText() == "Vous a tué 2 fois · vous doit " .. GL.Debt(nemesis), overview.cards[2].line:GetText())
+assert(overview.cards[2].line:GetText() == "Vous a tué 3 fois · vous doit " .. GL.Debt(nemesis), overview.cards[2].line:GetText())
 assert(overview.cards[3].record == GL.Get(prey) and overview.cards[1].record == nil)
 assert(overview.debts[1].record == nemesis and overview.debts[1].amount:GetText() == tostring(GL.Debt(nemesis)) and not overview.debts[2]:IsShown())
 assert(overview.week:GetText():find("nouvel ennemi", 1, true) or overview.week:GetText():find("nouveaux ennemis", 1, true), overview.week:GetText())
@@ -53,7 +55,7 @@ assert(#open == 1 and #settled == 1 and settled[1].record == GL.Get(avenged) and
 assert(ledger.total:GetText() == tostring(total) and ledger.count:GetText() == "1 dettes ouvertes · 1 réglées ce mois-ci")
 local first, second = ledger.rows[1], ledger.rows[2]
 assert(first.record == nemesis and first.amount:GetText() == tostring(total) and first.bounty:IsShown() and not first.strike:IsShown())
-assert(first.detail:GetText() == "2 morts · « Le Fléau de Tanaris »", first.detail:GetText())
+assert(first.detail:GetText() == "3 morts · « Le Fléau de Tanaris »", first.detail:GetText())
 assert(second.record == GL.Get(avenged) and second.strike:IsShown() and second.state:GetText() == "Réglée" and not second.bounty:IsShown())
 assert(second.detail:GetText():find("^Vengé le "), second.detail:GetText())
 assert(not ledger.rows[3]:IsShown() and not ledger.previous:IsEnabled() and not ledger.next:IsEnabled())
@@ -66,16 +68,16 @@ assert(rivals.record == GL.Get(avenged) and rivals.count:GetText() == "1 / 3" an
 assert(rivals.score:GetText():find("6", 1, true) and rivals.facts[2]:GetText() == "Comptes réglés", rivals.score:GetText())
 assert(rivals.steps[1]:IsShown() and rivals.steps[1].story:GetText():find("Tanaris", 1, true), rivals.steps[1].story:GetText())
 click(rivals.next)
-assert(rivals.record == GL.Get(prey) and rivals.nick:GetText() == "« Votre proie favorite »" and rivals.count:GetText() == "2 / 3")
+assert(rivals.record == nemesis and rivals.facts[2]:GetText() == "Il vous doit encore " .. GL.Debt(nemesis) and rivals.count:GetText() == "2 / 3")
 click(rivals.next)
-assert(rivals.record == nemesis and rivals.facts[2]:GetText() == "Il vous doit encore " .. GL.Debt(nemesis) and not rivals.next:IsEnabled())
+assert(rivals.record == GL.Get(prey) and rivals.nick:GetText() == "« Votre proie favorite »" and not rivals.next:IsEnabled())
 
 -- Dangerous lands: one line per zone, deaths first, with who killed you there.
 click(f.storyTabs.lands)
 local lands = f.storyHost.pages.lands
-assert(lands:IsShown() and #R.Lands() == 1 and R.Lands()[1].zone == "Tanaris" and R.Lands()[1].deaths == 3 and R.Lands()[1].kills == 9)
-assert(lands.rows[1].zone:GetText() == "Tanaris" and lands.rows[1].counts:GetText() == "3 morts · 9 victoires" and not lands.rows[2]:IsShown())
-assert(lands.rows[1].who:GetText() == "Noni Vachementop ×2, Siro Siro", lands.rows[1].who:GetText())
+assert(lands:IsShown() and #R.Lands() == 1 and R.Lands()[1].zone == "Tanaris" and R.Lands()[1].deaths == 4 and R.Lands()[1].kills == 9)
+assert(lands.rows[1].zone:GetText() == "Tanaris" and lands.rows[1].counts:GetText() == "4 morts · 9 victoires" and not lands.rows[2]:IsShown())
+assert(lands.rows[1].who:GetText() == "Noni Vachementop ×3, Siro Siro", lands.rows[1].who:GetText())
 
 -- Guilds: without any guild known the page says so; "En guerre" needs your own rule.
 click(f.storyTabs.guilds)
@@ -91,6 +93,20 @@ known = R.Guilds()
 assert(known[1].stance == "enemy" and known[1].ruled)
 R.Refresh()
 assert(crests.cards[1]:IsShown() and crests.cards[1].stance:GetText() == "En guerre · votre règle", crests.cards[1].stance:GetText())
+assert(crests.cards[1].initials:GetText() == "OB" and R.Initials("ducks") == "D" and R.Initials("Éclats d’Ombre") == "ÉD", R.Initials("Éclats d’Ombre"))
+-- A stranger grouped with three times nine days ago is not "your companion"; a friend grouped with is.
+GL.Remember(person("Valf", "Gank", "0010"))
+GL.RecordGroup(person("Valf", "Gank", "0010"), "g1", "Tanaris")
+GL.RecordGroup(person("Valf", "Gank", "0010"), "g2", "Tanaris")
+GL.RecordGroup(person("Valf", "Gank", "0010"), "g3", "Tanaris")
+for _, e in ipairs(GL.Get(person("Valf", "Gank", "0010")).history) do
+    if e.kind == "grouped" then e.time = now - 9 * 86400 end
+end
+local _, companion = GL.Titles()
+assert(companion == nil, "an old group with a stranger is not a companion")
+GL.SetReaction(person("Valf", "Gank", "0010"), "friend")
+_, companion = GL.Titles()
+assert(companion == GL.Get(person("Valf", "Gank", "0010")).key, "a friend you grouped with is")
 
 -- "Classements" opens the fourteen rankings with a way back; the way back returns to the overview.
 click(f.storyTabs.rankings)

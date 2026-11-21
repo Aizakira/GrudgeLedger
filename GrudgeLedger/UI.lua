@@ -1145,8 +1145,9 @@ function GL.ShowStatistics(mode, category)
                 if scope == "guilds" then y = y + offset + 8 end
             end
         end
-        f.helpHeading = bookText(f, 36, 433, 256, 21, 13, L("Comment lire ce classement"), theme.paper)
-        f.footnote = label(f, "", nil, 36, -462, 256)
+        -- Below the longest list of rankings (the guild ones), which the story entries pushed down in 0.40.0.
+        f.helpHeading = bookText(f, 36, 478, 256, 21, 13, L("Comment lire ce classement"), theme.paper)
+        f.footnote = label(f, "", nil, 36, -504, 256)
         f.footnote:SetTextColor(unpack(theme.muted))
         f.manage = button(f, "", 36, -620, 256, function()
             if f.mode == "guilds" then GL.ShowGuilds() else GL.ShowJournal("summary") end

@@ -1456,20 +1456,42 @@ function GL.Debt(record)
     if score >= 0 or (pvp.deaths or 0) + (pvp.aggressions or 0) == 0 or GL.Relation(record) == "friend" then return 0 end
     return -score
 end
--- Two titles that tell a story: your nemesis killed you most (twice at least); your best companion
--- grouped with you most (three times at least) and is not an enemy. Returns their record keys.
-function GL.Titles()
-    local nemesis, companion
-    for _, record in pairs(GL.db and GL.db.players or {}) do
-        local deaths, groups = record.pvp and record.pvp.deaths or 0, record.groupCount or 0
-        if deaths >= 2 and (not nemesis or deaths > nemesis.pvp.deaths
-            or deaths == nemesis.pvp.deaths and (record.reputation or 0) < (nemesis.reputation or 0)) then
-            nemesis = record
+-- Two titles that tell a story, and that fade with time. A fact weighs 1 when it happens and half
+-- as much every two weeks: five deaths last week outweigh twenty deaths two years ago.
+--   nemesis: at least three deaths to him, and a recent weight of 1.5 (three deaths in two weeks,
+--     or more of them further back);
+--   companion: not an enemy, and either a friend with a recent group weight of 1, or anyone with a
+--     recent group weight of 3 (three groups this week). A friend's groups count double.
+-- Returns their record keys.
+local TITLE_HALF_LIFE = 14 * 86400
+local function recentWeight(record, first, second)
+    local now, weight, events = GL.Now(), 0, 0
+    for _, e in ipairs(record.history or {}) do
+        if type(e) == "table" and (e.kind == first or e.kind == second) and not e.voided and e.voidReason ~= "battleground"
+            and type(e.time) == "number" then
+            events = events + 1
+            weight = weight + 0.5 ^ (math.max(0, now - e.time) / TITLE_HALF_LIFE)
         end
-        local relation = groups >= 3 and GL.Relation(record)
-        if relation and relation ~= "enemy" and relation ~= "warning" and (not companion or groups > companion.groupCount
-            or groups == companion.groupCount and record.key < companion.key) then
-            companion = record
+    end
+    return weight, events
+end
+function GL.Titles()
+    local nemesis, companion, worst, closest = nil, nil, 0, 0
+    for _, record in pairs(GL.db and GL.db.players or {}) do
+        if (record.pvp and record.pvp.deaths or 0) >= 3 then
+            local weight = recentWeight(record, "death")
+            if weight >= 1.5 and (weight > worst or weight == worst and nemesis and record.key < nemesis.key) then
+                nemesis, worst = record, weight
+            end
+        end
+        if (record.groupCount or 0) > 0 then
+            local relation = GL.Relation(record)
+            local weight = relation ~= "enemy" and relation ~= "warning" and recentWeight(record, "grouped", "group") or 0
+            local friend = relation == "friend"
+            if friend then weight = weight * 2 end
+            if weight >= (friend and 2 or 3) and (weight > closest or weight == closest and companion and record.key < companion.key) then
+                companion, closest = record, weight
+            end
         end
     end
     return nemesis and nemesis.key, companion and companion.key
