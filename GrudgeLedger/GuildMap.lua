@@ -278,7 +278,7 @@ function M.CatchUp(s, me, sender, full)
 end
 
 -- Versions (0.58.0): each member tells the guild which version of the addon it runs, at login, and
--- answers a newcomer once a minute at most. A member heard from without a version runs one older
+-- answers a newcomer once every ten seconds at most. A member heard from without a version runs one older
 -- than 0.58.0. Kept in memory only, never saved.
 local versions, heard, warned, answered = {}, {}, {}, {}
 local function numbers(value)
@@ -321,7 +321,7 @@ function M.Version(s, me, sender, value, relay, reply)
     end
     heard[sender] = heard[sender] or GL.Now()
     versions[sender] = value
-    -- A member arriving learns the versions of the others: each answers it once a minute at most.
+    -- A member arriving learns the versions of the others: each answers it once every ten seconds at most.
     -- An answer is never answered, so the guild does not echo.
     if not reply and GL.Now() - (answered[sender] or 0) >= 10 then
         answered[sender] = GL.Now()

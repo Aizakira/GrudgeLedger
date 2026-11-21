@@ -5,10 +5,6 @@ if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
         ["Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré."] = "Un mensaje a tu nombre (%s), transmitido por %s, no está en tu diario: fallo del juego, otro ordenador o invención. Se ignora.",
-        ["Valider la victoire"] = "Validar la victoria",
-        ["Victoire validée : les payeurs sont prévenus."] = "Victoria validada: se avisa a quienes pagan.",
-        ["Une victoire sur %s attend votre validation : elle est arrivée tard. Ouvrez la prime pour la valider."] = "Una victoria sobre %s espera tu validación: llegó tarde. Abre la recompensa para validarla.",
-        ["Un message à votre nom (%s), transmis par %s, est inconnu de votre carnet : plantage ou invention. Il est annulé."] = "Un mensaje a tu nombre (%s), transmitido por %s, no está en tu diario: fallo del juego o invención. Se anula.",
         ["%d victoire"] = "%d victoria",
         ["%d victoires"] = "%d victorias",
         ["%d mort"] = "%d muerte",
@@ -33,7 +29,6 @@ if locale == "esES" or locale == "esMX" then
         ["avis de recherche"] = "aviso de búsqueda",
         ["contribution"] = "contribución",
         ["paiement"] = "pago",
-        ["Attention : %s a fait passer en votre nom un message que vous n’avez jamais envoyé (%s). Il est ignoré."] = "Atención: %s ha transmitido en tu nombre un mensaje que nunca enviaste (%s). Se ignora.",
         ["De l’or vous a été envoyé pour la prime sur %s. Le courrier vous attend à la boîte aux lettres."] = "Te han enviado oro por la recompensa sobre %s. El correo te espera en el buzón.",
         ["Paiement envoyé"] = "Pago enviado",
         ["Paiement reçu"] = "Pago recibido",
@@ -1973,10 +1968,6 @@ if locale == "esES" or locale == "esMX" then
 else
     private.translations = {
         ["Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré."] = "A message in your name (%s), passed on by %s, is not in your book: a game crash, another computer or made up. Ignored.",
-        ["Valider la victoire"] = "Confirm the win",
-        ["Victoire validée : les payeurs sont prévenus."] = "Win confirmed: the payers are told.",
-        ["Une victoire sur %s attend votre validation : elle est arrivée tard. Ouvrez la prime pour la valider."] = "A win on %s waits for you: it arrived late. Open the bounty to confirm it.",
-        ["Un message à votre nom (%s), transmis par %s, est inconnu de votre carnet : plantage ou invention. Il est annulé."] = "A message in your name (%s), passed on by %s, is not in your book: a game crash or made up. It is cancelled.",
         ["%d victoire"] = "%d victory",
         ["%d victoires"] = "%d victories",
         ["%d mort"] = "%d death",
@@ -2001,7 +1992,6 @@ else
         ["avis de recherche"] = "wanted notice",
         ["contribution"] = "contribution",
         ["paiement"] = "payment",
-        ["Attention : %s a fait passer en votre nom un message que vous n’avez jamais envoyé (%s). Il est ignoré."] = "Warning: %s passed on a message in your name that you never sent (%s). It is ignored.",
         ["De l’or vous a été envoyé pour la prime sur %s. Le courrier vous attend à la boîte aux lettres."] = "Gold was sent to you for the bounty on %s. The mail is waiting at your mailbox.",
         ["Paiement envoyé"] = "Payment sent",
         ["Paiement reçu"] = "Payment received",

@@ -69,9 +69,11 @@ local function members(o)
 end
 local function account(o,me)
     local a={due=0,incoming=0,received=0,transit=0,amount=0,remaining=0}
+    -- Once the guild roster is read, the share of someone gone from the guild is not counted.
+    local roster=B.IsMember(me)
     for _,h in ipairs(members(o)) do
         if h==me then a.hunted=true end
-        for payer in pairs(o.pot) do
+        for payer in pairs(roster and not B.IsMember(h) and {} or o.pot) do
             local send,waiting,received=B.Payment(o,payer,h)
             if payer==me then a.due=a.due+send end
             if h==me then a.incoming=a.incoming+waiting; a.received=a.received+received end

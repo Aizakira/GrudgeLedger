@@ -1,10 +1,12 @@
-GRUDGE LEDGER — 0.58.8
+GRUDGE LEDGER — 0.58.9
+
+Dernière relecture avant la diffusion. À la connexion d’un membre, les gagnants, reçus et retraits du membre qui répond partent toujours en premier. La fenêtre Primes ne compte plus la part de quelqu’un qui a quitté la guilde. Après un plantage du jeu, ce que vous aviez fait pendant la session peut manquer à votre carnet : vérifiez vos courriers envoyés avant de régler une prime une seconde fois.
 
 Dernières corrections avant la diffusion. Les règles fondées sur l’heure des messages sont retirées : elles bloquaient des victoires honnêtes faites pendant l’absence du publieur. Le publieur valide une victoire dès qu’elle lui parvient, comme avant. À la connexion d’un membre, c’est le membre qui connaît le plus de primes qui lui répond. Une part due à quelqu’un qui a quitté la guilde ne bloque plus la prime et n’est plus proposée à la boîte aux lettres.
 
 Corrections de la relecture de la 0.58.6. Un message à votre nom que votre carnet ne connaît pas (plantage, même personnage sur un autre ordinateur) est ignoré, jamais annulé pour la guilde. Une réclamation avec un ami hors guilde dans le groupe compte ; seule sa part n’est pas demandée. Le rappel de paiement attend la liste de guilde.
 
-Corrections avant la diffusion, après trois relectures. Le rappel de connexion ne plante plus quand vous devez plusieurs primes, ne se répète plus à chaque /reload et ne s’emballe plus pendant le rattrapage de la guilde. À la connexion d’un membre, un seul membre lui envoie les primes de la guilde (avant, tous le faisaient),. La séparation du carnet par faction garde l’avis de chaque faction. Pluriels corrigés dans le Bilan et les Relations.
+Corrections avant la diffusion, après trois relectures. Le rappel de connexion ne plante plus quand vous devez plusieurs primes, ne se répète plus à chaque /reload et ne s’emballe plus pendant le rattrapage de la guilde. À la connexion d’un membre, un seul membre lui envoie les primes de la guilde (avant, tous le faisaient). La séparation du carnet par faction garde l’avis de chaque faction. Pluriels corrigés dans le Bilan et les Relations.
 
 Contrôles contre les faux messages. Un membre ne peut plus relayer une contribution, une victoire ou un paiement au nom de quelqu’un qui n’est pas dans la guilde. Si un membre fait passer en votre nom un message que vous n’avez jamais envoyé, il est ignoré et la discussion vous dit qui l’a fait. Deux victoires d’un même chasseur sur une prime doivent être espacées d’au moins une minute. Un membre ne peut pas remplir votre carnet : 600 messages au plus sur 38 jours, et les totaux de combats de la guilde sont bornés. La liste de ce qui peut être relayé n’est plus modifiable par un autre addon.
 
