@@ -1,8 +1,6 @@
 # Grudge Ledger — Le journal des rancunes
 
-**0.58.0.** Version de test pour la guilde : onglet Guilde (journal de guilde, ennemis de la guilde, alerte « Tueur de guilde »), le Bilan en cartes dans Relations, des primes refaites avec l’avis de recherche gratuit, un carnet par faction. Notes de version : [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
-
-La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde ouvert, même si une créature porte le dernier coup. Les anciens compteurs sont réunis à la mise à jour. La résurrection réactive les alertes. Le journal conserve les portraits récemment vus pendant la session et affiche votre honneur enregistré dans la synthèse. Le gain adverse est inconnu.
+**0.58.6.** Onglet Guilde (journal de guilde, ennemis de la guilde, alerte « Tueur de guilde »), le Bilan en cartes dans Relations, des primes refaites avec l’avis de recherche gratuit et des rappels de paiement, des contrôles contre les faux messages de guilde, un carnet par faction. Notes de version : [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
 
 
 <img src="docs/red-book.png" alt="Le livre rouge de Grudge Ledger" width="96" align="right">
@@ -11,9 +9,9 @@ La version 0.10.3 compte chaque adversaire ayant participé à une mort en monde
 
 Un petit addon pour **World of Warcraft Forever**, qui rassemble amis, ennemis, notes personnelles, avis sur les guildes et souvenirs de PvP.
 
-[English](README.md) · [Télécharger](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.6) · [Signaler un problème ou proposer une idée](https://github.com/Aizakira/GrudgeLedger/issues)
+[English](README.md) · [Télécharger](https://github.com/Aizakira/GrudgeLedger/releases) · [Signaler un problème ou proposer une idée](https://github.com/Aizakira/GrudgeLedger/issues)
 
-**[Essayer les primes de guilde (0.11.6)](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.6)** pour publier un contrat, suivre la chasse, répartir l’or par courrier et comparer les avis datés des membres. Le ZIP installable et les consignes de test figurent sur la page de la version.
+Publiez des primes, suivez la chasse, répartissez l’or par courrier et partagez vos combats avec la guilde. Tous les membres doivent avoir la même version.
 
 ## Pourquoi cet addon ?
 
@@ -340,7 +338,7 @@ Les tests Lua vérifient la logique simulée, y compris une API fonctionnelle, v
 
 ## Installation et premiers pas
 
-1. Télécharger le paquet de l'addon **`GrudgeLedger-<version>.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases/tag/v0.11.6).
+1. Télécharger le paquet de l'addon **`GrudgeLedger-<version>.zip`** dans les [versions publiées](https://github.com/Aizakira/GrudgeLedger/releases).
 2. Extraire le dossier `GrudgeLedger` dans `Interface/AddOns` du client Forever. Le fichier doit se trouver ici : `Interface/AddOns/GrudgeLedger/GrudgeLedger.toc`.
 3. Redémarrer WoW et activer Grudge Ledger dans la liste des addons.
 

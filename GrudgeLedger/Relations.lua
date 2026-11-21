@@ -11,6 +11,10 @@ local WEEK, MONTH = 7 * 86400, 30 * 86400
 -- the whole sheet of the narrow book: S() stretches a width, X() places from the sheet's left edge.
 local SHEET_W, SHEET_H = 664, 510
 local STRETCH = SHEET_W / 540
+-- "1 ennemi", "2 ennemis": the right form for a count (review 0.58.5).
+local function countForm(n, one, many)
+    return (n == 1 and L(one) or L(many)):format(n)
+end
 local function S(value)
     return math.floor(value * STRETCH + 0.5)
 end
@@ -222,7 +226,8 @@ local function paintDebts(page)
                 row.amount:SetText(tostring(GL.Debt(record)))
                 row.amount:SetTextColor(0.55, 0.12, 0.12)
                 row.state:SetText("")
-                row.bounty:Show()
+                -- Only when a bounty can be posted or read for this player (review 0.58.5).
+                if GL.ContactBountyMode and GL.ContactBountyMode(record) then row.bounty:Show() else row.bounty:Hide() end
                 row.sheet:Show()
             end
             row:Show()
@@ -233,7 +238,8 @@ local function paintDebts(page)
     page.empty:SetText(#lines == 0 and L("Personne ne vous doit rien. Le registre se remplit quand un joueur vous attaque ou vous tue.") or "")
     page.previous:SetEnabled(page.offset > 0)
     page.next:SetEnabled(page.offset + DEBT_ROWS < #lines)
-    page.count:SetText(L("%d dettes ouvertes · %d réglées ce mois-ci"):format(#open, #settled))
+    page.count:SetText(L("%s · %s ce mois-ci"):format(countForm(#open, "%d dette ouverte", "%d dettes ouvertes"),
+        countForm(#settled, "%d réglée", "%d réglées")))
 end
 
 -- Rivalries: the players you fought most, one at a time, with the score and the dated thread.
@@ -475,12 +481,14 @@ local function paintGuilds(page)
             card.initials:SetText(R.Initials(row.name))
             card.stance:SetText((stances[entry.stance] or stances.neutral) .. (entry.ruled and (" · " .. L("votre règle")) or ""))
             local lines = {}
-            if (row.grudges or 0) > 0 then lines[#lines + 1] = L("%d membres vous doivent quelque chose"):format(row.grudges) end
+            if (row.grudges or 0) > 0 then
+                lines[#lines + 1] = countForm(row.grudges, "%d membre vous doit quelque chose", "%d membres vous doivent quelque chose")
+            end
             if (row.deaths or 0) + (row.aggressions or 0) > 0 then
                 lines[#lines + 1] = L("%d morts · %d agressions"):format(row.deaths or 0, row.aggressions or 0)
             end
             if (row.kills or 0) > 0 then lines[#lines + 1] = L("Vaincue %d fois"):format(row.kills) end
-            if (row.friends or 0) > 0 then lines[#lines + 1] = L("%d amis parmi eux"):format(row.friends) end
+            if (row.friends or 0) > 0 then lines[#lines + 1] = countForm(row.friends, "%d ami parmi eux", "%d amis parmi eux") end
             card.lines:SetText(table.concat(lines, "\n"))
             card:Show()
         else
@@ -2173,7 +2181,7 @@ local function paintEnemies(page)
         page.previous:Hide()
         page.next:Hide()
     end
-    page.count:SetText(#list > 0 and L("%d ennemis"):format(#list) or "")
+    page.count:SetText(#list > 0 and countForm(#list, "%d ennemi", "%d ennemis") or "")
 end
 
 -- The books: the narrow format of the player sheet. Left, the entries and the key figures. Right,

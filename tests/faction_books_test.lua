@@ -66,8 +66,19 @@ GrudgeLedgerDB = { schema = 2, players = {
         { fact("kill", A1, now - 80), fact("grouped", H1, now - 70), fact("grouped", H1, now - 60) }, nil, { kills = 1 }),
     -- No author known: stays where it is.
     ["guid:Player-1-E0000004"] = sheet("Player-1-E0000004", "Vieux", "Horde", { { kind = "seen", time = now - 500 } }),
+    -- A Horde player marked enemy by the Alliance character, later friend by the Horde one: each
+    -- book keeps its own opinion (review 0.58.5).
+    ["guid:Player-1-E0000005"] = sheet("Player-1-E0000005", "Zed", "Horde", {
+        fact("kill", A1, now - 50), { kind = "reaction", reaction = "enemy", source = "manual", actorGUID = A1, time = now - 49 },
+        fact("grouped", H1, now - 40), { kind = "reaction", reaction = "friend", source = "manual", actorGUID = H1, time = now - 39 },
+    }, nil, { kills = 1 }),
 }, aliases = {}, guilds = { ["forever:les ennemis"] = { key = "forever:les ennemis", reaction = "enemy" } } }
+GrudgeLedgerDB.players["guid:Player-1-E0000005"].reaction = "friend"
+GrudgeLedgerDB.players["guid:Player-1-E0000005"].reactionSource = "manual"
 GL.InitDB()
+local zedHere, zedThere = GL.Get("guid:Player-1-E0000005"), GL.db.books.Horde.players["guid:Player-1-E0000005"]
+assert(zedHere.reaction == "enemy" and zedHere.reactionSource == "manual", tostring(zedHere.reaction))
+assert(zedThere.reaction == "friend" and zedThere.reactionSource == "manual", tostring(zedThere.reaction))
 assert(GL.db.book == "Alliance" and GL.db.characterFactions[H1] == nil, "the Horde character was never seen: deduced")
 local horde = GL.db.books.Horde.players
 assert(GL.Get("guid:Player-1-E0000001") and not GL.Get("guid:Player-1-E0000002") and horde["guid:Player-1-E0000002"])
@@ -77,7 +88,7 @@ assert(zug and hordeZug and #zug.history == 1 and #hordeZug.history == 2, "a she
 assert(zug.pvp.kills == 1 and hordeZug.pvp.kills == 0 and hordeZug.groupCount == 2 and zug.groupCount == 0)
 assert(GL.Get("guid:Player-1-E0000004") and GL.db.books.Horde.guilds["forever:les ennemis"], "opinions on guilds go to both books")
 local total = count(GL.db.players) + count(horde)
-assert(total == 5, total)
+assert(total == 7, total)
 
 -- 3. Logging in with the Horde character opens the Horde book; the Alliance one waits, untouched.
 faction, me = "Horde", H1
@@ -94,7 +105,7 @@ assert(GL.Get("guid:Player-1-E0000009") and not GL.db.books.Alliance.players["gu
 faction, me = "Alliance", A1
 mock.Fire("PLAYER_LOGIN")
 assert(GL.db.book == "Alliance" and GL.Get("guid:Player-1-E0000001") and not GL.Get("guid:Player-1-E0000009"))
-assert(GL.db.books.Horde.players["guid:Player-1-E0000009"] and count(GL.db.players) == 3)
+assert(GL.db.books.Horde.players["guid:Player-1-E0000009"] and count(GL.db.players) == 4)
 -- The same faction again: nothing happens.
 assert(GL.SelectBook() == false)
 

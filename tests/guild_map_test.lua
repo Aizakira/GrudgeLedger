@@ -337,6 +337,37 @@ assert(toastSent:IsShown() and toastSent.title:GetText() == "Paiement envoyé", 
 assert(next(a.GL.db.bountyPaymentWatch[a.id]) == nil, "nothing left to send")
 b.GL.BountyPaymentsCheck(false)
 assert(b.GL.bountyDue.count == 0 and book.navigation.bounties.caption:GetText() == "Primes")
+-- Two bounties at once (review 0.58.5): the login reminder of the payer, and the absence notice of
+-- the hunter, speak of two bounties without a Lua error.
+local twins = {}
+for i, target in ipairs({ "Player-1-enemy10", "Player-1-enemy11" }) do
+    twins[i] = assert(a.GL.Bounties.Post(target, "Twin " .. i, 100000))
+    flush()
+    assert(b.GL.Bounties.Pledge(twins[i], 30000))
+    flush()
+    now = now + 120
+    a.GL.Bounties.Kill(target)
+    flush()
+end
+b.GL.BountyPaymentsCheck(false)
+b.GL.BountyPaymentsCheck(true)
+assert(b.GL.bountyDue.count == 2 and book.navigation.bounties.caption:GetText() == "Primes · 2")
+assert(toastB:IsShown() and toastB.note:GetText():find("pour 2 primes", 1, true), toastB.note:GetText())
+a.GL.BountyPaymentsCheck(false)
+a.online = false
+for i = 1, 2 do assert(b.GL.Bounties.ConfirmPayment(twins[i], a.id, 30000)) end
+flush()
+a.online = true
+beforeA = #a.m.messages
+a.m.Fire("PLAYER_LOGIN")
+a.m.Fire("GUILD_ROSTER_UPDATE")
+flush()
+a.GL.BountyPaymentsCheck(true)
+local twoTold = false
+for i = beforeA + 1, #a.m.messages do
+    twoTold = twoTold or a.m.messages[i]:find("pour 2 primes", 1, true) ~= nil
+end
+assert(twoTold, "two bounties sent while away")
 for _, c in ipairs(clients) do assert(#c.GL.errors == 0, (c.GL.errors[1] or {}).text) end
 print("PASS guild vision: off by default, one message a fight with its opponent, kept only by members who share, borrowed fights "
     .. "refused, forty a member, a newcomer receives the guild's fights, guild killer alert with its own sound, forgotten when unticked")

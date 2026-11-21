@@ -62,7 +62,7 @@ assert(R.page == "debts")
 click(f.tabs.recap)
 local open, settled, total = R.Debts()
 assert(#open == 1 and #settled == 1 and settled[1].record == GL.Get(avenged) and total == GL.Debt(nemesis))
-assert(ledger.total:GetText() == tostring(total) and ledger.count:GetText() == "1 dettes ouvertes · 1 réglées ce mois-ci")
+assert(ledger.total:GetText() == tostring(total) and ledger.count:GetText() == "1 dette ouverte · 1 réglée ce mois-ci")
 local first, second = ledger.rows[1], ledger.rows[2]
 assert(first.record == nemesis and first.amount:GetText() == tostring(total) and first.bounty:IsShown() and not first.strike:IsShown())
 assert(first.detail:GetText() == "3 morts · « Le Fléau de Tanaris »", first.detail:GetText())
