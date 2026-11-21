@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.45.0
+GRUDGE LEDGER — 0.46.0
+
+La carte des terres dangereuses, dans la page Terres de Relations (jamais sur la carte du monde du jeu). Elle s’ouvre sur le continent où vous êtes : chaque zone où vous avez combattu porte une pastille, plus grande et plus rouge quand vous y mourez souvent. La molette ou un clic sur une pastille entre dans la zone ; la molette dans l’autre sens remonte au continent puis au monde. Dans une zone, chaque combat enregistré depuis la 0.45.0 est un point (rouge : une mort, vert : une victoire) ; le survol dit qui et quand, le clic ouvre le combat. « Voir la liste » rend l’ancienne liste.
 
 Préparation de la carte des terres dangereuses. Chaque combat enregistré garde maintenant l’endroit où il a eu lieu sur la carte (dans votre journal seulement : la guilde ne reçoit jamais la position). Nouvelle commande /gl carte : elle écrit ce que le jeu laisse faire avec les cartes et dessine la zone où vous êtes dans une petite fenêtre, avec un point rouge sur vous.
 

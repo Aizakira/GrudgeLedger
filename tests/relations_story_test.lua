@@ -159,6 +159,52 @@ do
     C_Map.GetPlayerMapPosition = function() return nil end
     GL.RecordPvP(person("Carte", "Test", "0042"), "death", "confirmed", "fixture", "map-2")
     assert(placed.history[#placed.history].mapID == nil, "no position, nothing stored")
+    -- The map of dangerous lands (0.46.0), in the Terres page. It opens on the continent of the zone
+    -- you are in: one badge per zone you fought in, placed by the game's own rectangle.
+    C_Map.GetPlayerMapPosition = function() return { GetXY = function() return 0.5124, 0.2876 end } end
+    C_Map.GetMapInfo = function(id)
+        if id == 1446 then return { mapID = 1446, name = "Tanaris", mapType = 3, parentMapID = 1414 } end
+        if id == 1414 then return { mapID = 1414, name = "Kalimdor", mapType = 2, parentMapID = 947 } end
+        if id == 947 then return { mapID = 947, name = "Azeroth", mapType = 1, parentMapID = 0 } end
+    end
+    C_Map.GetMapChildrenInfo = function(id)
+        if id == 1414 then return { { mapID = 1446, name = "Tanaris", mapType = 3 }, { mapID = 1444, name = "Feralas", mapType = 3 } } end
+        if id == 947 then return { { mapID = 1414, name = "Kalimdor", mapType = 2 } } end
+        return {}
+    end
+    C_Map.GetMapInfoAtPosition = function(id) return id == 1414 and { mapID = 1446 } or nil end
+    local methods = getmetatable(UIParent).__index
+    function methods:GetLeft() return 100 end
+    function methods:GetTop() return 600 end
+    click(f.tabs.lands)
+    local landsPage = f.host.pages.lands
+    local view = landsPage.map
+    assert(landsPage.mode == "map" and view:IsShown() and view.mapID == 1414 and not landsPage.rows[1]:IsShown())
+    assert(#view.entries == 1 and view.entries[1].child.name == "Tanaris" and view.badges[1]:IsShown())
+    assert(view.badges[1].count:GetText() == tostring(R.Lands()[1].deaths) and view.out:GetText() == "‹ Azeroth")
+    assert(view.caption:GetText():find("^Kalimdor · "), view.caption:GetText())
+    -- A click on the badge enters the zone: one point per fight that kept its position, and you.
+    click(view.badges[1])
+    assert(view.mapID == 1446 and #view.placed == 1 and view.points[1]:IsShown() and view.placed[1].event == event)
+    assert(view.dot:IsShown() and not view.badges[1]:IsShown() and view.hint:GetText():find("^1 combats placés"), view.hint:GetText())
+    -- The wheel goes up to the continent, then to the world, then stops; away from you it enters
+    -- the zone under the pointer.
+    view.canvas.scripts.OnMouseWheel(view.canvas, -1)
+    assert(view.mapID == 1414)
+    view.canvas.scripts.OnMouseWheel(view.canvas, -1)
+    assert(view.mapID == 947 and #view.entries == 1 and view.entries[1].child.name == "Kalimdor" and not view.out:IsShown())
+    assert(R.MapZoomOut() == false and view.mapID == 947)
+    view.mapID = 1414
+    R.Refresh()
+    view.canvas.scripts.OnMouseWheel(view.canvas, 1)
+    assert(view.mapID == 1446, "the wheel enters the zone under the pointer")
+    -- "Voir la liste" gives the list back; a client without map pictures only has the list.
+    click(landsPage.toggle)
+    assert(landsPage.mode == "list" and not view:IsShown() and landsPage.rows[1]:IsShown() and landsPage.toggle:GetText() == "Voir la carte")
+    click(landsPage.toggle)
+    C_Map.GetMapArtLayerTextures = function() return {} end
+    R.Refresh()
+    assert(not view:IsShown() and landsPage.rows[1]:IsShown(), "no picture: the list")
     assert(#GL.errors == 0, (GL.errors[1] or {}).text)
-    print("PASS map probe: facts printed, zone drawn from the game's pieces, position kept on fights when the game gives it")
+    print("PASS map: probe facts, position kept on fights, badges by zone, points in a zone, wheel zoom, list fallback")
 end
