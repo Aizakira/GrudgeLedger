@@ -550,6 +550,15 @@ test("shared awards use the received integer exactly once independently of kills
     assert(contact.honor == 40 and contact.kills == 0 and contact.probableKills == nil)
     local helped = GL.Get("guid:" .. e.guid)
     assert(helped.assists == 1 and helped.reputation == 0, helped.assists)
+    -- A helping hand closes its fight without being an aggression or a victory.
+    local fight = GL.Fights(helped)[1]
+    assert(fight.assists == 1 and fight.kills == 0 and fight.ended == "assist", fight.ended)
+    local aggressions = fight.aggressions
+    -- The game then announces that the killing blow was yours after all: the victory replaces it.
+    T.HandleEvent("PARTY_KILL", unitData.player.guid, e.guid)
+    assert(helped.assists == 0 and GL.ContactMatchup(helped).kills == 1, helped.assists)
+    fight = GL.Fights(helped)[1]
+    assert(fight.assists == 0 and fight.kills == 1 and fight.aggressions == aggressions)
     assert(count() == 1 and GL.Get("guid:Player-1-sender") == nil and GL.Get("guid:" .. unitData.focus.guid) == nil)
 end)
 

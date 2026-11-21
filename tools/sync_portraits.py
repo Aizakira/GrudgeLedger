@@ -474,7 +474,11 @@ def sync(root, region, contacts, force=False, profiles_only=True, achievements=F
                 write_atomic(path, data)
                 path.touch()
             updated += 1
-            publish(folder)
+            try:
+                publish(folder)
+            except (OSError, ValueError) as exc:
+                # The game or an antivirus may hold the file during a reload: the end of the round publishes again.
+                print(f"Publication postponed: {ascii(str(exc))}", flush=True)
             if retry_after is not None:
                 if (not usable_identity(snapshot) or not snapshot["gear"] or not snapshot["stats"]
                         or (achievements and not 0 <= time.time() - (snapshot.get("achievementsAt") or 0) < 7 * 86400)
@@ -537,12 +541,16 @@ def main():
                                 and (not args.name or name.casefold() == args.name.casefold())):
                             contacts.setdefault(key.removeprefix("guid:"), set()).add(name)
                 def journal_changed():
-                    return [(s, s.stat().st_mtime_ns, s.stat().st_size) for s in saves] != revision
+                    try:
+                        return [(s, s.stat().st_mtime_ns, s.stat().st_size) for s in saves] != revision
+                    except OSError:
+                        return True
                 unavailable = 0
                 if contacts:
                     unavailable = sync(args.game, args.region, contacts, args.force, args.profiles_only, args.pvp_achievements,
                                        args.locale, retry_after, journal_changed if args.watch else None)
-                    args.force = False
+                    if not (args.watch and journal_changed()):
+                        args.force = False
                 elif not args.watch:
                     parser.exit(1, "No matching saved contacts. Save the journal with /reload and try again.\n")
                 last = None if args.watch and journal_changed() else revision

@@ -125,15 +125,18 @@ local function park(entry)
     entry.frame:SetSize(200, 400)
     entry.frame:SetAlpha(0)
 end
-local function recycled()
+-- The stalest model that is not on a sheet gives its frame; a model taken in the last five minutes
+-- is never evicted, so a crowd of thirteen cannot make the pool retake models at every poll.
+local function recycled(now)
+    local oldest
     for i, guid in ipairs(keptOrder) do
         local entry = kept[guid]
-        if not entry.shown then
-            kept[guid] = nil
-            table.remove(keptOrder, i)
-            return entry
-        end
+        if not entry.shown and (not oldest or entry.at < kept[keptOrder[oldest]].at) then oldest = i end
     end
+    local entry = oldest and kept[keptOrder[oldest]]
+    if not entry or (entry.at > 0 and now - entry.at < KEPT_FRESH) then return nil end
+    kept[table.remove(keptOrder, oldest)] = nil
+    return entry
 end
 function GL.KeepModel(unit, guid)
     if keptUnsupported or type(guid) ~= "string" then return false end
@@ -142,7 +145,7 @@ function GL.KeepModel(unit, guid)
     if GL.Safe(UnitGUID, unit) ~= guid or (IsUnitModelReadyForUI and not GL.Safe(IsUnitModelReadyForUI, unit)) then return false end
     if not entry then
         if #keptOrder >= KEPT_MAX then
-            entry = recycled()
+            entry = recycled(now)
             if not entry then return false end
         else
             keptHost = keptHost or CreateFrame("Frame", nil, UIParent)

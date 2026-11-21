@@ -835,7 +835,7 @@ local confirmedHelp = L("Mon bilan PvP")
 local statisticsChoices = {
     players = {
         { name = L("Menaces"), entries = {
-            { "grudge", L("Rancunes les plus fortes"), L("Vos ennemis et les personnes à surveiller, selon leur solde négatif actuel."), "point", L("Solde actuel"), L("Les rancunes restent tenaces : une mort pèse dix victoires. Un avis manuel ou de guilde peut aussi signaler un danger sans solde négatif.") },
+            { "grudge", L("Rancunes les plus fortes"), L("Vos ennemis et les personnes à surveiller, selon leur solde négatif actuel."), "point", L("Solde actuel"), L("Les rancunes restent tenaces : une mort pèse bien plus qu’une victoire. Un avis manuel ou de guilde peut aussi signaler un danger sans solde négatif.") },
             { "enemiesSeen", L("Menaces les plus recroisées"), L("Celles que vous avez rencontrées le plus souvent."), "rencontre", L("Rencontres"), encounterHelp },
             { "enemiesRecent", L("Menaces vues récemment"), L("Vos ennemis et les personnes à surveiller, du plus récemment aperçu au plus ancien."), "date", L("Dernière observation"), recentHelp },
             { "aggressions", L("Le plus d'agressions"), L("Les joueurs avec le plus d'agressions enregistrées à votre encontre."), "agression", L("Agressions"), L("Nombre d'épisodes enregistrés, pas de coups reçus ni de fréquence horaire.") },
@@ -1019,7 +1019,7 @@ local function refreshStatistics()
         or choice[4] == "rencontre" and L("Ce classement commence à la deuxième rencontre observée sur le compte.")
         or choice[4] == "session" and L("Il faut une session de groupe enregistrée avec un ami.")
         or L("Seules les personnes avec des données pour ce critère figurent ici.")
-    f.empty:SetText(#rows == 0 and (L("Aucun résultat dans cette sélection.\n\n") .. emptyHelp .. (not guild and f.faction ~= "all" and L("\nEssaie aussi Toutes les factions.") or "")) or "")
+    f.empty:SetText(#rows == 0 and (L("Aucun résultat dans cette sélection.\n\n") .. emptyHelp .. (not guild and f.faction ~= "all" and L("\nEssayez aussi « Toutes les factions ».") or "")) or "")
     f.empty:SetWidth(guild and 196 or 525)
     local total = #rows == 0 and L("Aucune entrée") or counted(#rows, guild and "guilde" or "personne")
     if #rows > rankingPageSize then total = total .. " · " .. (f.offset + 1) .. "–" .. math.min(f.offset + rankingPageSize, #rows) end

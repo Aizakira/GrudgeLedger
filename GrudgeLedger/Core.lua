@@ -1108,7 +1108,7 @@ end
 local function joins(fight, e)
     if not fight or e.time - fight.last > FIGHT_GAP then return false end
     if not fight.ended then return true end
-    return fight.ended == "death" and e.kind == "kill" and e.time - fight.last <= AVENGE_GAP
+    return fight.ended == "death" and (e.kind == "kill" or e.kind == "assist") and e.time - fight.last <= AVENGE_GAP
 end
 -- Newest first. Each fight: at, last, events (oldest first), kills, deaths, aggressions, main.
 function GL.Fights(record)
@@ -1127,7 +1127,7 @@ function GL.Fights(record)
     local fights, current = {}, nil
     for _, e in ipairs(list) do
         if not joins(current, e) then
-            current = { at = e.time, events = {}, kills = 0, deaths = 0, aggressions = 0 }
+            current = { at = e.time, events = {}, kills = 0, deaths = 0, aggressions = 0, assists = 0 }
             fights[#fights + 1] = current
         end
         current.events[#current.events + 1] = e
@@ -1136,6 +1136,9 @@ function GL.Fights(record)
             current.kills, current.ended = current.kills + 1, "kill"
         elseif e.kind == "death" then
             current.deaths, current.ended = current.deaths + 1, "death"
+        elseif e.kind == "assist" then
+            -- A helping hand closes the fight like a victory, without being one or an aggression.
+            current.assists, current.ended = current.assists + 1, "assist"
         else
             current.aggressions = current.aggressions + 1
         end
@@ -1337,6 +1340,25 @@ function GL.RecordAssist(identity)
     history(record, "assist")
     GL.Emit("CHANGED", record)
     return record
+end
+
+-- The victory was yours after all (the killing blow was announced late): the helping hand written
+-- for the same death in the last seconds is taken back.
+function GL.RetractAssist(identity, seconds)
+    local record = GL.Get(identity)
+    if not record then return false end
+    for i = #record.history, 1, -1 do
+        local e = record.history[i]
+        if type(e) == "table" and e.kind == "assist" then
+            if type(e.time) ~= "number" or GL.Now() - e.time > (seconds or 15) then return false end
+            table.remove(record.history, i)
+            record.assists = math.max(0, (tonumber(record.assists) or 1) - 1)
+            invalidateJournal()
+            GL.Emit("CHANGED", record)
+            return true
+        end
+    end
+    return false
 end
 
 -- A duel is a friendly fight: kept in the history and in two counters, never in the balance.

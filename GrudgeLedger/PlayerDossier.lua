@@ -747,7 +747,7 @@ local function relationsPage(f,record,row)
             description=description.." · "..L("Annulé · exclu")
         end
         -- Active fight events are shown above, one line per fight.
-        if e.voided or e.voidReason=="battleground" or not combatKinds[e.kind] then
+        if e.voided or e.voidReason=="battleground" or not (combatKinds[e.kind] or e.kind=="assist") then
             add(e.time,description,nil,true,e)
         end
     end

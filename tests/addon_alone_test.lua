@@ -92,13 +92,19 @@ local shown = view.kept
 assert(GL.OpenPlayerDossier("Player-9-0A0A", nil, "Autre Joueur"))
 click(f.tabs.gear)
 assert(view.kept == nil and shown.frame.parent ~= view.stage and not shown.shown)
+-- Six minutes later twelve more opponents arrive: the pool makes eleven new frames and recycles the
+-- killer's stale one. A thirteenth finds only fresh models and evicts none (no thrashing in a crowd).
 local frames = #mock.frames
-for i = 1, 13 do
+local muchLater = later + 360
+GetServerTime = function() return muchLater end
+for i = 1, 12 do
     local other = ("Player-9-1%03d"):format(i)
     mock.units.target = { guid = other, name = "Autre", surname = "N" .. i, isPlayer = true }
-    assert(GL.KeepModel("target", other))
+    assert(GL.KeepModel("target", other), i)
 end
-assert(#mock.frames - frames == 11 and GL.KeptModelAt(killer) == nil, "the oldest model is recycled")
+assert(#mock.frames - frames == 11 and GL.KeptModelAt(killer) == nil, "the stalest model is recycled")
+mock.units.target = { guid = "Player-9-1099", name = "Autre", surname = "Dernier", isPlayer = true }
+assert(GL.KeepModel("target", "Player-9-1099") == false and GL.KeptModelAt("Player-9-1001") == muchLater, "a fresh model is never evicted")
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
 print("PASS addon alone: class and faction from the GUID, how the last death happened from the combat log, "
     .. "no dash column, in-game reading listed, gear placed by slot number, kept model shown and recycled")

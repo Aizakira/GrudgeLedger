@@ -310,6 +310,8 @@ local function groupmate(guid)
     return nil
 end
 
+-- When a helping hand was last written for a player, to take it back if the victory turns out yours.
+local recentHelp = {}
 local function creditKill(identity, confidence, evidence, native, assist)
     if not enabled() or not identity then return end
     local key = identity.guid or identity.key
@@ -355,6 +357,11 @@ local function creditKill(identity, confidence, evidence, native, assist)
             logFight.logCuts[key] = logFight.logCount
         end
         recentCredits[key] = { at = now, observed = confidence == "observed", nativeAt = native and now, event = event, fightId = f and f.id }
+        -- A helping hand written for this same death a moment ago was premature.
+        if recentHelp[key] and now >= recentHelp[key] and now - recentHelp[key] <= 15 then
+            recentHelp[key] = nil
+            GL.RetractAssist(identity)
+        end
         if f and f.opening and f.opening.guid == identity.guid then f.opening.defeated = true end
     end
     return record
@@ -711,18 +718,31 @@ end
 
 -- Owner's rule (0.36.0): honor named for a player you were fighting, without a killing blow from
 -- you or your group, is a helping hand, not a victory. The killing blow can be announced just after
--- the honor line, and a solo victory is inferred up to three seconds after the death: the decision waits four seconds, and a victory credited within ten seconds wins.
-local recentHelp = {}
+-- the honor line, and a solo victory can be inferred up to five seconds after it: the decision waits six seconds, and a victory written later still takes the helping hand back.
+-- The journal itself is asked whether a victory was written for this death: the short-lived credit
+-- table is emptied by a zone change and by a victim seen alive again.
+local function victoryAround(identity, at)
+    local record = GL.Get(identity)
+    local history = record and record.history or {}
+    for i = #history, 1, -1 do
+        local e = history[i]
+        if type(e) == "table" and type(e.time) == "number" then
+            if e.time < at - 10 then return false end
+            if e.kind == "kill" and not e.voided then return true end
+        end
+    end
+    return false
+end
 local function helped(identity)
-    local key = identity.guid or identity.key
+    local key, at = identity.guid or identity.key, GL.Now()
     local function settle()
-        local now, credit, last = GL.Now(), recentCredits[key], recentHelp[key]
-        if credit and now - credit.at <= 10 and not credit.event.voided then return end
-        if last and now >= last and now - last <= 10 then return end
+        local now, last = GL.Now(), recentHelp[key]
+        if victoryAround(identity, at) then return end
+        if last and now >= last and now - last <= 15 then return end
         recentHelp[key] = now
         GL.RecordAssist(identity)
     end
-    if C_Timer and C_Timer.After then C_Timer.After(4, settle) else settle() end
+    if C_Timer and C_Timer.After then C_Timer.After(6, settle) else settle() end
 end
 
 function T.OnHonorMessage(message, lineID)
@@ -1243,6 +1263,9 @@ function T.Poll()
     tryKills()
     local now = GL.Now()
     for key, credit in pairs(recentCredits) do if now < credit.at or now - credit.at > 10 then recentCredits[key] = nil end end
+    for key, at in pairs(recentHelp) do
+        if now < at or now - at > 15 then recentHelp[key] = nil end
+    end
 end
 
 function T.HandleEvent(event, ...)

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.38.1
+GRUDGE LEDGER — 0.38.2
+
+Corrections après relecture du code : un coup de main ne peut plus s’ajouter à une vraie victoire pour la même mort (la victoire le remplace), il n’est plus compté comme une agression ni affiché deux fois dans l’histoire, et il reste rattaché au combat où vous êtes mort. Les modèles 3D gardés ne se remplacent plus sans cesse dans une mêlée de plus de douze joueurs. Deux textes corrigés dans les classements.
 
 Le signalement de bug ajouté en 0.37.0 est retiré : il demandait trop d’étapes pour être utilisé. Le rapport anonyme de /gl debug reste disponible.
 
