@@ -71,7 +71,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `guildKey` | Rappel de la clé `royaume/guilde` | — |
 | `events` | Journal des événements de primes, tels que reçus, par `auteur:numéro` | 38 jours, sauf reçus encore utiles |
 | `seq` | Dernier numéro d'événement émis par ce client | — |
-| `heard` | Date où ce carnet a reçu chaque prime (`O`, `N`, `A`) et chaque réclamation (`K`, `H`) d'un autre membre (0.58.6). Une prime reçue plus d'une heure après sa propre date ne remplace jamais une prime reçue à temps ; une réclamation reçue plus de 30 minutes après sa date, ou après un retrait, n'est pas validée d'office par le publieur, qui la valide à la main | — |
+| `heard` | Date où ce carnet a reçu chaque prime (`O`, `N`, `A`) et chaque réclamation (`K`, `H`) d'un autre membre (0.58.6). Une prime reçue plus d'une heure après sa propre date ne remplace jamais une prime reçue à temps ; une réclamation reçue plus de 30 minutes après sa date (ou après votre connexion, si elle date d'avant), ou après un retrait, n'est pas validée d'office par le publieur, qui la valide à la main | — |
 | `since` | Date où ce carnet a connu la guilde (0.58.5) : un relais à votre nom plus récent, que vous n'avez pas, est une invention signalée | — |
 | `scores` | Victoires et morts cumulées, par cible puis par membre | — |
 | `shareFights`, `shareDeaths`, `shareSocial` | Partages, par personnage. Depuis la 0.51.0 ils sont actifs tant que la valeur n'est pas `false` : seul un refus explicite les coupe | — |
@@ -160,7 +160,6 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `F` | Désignation de la revendication gagnante | Le commanditaire |
 | `Y` | Paiement déclaré envoyé par un contributeur | Le payeur |
 | `V` | Courrier constaté reçu | Le bénéficiaire |
-| `Z` | Démenti (0.58.6) : `Z;auteur;n°;date;clé démentie;;`. Un membre annule pour toute la guilde un message à son nom que son carnet ne connaît pas (perdu lors d'un plantage, ou inventé par un autre). Jamais relayé ; renvoyé par son auteur à chaque connexion. La prime, la contribution ou la réclamation démentie ne compte plus | Le membre nommé dans la clé |
 
 ### Relevés `S2`
 

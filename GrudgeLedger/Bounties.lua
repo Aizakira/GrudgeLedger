@@ -134,8 +134,6 @@ local function unpackEvent(raw,archiving)
             local offset,amount=value:match("^(%d+),(%d+)$")
             if not guid(detail) or actor==detail or not number(offset,0,1000*GOLD)
                 or not number(amount,1,1000*GOLD-tonumber(offset)) then return end
-        elseif kind=="Z" then
-            if actor~=owner or value~="" or detail~="" then return end
         else return end
     end
     return {kind=kind,actor=actor,key=key,time=stamp,order=order,value=value,detail=detail,
@@ -161,19 +159,6 @@ local function view(s,archiving)
                     pot={[e.actor]=tonumber(e.value)},paid={},receipts={},arrivals={}}
             else events[#events+1]=e end
         end
-    end
-    -- What a member took back (Z) counts for nothing, a bounty as well as a pledge or a claim.
-    local denied={}
-    for _,e in ipairs(events) do
-        if e.kind=="Z" then denied[e.order]=true end
-    end
-    if next(denied) then
-        local kept={}
-        for key in pairs(denied) do orders[key]=nil end
-        for _,e in ipairs(events) do
-            if not denied[e.key] then kept[#kept+1]=e end
-        end
-        events=kept
     end
     -- A payer can settle an old debt after its guild event log has rotated away.
     local history=GL.db.bountyHistory and GL.db.bountyHistory[GL.Safe(UnitGUID,"player")]
@@ -290,7 +275,7 @@ local function view(s,archiving)
                 return heard and heard-x.at>3600 or false
             end
             local kept,lost=prior,o
-            if late(o)~=late(prior) then
+            if late(o)~=late(prior) and commitment(late(o) and o or prior)<3 then
                 if late(prior) then kept,lost=o,prior end
             elseif commitment(o)>commitment(prior) then kept,lost=o,prior end
             active[o.target]=kept
@@ -731,10 +716,12 @@ local function helpers(guildOnly)
     end
     return table.concat(out,",")
 end
+-- A claim made while you were offline reaches you at login: it is not late (review 0.58.6).
+local sessionStart=GL.Now and GL.Now() or 0
 local function lateClaim(s,o)
     local heard=type(s.heard)=="table" and s.heard[o.first.key]
     if not heard then return false end
-    return heard-o.first.time>1800 or (o.withdrawAsked~=nil and heard>=o.withdrawAsked)
+    return heard-math.max(o.first.time,sessionStart)>1800 or (o.withdrawAsked~=nil and heard>=o.withdrawAsked)
 end
 local toldLate={}
 local function finalize(s,me)
@@ -829,8 +816,8 @@ local function countMember(s,actor)
     return memberEvents.n[actor] or 0
 end
 -- Words said in your name that you never said: told once per member who passed them on.
-local forgeryTold,relayCount,deniedCount={}, {}, 0
-local DENIED=ML("Un message à votre nom (%s), transmis par %s, est inconnu de votre carnet : plantage ou invention. Il est annulé.")
+local forgeryTold,relayCount={}, {}
+local DENIED=ML("Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré.")
 local FORGED={O=ML("prime"),N=ML("prime"),A=ML("avis de recherche"),P=ML("contribution"),
     K=ML("victoire"),H=ML("victoire"),D=ML("mort"),Y=ML("paiement")}
 local function receive(msg,sender)
@@ -863,9 +850,14 @@ local function receive(msg,sender)
         local own={}
         for _,raw in pairs(s.events) do
             local e=unpackEvent(raw,true)
-            if e and e.actor==me and (e.kind=="V" or e.time>=now-38*DAY) then own[#own+1]={at=e.time,text=raw} end
+            if e and e.actor==me and (e.kind=="V" or e.time>=now-38*DAY) then
+                own[#own+1]={at=e.time,text=raw,rank=RELAYABLE[e.kind] and 1 or 0}
+            end
         end
-        table.sort(own,function(x,y) return x.at>y.at end)
+        table.sort(own,function(x,y)
+            if x.rank~=y.rank then return x.rank<y.rank end
+            return x.at>y.at
+        end)
         local ownBatch={}
         for i=1,math.min(150,#own) do ownBatch[i]=own[i].text end
         if #ownBatch>0 and not GL.Transport.State(s,"bounty:own") then
@@ -900,10 +892,10 @@ local function receive(msg,sender)
                 if #batch<RELAYED_EVENTS+RELAYED_SCORES then batch[#batch+1]="R;"..scoreMessage(actor,target,n[1],n[2]) end
             end
         end
-        -- Within what the queue still holds: a batch too long would be refused whole.
+        -- A batch that does not fit in the queue is left to another member: a short one would cancel
+        -- the complete ones of the others.
         local _,waiting=GL.Transport.Pending(s)
-        local room=math.max(0,480-waiting)
-        while #batch>room do batch[#batch]=nil end
+        if #batch>math.max(0,480-waiting) then batch={} end
         if #batch>0 then GL.Transport.SendBatch(s,batch,{key="bounty:relay",delay=4+math.random(0,16)}) end
         if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
         return
@@ -933,12 +925,12 @@ local function receive(msg,sender)
     end
     local e=unpackEvent(raw)
     if e and relay and sender~=me and RELAYABLE[e.kind] then GL.Transport.Cancel(s,"bounty:relay") end
-    -- What a member relays counts against them: 900 a session at most.
-    if e and relay then
+    if not e or s.events[e.key] then return end
+    -- What a member relays that is new here counts against them: 900 a session at most.
+    if relay then
         relayCount[sender]=(relayCount[sender] or 0)+1
         if relayCount[sender]>900 then return end
     end
-    if not e or s.events[e.key] then return end
     if not relay and e.actor~=sender then return end
     -- A relay is a member's word about another member (review 0.58.2). It may tell a bounty, a
     -- pledge, a claim, a death or a payment sent: the member named ignores what others say in its
@@ -948,15 +940,11 @@ local function receive(msg,sender)
     if relay then
         if not RELAYABLE[e.kind] then return end
         -- A message in your name that this book does not know, more recent than the day it knew the
-        -- guild: lost in a game crash, or made up. You take it back for the whole guild (Z), and the
-        -- chat says so, without accusing the member who passed it on.
-        if e.actor==me and e.time>(s.since or math.huge) and deniedCount<50 then
-            deniedCount=deniedCount+1
-            record(s,me,"Z",e.key,"","",true)
-            if not forgeryTold[sender] then
-                forgeryTold[sender]=true
-                GL.Print(DENIED:format(FORGED[e.kind] or "?",addresses[sender] or sender))
-            end
+        -- guild: a game crash, the same character on another computer, or made up. It is ignored
+        -- here, and the chat says so once, without accusing the member who passed it on.
+        if e.actor==me and e.time>(s.since or math.huge) and not forgeryTold[sender] then
+            forgeryTold[sender]=true
+            GL.Print(DENIED:format(FORGED[e.kind] or "?",addresses[sender] or sender))
         end
         -- A relay speaks only of a member of the guild: never of someone made up or gone.
         if not addresses[e.actor] then return end
@@ -968,12 +956,6 @@ local function receive(msg,sender)
     if not relay then
         if countMember(s,e.actor)>=MAX_MEMBER_EVENTS then return end
         memberEvents.n[e.actor]=(memberEvents.n[e.actor] or 0)+1
-    end
-    -- The helpers named in a claim are members of the guild: a share never goes to someone else.
-    if (e.kind=="K" or e.kind=="H") and e.detail~="" then
-        for helper in e.detail:gmatch("[^,]+") do
-            if not addresses[helper] then return end
-        end
     end
     -- When this book heard a bounty or a claim: one heard long after its own date was back-dated.
     if e.kind=="O" or e.kind=="N" or e.kind=="A" or e.kind=="K" or e.kind=="H" then
