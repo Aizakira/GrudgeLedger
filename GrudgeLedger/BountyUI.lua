@@ -1071,6 +1071,129 @@ function GL.OpenBounties(guid,mode)
     return f
 end
 
+-- Payments (0.58.2): whoever owes gold for a bounty and whoever is owed it are told when it
+-- happens, with a banner and the sound of coins, and reminded at login in the chat. A paid share
+-- is told too. Worked out again a few seconds after the guild's bounties change.
+local owedSeen, owingSeen
+local function ledger()
+    local me=mine()
+    local dues,incomes={},{}
+    if not me or not B.GuildScope() then return dues,incomes end
+    -- (B.History returns the orders and their next expiry: only the first counts here.)
+    local active=B.List()
+    local closed=B.History()
+    -- A won bounty can be in both lists: each one counts once.
+    local counted={}
+    for _,list in ipairs({active,closed}) do
+        for id,o in pairs(list) do
+            if (o.winner or o.priorWinner) and not o.supersededBy and not counted[id] then
+                counted[id]=true
+                for _,h in ipairs(members(o)) do
+                    local due=h~=me and B.Due(o,me,h) or 0
+                    if due>0 then
+                        local entry=dues[id] or {o=o,amount=0,hunters={}}
+                        dues[id]=entry
+                        entry.amount=entry.amount+due
+                        entry.hunters[#entry.hunters+1]=h
+                    end
+                    if h==me then
+                        for payer in pairs(o.pot) do
+                            local _,waiting=B.Payment(o,payer,me)
+                            if payer~=me and waiting>0 then
+                                local entry=incomes[id] or {o=o,amount=0,payers=0}
+                                incomes[id]=entry
+                                entry.amount=entry.amount+waiting
+                                entry.payers=entry.payers+1
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return dues,incomes
+end
+local function coins()
+    local sounds=SOUNDKIT or {}
+    local sound=sounds.LOOT_WINDOW_COIN_SOUND or sounds.IG_BACKPACK_COIN_SELECT
+    if sound and GL.Settings and GL.Settings().sounds then GL.Safe(PlaySound,sound,"Master") end
+end
+local function total(entries)
+    local sum,count=0,0
+    for _,entry in pairs(entries) do
+        sum=sum+entry.amount
+        count=count+1
+    end
+    return sum,count
+end
+function GL.BountyPaymentsCheck(first)
+    if not GL.db then return end
+    local dues,incomes=ledger()
+    if first or not owedSeen then
+        -- At login: one line in the chat for each side, nothing when nothing is due.
+        if first then
+            local owe,owing=total(dues),total(incomes)
+            if owe>0 then
+                local line=L("Primes à régler : vous devez %s. À une boîte aux lettres, le bouton « Régler la prime » prépare chaque courrier.")
+                GL.Print(line:format(money(owe)))
+            end
+            if owing>0 then GL.Print(L("Primes à recevoir : %s vous sont dus."):format(money(owing))) end
+        end
+    else
+        for id,entry in pairs(dues) do
+            local before=owedSeen[id]
+            if not before or entry.amount>before.amount then
+                local hunter=UI.plain(who(entry.hunters[1]))
+                local note=L("%s a remporté la prime. Vous lui devez %s : une boîte aux lettres prépare le courrier."):format(hunter,money(entry.amount))
+                if #entry.hunters>1 then note=L("%d chasseurs ont remporté la prime. Vous leur devez %s : une boîte aux lettres prépare les courriers.")
+                    :format(#entry.hunters,money(entry.amount)) end
+                if GL.ShowStoryBanner then
+                    GL.ShowStoryBanner(entry.o.target and ("guid:"..entry.o.target) or id,"warning",L("Prime à régler"),UI.plain(entry.o.name),note,
+                        L("Clic : la prime  •  clic droit : fermer"),function() GL.OpenBounties(entry.o.target,"view") end,"wanted")
+                end
+                coins()
+            end
+        end
+        for id,entry in pairs(incomes) do
+            if not owingSeen[id] then
+                if GL.ShowStoryBanner then
+                    GL.ShowStoryBanner(entry.o.target and ("guid:"..entry.o.target) or id,"friend",L("Prime remportée"),UI.plain(entry.o.name),
+                        L("La guilde vous doit %s. Le courrier arrivera dans votre boîte aux lettres."):format(money(entry.amount)),
+                        L("Clic : la prime  •  clic droit : fermer"),function() GL.OpenBounties(entry.o.target,"view") end,"wanted")
+                end
+                coins()
+            end
+        end
+        for id,entry in pairs(owingSeen) do
+            local now=incomes[id]
+            if not now or now.amount<entry.amount then
+                GL.Print(L("Paiement reçu pour la prime sur %s."):format(UI.plain(entry.o.name)))
+            end
+        end
+    end
+    owedSeen,owingSeen=dues,incomes
+    return dues,incomes
+end
+local checking=false
+GL.On("BOUNTIES_CHANGED",function()
+    if checking then return end
+    if C_Timer and C_Timer.After then
+        checking=true
+        C_Timer.After(2,function()
+            checking=false
+            GL.BountyPaymentsCheck(false)
+        end)
+    else
+        GL.BountyPaymentsCheck(false)
+    end
+end)
+local reminder=CreateFrame("Frame")
+reminder:RegisterEvent("PLAYER_LOGIN")
+reminder:SetScript("OnEvent",function()
+    -- After the guild's catch-up, so that the reminder counts what arrived while you were away.
+    if C_Timer and C_Timer.After then C_Timer.After(20,function() GL.BountyPaymentsCheck(true) end) end
+end)
+
 -- A burst of sync events repaints the visible panel only once on the next frame.
 GL.On("BOUNTIES_CHANGED",function() if f then f.dirty=true end end)
 GL.On("DOSSIER_UPDATED",function() if f then f.dirty=true end end)

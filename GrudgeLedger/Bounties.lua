@@ -817,6 +817,14 @@ local function receive(msg,sender)
 end
 local frame=CreateFrame("Frame")
 local lastPrune
+local function realmSuffix()
+    local realm=type(GetNormalizedRealmName)=="function" and GL.Clean(GL.Safe(GetNormalizedRealmName),"string")
+    if (not realm or realm=="") and type(GetRealmName)=="function" then
+        local plainRealm=GL.Clean(GL.Safe(GetRealmName),"string")
+        realm=plainRealm and (plainRealm:gsub("[%s%-]",""))
+    end
+    return realm~="" and realm or nil
+end
 local function refreshRoster()
     roster,addresses={},{}
     if not GetNumGuildMembers or not GetGuildRosterInfo then return end
@@ -825,7 +833,8 @@ local function refreshRoster()
         name,id=GL.Clean(name,"string"),GL.Clean(id,"string")
         if name and guid(id) then
             roster[name]=id; addresses[id]=name
-            if not name:find("-") then roster[name.."-"..GetNormalizedRealmName()]=id end
+            local realm=not name:find("-") and realmSuffix()
+            if realm then roster[name.."-"..realm]=id end
         end
     end
 end
@@ -835,7 +844,15 @@ function B.MemberName(id)
 end
 local function mailAddress(name)
     if name:find("-",1,true) then return name end
-    return name.."-"..GetNormalizedRealmName()
+    local realm=realmSuffix()
+    return realm and (name.."-"..realm) or name
+end
+-- Whether a mail's sender is this guildmate. Without a readable realm a sender from your own
+-- realm comes without one: the names then match before the dash.
+local function sameSender(member,sender)
+    if mailAddress(member)==sender then return true end
+    if realmSuffix() then return false end
+    return member:match("^[^-]+")==sender:match("^[^-]+")
 end
 local checkingInbox=false
 reconcileInbox=function(current,me,orders)
@@ -853,7 +870,7 @@ reconcileInbox=function(current,me,orders)
             for id in pairs(o.pot) do
                 local name=guild==current and addresses[id] or nil
                 name=name or (archived and archived.payerNames and archived.payerNames[id])
-                if name and mailAddress(name)==mail.sender then payer=id; break end
+                if name and sameSender(name,mail.sender) then payer=id; break end
             end
             if payer and guild and mail.offset+mail.amount<=B.Share(o,payer,me) then
                 local seen=o.arrivals and o.arrivals[payer.."/"..me]
@@ -1009,6 +1026,36 @@ local function payable(s,me)
 end
 local function showPayment()
     local s,me=scope()
+    local uncertain=s and s.mailUncertain and s.mailUncertain[me]
+    if uncertain and MailFrame and SendMailMailButton then
+        if not payButton then
+            payButton=CreateFrame("Button",nil,MailFrame,"UIPanelButtonTemplate")
+            payButton:SetPoint("BOTTOMLEFT",MailFrame,"TOPLEFT",8,2)
+            payButton:SetHeight(32)
+            payButton:SetClampedToScreen(true)
+        end
+        if not cycleButton then
+            cycleButton=CreateFrame("Button",nil,MailFrame,"UIPanelButtonTemplate")
+            cycleButton:SetPoint("LEFT",payButton,"RIGHT",3,0)
+            cycleButton:SetSize(100,28)
+        end
+        payButton.order=nil
+        payButton:SetText(ML("Le dernier règlement est parti"))
+        payButton:SetWidth(math.max(200,payButton:GetFontString():GetStringWidth()+28))
+        payButton:SetScript("OnClick",function()
+            if B.ReconcileMail(true) then GL.Print(ML("Règlement enregistré.")) end
+            showPayment()
+        end)
+        cycleButton:SetText(ML("Il n’est pas parti"))
+        cycleButton:SetWidth(math.max(140,cycleButton:GetFontString():GetStringWidth()+24))
+        cycleButton:SetScript("OnClick",function()
+            if B.ReconcileMail(false) then GL.Print(ML("Le règlement reste à faire.")) end
+            showPayment()
+        end)
+        payButton:Show()
+        cycleButton:Show()
+        return
+    end
     local ids,orders={},{}
     if s and joined==s then ids,orders=payable(s,me) end
     if not ids[1] or not MailFrame or not SendMailMailButton then
@@ -1024,6 +1071,8 @@ local function showPayment()
         payButton:SetPoint("BOTTOMLEFT",MailFrame,"TOPLEFT",8,2)
         payButton:SetHeight(32)
         payButton:SetClampedToScreen(true)
+    end
+    do
         payButton:SetScript("OnClick",function(self)
             if draft and draft.id==self.order and SendMailNameEditBox:GetText()==draft.to
                 and SendMailSubjectEditBox:GetText()==draft.subject and MoneyInputFrame_GetCopper(SendMailMoney)==draft.amount then return end
@@ -1139,7 +1188,8 @@ frame:SetScript("OnEvent",function(_,event)
         scanInbox()
         local s,me=scope()
         if s and s.mailUncertain and s.mailUncertain[me] then
-            GL.Print(ML("Courrier incertain : vérifiez l’envoi puis /glprime courrier envoye ou /glprime courrier nonenvoye."))
+            GL.Print(ML("Un règlement n’a pas été confirmé. Vérifiez vos courriers envoyés,"
+                .." puis répondez avec les boutons au-dessus de la boîte aux lettres."))
         end
         showPayment();return
     end
