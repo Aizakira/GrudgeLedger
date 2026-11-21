@@ -1078,7 +1078,8 @@ local owedSeen, owingSeen
 local function ledger()
     local me=mine()
     local dues,incomes={},{}
-    if not me or not B.GuildScope() then return dues,incomes end
+    -- No guild space for a moment (roster not arrived): nothing is known, not "nothing is due".
+    if not me or not B.GuildScope() then return nil end
     -- (B.History returns the orders and their next expiry: only the first counts here.)
     local active=B.List()
     local closed=B.History()
@@ -1111,7 +1112,7 @@ local function ledger()
             end
         end
     end
-    return dues,incomes
+    return dues,incomes,counted
 end
 local function coins()
     local sounds=SOUNDKIT or {}
@@ -1128,7 +1129,8 @@ local function total(entries)
 end
 function GL.BountyPaymentsCheck(first)
     if not GL.db then return end
-    local dues,incomes=ledger()
+    local dues,incomes,known=ledger()
+    if not dues then return end
     if first or not owedSeen then
         -- At login: one line in the chat for each side, nothing when nothing is due.
         if first then
@@ -1165,8 +1167,9 @@ function GL.BountyPaymentsCheck(first)
             end
         end
         for id,entry in pairs(owingSeen) do
+            -- Only a contract still known and still the same: a replaced one was not paid.
             local now=incomes[id]
-            if not now or now.amount<entry.amount then
+            if known[id] and (not now or now.amount<entry.amount) then
                 GL.Print(L("Paiement reçu pour la prime sur %s."):format(UI.plain(entry.o.name)))
             end
         end

@@ -86,6 +86,8 @@ for i = 4, 7 do
 end
 click(page.dots[1])
 assert(who.archetype:GetText() == "Le Prédateur", who.archetype:GetText())
+-- Who struck first is unknown in these fights: the sentence does not claim it.
+assert(not who.sentence:GetText():find("premier", 1, true), who.sentence:GetText())
 
 -- The period: one button, a click shows the next one. Older fights leave "this week".
 now = now + 10 * 86400

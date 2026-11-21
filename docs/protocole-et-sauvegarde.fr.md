@@ -130,7 +130,7 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `GLV;version`, `GLVR;version` | Version de l'addon du membre (0.58.0). `GLV` à la connexion ; chaque membre y répond par `GLVR`, une fois par minute au plus pour un même arrivant (0.58.1), et une réponse n'appelle jamais de réponse. Gardée en mémoire seulement, jamais sauvegardée. Un membre entendu sans cette annonce a une version antérieure à la 0.58.0 |
 | `MX` | Le membre a décoché la case : ses combats sont effacés chez les autres et la date est notée dans `mapForgot` |
 | `Q` | Demande de rattrapage à la connexion |
-| `R;…` | Relais d'un événement ou d'un total, en réponse à `Q` |
+| `R;…` | Relais d'un événement ou d'un total, en réponse à `Q`. Depuis la 0.58.3 : un seul membre répond, après 4 à 20 secondes, avec au plus 300 événements récents et 150 totaux ; les autres annulent en voyant passer un relais. Les types `F` (gagnant), `V` (réception), `X` (retrait), `U` et `S` (modification, succession) ne sont jamais acceptés en relais : ils n'arrivent que de leur auteur, qui les renvoie à chaque connexion. Le membre nommé dans un relais ignore ce que les autres disent en son nom |
 | `J;C;cible;empreinte;date;compte;nom` | Publication d'une fiche de guilde |
 | `J;T;propriétaire;cible;empreinte;numéro;date;compte;étiquette;0 ou 1` | Avis d'un membre sur une fiche |
 | `J;D;propriétaire;cible;secret` | Retrait d'une fiche ; le secret prouve le droit de retirer |

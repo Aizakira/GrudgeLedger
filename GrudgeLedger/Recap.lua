@@ -98,6 +98,10 @@ function R.Facts(period, scope)
     elseif k >= 2 * d and opened >= answered then
         archetype = L("Le Prédateur")
         sentence = L("Vous frappez le premier, et vous gagnez : %d victoires pour %d morts."):format(k, d)
+        -- Who struck first is not known for these fights: say only what is.
+        if opened + answered == 0 then
+            sentence = L("Vous gagnez bien plus que vous ne tombez : %d victoires pour %d morts."):format(k, d)
+        end
     elseif k >= 2 * d then
         archetype = L("Le Rempart")
         sentence = L("On vous attaque, et vous tenez : %d victoires pour %d morts."):format(k, d)
@@ -174,15 +178,15 @@ function R.Text(facts, period, who)
     if stats.mostDeaths then
         local value = stats.mostDeaths.value
         local form = value == 1 and L("Némésis : %s (1 mort)") or L("Némésis : %s (%d morts)")
-        lines[#lines + 1] = form:format(plain(stats.mostDeaths.record.fullName), value)
+        lines[#lines + 1] = form:format(plain(stats.mostDeaths.record.fullName or stats.mostDeaths.record.name), value)
     end
     if stats.mostKilled then
         local value = stats.mostKilled.value
         local form = value == 1 and L("Proie favorite : %s (1 victoire)") or L("Proie favorite : %s (%d victoires)")
-        lines[#lines + 1] = form:format(plain(stats.mostKilled.record.fullName), value)
+        lines[#lines + 1] = form:format(plain(stats.mostKilled.record.fullName or stats.mostKilled.record.name), value)
     end
     if facts.companion then
-        lines[#lines + 1] = L("Compagnon : %s"):format(plain(facts.companion.fullName))
+        lines[#lines + 1] = L("Compagnon : %s"):format(plain(facts.companion.fullName or facts.companion.name))
     end
     if facts.deadly then
         local value = facts.deadly.deaths
@@ -285,7 +289,7 @@ local function paintPeople(card, facts)
         box.tag:SetText(entry[2])
         box.tag:SetTextColor(unpack(entry[3]))
         if item then
-            Panels.Fit(box.name, plain(item.record.fullName), 200, 16, 11, true)
+            Panels.Fit(box.name, plain(item.record.fullName or item.record.name), 200, 16, 11, true)
             box.line:SetText(entry[4]:format(item.value))
             box.face:Show()
             if GL.PaintBookPortrait then GL.PaintBookPortrait(box.face, item.record) end

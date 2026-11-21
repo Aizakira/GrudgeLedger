@@ -796,8 +796,10 @@ local function history(record, kind, extra)
         if openingProofs[record] then indexOpeningEvidence(openingProofs[record], entry) end
         lastInteraction[record] = math.max(lastInteraction[record] or 0, interactionTime(entry.time, now))
     else
-        GL.db.unassignedHonor = GL.db.unassignedHonor or {}
+        GL.db.unassignedHonor = type(GL.db.unassignedHonor) == "table" and GL.db.unassignedHonor or {}
         table.insert(GL.db.unassignedHonor, entry)
+        -- The latest 500 are kept: enough for every statistic, bounded in the saved file.
+        while #GL.db.unassignedHonor > 500 do table.remove(GL.db.unassignedHonor, 1) end
     end
     guildStatistics = nil
     invalidateJournal()
@@ -1238,7 +1240,9 @@ function GL.RecordPvP(identity, kind, confidence, evidence, eventId, combat, rep
     GL.Emit("FIGHT_RECORDED", record, event)
     GL.Emit("CHANGED", record)
     -- The revenge moment: you just killed a player who owed you.
-    if owed > 0 then GL.Emit("REVENGE", record, owed, GL.Debt(record)) end
+    -- Told only when the debt really went down.
+    local after = owed > 0 and GL.Debt(record)
+    if after and after < owed then GL.Emit("REVENGE", record, owed, after) end
     return record, event
 end
 function GL.RecordAggression(identity, confidence, evidence, eventId, combat)
@@ -1474,10 +1478,14 @@ end
 -- What a player still owes you: they killed or attacked you and your balance with them is negative.
 -- Your own Friend choice forgives it.
 function GL.Debt(record)
-    local pvp = type(record) == "table" and record.pvp or {}
-    local score = type(record) == "table" and record.reputation or 0
-    if score >= 0 or (pvp.deaths or 0) + (pvp.aggressions or 0) == 0 or GL.Relation(record) == "friend" then return 0 end
-    return -score
+    if type(record) ~= "table" then return 0 end
+    local pvp = record.pvp or {}
+    if (pvp.deaths or 0) + (pvp.aggressions or 0) == 0 or GL.Relation(record) == "friend" then return 0 end
+    -- The debt follows the fights even when you gave your opinion by hand (that opinion freezes the
+    -- shown balance), and it has no ceiling: twenty deaths need twenty revenges (review 0.58.2).
+    local _, balance, social = GL.AutomaticBalance(record)
+    local score = balance < 0 and math.min(0, social) + balance or social < 0 and math.min(0, social + balance) or social
+    return score < 0 and -score or 0
 end
 -- Two titles that tell a story, and that fade with time. A fact weighs 1 when it happens and half
 -- as much every two weeks: five deaths last week outweigh twenty deaths two years ago.
@@ -2026,8 +2034,8 @@ local function actorFactions()
     return result
 end
 -- A sheet's counters, counted again from its facts, after its history was cut in two.
-local function recount(record)
-    local pvp, seen, groups = { kills = 0, deaths = 0, aggressions = 0 }, {}, 0
+local function counted(record)
+    local pvp, seen, groups, assists = { kills = 0, deaths = 0, aggressions = 0 }, {}, 0, 0
     for _, e in ipairs(record.history) do
         if type(e) == "table" and not e.voided and e.voidReason ~= "battleground" then
             local field = pvpFields[e.kind] and pvpFields[e.kind][e.confidence]
@@ -2036,10 +2044,35 @@ local function recount(record)
                 if id then seen[id] = true end
                 pvp[field] = pvp[field] + 1
             end
-            if e.kind == "grouped" then groups = groups + 1 end
+            if e.kind == "grouped" or e.kind == "group" then groups = groups + 1 end
+            if e.kind == "assist" then assists = assists + 1 end
         end
     end
-    record.pvp, record.groupCount = pvp, groups
+    return pvp, groups, assists
+end
+-- A sheet cut in two: each copy counts its own facts. What the old counters held beyond the facts
+-- (older events never written in the history) stays with the copy kept in the current book, and
+-- the old counters are kept for reference. Nothing is lost in the sum.
+local function recount(kept, copy)
+    local before = { pvp = deepCopy(kept.pvp), groupCount = kept.groupCount, assists = kept.assists }
+    local keptPvp, keptGroups, keptAssists = counted(kept)
+    local copyPvp, copyGroups, copyAssists = counted(copy)
+    for _, field in ipairs({ "kills", "deaths", "aggressions" }) do
+        local old = tonumber(type(before.pvp) == "table" and before.pvp[field]) or 0
+        keptPvp[field] = keptPvp[field] + math.max(0, old - keptPvp[field] - copyPvp[field])
+    end
+    keptGroups = keptGroups + math.max(0, (tonumber(before.groupCount) or 0) - keptGroups - copyGroups)
+    kept.pvp, kept.groupCount, kept.assists = keptPvp, keptGroups, keptAssists > 0 and keptAssists or nil
+    copy.pvp, copy.groupCount, copy.assists = copyPvp, copyGroups, copyAssists > 0 and copyAssists or nil
+    kept.migrated5, copy.migrated5 = before, before
+    -- An opinion given by hand belongs to the side whose history holds it.
+    local function hasOpinion(record)
+        for _, e in ipairs(record.history) do
+            if type(e) == "table" and (e.kind == "reaction" or e.kind == "reputation") then return true end
+        end
+    end
+    if kept.reactionSource == "manual" and not hasOpinion(copy) then copy.reactionSource = "automatic" end
+    if kept.reactionSource == "manual" and hasOpinion(copy) and not hasOpinion(kept) then kept.reactionSource = "automatic" end
 end
 -- Migration 5: a book written by characters of both factions is cut in two. Each fact and each note
 -- goes to the book of the character who wrote it; a sheet with facts on both sides is copied, each
@@ -2048,12 +2081,23 @@ end
 local function splitBook(current)
     local factions, other = actorFactions(), OTHER_SIDE[current]
     local away = { players = {}, aliases = {}, guilds = deepCopy(GL.db.guilds) }
+    -- Facts without a known author (older versions) go by the opponent's faction: you fight the
+    -- other side and group with your own. Unknown both ways: they stay in the current book.
+    local function sideOf(record, e)
+        local author = e.actorGUID and factions[e.actorGUID]
+        if author then return author end
+        local side = FACTION_NAMES[record.faction]
+        if not side then return current end
+        if FOUGHT[e.kind] then return OTHER_SIDE[side] end
+        if SIDED[e.kind] then return side end
+        return current
+    end
     local moved = 0
     for key, record in pairs(GL.db.players) do
         if type(record) == "table" then
             local kept, sent, keptNotes, sentNotes = {}, {}, {}, {}
             for _, e in ipairs(type(record.history) == "table" and record.history or {}) do
-                if type(e) == "table" and factions[e.actorGUID] == other then
+                if type(e) == "table" and sideOf(record, e) == other then
                     sent[#sent + 1] = e
                 else
                     kept[#kept + 1] = e
@@ -2075,14 +2119,15 @@ local function splitBook(current)
                     local copy = deepCopy(record)
                     copy.history, copy.notes = sent, sentNotes
                     record.history, record.notes = kept, keptNotes
-                    recount(copy)
-                    recount(record)
+                    recount(record, copy)
                     away.players[key] = copy
                 end
             end
         end
     end
     GL.db.books[other] = away
+    -- Names are indexed again in both books: two players of the same name may now be apart.
+    if moved > 0 then GL.db.aliases = {} end
     return moved
 end
 -- Opens the book of the faction you play. True when the book in use changed.
@@ -2171,6 +2216,12 @@ local function reopenBook()
     for _, key in ipairs({ "players", "aliases", "guilds" }) do
         GL.db[key] = type(GL.db[key]) == "table" and GL.db[key] or {}
     end
+    for _, key in ipairs({ "unassignedHonor", "battlegroundArchive" }) do
+        if GL.db[key] ~= nil and type(GL.db[key]) ~= "table" then
+            GL.db.quarantine = GL.db.quarantine or {}
+            GL.db.quarantine[key], GL.db[key] = GL.db[key], nil
+        end
+    end
     -- A name that points to a sheet now in the other book is forgotten, so it can be given again.
     for alias, key in pairs(GL.db.aliases) do
         if type(key) == "string" and not GL.db.players[key] then GL.db.aliases[alias] = nil end
@@ -2256,8 +2307,10 @@ end
 local boot = CreateFrame("Frame")
 boot:RegisterEvent("ADDON_LOADED")
 boot:RegisterEvent("PLAYER_LOGIN")
+-- Not every client knows this event: registering an unknown one raises an error.
+pcall(boot.RegisterEvent, boot, "NEUTRAL_FACTION_SELECT_RESULT")
 boot:SetScript("OnEvent", function(_, event, name)
-    if event == "PLAYER_LOGIN" then
+    if event == "PLAYER_LOGIN" or event == "NEUTRAL_FACTION_SELECT_RESULT" then
         GL.SelectBook()
         return
     end

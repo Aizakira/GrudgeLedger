@@ -135,6 +135,15 @@ f.search:SetText("B"); f.search:SetText("Be"); f.search:SetText("")
 assert(replays == 0, replays)
 GL.Bounties.History = realHistory
 -- The contract being read is won meanwhile: back to the list, with a message, not another bounty.
+-- The helper in your group is a guildmate: only guildmates share a bounty (0.58.3).
+local publisher,helper=mock.units.player.guid,"Player-77-Helper"
+C_ChatInfo={RegisterAddonMessagePrefix=function() end,SendAddonMessage=function() end}
+C_Timer=C_Timer or {}; C_Timer.NewTicker=function() end
+GetNumGuildMembers=function() return 2 end
+GetGuildRosterInfo=function(i)
+    return unpack({[1]=i==1 and "Testeur-Realm" or "Helper-Realm",[17]=i==1 and publisher or helper},1,17)
+end
+mock.Fire("GUILD_ROSTER_UPDATE")
 GL.OpenBounties(b.guid,"view")
 assert(f.detail:IsShown() and f.order.target==b.guid)
 GL.Bounties.Kill(b.guid)
@@ -158,13 +167,6 @@ view("transit"); assert(f.order.state=="sent" and f.count==1)
 click(f.rows[1]); assert(f.detail.stars:IsVisible())
 click(f.detail.back)
 view("paid"); assert(f.count==0)
-local publisher,helper=mock.units.player.guid,"Player-77-Helper"
-C_ChatInfo={RegisterAddonMessagePrefix=function() end,SendAddonMessage=function() end}
-C_Timer=C_Timer or {}; C_Timer.NewTicker=function() end
-GetNumGuildMembers=function() return 2 end
-GetGuildRosterInfo=function(i)
-    return unpack({[1]=i==1 and "Testeur-Realm" or "Helper-Realm",[17]=i==1 and publisher or helper},1,17)
-end
 mock.units.player.guid=helper
 mock.Fire("GUILD_ROSTER_UPDATE")
 GL.OpenBounties(b.guid,"view"); click(f.detail.back); filter(3,2)

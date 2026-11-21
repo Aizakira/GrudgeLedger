@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Vous gagnez bien plus que vous ne tombez : %d victoires pour %d morts."] = "Ganas mucho más de lo que caes: %d victorias por %d muertes.",
         ["Le dernier règlement est parti"] = "El último pago ha salido",
         ["Il n’est pas parti"] = "No ha salido",
         ["Règlement enregistré."] = "Pago registrado.",
@@ -1932,6 +1933,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Vous gagnez bien plus que vous ne tombez : %d victoires pour %d morts."] = "You win far more than you fall: %d victories for %d deaths.",
         ["Le dernier règlement est parti"] = "The last payment was sent",
         ["Il n’est pas parti"] = "It was not sent",
         ["Règlement enregistré."] = "Payment recorded.",

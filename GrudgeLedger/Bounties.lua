@@ -711,7 +711,7 @@ function B.Kill(target,combat)
                     if p or t then flag=flag..","..(p or 0)..","..(t or 0) end
                     claim=declare("H",id,flag,o.split=="equal" and helpers(true) or "")
                 end
-            else claim=declare("K",id,"",helpers()) end
+            else claim=declare("K",id,"",helpers(true)) end
             if claim and o.owner==me then owned=true end
         end
     end
@@ -744,6 +744,9 @@ function B.Death(target,name)
     end
 end
 local budgets={}
+-- What a member may pass on in another member's name (see receive), and how much of it at login.
+RELAYABLE={O=true,N=true,A=true,P=true,K=true,H=true,D=true,Y=true}
+RELAYED_EVENTS,RELAYED_SCORES=300,150
 local function receive(msg,sender)
     local s,me=scope()
     if not s or type(msg)~="string" or #msg>255 or GL.ContainsControlOrMarkup(msg) or not sender then return end
@@ -765,17 +768,37 @@ local function receive(msg,sender)
         return
     end
     if msg=="Q" then
+        if sender==me then return end
         if budget.lastQ and now-budget.lastQ<10 then return end
         budget.lastQ=now
-        if sender~=me and GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me) end
-        if sender~=me and GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
-        for target,scores in pairs(s.scores or {}) do
-            for actor,n in pairs(scores) do schedule(s,"R;"..scoreMessage(actor,target,n[1],n[2])) end
+        if GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me) end
+        if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
+        -- Your own winners, receipts, withdrawals and changes cannot be relayed by others: you send
+        -- them yourself, directly. They are few.
+        local own={}
+        for _,raw in pairs(s.events) do
+            local e=unpackEvent(raw,true)
+            if e and e.actor==me and not RELAYABLE[e.kind] and (e.kind=="V" or e.time>=now-38*DAY) then own[#own+1]=raw end
         end
+        if #own>0 and not GL.Transport.State(s,"bounty:own") then GL.Transport.SendBatch(s,own,{key="bounty:own",delay=1+math.random(0,4)}) end
+        if GL.Transport.State(s,"bounty:relay") then return end
+        local events={}
         for _,raw in pairs(s.events) do
             local e=unpackEvent(raw)
-            if e and (e.time>=now-38*DAY or e.actor==me) then schedule(s,"R;"..raw) end
+            if e and e.time>=now-38*DAY and RELAYABLE[e.kind] then events[#events+1]={at=e.time,text="R;"..raw} end
         end
+        table.sort(events,function(x,y)
+            if x.at~=y.at then return x.at>y.at end
+            return x.text<y.text
+        end)
+        local batch={}
+        for i=1,math.min(RELAYED_EVENTS,#events) do batch[i]=events[i].text end
+        for target,scores in pairs(s.scores or {}) do
+            for actor,n in pairs(scores) do
+                if #batch<RELAYED_EVENTS+RELAYED_SCORES then batch[#batch+1]="R;"..scoreMessage(actor,target,n[1],n[2]) end
+            end
+        end
+        if #batch>0 then GL.Transport.SendBatch(s,batch,{key="bounty:relay",delay=4+math.random(0,16)}) end
         return
     end
     if sender~=me and GL.GuildMap then GL.GuildMap.Heard(sender) end
@@ -795,7 +818,8 @@ local function receive(msg,sender)
     if raw:sub(1,2)=="G;" then
         local actor,target,wins,losses=raw:match("^G;([^;]+);([^;]+);(%d+);(%d+)$")
         wins,losses=number(wins,0,10000000),number(losses,0,10000000)
-        if guid(actor) and guid(target) and wins and losses and actor~=me and (relay or actor==sender) then
+        if guid(actor) and guid(target) and wins and losses and actor~=me and (relay and addresses[actor] or actor==sender) then
+            if relay then GL.Transport.Cancel(s,"bounty:relay") end
             mergeScore(s,actor,target,wins,losses)
         end
         return
@@ -803,6 +827,15 @@ local function receive(msg,sender)
     local e=unpackEvent(raw)
     if not e or s.events[e.key] then return end
     if not relay and e.actor~=sender then return end
+    -- A relay is a member's word about another member (review 0.58.2). It may tell a bounty, a
+    -- pledge, a claim, a death or a payment sent: the member named ignores what others say in its
+    -- name, and keeps its own account. It never chooses a winner (payers would mail the wrong
+    -- hunter), confirms a receipt (a payer would stop owing), withdraws or changes a contract:
+    -- those arrive from their author only, who sends them again at each login.
+    if relay then
+        if not RELAYABLE[e.kind] then return end
+        GL.Transport.Cancel(s,"bounty:relay")
+    end
     -- Relays are guild testimony, never an instruction to send gold or alter personal records.
     if e.actor==me then return end
     if e.kind=="V" and e.time<now-38*DAY then
@@ -838,6 +871,9 @@ local function refreshRoster()
         end
     end
 end
+function B.IsMember(id)
+    return guid(id) and addresses[id]~=nil or false
+end
 function B.MemberName(id)
     local r=guid(id) and GL.Get and GL.Get("guid:"..id)
     return addresses[id] or (r and (r.fullName or r.name))
@@ -861,6 +897,7 @@ reconcileInbox=function(current,me,orders)
     checkingInbox=true
     local history=GL.db.bountyHistory and GL.db.bountyHistory[me] or {}
     if current and not orders then orders=view(current) end
+    local settled={}
     for key,mail in pairs(inbox) do
         local archived=history[mail.id]
         local o=orders and orders[mail.id] or archived
@@ -874,14 +911,16 @@ reconcileInbox=function(current,me,orders)
             end
             if payer and guild and mail.offset+mail.amount<=B.Share(o,payer,me) then
                 local seen=o.arrivals and o.arrivals[payer.."/"..me]
-                inbox[key]=nil
                 if not seen or (seen[mail.offset] or 0)<mail.amount then
-                    if not record(guild,me,"V",mail.id,mail.offset..","..mail.amount,payer) then inbox[key]=mail end
+                    if record(guild,me,"V",mail.id,mail.offset..","..mail.amount,payer) then settled[#settled+1]=key end
+                else
+                    settled[#settled+1]=key
                 end
             end
         end
-        if mail.at and mail.at<GL.Now()-38*DAY then inbox[key]=nil end
+        if mail.at and mail.at<GL.Now()-38*DAY then settled[#settled+1]=key end
     end
+    for _,key in ipairs(settled) do inbox[key]=nil end
     checkingInbox=false
 end
 local function scanInbox()
