@@ -6,6 +6,8 @@ GetServerTime = function() return now end
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 local id = GL.IdentityFromName("Fighter", "Example", "Player-1-fighter")
 -- Fight 1: he attacks, hits again 40 s later, then kills you.
 GL.RecordAggression(id, "confirmed", "Observed", "f1-a")

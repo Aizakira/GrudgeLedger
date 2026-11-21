@@ -4,6 +4,8 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Vous le tuez"] = "Lo matas",
+        ["Par défaut, une vie pour une vie. Un agresseur reste ennemi même tué. Riposte : −1."] = "Por defecto, una vida por una vida. Un agresor sigue siendo enemigo aunque lo mates. Réplica: −1.",
         ["Trois morts récentes face au même joueur."] = "Tres muertes recientes ante el mismo jugador.",
         ["Un ami avec qui vous groupez, ou trois groupes cette semaine."] = "Un amigo con quien agrupas, o tres grupos esta semana.",
         ["Rivalités"] = "Rivalidades",
@@ -136,7 +138,6 @@ if locale == "esES" or locale == "esMX" then
         ["Filtres"] = "Filtros",
         ["Présence"] = "Presencia",
         ["−%d de plus"] = "−%d más",
-        ["Victoire : +1. Un agresseur reste ennemi même tué. Riposte : −1."] = "Victoria: +1. Un agresor sigue siendo enemigo aunque lo mates. Respuesta: −1.",
         ["Prévient votre guilde : le joueur ciblé et votre zone."] = "Avisa a tu hermandad: el jugador seleccionado y tu zona.",
         ["Guilde prévenue : %s."] = "Hermandad avisada: %s.",
         ["Appel non envoyé : hors guilde, ou un appel vient de partir. Réessayez dans un instant."] = "Llamada no enviada: sin hermandad, o acaba de salir otra. Inténtalo de nuevo en un momento.",
@@ -1702,6 +1703,8 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Vous le tuez"] = "You kill them",
+        ["Par défaut, une vie pour une vie. Un agresseur reste ennemi même tué. Riposte : −1."] = "By default, a life for a life. An attacker stays an enemy even once killed. Reply: −1.",
         ["Trois morts récentes face au même joueur."] = "Three recent deaths to the same player.",
         ["Un ami avec qui vous groupez, ou trois groupes cette semaine."] = "A friend you group with, or three groups this week.",
         ["Rivalités"] = "Rivalries",
@@ -1834,7 +1837,6 @@ else
         ["Filtres"] = "Filters",
         ["Présence"] = "Presence",
         ["−%d de plus"] = "−%d more",
-        ["Victoire : +1. Un agresseur reste ennemi même tué. Riposte : −1."] = "Victory: +1. An aggressor stays an enemy even once killed. Reply: −1.",
         ["Prévient votre guilde : le joueur ciblé et votre zone."] = "Tells your guild: the targeted player and your zone.",
         ["Guilde prévenue : %s."] = "Guild told: %s.",
         ["Appel non envoyé : hors guilde, ou un appel vient de partir. Réessayez dans un instant."] = "Call not sent: no guild, or a call just left. Try again in a moment.",

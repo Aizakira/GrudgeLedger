@@ -25,6 +25,7 @@ Le jeu écrit cette table sur le disque au `/reload` et à la déconnexion. Elle
 | `battlegroundCleanupVersion` | Marqueur de la migration 2 | `Core.lua` | — |
 | `grimoireFontDefaultApplied` | Marqueur de la migration 3 | `Core.lua` | — |
 | `migrations` | Migrations exécutées, par numéro, avec leur date | `Core.lua` | Une entrée par migration |
+| `replacedWeights` | Poids de rancune d'avant la migration 4 (`aggression`, `death`, `victory`), gardés pour mémoire | `Core.lua` | Écrit une seule fois |
 | `authorAccount` | Identifiant aléatoire du compte, 16 caractères hexadécimaux. Jamais diffusé tel quel : depuis la 0.22.0, les fiches de guilde portent une empreinte propre à chaque guilde (SHA-256 de l'identifiant et de la clé de guilde, 16 caractères), qui ne relie pas les personnages d'une guilde à l'autre | `Core.lua`, `GuildProfiles.lua` | — |
 | `journalEdition` | Compteur des fiches de guilde publiées | `GuildProfiles.lua` | — |
 | `bountyGuilds` | Un espace par guilde, par `royaume/guilde`. Détail plus bas | `Bounties.lua`, `GuildProfiles.lua`, `SharedDossiers.lua` | Jamais purgé à ce jour, même après un départ de guilde |
@@ -86,6 +87,7 @@ Depuis la 0.23.0, les migrations sont numérotées dans `migrations` (numéro �
 | 1 | `schema` = 2 | Les compteurs et événements « probables » sont fondus dans les « confirmés » ; les doublons d'un même identifiant d'événement sont annulés | Oui depuis la 0.23.0 : `migrated1` garde les valeurs remplacées. Non pour un carnet migré avant |
 | 2 | `battlegroundCleanupVersion` = 1 | Les événements des champs de bataille connus sont annulés ; les fiches devenues vides vont dans `battlegroundArchive` | Oui : rien n'est effacé |
 | 3 | `grimoireFontDefaultApplied` | Le réglage de police revient une fois à sa valeur par défaut | Sans objet |
+| 4 | `migrations[4]` | « Une vie pour une vie » (0.42.0) : `grudgeVictory` apparaît (5 ; une victoire valait toujours 1) et une agression laissée à l'ancienne valeur par défaut (5, avec une mort à 5) passe à 2. Les poids choisis par le joueur sont conservés, tous les soldes automatiques sont recalculés | Oui : `replacedWeights` garde les anciennes valeurs, à remettre dans les réglages |
 
 **Règle pour la migration 4 et les suivantes.**
 

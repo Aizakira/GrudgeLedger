@@ -13,6 +13,8 @@ assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 local identity = GL.Identity("target")
 local sample = {healthPct = 44, playerLevel = 34, opponentLevel = 39, opponents = 2, pet = true, pve = true, ignored = {}}
 local record = GL.RecordPvP(identity, "death", "confirmed", "PRIVATE technical evidence: UNIT_DIED", "death", sample)

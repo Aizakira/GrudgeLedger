@@ -8,6 +8,8 @@ assert(loadfile(TEST_ROOT .. "/UITheme.lua"))()
 assert(loadfile(TEST_ROOT .. "/UI.lua"))()
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 local selfGUID = mock.units.player.guid
 local function click(control)
     assert(control.enabled ~= false, "cannot click a disabled control")

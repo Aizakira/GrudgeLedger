@@ -2,6 +2,8 @@ local mock = assert(loadfile(TEST_WORK .. "/tests/wow_mock.lua"))()
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 local zone = "Bassin Arathi"
 GetRealZoneText = function() return zone end
 local function identity(name, guild)

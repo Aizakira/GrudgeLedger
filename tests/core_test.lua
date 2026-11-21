@@ -7,6 +7,8 @@ issecretvalue = function(v) return rawequal(v, secret) end
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")
 local GL = GrudgeLedger
 GL.InitDB()
+-- These assertions were written with the weights of before 0.42.0; they are pinned here.
+GL.SetSetting("grudgeAggression", 5) GL.SetSetting("grudgeDeath", 5) GL.SetSetting("grudgeVictory", 1)
 assert(GL.Clean(secret) == nil)
 assert(GL.Safe(function() return secret, "safe" end) == nil)
 assert(GL.IdentityFromName("Dupont", nil, nil) == nil, "unknown surnames must not merge")

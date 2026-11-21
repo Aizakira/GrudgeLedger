@@ -22,7 +22,7 @@ local lastInteraction = setmetatable({}, { __mode = "k" })
 local openingProofs = setmetatable({}, { __mode = "k" })
 local defaults = {
     markers = true, nameColor = false, friendAlerts = true, enemyAlerts = true, indirectAlerts = false, guildSightings = true,
-    grudgeAggression = 5, grudgeDeath = 5,
+    grudgeAggression = 2, grudgeDeath = 5, grudgeVictory = 5,
     sounds = true, alertCooldown = 180, iconSize = 20, pvpTracking = true, zoneTime = false,
     groupTracking = true, socialTracking = true, tradeTracking = false, minimapAngle = 225, readableFont = false,
     quickGestures = true, detectionLog = true, partyWarnings = false, tagReminders = true, chatBadges = false, compactTooltips = false,
@@ -256,14 +256,15 @@ local function provoked(record)
     return math.min(n, total)
 end
 GL.ProvokedAggressions = provoked
--- The player chooses how much an aggression and a death weigh (settings, 0 to 10; 5 by default).
--- A reply to your own attack weighs 1 at most, a victory always repays 1.
-local VICTORY = 1
+-- The player chooses what an aggression, a death and a victory weigh (settings, 0 to 10). Since
+-- 0.42.0 the default is "a life for a life": a death costs 5 and a victory repays 5, so one revenge
+-- settles one death; an aggression costs 2. A reply to your own attack weighs 1 at most.
 local function weights()
     local settings = GL.db and GL.db.settings or defaults
-    local aggression = type(settings.grudgeAggression) == "number" and settings.grudgeAggression or 5
-    local death = type(settings.grudgeDeath) == "number" and settings.grudgeDeath or 5
-    return aggression, math.min(1, aggression), death
+    local aggression = type(settings.grudgeAggression) == "number" and settings.grudgeAggression or defaults.grudgeAggression
+    local death = type(settings.grudgeDeath) == "number" and settings.grudgeDeath or defaults.grudgeDeath
+    local victory = type(settings.grudgeVictory) == "number" and settings.grudgeVictory or defaults.grudgeVictory
+    return aggression, math.min(1, aggression), death, victory
 end
 -- "2 agressions × −5  ·  2 morts × −5": the automatic balance with today's weights.
 function GL.BalanceFormula(record)
@@ -273,11 +274,11 @@ function GL.BalanceFormula(record)
     local function term(n, one, many, weight)
         if n > 0 then terms[#terms + 1] = n .. " " .. L(n > 1 and many or one) .. " × " .. weight end
     end
-    local aggression, reply, death = weights()
+    local aggression, reply, death, victory = weights()
     term((pvp.aggressions or 0) - replies, "agression", "agressions", "−" .. aggression)
     term(replies, "riposte", "ripostes", "−" .. reply)
     term(pvp.deaths or 0, "mort", "morts", "−" .. death)
-    term(pvp.kills or 0, "victoire", "victoires", "+1")
+    term(pvp.kills or 0, "victoire", "victoires", "+" .. victory)
     return table.concat(terms, "  ·  ")
 end
 -- What each fact weighs in the automatic balance.
@@ -301,9 +302,9 @@ function GL.AutomaticBalance(record)
     cached.total, cached.count = social, #events
     local pvp = record.pvp
     local replies = provoked(record)
-    -- An aggression weighs -5 from the first hit, a death -5 more: an aggression that kills is -10.
+    -- An aggression weighs from the first hit, a death weighs more on top of it, a victory repays.
     -- His reply to an attack you opened weighs only -1.
-    local AGGRESSION, PROVOKED, DEATH = weights()
+    local AGGRESSION, PROVOKED, DEATH, VICTORY = weights()
     local balance = VICTORY * (pvp.kills or 0)
         - DEATH * (pvp.deaths or 0)
         - AGGRESSION * ((pvp.aggressions or 0) - replies)
@@ -1928,7 +1929,8 @@ local function settingValue(key, value)
         if value ~= value or value == math.huge or value == -math.huge then return nil end
         if key == "alertCooldown" then value = math.max(15, math.min(3600, value))
         elseif key == "iconSize" then value = math.max(12, math.min(40, value))
-        elseif key == "grudgeAggression" or key == "grudgeDeath" then value = math.max(0, math.min(10, math.floor(value + 0.5)))
+        elseif key == "grudgeAggression" or key == "grudgeDeath" or key == "grudgeVictory" then
+            value = math.max(0, math.min(10, math.floor(value + 0.5)))
         elseif key == "readingScale" then value = math.max(0.85, math.min(1.25, value))
         elseif key == "minimapAngle" then value = value % 360 end
     end
@@ -1941,7 +1943,7 @@ function GL.SetSetting(key, value)
     local previous = GL.db.settings[key]
     GL.db.settings[key] = value
     -- New weights apply to every automatic balance at once; notes, counters and history are untouched.
-    if (key == "grudgeAggression" or key == "grudgeDeath") and previous ~= value then
+    if (key == "grudgeAggression" or key == "grudgeDeath" or key == "grudgeVictory") and previous ~= value then
         for _, record in pairs(GL.db.players or {}) do
             if type(record) == "table" and type(record.pvp) == "table" then refreshReputation(record) end
         end
@@ -1983,6 +1985,19 @@ function GL.InitDB()
     if not GL.db.grimoireFontDefaultApplied then
         GL.db.settings.readableFont = defaults.readableFont
         GL.db.grimoireFontDefaultApplied = true
+    end
+    -- Migration 4 (0.42.0), "a life for a life". Weights left at the old defaults (aggression 5,
+    -- death 5, victory fixed at 1) move to the new ones; weights the player chose are kept, and only
+    -- the victory, which had no setting, takes its new default. What was replaced is kept.
+    local reweighed = false
+    if not migrations[4] then
+        local settings = GL.db.settings
+        if type(settings.grudgeAggression) == "number" or type(settings.grudgeDeath) == "number" then
+            GL.db.replacedWeights = { aggression = settings.grudgeAggression, death = settings.grudgeDeath, victory = 1 }
+            if settings.grudgeAggression == 5 and settings.grudgeDeath == 5 then settings.grudgeAggression = defaults.grudgeAggression end
+            reweighed = true
+        end
+        migrations[4] = GL.Now()
     end
     for key, value in pairs(defaults) do
         local saved = settingValue(key, GL.db.settings[key])
@@ -2045,6 +2060,11 @@ function GL.InitDB()
     cleanBattlegroundHistory()
     migrations[2] = migrations[2] or (GL.db.battlegroundCleanupVersion == 1 and GL.Now() or nil)
     migrations[3] = migrations[3] or (GL.db.grimoireFontDefaultApplied and GL.Now() or nil)
+    if reweighed then
+        for _, record in pairs(GL.db.players) do
+            if type(record) == "table" and type(record.pvp) == "table" then refreshReputation(record) end
+        end
+    end
     GL.Emit("READY")
 end
 local boot = CreateFrame("Frame")

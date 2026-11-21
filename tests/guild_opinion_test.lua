@@ -8,6 +8,8 @@ local function client(i,saved)
     local mock=env.loadfile(TEST_WORK.."/tests/addon_mock.lua")()
     local c={env=env,GL=env.GrudgeLedger,g=env.GrudgeLedger.GuildProfiles,m=mock,online=true,
         id="Player-1-c"..i,name="Opinion"..i.."-Realm",guild="Guild"}
+    -- These assertions were written with the weights of before 0.42.0; they are pinned here.
+    c.GL.SetSetting("grudgeAggression",5) c.GL.SetSetting("grudgeDeath",5) c.GL.SetSetting("grudgeVictory",1)
     clients[i]=c
     mock.units.player={guid=c.id,name="Opinion"..i,surname="Example",guild=c.guild,realm="Realm"}
     env.GetServerTime=function() return now end

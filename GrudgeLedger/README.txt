@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.41.1
+GRUDGE LEDGER — 0.42.0
+
+Une vie pour une vie. Une agression coûte maintenant 2, une mort 5, et une victoire rapporte 5 (elle ne valait que 1). Un joueur qui vous attaque et vous tue vous doit 7 : une revanche venge la mort, une seconde raye la dette. Avant, il en fallait dix. Les trois valeurs se règlent dans Réglages → Relations et JcJ. Si vous n’aviez pas touché aux curseurs, vos soldes sont recalculés avec la nouvelle règle ; si vous les aviez réglés, vos choix sont gardés et seule la victoire passe à 5.
 
 Premiers retours en jeu sur Relations. Les titres suivent le temps : un fait pèse moitié moins toutes les deux semaines. Votre némésis doit vous avoir tué au moins trois fois, récemment ; votre compagnon est un ami avec qui vous groupez, ou un joueur groupé trois fois cette semaine (plus un inconnu croisé il y a longtemps). Les blasons de guilde portent les initiales de la guilde. Correction : dans les classements de guildes, « Mes règles de guilde » chevauchait « Comment lire ce classement ».
 
