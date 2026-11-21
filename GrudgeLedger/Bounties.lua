@@ -823,14 +823,13 @@ local function receive(msg,sender)
         table.sort(own,function(x,y) return x.at>y.at end)
         local ownBatch={}
         for i=1,math.min(150,#own) do ownBatch[i]=own[i].text end
-        local function sendOwn()
-            if #ownBatch>0 and not GL.Transport.State(s,"bounty:own") then
-                GL.Transport.SendBatch(s,ownBatch,{key="bounty:own",delay=1+math.random(0,4)})
-            end
-            if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
+        if #ownBatch>0 and not GL.Transport.State(s,"bounty:own") then
+            local _,queued=GL.Transport.Pending(s)
+            while #ownBatch>math.max(0,480-queued) do ownBatch[#ownBatch]=nil end
+            if #ownBatch>0 then GL.Transport.SendBatch(s,ownBatch,{key="bounty:own",delay=1+math.random(0,4)}) end
         end
         if GL.Transport.State(s,"bounty:relay") then
-            sendOwn()
+            if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
             return
         end
         -- The guild's, from one member. Deaths are many: 60 at most, so bounties and pledges pass.
@@ -858,14 +857,17 @@ local function receive(msg,sender)
                 if #batch<RELAYED_EVENTS+RELAYED_SCORES then batch[#batch+1]="R;"..scoreMessage(actor,target,n[1],n[2]) end
             end
         end
-        -- A batch that does not fit in the queue is left to another member: a short one would cancel
-        -- the complete ones of the others.
+        -- What the queue still holds: the totals go first, then the oldest events. A small guild's
+        -- relay is short and still sent; a short relay of a busy member answers later (below).
         local _,waiting=GL.Transport.Pending(s)
-        if #batch>math.max(0,480-waiting) then batch={} end
-        -- The fuller the book, the sooner it answers: a small one waits and is cancelled by a big one.
-        local delay=2+math.floor(16*(1-math.min(#events,RELAYED_EVENTS)/RELAYED_EVENTS))+math.random(0,2)
+        local room=math.max(0,480-waiting)
+        while #batch>room do batch[#batch]=nil end
+        -- The fuller the relay, the sooner it answers: a small one waits and is cancelled by a big
+        -- one. Counted on what is sent (deaths are many and the same for everyone).
+        local sent=math.min(#batch,RELAYED_EVENTS)
+        local delay=2+math.floor(16*(1-sent/RELAYED_EVENTS))+math.random(0,2)
         if #batch>0 then GL.Transport.SendBatch(s,batch,{key="bounty:relay",delay=delay}) end
-        sendOwn()
+        if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
         return
     end
     if sender~=me and GL.GuildMap then GL.GuildMap.Heard(sender) end

@@ -167,4 +167,16 @@ local withFriend=assert(b.Post("Player-2-friendly","Friendly",100))
 stamped(now,"K",hunter,84,withFriend,"","Player-9-outsider")
 assert(b.List()[withFriend].winner and b.List()[withFriend].winner.actor==hunter, b.List()[withFriend].state)
 
+-- 0.58.9: a full queue keeps room for your own events, which only you can send (winners, receipts,
+-- withdrawals); the guild's relay only takes what is left.
+local busy=b.GuildScope()
+local filler={}
+for i=1,470 do filler[i]="filler"..i end
+assert(gl.Transport.SendBatch(busy,filler,{key="filler",delay=1000}))
+now=now+60
+event(nil,"CHAT_MSG_ADDON","GLBounty1","Q","GUILD",names[partner])
+assert(gl.Transport.State(busy,"bounty:own")~=nil, "your own events still go out")
+assert(gl.Transport.State(busy,"bounty:relay")==nil, "no room left: no relay")
+gl.Transport.Cancel(busy,"filler")
+gl.Transport.Cancel(busy,"bounty:own")
 print("PASS guild alpha rules: personal quota, replay, legacy claims, solo/group, split, notification and durable history")
