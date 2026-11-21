@@ -51,8 +51,12 @@ local function read(text)
 end
 -- Who killed members of the guild, worked out once and again only when the fights change.
 local index, indexed
+-- The guild's fights change only when one is kept or forgotten: until then the sorted list is
+-- given again as it is (a guild of a hundred holds up to 6 000 lines).
+local version, sorted = 0, {}
 local function forgetIndex()
     index, indexed = nil, nil
+    version = version + 1
 end
 -- Keeps a member's fight: the latest first, one a second, a bounded number. False when it was
 -- already known or too old to enter the list.
@@ -260,6 +264,9 @@ function M.Points(withMine)
     local s, me = scope()
     local points = {}
     if not on(s, me) or type(s.places) ~= "table" then return points end
+    -- Kept a quarter of an hour at most: fights older than 38 days leave the list on their own.
+    local key = tostring(s) .. (withMine and ":all:" or ":others:") .. version .. ":" .. math.floor(GL.Now() / 900)
+    if sorted[withMine and 1 or 2] and sorted[withMine and 1 or 2].key == key then return sorted[withMine and 1 or 2].points end
     for actor, list in pairs(s.places) do
         if (withMine or actor ~= me) and guid(actor) and type(list) == "table" then
             for i = 1, math.min(PER_MEMBER, #list) do
@@ -275,6 +282,7 @@ function M.Points(withMine)
         if a.time ~= b.time then return a.time > b.time end
         return a.actor < b.actor
     end)
+    sorted[withMine and 1 or 2] = { key = key, points = points }
     return points
 end
 -- Whether this player killed members of the guild: how many deaths, and the latest one (which

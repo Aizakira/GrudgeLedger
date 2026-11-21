@@ -274,7 +274,9 @@ do
     -- sits on a tinted plate.
     R.MapOut()
     settle()
-    assert(view.world.art.textures[1].vertex[1] < 0.7 and view.labels[1].fill.color and view.labels[1].fill.color[1] > 0.7)
+    assert(view.world.art.textures[1].vertex[1] < 0.5 and view.labels[1].fill.color[4] == 0, "no plate under the number")
+    assert(view.labels[1].count.color[1] == 1 and view.labels[1].count.color[2] < 0.3 and view.labels[1].count.font[3] == "OUTLINE")
+    assert(view.regions[1].boost:IsShown() and view.regions[1].boost.blendMode == "ADD", "the deadliest zone is lit twice")
     -- Guild vision (0.49.0): one box on the page; the guild's fights are counted and drawn with yours.
     local realEnabled, realPoints, realEnable = GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable
     local ticked = false
@@ -306,14 +308,15 @@ do
             list[i] = { actor = "Player-1-Mate0001", time = GL.Now() - i * 3600, mapID = 1444, kind = i % 2 == 0 and "kill" or "death",
                 target = i < 9 and "Player-1-Foe0001" or nil, name = i < 9 and "Bad Guy" or nil }
         end
-        list[1].mine = true
+        list[1].mine, list[1].actor = true, "Player-1-Me000001"
         return list
     end
     click(f.tabs.guildlog)
     local log = f.host.pages.guildlog
     assert(log:IsShown() and log.title:GetText() == "Journal de guilde" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
     assert(log.rows[2].story:GetText() == "Un membre de la guilde a tué Bad Guy" and log.rows[2].where:GetText() == "Feralas · il y a 2 h")
-    assert(log.rows[7]:IsShown() and log.count:GetText() == "9 combats partagés · 5 morts" and log.next:IsEnabled() and not log.previous:IsEnabled())
+    assert(log.rows[6]:IsShown() and log.count:GetText() == "9 combats · 5 morts" and log.next:IsEnabled() and not log.previous:IsEnabled())
+    assert(not log.reset:IsShown() and log.who:GetText() == "Tous les membres")
     local opened
     local realDossier = GL.OpenPlayerDossier
     GL.OpenPlayerDossier = function(id, _, known) opened = id .. "/" .. tostring(known) end
@@ -332,9 +335,43 @@ do
     assert(posted == "Player-1-Foe0001/Bad Guy/0" and not log.rows[2].wanted:IsShown(), posted)
     GL.Bounties.Post, GL.Bounties.OpenFor = realPost, realOpen
     click(log.next)
-    assert(log.rows[2].story:GetText() == "Un membre de la guilde a été tué par un joueur inconnu" and not log.rows[2].sheet:IsShown())
-    assert(not log.rows[2].wanted:IsShown())
-    assert(not log.rows[3]:IsShown() and not log.next:IsEnabled())
+    assert(log.rows[3].story:GetText() == "Un membre de la guilde a été tué par un joueur inconnu" and not log.rows[3].sheet:IsShown())
+    assert(not log.rows[3].wanted:IsShown() and not log.rows[4]:IsShown() and not log.next:IsEnabled())
+    -- Filters (0.52.0): deaths only, then one member's journal, then one opponent, then a period.
+    click(log.kindButton)
+    assert(log.kindButton:GetText() == "Morts" and log.count:GetText() == "5 combats · 5 morts")
+    assert(log.offset == 0 and log.reset:IsShown())
+    click(log.kindButton)
+    click(log.kindButton)
+    assert(log.kindButton:GetText() == "Morts et victoires" and log.count:GetText() == "9 combats · 5 morts")
+    click(log.who)
+    assert(log.chooser:IsShown() and not log.rows[1]:IsShown() and log.chooser.buttons[1]:GetText() == "Tous les membres")
+    assert(log.chooser.buttons[2]:GetText() == "Vous · 1" and log.chooser.buttons[3]:GetText() == "Un membre de la guilde · 8")
+    click(log.chooser.buttons[3])
+    assert(not log.chooser:IsShown() and log.count:GetText() == "8 combats · 4 morts" and log.who:GetText() == "Un membre de la gu…")
+    click(log.foe)
+    assert(log.chooser.buttons[2]:GetText() == "Bad Guy · 7" and not log.chooser.buttons[3]:IsShown(), "an unnamed opponent cannot be chosen")
+    click(log.chooser.buttons[2])
+    assert(log.count:GetText() == "7 combats · 3 morts" and log.foe:GetText() == "Bad Guy")
+    click(log.periodButton)
+    click(log.periodButton)
+    assert(log.periodButton:GetText() == "7 jours" and log.count:GetText() == "7 combats · 3 morts")
+    click(log.periodButton)
+    click(log.periodButton)
+    click(log.periodButton)
+    assert(log.periodButton:GetText() == "24 h")
+    -- Nothing left: the page says how to get everything back, and the cross does it.
+    log.filter.who = "Player-1-Nobody01"
+    R.Refresh()
+    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("croix", 1, true))
+    click(log.reset)
+    assert(log.count:GetText() == "9 combats · 5 morts" and not log.reset:IsShown() and log.kindButton:GetText() == "Morts et victoires")
+    -- The chooser lists everyone first; "Tous" takes a filter back.
+    click(log.who)
+    click(log.chooser.buttons[3])
+    click(log.who)
+    click(log.chooser.buttons[1])
+    assert(log.filter.who == nil and log.count:GetText() == "9 combats · 5 morts")
     GL.OpenPlayerDossier = realDossier
     ticked = false
     R.Refresh()

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.51.0
+GRUDGE LEDGER — 0.52.0
+
+Journal de guilde : quatre filtres au-dessus des lignes. Le journal d’un seul membre, les combats contre un seul joueur, les morts ou les victoires seulement, et la période (24 h, 7 jours, 30 jours). Carte : les zones où vous mourez sont nettement plus rouges, et le chiffre n’a plus de plaque : rouge pour vos morts, vert pour vos victoires.
 
 Le partage avec la guilde est activé d’office : victoires et morts (avec l’endroit et l’adversaire), repérages, avis. Plus besoin de cocher quoi que ce soit pour que l’addon fonctionne en guilde. Un message unique le dit dans la discussion à la première connexion. Chaque partage se coupe dans les options (pages Relations et Alertes) et par la case « Vision de guilde » de la carte. Vos notes ne sont jamais partagées. Nouvelle page « Journal de guilde » dans Relations : qui a tué qui, où et quand, avec un clic vers la fiche de l’adversaire et un bouton « Rechercher » : un avis de recherche sans or, que toute la guilde voit dans Primes et qui l’alerte quand elle croise ce joueur. Dans la création d’une prime, une récompense laissée vide donne aussi un avis de recherche.
 

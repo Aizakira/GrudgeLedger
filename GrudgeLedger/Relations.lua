@@ -1135,7 +1135,7 @@ function R.MapLayout()
     -- the regions speak, the map under them is dimmed, so a lit zone stands out; closing in on a
     -- zone gives the map its full colours back.
     local mute = view.shapes and #view.shapes > 0 and 1 - between(world.zoneWidth * view.width * zoom, DETAIL_IN) or 0
-    local shade = 1 - 0.45 * mute
+    local shade = 1 - 0.6 * mute
     placeArt(view, world.art, 1, shade)
     local continentAlpha = between(zoom, CONTINENT_IN)
     local half = 0.5 / zoom
@@ -1169,7 +1169,17 @@ function R.MapLayout()
             region:SetPoint("TOPLEFT", canvas, "TOPLEFT", x, -y)
             region:SetSize(shape.width * view.width * zoom, shape.height * view.height * zoom)
             local wide = (entry.zone.rect.right - entry.zone.rect.left) * view.width * zoom
-            region:SetAlpha(entry.alpha * (0.2 + 0.8 * (1 - between(wide, DETAIL_IN))))
+            local alpha = entry.alpha * (0.2 + 0.8 * (1 - between(wide, DETAIL_IN)))
+            region:SetAlpha(alpha)
+            -- A second light over the deadliest zones: added light is faint on parchment, and the
+            -- owner wanted them to stand out (0.51.0).
+            local boost = region.boost
+            if boost and boost:IsShown() then
+                boost:ClearAllPoints()
+                boost:SetPoint("TOPLEFT", canvas, "TOPLEFT", x, -y)
+                boost:SetSize(shape.width * view.width * zoom, shape.height * view.height * zoom)
+                boost:SetAlpha(alpha * entry.boost)
+            end
         end
     end
     for i, label in ipairs(view.labels) do
@@ -1281,7 +1291,10 @@ local function paintMap(view, byName)
             worst = math.max(worst, deaths)
         end
     end
-    for _, region in ipairs(view.regions) do region:Hide() end
+    for _, region in ipairs(view.regions) do
+        region:Hide()
+        if region.boost then region.boost:Hide() end
+    end
     for _, label in ipairs(view.labels) do
         label.used = nil
         label:Hide()
@@ -1300,22 +1313,40 @@ local function paintMap(view, byName)
             GL.Safe(region.SetDesaturated, region, true)
             GL.Safe(region.SetBlendMode, region, "ADD")
             if entry.deaths > 0 then
-                region:SetVertexColor(1, 0.10, 0.05)
+                region:SetVertexColor(1, 0.06, 0.03)
             else
                 region:SetVertexColor(0.10, 0.75, 0.20)
             end
             region:Show()
-            shapes[n] = { zone = entry.zone, alpha = entry.deaths > 0 and 0.5 + 0.5 * share or 0.6 }
+            local boost = region.boost or view.canvas:CreateTexture(nil, "ARTWORK")
+            region.boost = boost
+            if entry.deaths > 0 then
+                if shape.atlas and boost.SetAtlas then boost:SetAtlas(shape.atlas) else boost:SetTexture(shape.file) end
+                boost:SetTexCoord(0, shape.usedX, 0, shape.usedY)
+                GL.Safe(boost.SetDesaturated, boost, true)
+                GL.Safe(boost.SetBlendMode, boost, "ADD")
+                boost:SetVertexColor(1, 0.04, 0.02)
+                boost:Show()
+            else
+                boost:Hide()
+            end
+            shapes[n] = { zone = entry.zone, alpha = entry.deaths > 0 and 0.65 + 0.35 * share or 0.6, boost = 0.4 + 0.6 * share }
         end
         local label = marker(view, view.labels, i)
         label.used = true
-        label:SetSize(24, 17)
-        -- The count always sits on a tinted plate: redder as the zone is deadlier, green when you
-        -- only won there. It reads even where the game gives no shape for the zone.
+        label:SetSize(28, 20)
+        -- Just the number, outlined so it reads on any part of the map: your deaths in red, or, in a
+        -- zone where you only won, your victories in green. The owner found the plates ugly (0.51.0).
+        label.fill:SetColorTexture(0, 0, 0, 0)
+        if not label.outlined then
+            label.outlined = true
+            local font = GL.Safe(label.count.GetFont, label.count)
+            if font then GL.Safe(label.count.SetFont, label.count, font, 16, "OUTLINE") end
+        end
         if entry.deaths > 0 then
-            label.fill:SetColorTexture(0.50 + 0.25 * share, 0.07, 0.05, 0.6 + 0.35 * share)
+            label.count:SetTextColor(1, 0.22, 0.16)
         else
-            label.fill:SetColorTexture(0.12, 0.40, 0.16, 0.85)
+            label.count:SetTextColor(0.35, 1, 0.4)
         end
         label.count:SetText(tostring(entry.deaths > 0 and entry.deaths or entry.kills))
         label.zone = entry.zone.mapID
@@ -1791,15 +1822,82 @@ function R.MapProbe()
     return true
 end
 
--- The guild's journal (0.51.0): what happens to the members who share their fights, yours
--- included, the latest first. One line a fight: who, against whom, where, when. A click opens the
--- opponent's sheet. Pages turn, nothing scrolls.
-local GUILD_ROWS = 7
+-- The guild's journal (0.51.0, filters in 0.52.0): what happens to the members who share their
+-- fights, yours included, the latest first. One line a fight: who, against whom, where, when.
+-- Four filters above the lines: who (a member), against whom (an opponent), what (deaths or
+-- victories) and when. A click on a line opens the opponent's sheet. Pages turn, nothing scrolls.
+local GUILD_ROWS = 6
+local PICKS = 12 -- names on one page of the chooser, in two columns
+local PERIODS = { { 0, "Toujours" }, { 86400, "24 h" }, { 7 * 86400, "7 jours" }, { 30 * 86400, "30 jours" } }
+local KINDS = { { nil, "Morts et victoires" }, { "death", "Morts" }, { "kill", "Victoires" } }
 local function elapsed(at)
     local delta = math.max(0, GL.Now() - at)
     if delta < 3600 then return L("il y a %d min"):format(math.max(1, math.floor(delta / 60))) end
     if delta < 86400 then return L("il y a %d h"):format(math.floor(delta / 3600)) end
     return L("il y a %d j"):format(math.floor(delta / 86400))
+end
+-- Shortens a name on a character boundary, for the filter buttons.
+local function short(text, most)
+    local out, count = {}, 0
+    for char in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+        count = count + 1
+        if count > most then return table.concat(out) .. "…" end
+        out[count] = char
+    end
+    return text
+end
+local function foeKey(point)
+    return point.target or (point.name and "name:" .. point.name) or nil
+end
+local function memberName(point)
+    if point.mine then return L("Vous") end
+    local member = GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(point.actor)
+    return UI.plain(member or L("Un membre de la guilde"))
+end
+local function foeName(point)
+    return UI.plain(point.name or L("un joueur inconnu"))
+end
+-- The guild's fights that pass the filters: who (member identifier), foe (opponent key), kind
+-- ("death" or "kill") and period (seconds back from now, 0 for always). Left out, a filter keeps
+-- everything; "skip" names one filter to leave out, for the chooser's counts.
+function R.GuildLog(filter, skip)
+    filter = filter or {}
+    local all = GL.GuildMap and GL.GuildMap.Points(true) or {}
+    local since = (filter.period or 0) > 0 and skip ~= "period" and GL.Now() - filter.period or nil
+    local who = skip ~= "who" and filter.who or nil
+    local foe = skip ~= "foe" and filter.foe or nil
+    local kind = skip ~= "kind" and filter.kind or nil
+    if not (since or who or foe or kind) then return all end
+    local out = {}
+    for _, point in ipairs(all) do
+        if (not who or point.actor == who) and (not kind or point.kind == kind) and (not since or point.time >= since)
+            and (not foe or foeKey(point) == foe) then
+            out[#out + 1] = point
+        end
+    end
+    return out
+end
+-- The names the chooser offers for "who" or "foe", with how many fights each, the most first.
+function R.GuildLogChoices(filter, field)
+    local counts, list = {}, {}
+    for _, point in ipairs(R.GuildLog(filter, field)) do
+        local key = field == "who" and point.actor or foeKey(point)
+        if key then
+            local entry = counts[key]
+            if not entry then
+                entry = { key = key, count = 0, label = field == "who" and memberName(point) or foeName(point), mine = point.mine }
+                counts[key] = entry
+                list[#list + 1] = entry
+            end
+            entry.count = entry.count + 1
+        end
+    end
+    table.sort(list, function(a, b)
+        if (a.mine == true) ~= (b.mine == true) then return a.mine == true end
+        if a.count ~= b.count then return a.count > b.count end
+        return a.label < b.label
+    end)
+    return list
 end
 local function openOpponent(row)
     if row.target and GL.OpenPlayerDossier then GL.OpenPlayerDossier(row.target, nil, row.enemy) end
@@ -1820,34 +1918,125 @@ local function wanted(row)
     end
     R.Refresh()
 end
+-- The chooser: the members (or the opponents) of the guild's journal, on pages, in place of the lines.
+local function openChooser(page, field)
+    page.choosing = page.choosing ~= field and field or nil
+    page.pickOffset = 0
+    R.Refresh()
+end
+local function buildChooser(page)
+    local chooser = CreateFrame("Frame", nil, page)
+    chooser:SetPoint("TOPLEFT", X(26), -108)
+    chooser:SetSize(S(540), 352)
+    local band = chooser:CreateTexture(nil, "BACKGROUND")
+    band:SetAllPoints()
+    band:SetColorTexture(0.44, 0.28, 0.13, 0.12)
+    chooser.title = Panels.Text(chooser, S(12), -10, S(400), 14, true)
+    chooser.buttons = {}
+    for i = 1, PICKS do
+        local column, line = (i - 1) % 2, math.floor((i - 1) / 2)
+        local index = i
+        local button = UI.button(chooser, "", S(12) + column * S(262), -40 - line * 44, S(254), function()
+            local entry = chooser.entries and chooser.entries[page.pickOffset + index]
+            if index == 1 and page.pickOffset == 0 then
+                page.filter[page.choosing] = nil
+            elseif entry then
+                page.filter[page.choosing] = entry.key
+            end
+            page.choosing, page.offset = nil, 0
+            R.Refresh()
+        end, nil, true)
+        chooser.buttons[i] = button
+    end
+    chooser.previous = UI.button(chooser, "‹", S(12), -312, S(40), function()
+        page.pickOffset = math.max(0, page.pickOffset - PICKS)
+        R.Refresh()
+    end, nil, true)
+    chooser.next = UI.button(chooser, "›", S(488), -312, S(40), function()
+        page.pickOffset = page.pickOffset + PICKS
+        R.Refresh()
+    end, nil, true)
+    chooser:Hide()
+    return chooser
+end
+local function paintChooser(page)
+    local chooser, field = page.chooser, page.choosing
+    chooser.title:SetText(field == "who" and L("Le journal de quel membre ?") or L("Les combats contre quel joueur ?"))
+    -- The first place is always "everyone"; the names follow, the most fights first.
+    local entries = { { label = field == "who" and L("Tous les membres") or L("Tous les ennemis") } }
+    for _, entry in ipairs(R.GuildLogChoices(page.filter, field)) do entries[#entries + 1] = entry end
+    chooser.entries = entries
+    page.pickOffset = math.min(page.pickOffset, math.max(0, math.floor((#entries - 1) / PICKS) * PICKS))
+    for i, button in ipairs(chooser.buttons) do
+        local entry = entries[page.pickOffset + i]
+        if entry then
+            local text = entry.count and (short(entry.label, 24) .. " · " .. entry.count) or entry.label
+            button:SetText(text)
+            UI.selectButton(button, page.filter[field] == entry.key)
+            button:Show()
+        else
+            button:Hide()
+        end
+    end
+    chooser.previous:SetEnabled(page.pickOffset > 0)
+    chooser.next:SetEnabled(page.pickOffset + PICKS < #entries)
+    if #entries > PICKS then
+        chooser.previous:Show()
+        chooser.next:Show()
+    else
+        chooser.previous:Hide()
+        chooser.next:Hide()
+    end
+end
 local function buildGuildJournal(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
     page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
     page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
+    page.filter, page.period, page.kind = {}, 1, 1
+    -- The filters: two choosers and two switches, and a way back to everything.
+    page.who = UI.button(page, "", X(26), -72, S(150), function() openChooser(page, "who") end, nil, true)
+    page.foe = UI.button(page, "", X(180), -72, S(150), function() openChooser(page, "foe") end, nil, true)
+    page.kindButton = UI.button(page, "", X(334), -72, S(104), function()
+        page.kind = page.kind % #KINDS + 1
+        page.filter.kind, page.offset, page.choosing = KINDS[page.kind][1], 0, nil
+        R.Refresh()
+    end, nil, true)
+    page.periodButton = UI.button(page, "", X(442), -72, S(82), function()
+        page.period = page.period % #PERIODS + 1
+        page.filter.period, page.offset, page.choosing = PERIODS[page.period][1], 0, nil
+        R.Refresh()
+    end, nil, true)
+    page.reset = UI.button(page, "×", X(528), -72, S(38), function()
+        page.filter, page.period, page.kind, page.offset, page.choosing = {}, 1, 1, 0, nil
+        R.Refresh()
+    end, nil, true)
+    page.reset:SetScript("OnEnter", function(self) tip(self, L("Tout afficher")) end)
+    page.reset:SetScript("OnLeave", hideTip)
     page.rows = {}
     for i = 1, GUILD_ROWS do
         local row = CreateFrame("Button", nil, page)
-        row:SetPoint("TOPLEFT", X(26), -84 - (i - 1) * 54)
-        row:SetSize(S(540), 52)
+        row:SetPoint("TOPLEFT", X(26), -108 - (i - 1) * 56)
+        row:SetSize(S(540), 54)
         local rule = row:CreateTexture(nil, "BORDER")
         rule:SetPoint("BOTTOMLEFT")
         rule:SetPoint("BOTTOMRIGHT")
         rule:SetHeight(1)
         rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
         row.mark = row:CreateTexture(nil, "ARTWORK")
-        row.mark:SetPoint("TOPLEFT", S(2), -12)
+        row.mark:SetPoint("TOPLEFT", S(2), -13)
         row.mark:SetSize(22, 22)
-        row.story = Panels.Text(row, S(32), -6, S(340), 15, true)
+        row.story = Panels.Text(row, S(32), -7, S(340), 15, true)
         GL.Safe(row.story.SetWordWrap, row.story, false)
-        row.where = Panels.Text(row, S(32), -28, S(340), 12, false, UI.theme.inkMuted)
-        row.wanted = UI.button(row, L("Rechercher"), S(380), -13, S(92), function() wanted(row) end, nil, true)
+        row.where = Panels.Text(row, S(32), -29, S(340), 12, false, UI.theme.inkMuted)
         GL.Safe(row.where.SetWordWrap, row.where, false)
-        row.sheet = UI.button(row, L("Fiche"), S(476), -13, S(64), function() openOpponent(row) end, nil, true)
+        row.wanted = UI.button(row, L("Rechercher"), S(380), -14, S(92), function() wanted(row) end, nil, true)
+        row.sheet = UI.button(row, L("Fiche"), S(476), -14, S(64), function() openOpponent(row) end, nil, true)
         row:SetScript("OnClick", openOpponent)
         page.rows[i] = row
     end
-    page.empty = Panels.Text(page, X(26), -100, S(540), 13, false, UI.theme.inkMuted)
+    page.chooser = buildChooser(page)
+    page.empty = Panels.Text(page, X(26), -124, S(540), 13, false, UI.theme.inkMuted)
     page.offset = 0
     page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
         page.offset = math.max(0, page.offset - GUILD_ROWS)
@@ -1865,19 +2054,44 @@ local function paintGuildJournal(page)
     page.title:SetText(L("Journal de guilde"))
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
-    local lines = sharing and GL.GuildMap.Points(true) or {}
+    local filter = page.filter
+    local lines = sharing and R.GuildLog(filter) or {}
     page.lead:SetText(sharing and L("Les victoires et les morts des membres qui partagent leurs combats.") or "")
+    -- The filter buttons say what they keep; a chosen name is shown on its button.
+    local whoName, foeLabel = L("Tous les membres"), L("Tous les ennemis")
+    for _, point in ipairs(sharing and GL.GuildMap.Points(true) or {}) do
+        if filter.who and point.actor == filter.who then whoName = memberName(point) end
+        if filter.foe and foeKey(point) == filter.foe then foeLabel = foeName(point) end
+    end
+    page.who:SetText(short(whoName, 18))
+    page.foe:SetText(short(foeLabel, 18))
+    page.kindButton:SetText(L(KINDS[page.kind][2]))
+    page.periodButton:SetText(L(PERIODS[page.period][2]))
+    UI.selectButton(page.who, filter.who ~= nil or page.choosing == "who")
+    UI.selectButton(page.foe, filter.foe ~= nil or page.choosing == "foe")
+    UI.selectButton(page.kindButton, filter.kind ~= nil)
+    UI.selectButton(page.periodButton, (filter.period or 0) > 0)
+    local filtered = filter.who or filter.foe or filter.kind or (filter.period or 0) > 0
+    for _, control in ipairs({ page.who, page.foe, page.kindButton, page.periodButton }) do
+        if sharing then control:Show() else control:Hide() end
+    end
+    if sharing and filtered then page.reset:Show() else page.reset:Hide() end
+    if not sharing then page.choosing = nil end
+    if page.choosing then
+        page.chooser:Show()
+        paintChooser(page)
+    else
+        page.chooser:Hide()
+    end
     page.offset = math.min(page.offset, math.max(0, math.floor((#lines - 1) / GUILD_ROWS) * GUILD_ROWS))
     local deaths = 0
     for _, point in ipairs(lines) do
         if point.kind == "death" then deaths = deaths + 1 end
     end
     for i, row in ipairs(page.rows) do
-        local point = lines[page.offset + i]
+        local point = not page.choosing and lines[page.offset + i]
         if point then
-            local member = point.mine and L("Vous") or GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(point.actor)
-            member = UI.plain(member or L("Un membre de la guilde"))
-            local enemy = UI.plain(point.name or L("un joueur inconnu"))
+            local member, enemy = memberName(point), foeName(point)
             local died = point.kind == "death"
             local story
             if point.mine then
@@ -1907,13 +2121,23 @@ local function paintGuildJournal(page)
         empty = L("Vous n’êtes dans aucune guilde : ce journal raconte les combats de la vôtre.")
     elseif not sharing then
         empty = L("La vision de guilde est décochée. Cochez-la sur la carte pour lire ce journal et y figurer.")
+    elseif #lines == 0 and filtered then
+        empty = L("Aucun combat pour ces filtres. La croix les retire.")
     elseif #lines == 0 then
         empty = L("Aucun combat partagé pour l’instant. Le journal se remplit quand un membre gagne ou meurt.")
     end
-    page.empty:SetText(empty)
+    page.empty:SetText(not page.choosing and empty or "")
+    local turning = not page.choosing and #lines > GUILD_ROWS
     page.previous:SetEnabled(page.offset > 0)
     page.next:SetEnabled(page.offset + GUILD_ROWS < #lines)
-    page.count:SetText(#lines > 0 and L("%d combats partagés · %d morts"):format(#lines, deaths) or "")
+    if turning then
+        page.previous:Show()
+        page.next:Show()
+    else
+        page.previous:Hide()
+        page.next:Hide()
+    end
+    page.count:SetText(not page.choosing and #lines > 0 and L("%d combats · %d morts"):format(#lines, deaths) or "")
 end
 
 -- The book: the narrow format of the player sheet. Left, the seven entries and a few figures.

@@ -4,6 +4,17 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Toujours"] = "Siempre",
+        ["24 h"] = "24 h",
+        ["7 jours"] = "7 días",
+        ["30 jours"] = "30 días",
+        ["Morts et victoires"] = "Muertes y victorias",
+        ["Le journal de quel membre ?"] = "¿El diario de qué miembro?",
+        ["Les combats contre quel joueur ?"] = "¿Los combates contra qué jugador?",
+        ["Tous les ennemis"] = "Todos los enemigos",
+        ["Tout afficher"] = "Mostrar todo",
+        ["Aucun combat pour ces filtres. La croix les retire."] = "Ningún combate con estos filtros. La cruz los quita.",
+        ["%d combats · %d morts"] = "%d combates · %d muertes",
         ["Avis de recherche publié à la guilde, sans or."] = "Aviso de búsqueda publicado en la hermandad, sin oro.",
         ["Récompense (PO) · vide : sans or"] = "Recompensa (oro) · vacío: sin oro",
         ["Rechercher"] = "Buscar",
@@ -1766,6 +1777,17 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Toujours"] = "Always",
+        ["24 h"] = "24 h",
+        ["7 jours"] = "7 days",
+        ["30 jours"] = "30 days",
+        ["Morts et victoires"] = "Deaths and victories",
+        ["Le journal de quel membre ?"] = "Which member's journal?",
+        ["Les combats contre quel joueur ?"] = "Fights against which player?",
+        ["Tous les ennemis"] = "All enemies",
+        ["Tout afficher"] = "Show everything",
+        ["Aucun combat pour ces filtres. La croix les retire."] = "No fight for these filters. The cross removes them.",
+        ["%d combats · %d morts"] = "%d fights · %d deaths",
         ["Avis de recherche publié à la guilde, sans or."] = "Wanted notice posted to the guild, without gold.",
         ["Récompense (PO) · vide : sans or"] = "Reward (gold) · empty: no gold",
         ["Rechercher"] = "Wanted",
