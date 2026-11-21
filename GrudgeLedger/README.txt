@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.47.2
+GRUDGE LEDGER — 0.48.0
+
+Carte des terres dangereuses refaite sur une seule toile : la molette va du monde entier jusqu’à une zone sans jamais changer de carte. L’image des continents arrive en zoomant, puis le détail des zones que vous avez explorées, toujours au même endroit. Les régions ne sont plus des carrés noirs : la forme de la zone s’allume en rouge selon votre part de morts. Une flèche montre où vous êtes et vers où vous regardez. Deux boutons : Monde et Ma position. Un clic sur le chiffre d’une zone y glisse.
 
 Primes : quand une prime est refusée faute de guilde lisible, le message dit maintenant ce qui manque. Sans guilde, il le dit clairement (une prime se dépose dans une guilde). Si le nom de la guilde n’est pas encore arrivé, l’addon le redemande au jeu. Si le nom du royaume est illisible, le numéro de royaume de votre propre identifiant sert à sa place.
 

@@ -672,19 +672,25 @@ local function killers(entry)
     return table.concat(parts, ", ")
 end
 -- The map of dangerous lands, in this page only (never on the game's world map).
--- Measured in the game with /gl carte: the client gives an addon the pieces of a map's picture,
--- the player's position, the rectangle of each zone on the map above and, for a point of a
--- continent, the texture the game itself uses to light up the zone under the pointer. That last
--- one is the zone's exact shape: tinted red by your share of deaths there, it makes the regions.
--- The view zooms and drags freely. Zoomed out, the regions say where you die; zooming in fades
--- them and shows each fight where it happened (fights keep their position since 0.45.0). At the
--- deepest zoom the wheel enters the zone under the pointer and its detailed picture; zooming out
--- of a zone returns to its continent, then to the world.
+-- One canvas for the whole world, as OpenMap does (credited in CREDITS.txt; its code is not copied):
+-- every picture is placed by its rectangle on the world map, so the wheel closes in from the
+-- world to a zone without ever switching maps. Bottom to top, and when each one comes in:
+--   world picture        always
+--   continent pictures   as you close in, their frame feathered away by a mask
+--   zone detail          the pieces of a zone you have explored, when the zone is wide enough
+--   regions              the game's own shape of each zone, lit by your share of deaths there
+--   fights               each one where it happened (kept since 0.45.0), once zones are readable
+-- Everything comes from the game's own pictures: the addon ships one small mask and no map.
 local MAP_W, MAP_H = 600, 400
 local MAP_POINTS = 80 -- fights drawn at once, the latest ones: more would be noise
-local ZOOM_MAX = 4 -- times the whole map; past it the wheel enters the zone under the pointer
-local ZOOM_STEP = 1.25
+local ZOOM_MAX = 40 -- times the whole world: a zone fills the view well before
+local ZOOM_STEP = 1.3
+local CONTINENT_IN = { 1.25, 2.1 } -- zoom where the continent pictures start and finish coming in
+local DETAIL_IN = { 150, 260 } -- width of a zone on screen where its explored pieces come in
+local ZONES_KEPT = 8 -- zones whose detail stays loaded at once
 local SKULL, SWORD = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", "Interface\\CURSOR\\Attack"
+local ARROW = "Interface\\Minimap\\MinimapArrow"
+local FEATHER = "Interface\\AddOns\\GrudgeLedger\\Media\\MapFeather"
 local function mapInfo(id)
     local info = id and C_Map and GL.Safe(C_Map.GetMapInfo, id)
     return type(info) == "table" and info or nil
@@ -703,6 +709,23 @@ local function rectOn(child, parent)
         and right > left and bottom > top then
         return { left = left, right = right, top = top, bottom = bottom }
     end
+end
+local function hasArt(id)
+    local files = GL.Safe(C_Map.GetMapArtLayerTextures, id, 1)
+    return type(files) == "table" and #files > 0
+end
+-- The map everything is drawn on: the world above where you stand, or its continent when the
+-- client has no picture of the world.
+local function rootOf(id)
+    local continent
+    for _ = 1, 6 do
+        local info = mapInfo(id)
+        if not info then break end
+        if info.mapType == 1 and hasArt(id) then return id end
+        if info.mapType == 2 and hasArt(id) then continent = continent or id end
+        id = info.parentMapID
+    end
+    return continent
 end
 -- The game's own highlight of a zone on its continent: a texture, the part of it used, and its
 -- rectangle on the continent. A point of the zone's land is looked for inside its rectangle.
@@ -739,7 +762,7 @@ local function zonesOf(id, cache)
             local rect = rectOn(child.mapID, continent)
             if rect then
                 local shape = zoneShape(continent, child.mapID, rect)
-                local zone = { mapID = child.mapID, name = child.name, rect = rect, shape = shape }
+                local zone = { mapID = child.mapID, name = child.name, rect = rect, shape = shape, continent = continent }
                 if into then
                     local w, h = into.right - into.left, into.bottom - into.top
                     zone.rect = { left = into.left + rect.left * w, right = into.left + rect.right * w,
@@ -790,7 +813,13 @@ local function marker(view, pool, i)
     end
     return button
 end
--- Where a point of the map (0 to 1) falls in the view, in pixels from its top left corner.
+local function mapView()
+    return R.window and R.window.host.pages.lands.map
+end
+local function between(value, range)
+    return math.max(0, math.min(1, (value - range[1]) / (range[2] - range[1])))
+end
+-- Where a point of the world (0 to 1) falls in the view, in pixels from its top left corner.
 local function place(view, u, v)
     return (u - view.cx) * view.width * view.zoom + view.width / 2, (v - view.cy) * view.height * view.zoom + view.height / 2
 end
@@ -799,7 +828,7 @@ local function clampCentre(view)
     view.cx = math.max(half, math.min(1 - half, view.cx))
     view.cy = math.max(half, math.min(1 - half, view.cy))
 end
--- The pointer on the map (0 to 1), or nil when the client does not say where the view is.
+-- The pointer on the world (0 to 1), or nil when the client does not say where the view is.
 local function pointer(view)
     local cx, cy = GL.Safe(GetCursorPosition)
     local scale = GL.Safe(view.canvas.GetEffectiveScale, view.canvas)
@@ -809,6 +838,209 @@ local function pointer(view)
     local px, py = cx / scale - left, top - cy / scale
     return (px - view.width / 2) / (view.width * view.zoom) + view.cx, (py - view.height / 2) / (view.height * view.zoom) + view.cy, px, py
 end
+-- A map's picture, from the game's own pieces, to be placed on a rectangle of the world.
+local function loadArt(view, id, rect, level, feathered)
+    local layers = GL.Safe(C_Map.GetMapArtLayers, id)
+    local layer = type(layers) == "table" and layers[1]
+    local files = GL.Safe(C_Map.GetMapArtLayerTextures, id, 1)
+    if type(layer) ~= "table" or type(files) ~= "table" or #files == 0 then return nil end
+    local art = { rect = rect, textures = {}, count = #files, width = tonumber(layer.layerWidth) or 1002,
+        height = tonumber(layer.layerHeight) or 668, tile = tonumber(layer.tileWidth) or 256 }
+    art.columns = math.max(1, math.ceil(art.width / art.tile))
+    -- The frame of a continent's picture would show as a rectangle on the world: a soft mask hides it.
+    if feathered and type(view.canvas.CreateMaskTexture) == "function" then
+        local ok, mask = pcall(view.canvas.CreateMaskTexture, view.canvas)
+        if ok and mask then
+            GL.Safe(mask.SetTexture, mask, FEATHER, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            art.mask = mask
+        end
+    end
+    for i = 1, #files do
+        local piece = view.canvas:CreateTexture(nil, "BACKGROUND", nil, level)
+        piece:SetTexture(files[i])
+        -- The last column and the last row are cut where the picture ends.
+        local column, row = (i - 1) % art.columns, math.floor((i - 1) / art.columns)
+        piece.fx = math.min(1, (art.width - column * art.tile) / art.tile)
+        piece.fy = math.min(1, (art.height - row * art.tile) / art.tile)
+        piece:SetTexCoord(0, piece.fx, 0, piece.fy)
+        if art.mask then GL.Safe(piece.AddMaskTexture, piece, art.mask) end
+        art.textures[i] = piece
+    end
+    return art
+end
+local function placeArt(view, art, alpha)
+    if alpha <= 0 then
+        if not art.hidden then
+            for _, piece in ipairs(art.textures) do piece:Hide() end
+            art.hidden = true
+        end
+        return
+    end
+    local rect = art.rect
+    local sx, sy = (rect.right - rect.left) * view.width * view.zoom, (rect.bottom - rect.top) * view.height * view.zoom
+    local w, h = art.tile / art.width * sx, art.tile / art.height * sy
+    local x0, y0 = place(view, rect.left, rect.top)
+    for i, piece in ipairs(art.textures) do
+        piece:ClearAllPoints()
+        piece:SetPoint("TOPLEFT", view.canvas, "TOPLEFT", x0 + ((i - 1) % art.columns) * w, -(y0 + math.floor((i - 1) / art.columns) * h))
+        piece:SetSize(w * piece.fx, h * piece.fy)
+        piece:SetAlpha(alpha)
+        piece:Show()
+    end
+    art.hidden = nil
+    if art.mask then
+        art.mask:ClearAllPoints()
+        art.mask:SetPoint("TOPLEFT", view.canvas, "TOPLEFT", x0, -y0)
+        art.mask:SetSize(sx, sy)
+    end
+end
+-- The world drawn in the view: its picture, its continents with theirs, and every zone.
+local function buildWorld(view, root)
+    local art = loadArt(view, root, { left = 0, right = 1, top = 0, bottom = 1 }, 0)
+    if not art then return nil end
+    local world = { root = root, art = art, continents = {}, rects = {}, zones = zonesOf(root, view.cache) }
+    local children = GL.Safe(C_Map.GetMapChildrenInfo, root, 2)
+    for _, continent in ipairs(type(children) == "table" and children or {}) do
+        local rect = rectOn(continent.mapID, root)
+        if rect then
+            world.rects[continent.mapID] = rect
+            world.continents[#world.continents + 1] = { mapID = continent.mapID, name = continent.name, rect = rect,
+                art = loadArt(view, continent.mapID, rect, 1, true) }
+        end
+    end
+    local total = 0
+    for _, zone in ipairs(world.zones) do
+        world.rects[zone.mapID] = zone.rect
+        total = total + (zone.rect.right - zone.rect.left)
+    end
+    world.zoneWidth = #world.zones > 0 and total / #world.zones or 0.25
+    return world
+end
+local function powerOfTwo(n)
+    local p = 16
+    while p < n do p = p * 2 end
+    return p
+end
+-- The pieces of a zone the player has explored, each with its place on the world. The game gives
+-- them cut the way its own map lays them: pieces of 256, the last of a row or a column smaller.
+local function detailOf(view, zone)
+    local known = view.detail[zone.mapID]
+    if known then return known end
+    local tiles = {}
+    local explored = C_MapExplorationInfo and GL.Safe(C_MapExplorationInfo.GetExploredMapTextures, zone.mapID)
+    local layers = GL.Safe(C_Map.GetMapArtLayers, zone.mapID)
+    local layer = type(layers) == "table" and layers[1]
+    local zw, zh = tonumber(type(layer) == "table" and layer.layerWidth) or 1002, tonumber(type(layer) == "table" and layer.layerHeight) or 668
+    local rect = zone.rect
+    local rw, rh = rect.right - rect.left, rect.bottom - rect.top
+    for _, info in ipairs(type(explored) == "table" and explored or {}) do
+        local tw, th = tonumber(info.textureWidth), tonumber(info.textureHeight)
+        local ox, oy, files = tonumber(info.offsetX), tonumber(info.offsetY), info.fileDataIDs
+        if tw and th and ox and oy and tw > 0 and th > 0 and type(files) == "table" and not info.isShownByMouseOver then
+            local wide, tall = math.ceil(tw / 256), math.ceil(th / 256)
+            for j = 1, tall do
+                local ph = (j < tall or th % 256 == 0) and 256 or th % 256
+                local fh = j < tall and 256 or powerOfTwo(ph)
+                for k = 1, wide do
+                    local pw = (k < wide or tw % 256 == 0) and 256 or tw % 256
+                    local fw = k < wide and 256 or powerOfTwo(pw)
+                    local file = files[(j - 1) * wide + k]
+                    if file and #tiles < 160 then
+                        tiles[#tiles + 1] = { file = file, u = rect.left + (ox + 256 * (k - 1)) / zw * rw, v = rect.top + (oy + 256 * (j - 1)) / zh * rh,
+                            w = pw / zw * rw, h = ph / zh * rh, tx = pw / fw, ty = ph / fh }
+                    end
+                end
+            end
+        end
+    end
+    view.detail[zone.mapID] = tiles
+    return tiles
+end
+local function dropDetail(view, id)
+    local live = view.live[id]
+    if not live then return end
+    for _, texture in ipairs(live.textures) do
+        texture:Hide()
+        view.spare[#view.spare + 1] = texture
+    end
+    view.live[id] = nil
+end
+local function showDetail(view, zone, alpha)
+    local live = view.live[zone.mapID]
+    if not live then
+        local tiles = detailOf(view, zone)
+        if #tiles == 0 then return end
+        -- Only a few zones keep their detail: the one looked at longest ago gives its textures back.
+        local kept, oldestID, oldest = 0, nil, nil
+        for id, other in pairs(view.live) do
+            kept = kept + 1
+            if not oldest or other.stamp < oldest.stamp then oldestID, oldest = id, other end
+        end
+        if kept >= ZONES_KEPT and oldest.stamp < view.stamp then dropDetail(view, oldestID) end
+        live = { textures = {}, tiles = tiles }
+        for i, tile in ipairs(tiles) do
+            local texture = table.remove(view.spare) or view.canvas:CreateTexture(nil, "BORDER")
+            texture:SetTexture(tile.file)
+            texture:SetTexCoord(0, tile.tx, 0, tile.ty)
+            live.textures[i] = texture
+        end
+        view.live[zone.mapID] = live
+    end
+    live.stamp = view.stamp
+    local sx, sy = view.width * view.zoom, view.height * view.zoom
+    for i, tile in ipairs(live.tiles) do
+        local texture = live.textures[i]
+        local x, y = place(view, tile.u, tile.v)
+        texture:ClearAllPoints()
+        texture:SetPoint("TOPLEFT", view.canvas, "TOPLEFT", x, -y)
+        texture:SetSize(tile.w * sx, tile.h * sy)
+        texture:SetAlpha(alpha)
+        texture:Show()
+    end
+end
+-- Where you stand, on the world.
+local function locate(view)
+    local mine, x, y = playerPlace()
+    view.here = nil
+    if not (x and y and view.world) then return end
+    if mine == view.root then
+        view.here = { x = x, y = y }
+        return
+    end
+    local rect = view.world.rects[mine]
+    if rect then view.here = { x = rect.left + x * (rect.right - rect.left), y = rect.top + y * (rect.bottom - rect.top), zone = mine } end
+end
+-- What the view is looking at: the zone under its centre once zones are readable, else the
+-- continent, else the world. Counts follow.
+local function describe(view)
+    local world, best, distance = view.world, nil, nil
+    for _, zone in ipairs(world.zones) do
+        local rect = zone.rect
+        if view.cx >= rect.left and view.cx <= rect.right and view.cy >= rect.top and view.cy <= rect.bottom
+            and (rect.right - rect.left) * view.width * view.zoom >= 220 then
+            local d = math.abs((rect.left + rect.right) / 2 - view.cx) + math.abs((rect.top + rect.bottom) / 2 - view.cy)
+            if not best or d < distance then best, distance = zone, d end
+        end
+    end
+    local title, deaths, kills, inside = nil, 0, 0, nil
+    if best then
+        local entry = view.byName[best.name]
+        return best.name, entry and entry.deaths or 0, entry and entry.kills or 0
+    end
+    if view.zoom >= CONTINENT_IN[2] then
+        for _, continent in ipairs(world.continents) do
+            local rect = continent.rect
+            if view.cx >= rect.left and view.cx <= rect.right and view.cy >= rect.top and view.cy <= rect.bottom then
+                title, inside = continent.name, continent.mapID
+            end
+        end
+    end
+    for _, entry in ipairs(view.tallies or {}) do
+        if not inside or entry.zone.continent == inside then deaths, kills = deaths + entry.deaths, kills + entry.kills end
+    end
+    local info = mapInfo(world.root)
+    return title or (info and info.name) or "", deaths, kills
+end
 local function buildMap(page)
     local view = CreateFrame("Frame", nil, page)
     view:SetPoint("TOPLEFT", X(26), -70)
@@ -817,59 +1049,54 @@ local function buildMap(page)
     view.canvas:SetPoint("TOP", view, "TOP", 0, 0)
     view.canvas:SetSize(MAP_W, MAP_H)
     GL.Safe(view.canvas.SetClipsChildren, view.canvas, true)
-    view.pieces, view.regions, view.labels, view.points, view.cache = {}, {}, {}, {}, {}
+    view.regions, view.labels, view.points, view.cache = {}, {}, {}, {}
+    view.worlds, view.detail, view.live, view.spare, view.stamp = {}, {}, {}, {}, 0
     view.zoom, view.cx, view.cy = 1, 0.5, 0.5
-    view.dot = view.canvas:CreateTexture(nil, "OVERLAY")
-    view.dot:SetSize(8, 8)
-    view.dot:SetColorTexture(1, 0.83, 0.3)
+    -- You: the arrow of the minimap, turned the way you face, above everything on the map.
+    view.me = CreateFrame("Frame", nil, view.canvas)
+    view.me:SetSize(30, 30)
+    GL.Safe(view.me.SetFrameLevel, view.me, (GL.Safe(view.canvas.GetFrameLevel, view.canvas) or 1) + 6)
+    view.dot = view.me:CreateTexture(nil, "OVERLAY")
+    view.dot:SetAllPoints()
+    view.dot:SetTexture(ARROW)
     GL.Safe(view.canvas.EnableMouseWheel, view.canvas, true)
     GL.Safe(view.canvas.EnableMouse, view.canvas, true)
     view.canvas:SetScript("OnMouseWheel", function(_, delta) R.MapWheel(delta) end)
     -- Hold the left button and move: the map follows the pointer.
     view.canvas:SetScript("OnMouseDown", function()
         local _, _, px, py = pointer(view)
+        view.goal = nil
         view.drag = px and { px = px, py = py, cx = view.cx, cy = view.cy } or nil
     end)
     view.canvas:SetScript("OnMouseUp", function() view.drag = nil end)
-    view.canvas:SetScript("OnHide", function() view.drag = nil end)
-    view.canvas:SetScript("OnUpdate", function()
+    view.canvas:SetScript("OnHide", function() view.drag, view.goal = nil, nil end)
+    view.canvas:SetScript("OnUpdate", function(_, elapsed)
         local drag = view.drag
-        if not drag then return end
-        local _, _, px, py = pointer(view)
-        if not px then return end
-        view.cx = drag.cx - (px - drag.px) / (view.width * view.zoom)
-        view.cy = drag.cy - (py - drag.py) / (view.height * view.zoom)
-        R.MapLayout()
+        if drag then
+            local _, _, px, py = pointer(view)
+            if px then
+                view.cx = drag.cx - (px - drag.px) / (view.width * view.zoom)
+                view.cy = drag.cy - (py - drag.py) / (view.height * view.zoom)
+                R.MapLayout()
+            end
+        elseif view.goal then
+            R.MapStep(elapsed)
+        end
+        -- You move: the arrow follows, a few times a second.
+        view.since = (view.since or 0) + (tonumber(elapsed) or 0)
+        if view.since >= 0.3 and view.world and not view.drag and not view.goal then
+            view.since = 0
+            locate(view)
+            R.MapLayout()
+        end
     end)
-    view.out = UI.button(view, "‹", 0, -408, 210, function() R.MapOut() end, nil, true)
+    view.out = UI.button(view, L("Monde"), 0, -408, 84, function() R.MapOut() end, nil, true)
+    view.mine = UI.button(view, L("Ma position"), 90, -408, 118, function() R.MapHere() end, nil, true)
     view.caption = Panels.Text(view, 218, -406, S(540) - 218, 12, true)
     view.caption:SetJustifyH("RIGHT")
     view.hint = Panels.Text(view, 218, -423, S(540) - 218, 11, false, UI.theme.inkMuted)
     view.hint:SetJustifyH("RIGHT")
     return view
-end
--- Loads the picture of a map from the game's own pieces. False when the game has none for it.
-local function loadPieces(view, id)
-    local layers = GL.Safe(C_Map.GetMapArtLayers, id)
-    local layer = type(layers) == "table" and layers[1]
-    local textures = GL.Safe(C_Map.GetMapArtLayerTextures, id, 1)
-    if type(layer) ~= "table" or type(textures) ~= "table" or #textures == 0 then return false end
-    local width, height = tonumber(layer.layerWidth) or 1002, tonumber(layer.layerHeight) or 668
-    view.tile = (tonumber(layer.tileWidth) or 256)
-    view.artWidth, view.artHeight = width, height
-    local scale = math.min(MAP_W / width, MAP_H / height)
-    view.width, view.height = width * scale, height * scale
-    view.canvas:SetSize(view.width, view.height)
-    view.columns = math.max(1, math.ceil(width / view.tile))
-    for _, piece in ipairs(view.pieces) do piece:Hide() end
-    for i = 1, #textures do
-        local piece = view.pieces[i] or view.canvas:CreateTexture(nil, "BACKGROUND")
-        view.pieces[i] = piece
-        piece:SetTexture(textures[i])
-        piece:Show()
-    end
-    view.pieceCount = #textures
-    return true
 end
 -- The fights that kept their position, placed on this map: its own, or those of the zones it
 -- shows, moved through each zone's rectangle. The latest first.
@@ -893,22 +1120,36 @@ function R.MapPoints(id, zones)
 end
 -- Re-places everything for the current zoom and centre. Cheap: a few dozen regions at most.
 function R.MapLayout()
-    local view = R.window and R.window.host.pages.lands.map
-    if not view or not view.width then return end
+    local view = mapView()
+    local world = view and view.world
+    if not world or not view.width then return end
     clampCentre(view)
     local zoom, canvas = view.zoom, view.canvas
-    for i = 1, view.pieceCount or 0 do
-        local piece = view.pieces[i]
-        local u, v = ((i - 1) % view.columns) * view.tile / view.artWidth, math.floor((i - 1) / view.columns) * view.tile / view.artHeight
-        local x, y = place(view, u, v)
-        local size = view.tile / view.artWidth * view.width * zoom
-        piece:ClearAllPoints()
-        piece:SetPoint("TOPLEFT", canvas, "TOPLEFT", x, -y)
-        piece:SetSize(size, size)
+    view.stamp = view.stamp + 1
+    placeArt(view, world.art, 1)
+    local continentAlpha = between(zoom, CONTINENT_IN)
+    local half = 0.5 / zoom
+    local left, right, top, bottom = view.cx - half, view.cx + half, view.cy - half, view.cy + half
+    for _, continent in ipairs(world.continents) do
+        local rect = continent.rect
+        local seen = rect.right > left and rect.left < right and rect.bottom > top and rect.top < bottom
+        if continent.art then placeArt(view, continent.art, seen and continentAlpha or 0) end
     end
-    -- Regions say where; they fade as you close in, and the fights take over.
-    local fade = math.max(0, math.min(1, 1 - (zoom - 1.5) / 1.5))
-    local showPoints = view.zoneMap or zoom >= 1.8
+    -- The detail of the zones in sight, once they are wide enough on screen.
+    for _, zone in ipairs(world.zones) do
+        local rect = zone.rect
+        local alpha = between((rect.right - rect.left) * view.width * zoom, DETAIL_IN)
+        if alpha > 0 and rect.right > left and rect.left < right and rect.bottom > top and rect.top < bottom then
+            showDetail(view, zone, alpha)
+        end
+    end
+    for _, live in pairs(view.live) do
+        if live.stamp ~= view.stamp then
+            for _, texture in ipairs(live.textures) do texture:Hide() end
+        end
+    end
+    -- Regions say where; they fade as a zone grows on screen, and the fights take over.
+    local showPoints = zoom >= view.pointZoom
     for i, region in ipairs(view.regions) do
         local entry = view.shapes and view.shapes[i]
         if entry and region:IsShown() then
@@ -917,7 +1158,8 @@ function R.MapLayout()
             region:ClearAllPoints()
             region:SetPoint("TOPLEFT", canvas, "TOPLEFT", x, -y)
             region:SetSize(shape.width * view.width * zoom, shape.height * view.height * zoom)
-            region:SetAlpha(entry.alpha * (0.25 + 0.75 * fade))
+            local wide = (entry.zone.rect.right - entry.zone.rect.left) * view.width * zoom
+            region:SetAlpha(entry.alpha * (0.2 + 0.8 * (1 - between(wide, DETAIL_IN))))
         end
     end
     for i, label in ipairs(view.labels) do
@@ -927,7 +1169,7 @@ function R.MapLayout()
             local x, y = place(view, (rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2)
             label:ClearAllPoints()
             label:SetPoint("CENTER", canvas, "TOPLEFT", x, -y)
-            if showPoints and not view.zoneMap and zoom >= 2.6 then label:Hide() else label:Show() end
+            if zoom >= view.pointZoom * 1.7 then label:Hide() else label:Show() end
         end
     end
     for i, point in ipairs(view.points) do
@@ -941,47 +1183,72 @@ function R.MapLayout()
     end
     if view.here then
         local x, y = place(view, view.here.x, view.here.y)
-        view.dot:ClearAllPoints()
-        view.dot:SetPoint("CENTER", canvas, "TOPLEFT", x, -y)
-        view.dot:Show()
+        view.me:ClearAllPoints()
+        view.me:SetPoint("CENTER", canvas, "TOPLEFT", x, -y)
+        local facing = GL.Clean(GL.Safe(GetPlayerFacing), "number")
+        if facing then GL.Safe(view.dot.SetRotation, view.dot, facing) end
+        view.me:Show()
+        view.mine:Show()
     else
-        view.dot:Hide()
+        view.me:Hide()
+        view.mine:Hide()
     end
+    if zoom > 1.02 then view.out:Show() else view.out:Hide() end
+    local title, deaths, kills = describe(view)
+    view.caption:SetText(UI.plain(title) .. " · " .. L("%d morts · %d victoires"):format(deaths, kills))
 end
 local function paintMap(view, byName)
-    local id = view.mapID
-    local info = mapInfo(id)
-    if not info then return false end
-    if view.loaded ~= id then
-        if not loadPieces(view, id) then return false end
-        view.loaded = id
+    local mine = playerPlace()
+    local root = rootOf(mine) or view.root
+    if not root then return false end
+    local world = view.worlds[root]
+    if not world then
+        world = buildWorld(view, root)
+        if not world then return false end
+        view.worlds[root] = world
     end
-    view.zoneMap = info.mapType == 3
-    local parent = mapInfo(info.parentMapID)
-    local above = parent and GL.Safe(C_Map.GetMapArtLayerTextures, parent.mapID, 1)
-    if type(above) == "table" and #above > 0 then
-        view.parent = parent.mapID
-        view.out:SetText("‹ " .. UI.plain(parent.name))
-        view.out:Show()
-    else
-        view.parent = nil
-        view.out:Hide()
+    if view.root ~= root then
+        -- Another world (rare: another family of continents): the previous pictures step aside.
+        if view.world then
+            placeArt(view, view.world.art, 0)
+            for _, continent in ipairs(view.world.continents) do
+                if continent.art then placeArt(view, continent.art, 0) end
+            end
+        end
+        for id in pairs(view.live) do dropDetail(view, id) end
+        view.root, view.world, view.detail = root, world, {}
+        local scale = math.min(MAP_W / world.art.width, MAP_H / world.art.height)
+        view.width, view.height = world.art.width * scale, world.art.height * scale
+        view.canvas:SetSize(view.width, view.height)
+        -- It opens on your continent, whole.
+        view.zoom, view.cx, view.cy, view.goal = 1, 0.5, 0.5, nil
+        local rect
+        for _, continent in ipairs(world.continents) do
+            if continent.mapID == mine then rect = continent.rect end
+        end
+        for _, zone in ipairs(world.zones) do
+            if zone.mapID == mine then rect = world.rects[zone.continent] end
+        end
+        if rect then
+            view.zoom = math.max(1, math.min(ZOOM_MAX, 1 / math.max(rect.right - rect.left, rect.bottom - rect.top)))
+            view.cx, view.cy = (rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2
+        end
     end
+    -- What you have explored may have grown since the last visit of the page.
+    view.detail = {}
+    local zones = world.zones
+    view.byName = byName
+    -- Fights show once an ordinary zone is about a hundred pixels wide.
+    view.pointZoom = math.max(1.4, 110 / math.max(1, world.zoneWidth * view.width))
     -- Every zone you fought in, tinted by its share of your deaths: the worst zone is bright red
     -- whatever its count, a zone where you only won is green.
-    local zones = view.zoneMap and {} or zonesOf(id, view.cache)
-    local tallies, shapes, worst, deaths, kills = {}, {}, 1, 0, 0
+    local tallies, shapes, worst = {}, {}, 1
     for _, zone in ipairs(zones) do
         local entry = byName[zone.name]
         if entry and entry.deaths + entry.kills > 0 then
             tallies[#tallies + 1] = { zone = zone, deaths = entry.deaths, kills = entry.kills }
             worst = math.max(worst, entry.deaths)
-            deaths, kills = deaths + entry.deaths, kills + entry.kills
         end
-    end
-    if view.zoneMap then
-        local entry = byName[info.name]
-        deaths, kills = entry and entry.deaths or 0, entry and entry.kills or 0
     end
     for _, region in ipairs(view.regions) do region:Hide() end
     for _, label in ipairs(view.labels) do
@@ -992,20 +1259,22 @@ local function paintMap(view, byName)
         local share = entry.deaths / worst
         if entry.zone.shape then
             local n = #shapes + 1
-            local region = view.regions[n] or view.canvas:CreateTexture(nil, "BORDER")
+            local region = view.regions[n] or view.canvas:CreateTexture(nil, "ARTWORK")
             view.regions[n] = region
             local shape = entry.zone.shape
             if shape.atlas and region.SetAtlas then region:SetAtlas(shape.atlas) else region:SetTexture(shape.file) end
             region:SetTexCoord(0, shape.usedX, 0, shape.usedY)
+            -- The game lights a zone by adding this texture to the map: its dark surroundings add
+            -- nothing. Drawn any other way they showed as black squares (owner report, 0.47.0).
             GL.Safe(region.SetDesaturated, region, true)
-            GL.Safe(region.SetBlendMode, region, "BLEND")
+            GL.Safe(region.SetBlendMode, region, "ADD")
             if entry.deaths > 0 then
-                region:SetVertexColor(0.85, 0.08, 0.06)
+                region:SetVertexColor(1, 0.10, 0.05)
             else
-                region:SetVertexColor(0.15, 0.6, 0.2)
+                region:SetVertexColor(0.10, 0.75, 0.20)
             end
             region:Show()
-            shapes[n] = { zone = entry.zone, alpha = entry.deaths > 0 and 0.3 + 0.65 * share or 0.45 }
+            shapes[n] = { zone = entry.zone, alpha = entry.deaths > 0 and 0.35 + 0.65 * share or 0.5 }
         end
         local label = marker(view, view.labels, i)
         label.used = true
@@ -1023,9 +1292,9 @@ local function paintMap(view, byName)
         label:SetScript("OnEnter", function(self)
             tip(self, UI.plain(entry.zone.name), L("%d morts · %d victoires"):format(entry.deaths, entry.kills))
         end)
-        label:SetScript("OnClick", function(self) R.MapEnter(self.zone) end)
+        label:SetScript("OnClick", function(self) R.MapFocus(self.zone) end)
     end
-    local points = R.MapPoints(id, zones)
+    local points = R.MapPoints(root, zones)
     for _, point in ipairs(view.points) do
         point.used = nil
         point:Hide()
@@ -1053,67 +1322,66 @@ local function paintMap(view, byName)
             if GL.InspectEvent then GL.InspectEvent(entry.record, entry.event) else openSheet(entry.record) end
         end)
     end
-    local mine, x, y = playerPlace()
-    view.here = nil
-    if x and y then
-        if mine == id then
-            view.here = { x = x, y = y }
-        else
-            for _, zone in ipairs(zones) do
-                if zone.mapID == mine then
-                    local rect = zone.rect
-                    view.here = { x = rect.left + x * (rect.right - rect.left), y = rect.top + y * (rect.bottom - rect.top) }
-                end
-            end
-        end
-    end
+    locate(view)
     view.tallies, view.shapes, view.placed = tallies, shapes, points
-    view.caption:SetText(UI.plain(info.name) .. " · " .. L("%d morts · %d victoires"):format(deaths, kills))
     view.hint:SetText(L("Molette : zoomer · glisser : se déplacer · %d combats placés"):format(#points))
     R.MapLayout()
     return true
 end
--- Shows another map, centred where asked (a point of the new map, 0 to 1) at the zoom asked.
-function R.MapEnter(id, zoom, cx, cy)
-    local view = R.window and R.window.host.pages.lands.map
-    if not view or not id then return false end
-    view.mapID, view.zoom, view.cx, view.cy = id, zoom or 1, cx or 0.5, cy or 0.5
-    R.Refresh()
-    return view.mapID == id
+-- Glides to a zone (or a continent) until it fills the view. The map never switches.
+function R.MapFocus(id)
+    local view = mapView()
+    local rect = view and view.world and view.world.rects[id]
+    if not rect then return false end
+    local zoom = 0.85 * math.min(1 / (rect.right - rect.left), 1 / (rect.bottom - rect.top))
+    view.goal = { zoom = math.max(1, math.min(ZOOM_MAX, zoom)), cx = (rect.left + rect.right) / 2, cy = (rect.top + rect.bottom) / 2 }
+    return true
 end
--- Up one map: the zone you leave stays under your eyes, zoomed in on its continent.
+-- Back to the whole world.
 function R.MapOut()
-    local view = R.window and R.window.host.pages.lands.map
-    if not view or not view.parent then return false end
-    local rect = rectOn(view.mapID, view.parent)
-    if rect and view.zoneMap then
-        return R.MapEnter(view.parent, 2.5, (rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2)
-    end
-    return R.MapEnter(view.parent)
+    local view = mapView()
+    if not view or not view.world or view.zoom <= 1.001 then return false end
+    view.goal = { zoom = 1, cx = 0.5, cy = 0.5 }
+    return true
 end
--- The wheel: away from you closes in on the pointer, and past the deepest zoom enters the zone
--- under it; towards you backs out, and past the whole map goes up one map.
+-- To where you stand.
+function R.MapHere()
+    local view = mapView()
+    if not view or not view.here then return false end
+    if view.here.zone and R.MapFocus(view.here.zone) then return true end
+    view.goal = { zoom = math.min(ZOOM_MAX, view.pointZoom * 2), cx = view.here.x, cy = view.here.y }
+    return true
+end
+-- The wheel: away from you closes in on the pointer, towards you backs out, from the whole world
+-- down to a zone. It sets where the view is going; MapStep glides there.
 function R.MapWheel(delta)
-    local view = R.window and R.window.host.pages.lands.map
-    if not view or not view.mapID or not view.width then return false end
+    local view = mapView()
+    if not view or not view.world or not view.width then return false end
+    local from = view.goal and view.goal.zoom or view.zoom
+    local zoom = math.max(1, math.min(ZOOM_MAX, delta > 0 and from * ZOOM_STEP or from / ZOOM_STEP))
+    if math.abs(zoom - from) < 0.0001 then return false end
     local u, v, px, py = pointer(view)
-    if delta < 0 then
-        if view.zoom <= 1.001 then return R.MapOut() end
-        view.zoom = math.max(1, view.zoom / ZOOM_STEP)
-    else
-        if view.zoom >= ZOOM_MAX - 0.001 then
-            if view.zoneMap then return false end
-            local under = GL.Safe(C_Map.GetMapInfoAtPosition, view.mapID, u or view.cx, v or view.cy)
-            if type(under) ~= "table" or under.mapID == view.mapID then return false end
-            return R.MapEnter(under.mapID)
-        end
-        view.zoom = math.min(ZOOM_MAX, view.zoom * ZOOM_STEP)
+    view.goal = { zoom = zoom, u = u, v = v, px = px, py = py }
+    return true
+end
+-- One frame of the glide. With a pointer the point under it stays under it.
+function R.MapStep(elapsed)
+    local view = mapView()
+    local goal = view and view.goal
+    if not goal or not view.width then return false end
+    local k = math.min(1, (tonumber(elapsed) or 0) * 12)
+    local zoom = view.zoom * (goal.zoom / view.zoom) ^ k
+    local done = math.abs(zoom - goal.zoom) < goal.zoom * 0.005
+    if done then zoom = goal.zoom end
+    view.zoom = zoom
+    if goal.cx then
+        view.cx = done and goal.cx or view.cx + (goal.cx - view.cx) * k
+        view.cy = done and goal.cy or view.cy + (goal.cy - view.cy) * k
+    elseif goal.u then
+        view.cx = goal.u - (goal.px - view.width / 2) / (view.width * zoom)
+        view.cy = goal.v - (goal.py - view.height / 2) / (view.height * zoom)
     end
-    -- The point under the pointer stays under it.
-    if u then
-        view.cx = u - (px - view.width / 2) / (view.width * view.zoom)
-        view.cy = v - (py - view.height / 2) / (view.height * view.zoom)
-    end
+    if done then view.goal = nil end
     R.MapLayout()
     return true
 end
@@ -1168,22 +1436,7 @@ local function paintLands(page)
     if page.mode == "map" and C_Map then
         local byName = {}
         for _, entry in ipairs(lands) do byName[entry.zone] = entry end
-        local view = page.map
-        if not view.mapID then
-            local mine = playerPlace()
-            local info = mapInfo(mine)
-            view.mapID = info and info.mapType == 3 and info.parentMapID or mine
-        end
-        mapped = view.mapID ~= nil and paintMap(view, byName)
-        -- A map the game has no picture for (an instance, a cave) falls back to the map above it.
-        if not mapped and view.mapID then
-            local info = mapInfo(view.mapID)
-            local above = info and mapInfo(info.parentMapID)
-            if above then
-                view.mapID, view.zoom, view.cx, view.cy, view.loaded = above.mapID, 1, 0.5, 0.5, nil
-                mapped = paintMap(view, byName)
-            end
-        end
+        mapped = paintMap(page.map, byName)
     end
     if mapped then page.map:Show() else page.map:Hide() end
     page.toggle:SetText(mapped and L("Voir la liste") or L("Voir la carte"))
@@ -1425,6 +1678,9 @@ function R.MapProbe()
     local rectangle = type(info) == "table" and { GL.Safe(api.GetMapRectOnMap, map, info.parentMapID) }
     GL.Print(L("Carte du dessus : %s zones · rectangle de cette zone : %s"):format(type(children) == "table" and #children or 0,
         answerOf(rectangle and rectangle[1])))
+    local explored = map and C_MapExplorationInfo and GL.Safe(C_MapExplorationInfo.GetExploredMapTextures, map)
+    GL.Print(L("Détail des zones : %s morceaux explorés ici · masque : %s"):format(type(explored) == "table" and #explored or L("absent"),
+        type(UIParent) == "table" and type(UIParent.CreateMaskTexture) == "function" and L("oui") or L("non")))
     if tiles == 0 or not layer then return true end
     -- The zone, drawn from the game's own pieces in our window, and the dot.
     local w = GrudgeLedgerMapProbe or UI.window("GrudgeLedgerMapProbe", L("Sonde : carte"), 468, 372)

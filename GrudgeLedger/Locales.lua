@@ -4,6 +4,9 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Monde"] = "Mundo",
+        ["Ma position"] = "Mi posición",
+        ["Détail des zones : %s morceaux explorés ici · masque : %s"] = "Detalle de las zonas: %s piezas exploradas aquí · máscara: %s",
         ["Vous n’êtes dans aucune guilde. Une prime se dépose dans une guilde : ses membres la voient et la chassent."] = "No estás en ninguna hermandad. Una recompensa se publica en una hermandad: sus miembros la ven y la cazan.",
         ["Le nom de votre guilde n’est pas encore arrivé. Réessayez dans quelques secondes."] = "El nombre de tu hermandad aún no ha llegado. Inténtalo de nuevo en unos segundos.",
         ["Le royaume ne peut pas être lu."] = "No se puede leer el reino.",
@@ -1729,6 +1732,9 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Monde"] = "World",
+        ["Ma position"] = "My position",
+        ["Détail des zones : %s morceaux explorés ici · masque : %s"] = "Zone detail: %s explored pieces here · mask: %s",
         ["Vous n’êtes dans aucune guilde. Une prime se dépose dans une guilde : ses membres la voient et la chassent."] = "You are not in a guild. A bounty is posted in a guild: its members see it and hunt it.",
         ["Le nom de votre guilde n’est pas encore arrivé. Réessayez dans quelques secondes."] = "Your guild’s name has not arrived yet. Try again in a few seconds.",
         ["Le royaume ne peut pas être lu."] = "The realm cannot be read.",

@@ -176,7 +176,7 @@ do
     C_Map.GetMapRectOnMap = function(child, parent)
         if child == 1446 and parent == 1414 then return 0.4, 0.6, 0.6, 0.8 end
         if child == 1444 and parent == 1414 then return 0.1, 0.3, 0.5, 0.7 end
-        if child == 1414 and parent == 947 then return 0.0, 0.5, 0.0, 1.0 end
+        if child == 1414 and parent == 947 then return 0.1, 0.5, 0.2, 0.8 end
     end
     C_Map.GetMapInfoAtPosition = function(id, x, y)
         if id ~= 1414 then return nil end
@@ -193,24 +193,52 @@ do
     function methods:GetTop() return 600 end
     function methods:SetVertexColor(...) self.vertex = { ... } end
     function methods:SetAlpha(value) self.alpha = value end
-    local cursorX, cursorY = 200, 200
+    local cursorX, cursorY = 400, 400
     GetCursorPosition = function() return cursorX, cursorY end
+    C_MapExplorationInfo = { GetExploredMapTextures = function(id)
+        if id ~= 1446 then return {} end
+        return { { textureWidth = 300, textureHeight = 200, offsetX = 100, offsetY = 50, fileDataIDs = { 501, 502 } },
+            { textureWidth = 64, textureHeight = 64, offsetX = 0, offsetY = 0, fileDataIDs = { 503 }, isShownByMouseOver = true } }
+    end }
     click(f.tabs.lands)
     local landsPage = f.host.pages.lands
     local view = landsPage.map
-    assert(landsPage.mode == "map" and view:IsShown() and view.mapID == 1414 and view.zoom == 1 and not landsPage.rows[1]:IsShown())
-    -- One region for the zone you fought in, in the game's shape; the worst zone is bright red.
+    local function settle() view.canvas.scripts.OnUpdate(view.canvas, 1) end
+    -- One canvas for the whole world (0.48.0). It opens on your continent, whole.
+    assert(landsPage.mode == "map" and view:IsShown() and view.root == 947 and not landsPage.rows[1]:IsShown())
+    assert(math.abs(view.zoom - 1 / 0.6) < 0.001 and math.abs(view.cx - 0.3) < 0.001 and view.cy == 0.5, view.zoom)
+    local continent = view.world.continents[1]
+    assert(#view.world.continents == 1 and #continent.art.textures == 12 and continent.art.mask, "the continent's picture, feathered")
+    assert(continent.art.textures[1].alpha > 0.3 and continent.art.textures[1].alpha < 0.7 and view.world.art.textures[1].alpha == 1)
+    -- One region for the zone you fought in, in the game's shape, added to the map like the game
+    -- does (never a black square); the worst zone is bright red. Zones of every continent, no total.
     assert(#view.tallies == 1 and view.tallies[1].zone.name == "Tanaris" and #view.shapes == 1 and view.regions[1]:IsShown())
-    assert(view.shapes[1].zone.shape.file == 9001 and view.shapes[1].alpha > 0.9, view.shapes[1].alpha)
+    assert(view.shapes[1].zone.shape.file == 9001 and view.shapes[1].alpha > 0.9 and view.regions[1].blendMode == "ADD")
     assert(view.regions[1].vertex[1] > 0.8 and view.labels[1].count:GetText() == tostring(R.Lands()[1].deaths))
-    assert(view.out:GetText() == "‹ Azeroth" and view.caption:GetText():find("^Kalimdor · "), view.caption:GetText())
-    -- Zoomed out the fights are hidden; they are placed through the zone's rectangle on the continent.
-    assert(#view.placed == 1 and view.placed[1].event == event and not view.points[1]:IsShown())
-    assert(math.abs(view.placed[1].x - (0.4 + 0.512 * 0.2)) < 0.001 and math.abs(view.placed[1].y - (0.6 + 0.288 * 0.2)) < 0.001)
-    -- The wheel closes in on the pointer: the fights appear, the region fades.
+    assert(math.abs(view.tallies[1].zone.rect.left - 0.26) < 0.001 and math.abs(view.shapes[1].zone.shape.width - 0.088) < 0.001)
+    assert(view.caption:GetText():find("^Azeroth · "), view.caption:GetText())
+    -- Zoomed out the fights are hidden; they are placed through the zone's rectangle on the world.
+    assert(#view.placed == 1 and view.placed[1].event == event and not view.points[1]:IsShown() and not next(view.live))
+    assert(math.abs(view.placed[1].x - (0.26 + 0.512 * 0.08)) < 0.001 and math.abs(view.placed[1].y - (0.56 + 0.288 * 0.12)) < 0.001)
+    -- You: an arrow where you stand.
+    assert(view.me:IsShown() and math.abs(view.here.x - (0.26 + 0.5124 * 0.08)) < 0.001 and view.mine:IsShown())
+    -- The wheel sets where the view goes and the view glides there, the point under the pointer
+    -- staying under it. The fights appear, the region fades, the explored pieces of the zone come in.
     local wheel = view.canvas.scripts.OnMouseWheel
-    for _ = 1, 3 do wheel(view.canvas, 1) end
-    assert(view.zoom > 1.9 and view.points[1]:IsShown() and view.regions[1].alpha < view.shapes[1].alpha, view.zoom)
+    wheel(view.canvas, 1)
+    assert(view.goal and math.abs(view.zoom - 1 / 0.6) < 0.001, "nothing jumps")
+    view.canvas.scripts.OnUpdate(view.canvas, 0.02)
+    assert(view.goal and view.zoom > 1 / 0.6 and view.zoom < view.goal.zoom, view.zoom)
+    settle()
+    assert(not view.goal and math.abs(view.zoom - 1.3 / 0.6) < 0.001 and math.abs(view.cx - 0.3) < 0.001)
+    for _ = 1, 2 do
+        wheel(view.canvas, 1)
+        settle()
+    end
+    assert(view.zoom > 3.6 and view.points[1]:IsShown() and view.regions[1].alpha < view.shapes[1].alpha, view.zoom)
+    local live = view.live[1446]
+    assert(live and #live.textures == 2 and live.textures[1].alpha > 0 and live.textures[1].alpha < 1, "explored pieces, not the hover one")
+    assert(math.abs(live.textures[2].texCoord[2] - 44 / 64) < 0.001 and math.abs(live.textures[2].texCoord[4] - 200 / 256) < 0.001)
     -- Holding the button and moving drags the map; the view never leaves it.
     local before = view.cx
     view.canvas.scripts.OnMouseDown(view.canvas, "LeftButton")
@@ -218,32 +246,34 @@ do
     view.canvas.scripts.OnUpdate(view.canvas, 0.1)
     view.canvas.scripts.OnMouseUp(view.canvas, "LeftButton")
     assert(view.cx < before and view.cx >= 0.5 / view.zoom - 0.0001, view.cx)
-    -- At the deepest zoom the wheel enters the zone under the pointer; a click on a count does too.
-    R.MapEnter(1414, 4, 0.5, 0.7)
-    cursorX, cursorY = 100 + view.width / 2, 600 - view.height / 2
-    wheel(view.canvas, 1)
-    assert(view.mapID == 1446 and view.zoom == 1 and view.zoneMap and view.points[1]:IsShown() and view.dot:IsShown(), view.mapID)
-    assert(math.abs(view.placed[1].x - 0.512) < 0.001 and not view.regions[1]:IsShown())
-    -- Backing out of a zone returns to its continent, the zone still under your eyes; then the world,
-    -- where the zones of every continent are shown, not a total per continent.
-    wheel(view.canvas, -1)
-    assert(view.mapID == 1414 and view.zoom == 2.5 and math.abs(view.cx - 0.5) < 0.001, view.zoom)
-    R.MapEnter(1414)
-    wheel(view.canvas, -1)
-    assert(view.mapID == 947 and #view.tallies == 1 and view.tallies[1].zone.name == "Tanaris" and not view.out:IsShown())
-    assert(math.abs(view.tallies[1].zone.rect.left - 0.2) < 0.001 and math.abs(view.shapes[1].zone.shape.width - 0.11) < 0.001)
-    assert(R.MapOut() == false and view.mapID == 947)
-    R.MapEnter(1414)
+    -- The wheel goes all the way down without ever switching maps.
+    for _ = 1, 20 do
+        wheel(view.canvas, 1)
+        settle()
+    end
+    assert(view.root == 947 and view.zoom == 40 and R.MapWheel(1) == false, view.zoom)
+    -- A click on a count glides to its zone: it fills the view, and the caption names it.
     click(view.labels[1])
-    assert(view.mapID == 1446)
+    settle()
+    assert(math.abs(view.zoom - 0.85 / 0.12) < 0.001 and math.abs(view.cx - 0.3) < 0.001 and math.abs(view.cy - 0.62) < 0.001, view.zoom)
+    assert(view.caption:GetText():find("^Tanaris · "), view.caption:GetText())
+    assert(view.live[1446].textures[1].alpha == 1 and view.out:IsShown())
+    -- "Monde" backs out to the whole world; "Ma position" returns to your zone.
+    assert(R.MapOut() == true)
+    settle()
+    assert(view.zoom == 1 and view.cx == 0.5 and not view.out:IsShown() and R.MapOut() == false and R.MapWheel(-1) == false)
+    assert(not view.live[1446].textures[1]:IsShown() and continent.art.hidden, "detail and continents step back")
+    click(view.mine)
+    settle()
+    assert(view.zoom > 7 and view.caption:GetText():find("^Tanaris · "))
     -- "Voir la liste" gives the list back; a client without map pictures only has the list.
     click(landsPage.toggle)
     assert(landsPage.mode == "list" and not view:IsShown() and landsPage.rows[1]:IsShown() and landsPage.toggle:GetText() == "Voir la carte")
     click(landsPage.toggle)
     C_Map.GetMapArtLayerTextures = function() return {} end
-    view.loaded = nil
+    view.worlds, view.root = {}, nil
     R.Refresh()
     assert(not view:IsShown() and landsPage.rows[1]:IsShown(), "no picture: the list")
     assert(#GL.errors == 0, (GL.errors[1] or {}).text)
-    print("PASS map: probe facts, position kept on fights, zones tinted in their shape, free zoom and drag, fights when zoomed, list fallback")
+    print("PASS map: probe facts, position kept on fights, one continuous canvas from world to zone, lit regions, explored detail, arrow, glide, list fallback")
 end
