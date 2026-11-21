@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.47.0
+GRUDGE LEDGER — 0.47.1
+
+Primes : quand la création est refusée, le message dit maintenant pourquoi (joueur sans identifiant dans votre livre, guilde ou royaume illisible, prime sur soi-même) au lieu de « Vérifiez le contrat ». Le nom du royaume est aussi lu d’une seconde façon quand le jeu ne donne pas la première, ce qui pouvait bloquer toutes les primes.
 
 La carte des terres dangereuses se parcourt librement : la molette zoome sur le pointeur, un clic maintenu déplace la carte. Les zones où vous avez combattu sont teintées dans leur vraie forme, d’autant plus rouges que vous y mourez par rapport à votre pire zone (verte si vous n’y avez que gagné). En zoomant, les teintes s’effacent et chaque combat apparaît à son endroit : un crâne pour une mort, une épée pour une victoire. Au zoom le plus fort, la molette entre dans la zone et son image détaillée ; en reculant, on revient au continent puis au monde, où toutes les zones restent visibles.
 

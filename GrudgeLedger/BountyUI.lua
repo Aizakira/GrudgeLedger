@@ -156,8 +156,19 @@ local function chooseTab(tab)
     f.tab, f.filterKey, f.role, f.selected, f.editing, f.origin = tab,"all","all",nil,nil,nil
     f.form:Hide(); f.filters:Hide(); resetList(); message(); refresh()
 end
-local function actionResult(id,err)
+local function actionResult(id,err,why)
     if id then f.cachedOrders=nil; return true end
+    -- A refusal names its cause: "check the contract" alone left the player with nothing to do.
+    local causes = {
+        scope=L("Guilde ou royaume illisible pour l’instant. Réessayez dans un instant, ou après un /reload."),
+        target=L("Ce joueur n’a pas encore d’identifiant dans votre livre. Ciblez-le une fois, puis recommencez."),
+        self=L("Vous ne pouvez pas poser une prime sur vous-même."),
+        name=L("Le nom de ce joueur ne peut pas être envoyé à la guilde."),
+    }
+    if err=="invalid" and causes[why] then
+        message(causes[why])
+        return false
+    end
     local errors = {
         ally=L("Cet allié peut recevoir des étiquettes dans le Journal."),
         duplicate=L("Une prime est déjà ouverte sur ce joueur."),
@@ -268,8 +279,8 @@ local function publish()
     local problem=noteError(note)
     if problem then return message(problem) end
     local options = {quota=q,group=f.draft.group,split=f.draft.split,souvenir=f.draft.souvenir,note=note}
-    local id,err = B.Post(f.target.guid,f.target.fullName or f.target.name,amount,options)
-    if actionResult(id,err) then chooseTab("active"); selectOrder(id); message(L("Prime publiée à la guilde.")) end
+    local id,err,why = B.Post(f.target.guid,f.target.fullName or f.target.name,amount,options)
+    if actionResult(id,err,why) then chooseTab("active"); selectOrder(id); message(L("Prime publiée à la guilde.")) end
 end
 local function makeForm()
     local form=CreateFrame("Frame",nil,f); f.form=form; form:SetAllPoints(f); form.options={}

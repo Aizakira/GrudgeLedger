@@ -166,3 +166,18 @@ click(f.form.publish)
 assert(f.order.id~=old.id and f.order.state=="open" and f.order.pot[issuer]==1200000 and not f.order.pot["Player-77-Partner"])
 assert(GL.Bounties.History()[old.id].state=="expired" and GL.Bounties.Progress(f.order)==0)
 print("PASS bounty UI: create, target and dossier return, rules, contribution, search, paging, update, hunt finished, history, payout states and guild change")
+
+-- Owner report (0.47.0): "Créer la prime" did nothing and only said "check the contract". A
+-- refusal now names its cause, and a client without GetNormalizedRealmName still has a guild scope.
+do
+    local B = GL.Bounties
+    local rules = { quota = 1, group = "solo", split = "winner", souvenir = "none", note = "" }
+    local id, err, why = B.Post(nil, "No Guid", 10000, rules)
+    assert(id == nil and err == "invalid" and why == "target", tostring(why))
+    id, err, why = B.Post(issuer, "My Self", 10000, rules)
+    assert(id == nil and why == "self", tostring(why))
+    GetNormalizedRealmName = nil
+    id, err, why = B.Post("Player-77-Fresh0001", "Fresh Target", 10000, rules)
+    assert(id and B.GuildScope().guildKey == "Forever/Test Guild", tostring(err) .. " " .. tostring(why))
+    print("PASS bounty refusal: the cause is named, and the plain realm name serves when no normalized one exists")
+end

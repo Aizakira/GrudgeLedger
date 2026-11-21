@@ -27,9 +27,14 @@ local function rules(opts)
     return quota,groups[group]..shares[split]..souvenirs[media]
 end
 local function scope()
-    if not GL.db or not GetGuildInfo or not GetNormalizedRealmName then return end
+    if not GL.db or not GetGuildInfo then return end
     local name, _, _, realm = GL.Safe(GetGuildInfo,"player")
     realm = realm or GL.Safe(GetNormalizedRealmName)
+    -- Some clients give no normalized realm name: the plain one, without spaces, is the same key.
+    if type(realm)~="string" or realm=="" then
+        local plainRealm=GL.Clean(GL.Safe(GetRealmName),"string")
+        realm=plainRealm and plainRealm:gsub("[%s%-]","") or realm
+    end
     local me = GL.Clean(UnitGUID("player"),"string")
     name,realm=GL.Clean(name,"string"),GL.Clean(realm,"string")
     if not plain(name,120) or name == "" or not plain(realm,80) or realm == "" or not guid(me) then return end
@@ -557,7 +562,12 @@ function GL.BountyTargetEligible(record)
 end
 function B.Post(target,name,copper,opts)
     local s,me=scope()
-    if not s or not guid(target) or target==me or not plain(name,64) or name=="" or not number(copper,0,1000*GOLD) then return nil,"invalid" end
+    -- The third value says which check refused, so the window can tell the player what to do.
+    if not s then return nil,"invalid","scope" end
+    if not guid(target) then return nil,"invalid","target" end
+    if target==me then return nil,"invalid","self" end
+    if not plain(name,64) or name=="" then return nil,"invalid","name" end
+    if not number(copper,0,1000*GOLD) then return nil,"invalid","amount" end
     local candidate=GL.Get and GL.Get("guid:"..target) or {guid=target}
     if not candidate.faction and UnitFactionGroup and GL.Safe(UnitGUID,"target")==target then
         candidate={guid=target,faction=GL.Clean(GL.Safe(UnitFactionGroup,"target"),"string")}
@@ -577,7 +587,7 @@ function B.Post(target,name,copper,opts)
     local kind,value
     if type(opts)=="table" then
         local quota,flags=rules(opts)
-        if not quota then return nil,"invalid" end
+        if not quota then return nil,"invalid","rules" end
         -- Legacy clients ignore N/H, so a one-kill claim cannot close a multi-kill order.
         kind,value="N",copper..","..quota..","..flags
     elseif opts==nil or type(opts)=="boolean" then kind,value=opts and "A" or "O",copper
