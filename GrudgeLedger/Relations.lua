@@ -1291,7 +1291,8 @@ end
 -- down to a zone. It sets where the view is going; MapStep glides there.
 function R.MapWheel(delta)
     local view = mapView()
-    if not view or not view.world or not view.width then return false end
+    -- While the map is held, the wheel waits: otherwise the view jumps when the button is let go.
+    if not view or not view.world or not view.width or view.drag then return false end
     local from = view.goal and view.goal.zoom or view.zoom
     local zoom = math.max(1, math.min(ZOOM_MAX, delta > 0 and from * ZOOM_STEP or from / ZOOM_STEP))
     if math.abs(zoom - from) < 0.0001 then return false end

@@ -74,7 +74,8 @@ local function keep(s, actor, text)
         for other, theirs in pairs(s.places) do
             count = count + 1
             local latest = type(theirs) == "table" and read(theirs[1]) or 0
-            if not oldestAt or latest < oldestAt then
+            local mine = GL.Bounties and GL.Bounties.GuildScope and select(2, GL.Bounties.GuildScope()) == other
+            if not mine and (not oldestAt or latest < oldestAt) then
                 oldest, oldestAt = other, latest
             end
         end
@@ -111,7 +112,7 @@ local function answer(s, me, full)
         if read(text) then own[#own + 1] = message(me, text) end
     end
     local sent = false
-    if #own > 0 and not T.State(s, "map:own") then sent = T.SendBatch(s, own, { key = "map:own" }) == true end
+    if #own > 0 and not T.State(s, "map:own") then sent = T.SendBatch(s, own, { key = "map:own", delay = 2 + math.random(0, 8) }) == true end
     local others = {}
     for actor, list in pairs(type(s.places) == "table" and s.places or {}) do
         if (actor ~= me or not full) and guid(actor) and type(list) == "table" then
@@ -149,8 +150,18 @@ local function seed(s, me)
             guid(record.guid) and record.guid or "", plainName(name) and name or ""))
     end
 end
+-- A guild catch-up brings hundreds of fights in a few seconds: the open pages are drawn again
+-- once every fifth of a second at most, not once per fight.
+local refreshing = false
 local function refresh()
-    if GL.RelationsPages and GL.RelationsPages.Refresh then GL.RelationsPages.Refresh() end
+    if not (GL.RelationsPages and GL.RelationsPages.Refresh) then return end
+    if not (C_Timer and C_Timer.After) then GL.RelationsPages.Refresh() return end
+    if refreshing then return end
+    refreshing = true
+    C_Timer.After(0.2, function()
+        refreshing = false
+        GL.RelationsPages.Refresh()
+    end)
 end
 
 -- Once the guild is known: your latest fights are made ready for the members who will ask, and
@@ -243,10 +254,11 @@ function M.Receive(s, me, sender, raw, relay)
     if not guid(actor) or actor == me then return false end
     local forgot = type(s.mapForgot) == "table" and s.mapForgot[actor]
     if relay then
-        -- Another member is already passing the guild's fights on: ours would only repeat them.
-        GL.Transport.Cancel(s, "map:relay")
+        -- Only the fights of a member of the guild, well formed and not forgotten, are kept; then
+        -- another member is passing the guild's fights on, and ours would only repeat them.
         local at = read(rest)
-        if not at or (forgot and at <= forgot) then return false end
+        if not at or (forgot and at <= forgot) or not (GL.Bounties and GL.Bounties.IsMember and GL.Bounties.IsMember(actor)) then return false end
+        GL.Transport.Cancel(s, "map:relay")
     elseif actor ~= sender then
         return false
     elseif forgot then
@@ -311,7 +323,7 @@ function M.Version(s, me, sender, value, relay, reply)
     versions[sender] = value
     -- A member arriving learns the versions of the others: each answers it once a minute at most.
     -- An answer is never answered, so the guild does not echo.
-    if not reply and GL.Now() - (answered[sender] or 0) >= 60 then
+    if not reply and GL.Now() - (answered[sender] or 0) >= 10 then
         answered[sender] = GL.Now()
         M.Announce(s, true)
     end

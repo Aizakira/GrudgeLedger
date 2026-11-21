@@ -48,11 +48,23 @@ local function client(i)
     for _,p in ipairs(clients) do if p.online then p.event(nil,"GUILD_ROSTER_UPDATE") end end
     return c
 end
+-- Messages may wait in a client's queue (the login relay leaves after a random delay): the network
+-- is quiet only when nothing is in flight and nothing is queued.
+local function queued()
+    for _,c in ipairs(clients) do
+        local s=c.online and c.b.GuildScope()
+        if s then
+            local urgent,bulk=c.env.GrudgeLedger.Transport.Pending(s)
+            if urgent+bulk>0 then return true end
+        end
+    end
+    return false
+end
 local function flush()
-    for _=1,200 do
+    for _=1,400 do
         now=now+1
         for _,c in ipairs(clients) do if c.online then c.tick() end end
-        if #network==0 then return end
+        if #network==0 and not queued() then return end
         local batch=network;network={}
         for _,m in ipairs(batch) do
             for _,c in ipairs(clients) do
