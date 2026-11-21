@@ -114,7 +114,9 @@ guildFilters[3].choices[1]:Click()
 assert(f.rows[1].item and f.choice == 1 and f.category == 3, "guild rules work even without combat")
 f.navigation.journal:Click()
 GrudgeLedgerJournal.navigation.players:Click()
-assert(f:IsVisible() and f.sections[4].active and guildFilters[3].choices[1].active)
+-- This harness loads the book without the story pages (Relations.lua): the button then falls back
+-- to the rankings and their last state. tests/relations_story_test.lua covers the pages themselves.
+assert(f:IsVisible() and f.story == nil and f.sections[4].active and guildFilters[3].choices[1].active)
 for _, row in ipairs(f.rows) do
     if row:IsShown() then assert(GL.GetGuildRule(row.item.name, row.item.realm) and row.value:GetText() ~= "") end
 end

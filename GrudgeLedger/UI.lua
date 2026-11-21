@@ -550,7 +550,7 @@ local function bookNavigation(f, selected)
     f.navigation = {}
     for i, entry in ipairs({
         { "ledger", L("Journal"), function() GL.ShowLedger() end },
-        { "players", L("Relations"), function() GL.ShowStatistics() end },
+        { "players", L("Relations"), function() GL.ShowRelations() end },
         { "journal", L("Bilan"), function() GL.ShowJournal("summary") end },
         { "bounties", L("Primes"), function() GL.OpenBounties() end },
     }) do
@@ -1039,21 +1039,50 @@ local function refreshStatistics()
         or L("Cliquez sur une personne pour lire son histoire."))
     f.footnote:SetText(choice[6])
 end
+-- Relations opens on its story pages (overview, ledger of debts); the rankings stay one click away.
+function GL.ShowRelations(page)
+    if not GL.RelationsPages then return GL.ShowStatistics() end
+    GL.ShowStatistics("players")
+    local f = statisticsWindow
+    if not f then return end
+    f.story = page == "debts" and "debts" or "overview"
+    GL.RelationsPages.Show(f, f.story)
+    for key, tab in pairs(f.storyTabs) do UI.selectButton(tab, key == f.story) end
+    for _, tab in ipairs(f.sections) do UI.selectButton(tab, false) end
+    for _, panel in ipairs(f.filters.players) do panel:Hide() end
+    for _, panel in ipairs(f.filters.guilds) do panel:Hide() end
+    f.helpHeading:Hide()
+    f.footnote:SetText(L("Relations raconte : des personnes, des dettes, des revanches. Les classements détaillés sont dans Menaces, Amis, Combats et Guildes."))
+end
 function GL.ShowStatistics(mode, category)
     if not GL.db then return end
     mode = mode or (statisticsWindow and statisticsWindow.mode)
     mode = mode == "guilds" and "guilds" or "players"
     if not statisticsChoices[mode][category] then category = nil end
+    if statisticsWindow and statisticsWindow.story then
+        statisticsWindow.story = nil
+        if GL.RelationsPages then GL.RelationsPages.Hide(statisticsWindow) end
+        for _, tab in pairs(statisticsWindow.storyTabs) do UI.selectButton(tab, false) end
+        statisticsWindow.helpHeading:Show()
+    end
     if not statisticsWindow then
         local f = bookWindow("GrudgeLedgerStatistics", "Grudge Ledger")
         statisticsWindow = f
         f.rows, f.sections, f.filters, f.guildActions = {}, {}, {}, {}
         bookNavigation(f, "players")
+        f.storyTabs = {}
+        for i, entry in ipairs({ { "overview", L("Vue d’ensemble") }, { "debts", L("Dettes") } }) do
+            local tab = button(f, entry[2], 36 + (i - 1) * 140, -157, 134, function() GL.ShowRelations(entry[1]) end, true)
+            tab:SetHeight(30)
+            tab.caption:SetWidth(126)
+            journalFont(tab.caption, "GameFontNormalLarge", 14)
+            f.storyTabs[entry[1]] = tab
+        end
         local playerGroups = statisticsChoices.players
         for i = 1, #playerGroups + 1 do
             local group = playerGroups[i]
             local tab = button(f, group and group.name or L("Guildes"), 36 + ((i - 1) % 2) * 140,
-                -157 - math.floor((i - 1) / 2) * 35, 134, function()
+                -192 - math.floor((i - 1) / 2) * 35, 134, function()
                     GL.ShowStatistics(group and "players" or "guilds", group and i or nil)
                 end, true)
             tab:SetHeight(30)
@@ -1062,7 +1091,7 @@ function GL.ShowStatistics(mode, category)
             f.sections[i] = tab
         end
         for scope, groups in pairs(statisticsChoices) do
-            local y = 236
+            local y = 271
             f.filters[scope] = {}
             for i, group in ipairs(groups) do
                 local panel = CreateFrame("Frame", nil, f)
@@ -1077,6 +1106,10 @@ function GL.ShowStatistics(mode, category)
                 for j, entry in ipairs(group.entries) do
                     local control = button(panel, entry[2], 0, -offset, 274, function()
                         f.category, f.choice, f.offset, f.selected = i, j, 0, nil
+                        if scope == "guilds" and f.story then
+                            GL.ShowStatistics("guilds")
+                            return
+                        end
                         refreshStatistics()
                     end, true)
                     control.skin:Hide()

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.39.0
+GRUDGE LEDGER — 0.40.0
+
+Relations raconte une histoire. La page s’ouvre sur « Votre monde » : votre compagnon, votre némésis et votre proie favorite en grand, ce qui s’est passé cette semaine et les dettes à régler en premier. Nouvelle page « Dettes » : le registre de ce qu’on vous doit, la plus lourde en tête, et les dettes réglées rayées à la plume. Les joueurs gagnent un surnom tiré des faits (« Le Fléau de Tanaris », « Frappe dans le dos », « Chasse en meute », « Votre proie favorite », « Fidèle compagnon »). Les classements d’avant restent accessibles par Menaces, Amis, Combats et Guildes. Un fichier est ajouté : relancez le jeu une fois, un /reload ne suffit pas.
 
 Journal, barre du haut épurée : la rangée de quatre boutons (Tous, À régler, Amis, Signalés) devient un seul bouton qui nomme la liste affichée avec son nombre, par exemple « À régler · 29 ». Un clic passe à la liste suivante. « Filtres » est à côté et réunit tout le reste, y compris l’ordre de tri. Anglais et espagnol : un seul mot par idée (« opinion » et « balance », « opinión » et « saldo »).
 
