@@ -2624,22 +2624,24 @@ local function buildLedger()
         if opening then openMenu = menu menu:Show() menu:Raise() end
     end
     f:HookScript("OnHide", closeMenu)
-    -- Quick views: the four lists people open most, one click each, with their count.
-    f.views = {}
-    local viewX = 36
-    for _, view in ipairs({ { "all", L("Tous"), 56 }, { "debt", L("À régler"), 84 }, { "friend", L("Amis"), 58 }, { "any", L("Signalés"), 73 } }) do
-        local key = view[1]
-        local control = button(f, view[2], viewX, -188, view[3], function()
-            closeMenu()
-            filter = (key == "debt" or key == "friend") and key or "all"
-            tagFilter = key == "any" and "any" or "all"
-            offset = 0
-            refresh()
-        end, true)
-        control.title = view[2]
-        f.views[key] = control
-        viewX = viewX + view[3]
+    -- One button names the current list with its count; a click shows the next of the four lists
+    -- people open most. A list always starts clean: the other filters are put back.
+    local viewOrder = { "all", "debt", "friend", "any" }
+    f.viewNames = { all = L("Tous"), debt = L("À régler"), friend = L("Amis"), any = L("Signalés") }
+    function f.ShowView(key)
+        closeMenu()
+        filter = (key == "debt" or key == "friend") and key or "all"
+        tagFilter = key == "any" and "any" or "all"
+        factionFilter, notesOnly, offset = "all", false, 0
+        refresh()
     end
+    f.viewCycle = button(f, L("Tous"), 36, -203, 168, function()
+        local following = "all"
+        for i, key in ipairs(viewOrder) do
+            if key == f.viewKey then following = viewOrder[i % #viewOrder + 1] end
+        end
+        f.ShowView(following)
+    end, nil, false)
     -- Every other filter lives in one panel, opened on demand; it stays open while you choose.
     local panel = CreateFrame("Frame", nil, f)
     f.filterPanel = panel
@@ -2684,27 +2686,8 @@ local function buildLedger()
         notesOnly, offset = not notesOnly, 0
         refresh()
     end, true, false)
-    f.detail = button(panel, L("Détail : Identité"), 143, -tail, 133, function()
-        for i, choice in ipairs(detailChoices) do
-            if choice[1] == listDetail then listDetail = detailChoices[i % #detailChoices + 1][1] break end
-        end
-        GL.SetSetting("listDetail", listDetail)
-        refresh()
-    end, nil, false)
-    if GL.TagChoices then
-        f.sharedProfiles = button(panel, L("Fiches de guilde"), 8, -(tail + 30), 133, function()
-            closeMenu()
-            GL.OpenGuildProfiles(currentRecord())
-        end)
-    end
-    f.reset = button(panel, L("Effacer"), 143, -(tail + 30), 65, function()
-        filter, factionFilter, tagFilter, notesOnly, offset, f.query = "all", "all", "all", false, 0, ""
-        f.search:SetText("")
-        refresh()
-    end)
-    f.closeFilters = button(panel, L("Fermer"), 211, -(tail + 30), 65, closeMenu)
-    panel:SetHeight(tail + 64)
-    f.sort = button(f, L("Dernière interaction"), 36, -218, 168, function()
+    -- The order of the list can only be chosen during a search; it lives with the other choices.
+    f.sort = button(panel, L("Dernière interaction"), 8, -(tail + 30), 268, function()
         if not f.query or f.query == "" then return end
         for i, choice in ipairs(sortChoices) do
             if choice[1] == listSort then listSort = sortChoices[i % #sortChoices + 1][1] break end
@@ -2713,7 +2696,27 @@ local function buildLedger()
         GL.SetSetting("listSort", listSort)
         refresh()
     end, nil, false)
-    f.openFilters = button(f, L("Filtres"), 208, -218, 99, function() toggleMenu(panel) end)
+    f.detail = button(panel, L("Détail : Identité"), 143, -tail, 133, function()
+        for i, choice in ipairs(detailChoices) do
+            if choice[1] == listDetail then listDetail = detailChoices[i % #detailChoices + 1][1] break end
+        end
+        GL.SetSetting("listDetail", listDetail)
+        refresh()
+    end, nil, false)
+    if GL.TagChoices then
+        f.sharedProfiles = button(panel, L("Fiches de guilde"), 8, -(tail + 60), 133, function()
+            closeMenu()
+            GL.OpenGuildProfiles(currentRecord())
+        end)
+    end
+    f.reset = button(panel, L("Effacer"), 143, -(tail + 60), 65, function()
+        filter, factionFilter, tagFilter, notesOnly, offset, f.query = "all", "all", "all", false, 0, ""
+        f.search:SetText("")
+        refresh()
+    end)
+    f.closeFilters = button(panel, L("Fermer"), 211, -(tail + 60), 65, closeMenu)
+    panel:SetHeight(tail + 94)
+    f.openFilters = button(f, L("Filtres"), 208, -203, 99, function() toggleMenu(panel) end)
     for i = 1, 11 do
         local row = CreateFrame("Button", nil, f)
         row:SetPoint("TOPLEFT", 32, -301 - (i - 1) * 53)
@@ -3149,16 +3152,18 @@ refresh = function(focusSelected)
     ledger.relationFilter:SetText(L("Avis") .. " : " .. relationName)
     local factionName = factionNames[factionFilter] or (factionFilter == "unknown" and L("Inconnue") or L("Toutes factions"))
     ledger.factionFilter:SetText(L("Faction") .. " : " .. factionName)
-    -- Quick views with their counts; the Filtres button says how many filters are on.
+    -- The list button names the list shown and its count; with other filters it says "Sélection".
     local counts = GL.JournalCounts()
     local unfiltered = factionFilter == "all" and not notesOnly
-    UI.selectButton(ledger.views.all, unfiltered and filter == "all" and tagFilter == "all")
-    UI.selectButton(ledger.views.debt, unfiltered and filter == "debt" and tagFilter == "all")
-    UI.selectButton(ledger.views.friend, unfiltered and filter == "friend" and tagFilter == "all")
-    UI.selectButton(ledger.views.any, unfiltered and filter == "all" and tagFilter == "any")
-    for key, control in pairs(ledger.views) do
-        control:SetText(control.title .. " " .. counts[key])
+    local viewKey
+    if unfiltered and tagFilter == "all" and (filter == "all" or filter == "debt" or filter == "friend") then
+        viewKey = filter
+    elseif unfiltered and filter == "all" and tagFilter == "any" then
+        viewKey = "any"
     end
+    ledger.viewKey = viewKey
+    ledger.viewCycle:SetText(viewKey and (ledger.viewNames[viewKey] .. " · " .. counts[viewKey]) or L("Sélection · %d"):format(#records))
+    UI.selectButton(ledger.viewCycle, viewKey ~= "all")
     local active = (filter ~= "all" and 1 or 0) + (factionFilter ~= "all" and 1 or 0) + (tagFilter ~= "all" and 1 or 0) + (notesOnly and 1 or 0)
     ledger.openFilters:SetText(active > 0 and (L("Filtres") .. " · " .. active) or L("Filtres"))
     UI.selectButton(ledger.openFilters, active > 0)
@@ -3169,7 +3174,7 @@ refresh = function(focusSelected)
     ledger.previous:SetEnabled(offset > 0)
     ledger.next:SetEnabled(offset + ledger.pageSize < #records)
     ledger.sort:SetEnabled(searched)
-    for _, choice in ipairs(sortChoices) do if choice[1] == listSort then ledger.sort:SetText(choice[2]) end end
+    for _, choice in ipairs(sortChoices) do if choice[1] == listSort then ledger.sort:SetText(L("Tri : %s"):format(choice[2])) end end
     for _, choice in ipairs(detailChoices) do if choice[1] == listDetail then ledger.detail:SetText(L("Détail : %s"):format(choice[2])) end end
     UI.selectButton(ledger.notesOnly, notesOnly)
     renderDetail()

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.38.2
+GRUDGE LEDGER — 0.39.0
+
+Journal, barre du haut épurée : la rangée de quatre boutons (Tous, À régler, Amis, Signalés) devient un seul bouton qui nomme la liste affichée avec son nombre, par exemple « À régler · 29 ». Un clic passe à la liste suivante. « Filtres » est à côté et réunit tout le reste, y compris l’ordre de tri. Anglais et espagnol : un seul mot par idée (« opinion » et « balance », « opinión » et « saldo »).
 
 Corrections après relecture du code : un coup de main ne peut plus s’ajouter à une vraie victoire pour la même mort (la victoire le remplace), il n’est plus compté comme une agression ni affiché deux fois dans l’histoire, et il reste rattaché au combat où vous êtes mort. Les modèles 3D gardés ne se remplacent plus sans cesse dans une mêlée de plus de douze joueurs. Deux textes corrigés dans les classements.
 

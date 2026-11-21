@@ -13,21 +13,27 @@ local record = GL.Get(id)
 GL.ShowLedger(record.key)
 local f = GrudgeLedgerWindow
 
--- Quick views and their counts.
-assert(f.views.all:GetText() == "Tous 2" and f.views.debt:GetText() == "À régler 1", f.views.all:GetText())
-assert(f.views.friend:GetText() == "Amis 1" and f.views.any:GetText() == "Signalés 0")
-assert(f.views.all.active and f.openFilters:GetText() == "Filtres")
-click(f.views.debt)
-assert(f.views.debt.active and not f.views.all.active and f.rows[1].key == record.key and not f.rows[2]:IsShown())
-click(f.views.friend)
+-- One button names the list and its count; each click shows the next list (0.39.0).
+assert(f.viewCycle:GetText() == "Tous · 2" and not f.viewCycle.active and f.openFilters:GetText() == "Filtres", f.viewCycle:GetText())
+click(f.viewCycle)
+assert(f.viewCycle:GetText() == "À régler · 1" and f.viewCycle.active and f.rows[1].key == record.key and not f.rows[2]:IsShown())
+click(f.viewCycle)
+assert(f.viewCycle:GetText() == "Amis · 1", f.viewCycle:GetText())
 assert(f.rows[1].key == friend.key and f.openFilters:GetText() == "Filtres · 1")
 -- The panel holds the other filters and stays open while choosing; a quick view closes it.
 click(f.openFilters)
 assert(f.filterPanel:IsShown())
 click(f.filters.enemy)
-assert(f.filterPanel:IsShown() and f.rows[1].key == record.key and not f.views.friend.active)
-click(f.views.all)
-assert(not f.filterPanel:IsShown() and f.rows[2]:IsShown())
+assert(f.filterPanel:IsShown() and f.rows[1].key == record.key and f.viewCycle:GetText() == "Sélection · 1", f.viewCycle:GetText())
+-- The order of the list is chosen in the panel. From a custom selection the button returns to
+-- everyone, closes the panel and puts the other filters back; two more clicks reach "Signalés".
+assert(f.sort.parent == f.filterPanel)
+click(f.viewCycle)
+assert(not f.filterPanel:IsShown() and f.rows[2]:IsShown() and f.viewCycle:GetText() == "Tous · 2")
+f.ShowView("any")
+assert(f.viewCycle:GetText() == "Signalés · 0" and not f.rows[1]:IsShown())
+click(f.viewCycle)
+assert(f.viewCycle:GetText() == "Tous · 2")
 
 -- The right page has no tab bar; the summary tells the story.
 GL.ShowLedger(record.key)
