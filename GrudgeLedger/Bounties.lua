@@ -5,6 +5,8 @@ local B = {}
 GL.Bounties = B
 local ML=GL.L or function(s) return s end
 local DAY, GOLD = 86400, 10000
+-- What one member may keep in your book over the 38 days of the log, and the guild's fight counts.
+local MAX_MEMBER_EVENTS,MAX_SCORE_TARGETS,MAX_SCORE_ACTORS=600,1500,60
 local function guid(s)
     return type(s) == "string" and #s <= 32 and s:match("^Player%-%w+%-%w+$")
 end
@@ -65,6 +67,7 @@ local function scope()
     local key = realm.."/"..name
     local s = GL.db.bountyGuilds[key] or {events={}, seq=0}
     s.guildKey=key
+    s.since=s.since or GL.Now()
     GL.db.bountyGuilds[key] = s
     return s, me
 end
@@ -184,7 +187,9 @@ local function view(s,archiving)
             if e.kind=="S" then o.after=e.value
             elseif (not o.custom and e.kind=="K") or (o.custom and e.kind=="H"
                 and (o.group=="party" or e.value=="0") and (o.split=="equal" or e.detail=="")
-                and (e.value=="1" or e.detail=="")) then
+                and (e.value=="1" or e.detail=="")) and e.time-((o.lastWin or {})[e.actor] or -math.huge)>=60 then
+                o.lastWin=o.lastWin or {}
+                o.lastWin[e.actor]=e.time
                 local wins=(o.progress[e.actor] or 0)+1
                 o.progress[e.actor]=math.min(wins,o.quota)
                 if wins==o.quota then
@@ -516,9 +521,23 @@ function B.SendJournal(s, message)
     schedule(s, "J;" .. message)
 end
 -- Per-member cumulative totals survive replay and offline catch-up.
+local scoreTargets
 local function mergeScore(s,actor,target,wins,losses)
     s.scores=s.scores or {}
+    if not scoreTargets or scoreTargets.s~=s then
+        scoreTargets={s=s,n=0}
+        for _ in pairs(s.scores) do scoreTargets.n=scoreTargets.n+1 end
+    end
+    if not s.scores[target] then
+        if scoreTargets.n>=MAX_SCORE_TARGETS then return end
+        scoreTargets.n=scoreTargets.n+1
+    end
     local scores=s.scores[target] or {}
+    if not scores[actor] then
+        local n=0
+        for _ in pairs(scores) do n=n+1 end
+        if n>=MAX_SCORE_ACTORS then return end
+    end
     s.scores[target]=scores
     local old=scores[actor] or {0,0}
     scores[actor]={math.max(old[1],wins),math.max(old[2],losses)}
@@ -745,8 +764,24 @@ function B.Death(target,name)
 end
 local budgets={}
 -- What a member may pass on in another member's name (see receive), and how much of it at login.
-RELAYABLE={O=true,N=true,A=true,P=true,K=true,H=true,D=true,Y=true}
-RELAYED_EVENTS,RELAYED_SCORES=300,150
+-- Local: another addon or a /run macro could otherwise widen it (0.58.5).
+local RELAYABLE={O=true,N=true,A=true,P=true,K=true,H=true,D=true,Y=true}
+local RELAYED_EVENTS,RELAYED_SCORES=300,150
+local memberEvents
+local function countMember(s,actor)
+    if not memberEvents or memberEvents.s~=s then
+        memberEvents={s=s,n={}}
+        for _,raw in pairs(s.events) do
+            local who=type(raw)=="string" and raw:match("^[^;]+;([^;]+);")
+            if who then memberEvents.n[who]=(memberEvents.n[who] or 0)+1 end
+        end
+    end
+    return memberEvents.n[actor] or 0
+end
+-- Words said in your name that you never said: told once per member who passed them on.
+local forgeryTold={}
+local FORGED={O=ML("prime"),N=ML("prime"),A=ML("avis de recherche"),P=ML("contribution"),
+    K=ML("victoire"),H=ML("victoire"),D=ML("mort"),Y=ML("paiement")}
 local function receive(msg,sender)
     local s,me=scope()
     if not s or type(msg)~="string" or #msg>255 or GL.ContainsControlOrMarkup(msg) or not sender then return end
@@ -834,10 +869,21 @@ local function receive(msg,sender)
     -- those arrive from their author only, who sends them again at each login.
     if relay then
         if not RELAYABLE[e.kind] then return end
+        -- Your own words, which this book never wrote since it knows this guild: a member made them up.
+        if e.actor==me and e.time>(s.since or math.huge) and not forgeryTold[sender] then
+            forgeryTold[sender]=true
+            GL.Print(ML("Attention : %s a fait passer en votre nom un message que vous n’avez jamais envoyé (%s). Il est ignoré.")
+                :format(addresses[sender] or sender,FORGED[e.kind] or "?"))
+        end
+        -- A relay speaks only of a member of the guild: never of someone made up or gone.
+        if not addresses[e.actor] then return end
         GL.Transport.Cancel(s,"bounty:relay")
     end
     -- Relays are guild testimony, never an instruction to send gold or alter personal records.
     if e.actor==me then return end
+    -- One member cannot fill your book: past 600 messages in 38 days, theirs wait for the old to go.
+    if countMember(s,e.actor)>=MAX_MEMBER_EVENTS then return end
+    memberEvents.n[e.actor]=(memberEvents.n[e.actor] or 0)+1
     if e.kind=="V" and e.time<now-38*DAY then
         local archive=GL.db.bountyHistory and GL.db.bountyHistory[me]
         local o=archive and archive[e.order]
@@ -1195,6 +1241,7 @@ local function join()
             if not e or (e.kind=="V" and e.time<GL.Now()-38*DAY and not GL.db.bountyHistory[e.actor]) then s.events[k]=nil end
         end
         lastPrune=GL.Now()
+        memberEvents=nil
     end
     if s and not next(roster) then joined,openTargets=nil,nil; return end
     if s~=joined then

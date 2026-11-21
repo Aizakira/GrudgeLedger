@@ -71,6 +71,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `guildKey` | Rappel de la clé `royaume/guilde` | — |
 | `events` | Journal des événements de primes, tels que reçus, par `auteur:numéro` | 38 jours, sauf reçus encore utiles |
 | `seq` | Dernier numéro d'événement émis par ce client | — |
+| `since` | Date où ce carnet a connu la guilde (0.58.5) : un relais à votre nom plus récent, que vous n'avez pas, est une invention signalée | — |
 | `scores` | Victoires et morts cumulées, par cible puis par membre | — |
 | `shareFights`, `shareDeaths`, `shareSocial` | Partages, par personnage. Depuis la 0.51.0 ils sont actifs tant que la valeur n'est pas `false` : seul un refus explicite les coupe | — |
 | `shareSightings` | Accord d'envoi des repérages (veille de guilde, 0.30.0), par personnage. Actif depuis la 0.51.0 tant que la valeur n'est pas `false` : l'envoi révèle la zone où l'on se trouve. Les repérages reçus ne sont jamais sauvegardés | — |
@@ -131,7 +132,7 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `GLV;version`, `GLVR;version` | Version de l'addon du membre (0.58.0). `GLV` à la connexion ; chaque membre y répond par `GLVR`, une fois par minute au plus pour un même arrivant (0.58.1), et une réponse n'appelle jamais de réponse. Gardée en mémoire seulement, jamais sauvegardée. Un membre entendu sans cette annonce a une version antérieure à la 0.58.0 |
 | `MX` | Le membre a décoché la case : ses combats sont effacés chez les autres et la date est notée dans `mapForgot` |
 | `Q` | Demande de rattrapage à la connexion |
-| `R;…` | Relais d'un événement ou d'un total, en réponse à `Q`. Depuis la 0.58.3 : un seul membre répond, après 4 à 20 secondes, avec au plus 300 événements récents et 150 totaux ; les autres annulent en voyant passer un relais. Les types `F` (gagnant), `V` (réception), `X` (retrait), `U` et `S` (modification, succession) ne sont jamais acceptés en relais : ils n'arrivent que de leur auteur, qui les renvoie à chaque connexion. Le membre nommé dans un relais ignore ce que les autres disent en son nom |
+| `R;…` | Relais d'un événement ou d'un total, en réponse à `Q`. Depuis la 0.58.3 : un seul membre répond, après 4 à 20 secondes, avec au plus 300 événements récents et 150 totaux ; les autres annulent en voyant passer un relais. Les types `F` (gagnant), `V` (réception), `X` (retrait), `U` et `S` (modification, succession) ne sont jamais acceptés en relais : ils n'arrivent que de leur auteur, qui les renvoie à chaque connexion. Le membre nommé dans un relais ignore ce que les autres disent en son nom. Depuis la 0.58.5 : un relais ne parle que d'un membre présent dans la liste de guilde ; un relais à votre nom, plus récent que `since` et que vous n'avez pas, est signalé dans la discussion avec le nom du membre qui l'a fait passer (une fois par membre et par session). Deux victoires (`K`, `H`) d'un même chasseur sur un contrat comptent seulement à une minute d'écart au moins. Au plus 600 événements par membre sur 38 jours, 1 500 cibles et 60 membres par cible dans `scores` |
 | `J;C;cible;empreinte;date;compte;nom` | Publication d'une fiche de guilde |
 | `J;T;propriétaire;cible;empreinte;numéro;date;compte;étiquette;0 ou 1` | Avis d'un membre sur une fiche |
 | `J;D;propriétaire;cible;secret` | Retrait d'une fiche ; le secret prouve le droit de retirer |

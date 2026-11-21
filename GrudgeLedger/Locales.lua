@@ -4,6 +4,11 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["prime"] = "recompensa",
+        ["avis de recherche"] = "aviso de búsqueda",
+        ["contribution"] = "contribución",
+        ["paiement"] = "pago",
+        ["Attention : %s a fait passer en votre nom un message que vous n’avez jamais envoyé (%s). Il est ignoré."] = "Atención: %s ha transmitido en tu nombre un mensaje que nunca enviaste (%s). Se ignora.",
         ["De l’or vous a été envoyé pour la prime sur %s. Le courrier vous attend à la boîte aux lettres."] = "Te han enviado oro por la recompensa sobre %s. El correo te espera en el buzón.",
         ["Paiement envoyé"] = "Pago enviado",
         ["Paiement reçu"] = "Pago recibido",
@@ -1942,6 +1947,11 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["prime"] = "bounty",
+        ["avis de recherche"] = "wanted notice",
+        ["contribution"] = "contribution",
+        ["paiement"] = "payment",
+        ["Attention : %s a fait passer en votre nom un message que vous n’avez jamais envoyé (%s). Il est ignoré."] = "Warning: %s passed on a message in your name that you never sent (%s). It is ignored.",
         ["De l’or vous a été envoyé pour la prime sur %s. Le courrier vous attend à la boîte aux lettres."] = "Gold was sent to you for the bounty on %s. The mail is waiting at your mailbox.",
         ["Paiement envoyé"] = "Payment sent",
         ["Paiement reçu"] = "Payment received",

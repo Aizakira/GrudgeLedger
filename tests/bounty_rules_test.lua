@@ -59,9 +59,16 @@ assert(o.quota==3 and o.group=="party" and o.split=="equal" and o.souvenir=="vid
 receive("K",hunter,1,id,"","") -- legacy claim must never close this order
 receive("H",hunter,2,id,"0","")
 receive("H",partner,3,id,"0","")
+-- A second win of the same hunter in the same minute does not count (0.58.5): a forged burst
+-- cannot fill a quota.
+receive("H",hunter,21,id,"0","")
+o=b.List()[id]
+assert(b.Progress(o,hunter)==1, b.Progress(o,hunter))
+now=now+60
 receive("H",hunter,4,id,"0","")
 o=b.List()[id]
 assert(o.state=="open" and b.Progress(o,hunter)==2 and b.Progress(o,partner)==1)
+now=now+60
 receive("H",hunter,5,id,"1,40,53",partner)
 o=b.List()[id]
 assert(o.state=="fulfilled" and o.winner.actor==hunter and o.winner.opponentLevel==53 and o.winner.playerLevel==40)
@@ -123,5 +130,19 @@ assert(b.OpenFor(sameSecond).note=="nueva")
 env.SlashCmdList.GLBOUNTY("renew "..successor.." updated")
 assert(b.OpenFor(sameSecond).note=="updated")
 now=now+7*86400+1
-assert(b.CanRepost(b.List()[successor]) and b.Post(sameSecond,"Later",100))
+local later=assert(b.CanRepost(b.List()[successor]) and b.Post(sameSecond,"Later",100))
+-- 0.58.5: a relay speaks only of a member of the guild. A pledge in the name of someone unknown
+-- is refused; one in your own name that you never made is refused and told, once per member.
+local function relayed(kind,actor,seq,id,value,detail)
+    local msg="R;"..table.concat({kind,actor,seq,now,id,value,detail},";")
+    event(nil,"CHAT_MSG_ADDON","GLBounty1",msg,"GUILD",names[hunter])
+end
+relayed("P","Player-5-ghost",77,later,"5000","")
+assert(b.List()[later].pot["Player-5-ghost"]==nil, "a made-up member pledges nothing")
+local beforeForgery=notices
+relayed("P",owner,78,later,"5000","")
+relayed("P",owner,79,later,"7000","")
+assert(b.List()[later].pot[owner]==100 and notices==beforeForgery+1, "told once, and the pot is yours")
+relayed("P",partner,80,later,"5000","")
+assert(b.List()[later].pot[partner]==5000, "a real member's pledge still travels")
 print("PASS guild alpha rules: personal quota, replay, legacy claims, solo/group, split, notification and durable history")
