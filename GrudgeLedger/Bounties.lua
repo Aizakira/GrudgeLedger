@@ -5,6 +5,7 @@ local B = {}
 GL.Bounties = B
 local ML=GL.L or function(s) return s end
 local DAY, GOLD = 86400, 10000
+local roster,addresses={},{}
 -- What one member may keep in your book over the 38 days of the log, and the guild's fight counts.
 local MAX_MEMBER_EVENTS,MAX_SCORE_TARGETS,MAX_SCORE_ACTORS=600,1500,60
 local function guid(s)
@@ -200,10 +201,8 @@ local function view(s,archiving)
                 o.note=e.detail
                 -- Leave at least seven days of history before the 38-day archive cutoff.
                 if e.value=="1" then o.expires=math.min(o.at+31*DAY,e.time+(o.auto and 3 or 7)*DAY) end
-            elseif e.kind=="X" then
-                -- Kept even when a claim came first: the issuer does not confirm a claim heard after it.
-                o.withdrawAsked=o.withdrawAsked or e.time
-                if not o.first then o.closed,o.endedAt,o.endedKey="withdrawn",e.time,e.key end
+            elseif e.kind=="X" and not o.first then
+                o.closed,o.endedAt,o.endedKey="withdrawn",e.time,e.key
             end
         end
     end
@@ -268,16 +267,8 @@ local function view(s,archiving)
         else
             -- Preserve an already settled/awarded contract when an older posting
             -- arrives late. Equal commitments keep the first publication (GUID tie-break).
-            -- A publication heard here more than an hour after its own date was back-dated, or kept
-            -- away: it never replaces one heard in time (review 0.58.5).
-            local function late(x)
-                local heard=type(s.heard)=="table" and s.heard[x.id]
-                return heard and heard-x.at>3600 or false
-            end
             local kept,lost=prior,o
-            if late(o)~=late(prior) and commitment(late(o) and o or prior)<3 then
-                if late(prior) then kept,lost=o,prior end
-            elseif commitment(o)>commitment(prior) then kept,lost=o,prior end
+            if commitment(o)>commitment(prior) then kept,lost=o,prior end
             active[o.target]=kept
             lost.supersededBy,lost.closed=kept.id,"superseded"
             lost.priorWinner,lost.winner=lost.winner,nil
@@ -294,8 +285,10 @@ local function view(s,archiving)
             local due,awaiting=0,0
             for payer in pairs(o.pot) do
                 for hunter in (o.winner.actor..","..o.winner.detail):gmatch("[^,]+") do
-                    local toSend,toReceive=B.Payment(o,payer,hunter)
-                    due,awaiting=due+toSend,awaiting+toReceive
+                    if not next(addresses) or addresses[hunter] then
+                        local toSend,toReceive=B.Payment(o,payer,hunter)
+                        due,awaiting=due+toSend,awaiting+toReceive
+                    end
                 end
             end
             o.closed=awaiting==0 and "paid" or due==0 and "sent" or "fulfilled"
@@ -308,7 +301,6 @@ function B.Progress(o,hunter)
     hunter=hunter or GL.Safe(UnitGUID,"player")
     return o and not o.supersededBy and o.progress and o.progress[hunter] or 0
 end
-local roster,addresses={},{}
 local function remember(orders,me)
     if not guid(me) then return end
     local all=GL.db.bountyHistory or {}
@@ -716,37 +708,13 @@ local function helpers(guildOnly)
     end
     return table.concat(out,",")
 end
--- A claim made while you were offline reaches you at login: it is not late (review 0.58.6).
-local sessionStart=GL.Now and GL.Now() or 0
-local function lateClaim(s,o)
-    local heard=type(s.heard)=="table" and s.heard[o.first.key]
-    if not heard then return false end
-    return heard-math.max(o.first.time,sessionStart)>1800 or (o.withdrawAsked~=nil and heard>=o.withdrawAsked)
-end
-local toldLate={}
+-- The issuer confirms the first complete claim. Claim times are declared by the hunter: without a
+-- clock everyone trusts, a rule on lateness blocked honest wins made while the issuer was away
+-- (reviews 0.58.6 and 0.58.7). The guild is a circle of trust.
 local function finalize(s,me)
     for id,o in pairs(view(s)) do
-        if o.owner==me and o.state=="claimed" then
-            if not lateClaim(s,o) then
-                declare("F",id,o.first.key,"")
-            elseif not toldLate[id] then
-                toldLate[id]=true
-                GL.Print(ML("Une victoire sur %s attend votre validation : elle est arrivée tard. Ouvrez la prime pour la valider.")
-                    :format(o.name or "?"))
-            end
-        end
+        if o.owner==me and o.state=="claimed" then declare("F",id,o.first.key,"") end
     end
-end
--- Your bounty whose claim arrived late: you look at it and confirm it yourself.
-function B.LateClaim(o)
-    local s,me=scope()
-    return s and o and o.owner==me and o.state=="claimed" and o.first and lateClaim(s,o) or false
-end
-function B.Award(id)
-    local s,me=scope()
-    local o=s and view(s)[id]
-    if not o or o.owner~=me or o.state~="claimed" or not o.first then return nil,"invalid" end
-    return declare("F",id,o.first.key,"")
 end
 function B.Kill(target,combat)
     if GL.GuildMap then GL.GuildMap.Fight("k",target) end
@@ -850,21 +818,19 @@ local function receive(msg,sender)
         local own={}
         for _,raw in pairs(s.events) do
             local e=unpackEvent(raw,true)
-            if e and e.actor==me and (e.kind=="V" or e.time>=now-38*DAY) then
-                own[#own+1]={at=e.time,text=raw,rank=RELAYABLE[e.kind] and 1 or 0}
-            end
+            if e and e.actor==me and (e.kind=="V" or e.time>=now-38*DAY) then own[#own+1]={at=e.time,text=raw} end
         end
-        table.sort(own,function(x,y)
-            if x.rank~=y.rank then return x.rank<y.rank end
-            return x.at>y.at
-        end)
+        table.sort(own,function(x,y) return x.at>y.at end)
         local ownBatch={}
         for i=1,math.min(150,#own) do ownBatch[i]=own[i].text end
-        if #ownBatch>0 and not GL.Transport.State(s,"bounty:own") then
-            GL.Transport.SendBatch(s,ownBatch,{key="bounty:own",delay=1+math.random(0,4)})
+        local function sendOwn()
+            if #ownBatch>0 and not GL.Transport.State(s,"bounty:own") then
+                GL.Transport.SendBatch(s,ownBatch,{key="bounty:own",delay=1+math.random(0,4)})
+            end
+            if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
         end
         if GL.Transport.State(s,"bounty:relay") then
-            if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
+            sendOwn()
             return
         end
         -- The guild's, from one member. Deaths are many: 60 at most, so bounties and pledges pass.
@@ -896,8 +862,10 @@ local function receive(msg,sender)
         -- the complete ones of the others.
         local _,waiting=GL.Transport.Pending(s)
         if #batch>math.max(0,480-waiting) then batch={} end
-        if #batch>0 then GL.Transport.SendBatch(s,batch,{key="bounty:relay",delay=4+math.random(0,16)}) end
-        if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
+        -- The fuller the book, the sooner it answers: a small one waits and is cancelled by a big one.
+        local delay=2+math.floor(16*(1-math.min(#events,RELAYED_EVENTS)/RELAYED_EVENTS))+math.random(0,2)
+        if #batch>0 then GL.Transport.SendBatch(s,batch,{key="bounty:relay",delay=delay}) end
+        sendOwn()
         return
     end
     if sender~=me and GL.GuildMap then GL.GuildMap.Heard(sender) end
@@ -957,11 +925,7 @@ local function receive(msg,sender)
         if countMember(s,e.actor)>=MAX_MEMBER_EVENTS then return end
         memberEvents.n[e.actor]=(memberEvents.n[e.actor] or 0)+1
     end
-    -- When this book heard a bounty or a claim: one heard long after its own date was back-dated.
-    if e.kind=="O" or e.kind=="N" or e.kind=="A" or e.kind=="K" or e.kind=="H" then
-        s.heard=type(s.heard)=="table" and s.heard or {}
-        s.heard[e.key]=now
-    end
+
     if e.kind=="V" and e.time<now-38*DAY then
         local archive=GL.db.bountyHistory and GL.db.bountyHistory[me]
         local o=archive and archive[e.order]
@@ -1180,7 +1144,7 @@ local function payable(s,me)
     for key,o in pairs(orders) do
         if o.winner then
             for h in (o.winner.actor..","..o.winner.detail):gmatch("[^,]+") do
-                if B.Due(o,me,h)>0 then ids[#ids+1]=key; break end
+                if addresses[h] and B.Due(o,me,h)>0 then ids[#ids+1]=key; break end
             end
         end
     end
@@ -1320,11 +1284,6 @@ local function join()
         end
         lastPrune=GL.Now()
         memberEvents=nil
-        if type(s.heard)=="table" then
-            for k in pairs(s.heard) do
-                if not s.events[k] then s.heard[k]=nil end
-            end
-        end
     end
     if s and not next(roster) then joined,openTargets=nil,nil; return end
     if s~=joined then

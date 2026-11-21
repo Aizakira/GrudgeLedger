@@ -523,14 +523,6 @@ local function makeDetail(host)
             message(L("La prime retenue est déjà terminée."))
         end
     end,true)
-    -- A claim that reached you late waits for your hand (0.58.6): the same place as "Republier".
-    p.award=button(p,L("Valider la victoire"),26,446,260,function()
-        local o=f.order
-        if not (o and B.LateClaim(o)) then return end
-        if B.Award(o.id) then message(L("Victoire validée : les payeurs sont prévenus.")) end
-        f.cachedOrders=nil
-        refresh()
-    end,true)
     p.repost=button(p,L("Republier la prime"),26,446,260,function()
         local o=f.order
         if not B.CanRepost(o) then return end
@@ -644,7 +636,6 @@ local function renderDetail(o)
     p.note:SetText(o.note and o.note~="" and UI.plain(o.note) or L("Aucune consigne particulière."))
     visible(p.retained,o.state=="superseded")
     visible(p.repost,o.state~="superseded" and B.CanRepost(o))
-    visible(p.award,B.LateClaim and B.LateClaim(o) or false)
     if o.state~="open" then f.editing=nil end
     visible(f.tools,isOpen(o) and not f.editing)
     visible(f.editor,f.editing~=nil)
