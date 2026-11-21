@@ -365,7 +365,6 @@ Quelques commandes facultatives, également utilisables dans une macro :
 /gl settings
 /gl reperage
 /gl debug
-/gl bug
 /gl sonde
 ```
 

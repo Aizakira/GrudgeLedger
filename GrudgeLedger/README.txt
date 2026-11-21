@@ -1,8 +1,8 @@
-GRUDGE LEDGER — 0.38.0
+GRUDGE LEDGER — 0.38.1
+
+Le signalement de bug ajouté en 0.37.0 est retiré : il demandait trop d’étapes pour être utilisé. Le rapport anonyme de /gl debug reste disponible.
 
 Nettoyage : les pages Face-à-face et Armurerie du Journal, que plus personne ne pouvait ouvrir depuis la 0.33.0, sont retirées du code. Rien ne change à l’écran : la fiche du joueur les remplace, et le filtre « Mes face-à-face » de l’histoire détaillée reste.
-
-Signaler un bug : tapez /gl bug (ou Réglages → Données → « Signaler un bug »). L’addon prépare un rapport : le lieu, la situation (combat, groupe, instance), la langue, la version, les réglages et l’endroit des dernières erreurs. Aucun nom de joueur, aucune note. Écrivez en haut ce qui s’est passé, copiez le tout et collez-le sur github.com/Aizakira/GrudgeLedger/issues (un compte GitHub gratuit est nécessaire : un addon ne peut rien envoyer lui-même sur Internet).
 
 Coup de main : si vous combattiez un joueur et que le jeu vous donne de l’honneur pour sa mort, alors qu’un inconnu hors de votre groupe porte le coup fatal, le Journal l’inscrit comme un « coup de main ». Ce n’est pas une victoire : il a son propre compteur sur la fiche, n’entre pas dans le solde et ne règle aucune dette. Une victoire de groupe reste une victoire.
 
