@@ -4,8 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
-        ["%d combats placés · un clic ouvre le combat"] = "%d combates situados · un clic abre el combate",
-        ["Molette ou clic sur une pastille : entrer dans la zone"] = "Rueda o clic en una marca: entrar en la zona",
+        ["Molette : zoomer · glisser : se déplacer · %d combats placés"] = "Rueda: zoom · arrastrar: moverse · %d combates situados",
         ["Voir la liste"] = "Ver la lista",
         ["Voir la carte"] = "Ver el mapa",
         ["Carte : le jeu n’offre pas les fonctions de carte à un addon."] = "Mapa: el juego no ofrece las funciones de mapa a un addon.",
@@ -1721,8 +1720,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
-        ["%d combats placés · un clic ouvre le combat"] = "%d fights placed · a click opens the fight",
-        ["Molette ou clic sur une pastille : entrer dans la zone"] = "Wheel or click on a badge: enter the zone",
+        ["Molette : zoomer · glisser : se déplacer · %d combats placés"] = "Wheel: zoom · drag: move · %d fights placed",
         ["Voir la liste"] = "Show the list",
         ["Voir la carte"] = "Show the map",
         ["Carte : le jeu n’offre pas les fonctions de carte à un addon."] = "Map: the game does not offer map functions to an addon.",

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.46.0
+GRUDGE LEDGER — 0.47.0
+
+La carte des terres dangereuses se parcourt librement : la molette zoome sur le pointeur, un clic maintenu déplace la carte. Les zones où vous avez combattu sont teintées dans leur vraie forme, d’autant plus rouges que vous y mourez par rapport à votre pire zone (verte si vous n’y avez que gagné). En zoomant, les teintes s’effacent et chaque combat apparaît à son endroit : un crâne pour une mort, une épée pour une victoire. Au zoom le plus fort, la molette entre dans la zone et son image détaillée ; en reculant, on revient au continent puis au monde, où toutes les zones restent visibles.
 
 La carte des terres dangereuses, dans la page Terres de Relations (jamais sur la carte du monde du jeu). Elle s’ouvre sur le continent où vous êtes : chaque zone où vous avez combattu porte une pastille, plus grande et plus rouge quand vous y mourez souvent. La molette ou un clic sur une pastille entre dans la zone ; la molette dans l’autre sens remonte au continent puis au monde. Dans une zone, chaque combat enregistré depuis la 0.45.0 est un point (rouge : une mort, vert : une victoire) ; le survol dit qui et quand, le clic ouvre le combat. « Voir la liste » rend l’ancienne liste.
 

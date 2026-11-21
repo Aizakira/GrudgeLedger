@@ -59,3 +59,6 @@ The original campaign artwork is distributed under GPLv3.
 The neutral silver medallion (Media/RelationNeutral.tga, 128x128 RGBA) was
 generated using OpenAI's built-in image tool for 0.4.3 and is distributed
 under the same GPLv3 terms. It identifies known neutral contacts.
+
+The map of dangerous lands follows an approach learned from OpenMap (MIT License, OpenMap contributors):
+placing zones through C_Map.GetMapRectOnMap and using the game's zone highlights as shapes. No code was copied.

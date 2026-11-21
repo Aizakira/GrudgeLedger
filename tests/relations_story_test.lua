@@ -159,52 +159,91 @@ do
     C_Map.GetPlayerMapPosition = function() return nil end
     GL.RecordPvP(person("Carte", "Test", "0042"), "death", "confirmed", "fixture", "map-2")
     assert(placed.history[#placed.history].mapID == nil, "no position, nothing stored")
-    -- The map of dangerous lands (0.46.0), in the Terres page. It opens on the continent of the zone
-    -- you are in: one badge per zone you fought in, placed by the game's own rectangle.
+    -- The map of dangerous lands, in the Terres page (0.47.0): free zoom and drag, zones tinted in
+    -- the shape the game itself uses to light them up, fights placed when you close in.
     C_Map.GetPlayerMapPosition = function() return { GetXY = function() return 0.5124, 0.2876 end } end
     C_Map.GetMapInfo = function(id)
         if id == 1446 then return { mapID = 1446, name = "Tanaris", mapType = 3, parentMapID = 1414 } end
+        if id == 1444 then return { mapID = 1444, name = "Feralas", mapType = 3, parentMapID = 1414 } end
         if id == 1414 then return { mapID = 1414, name = "Kalimdor", mapType = 2, parentMapID = 947 } end
         if id == 947 then return { mapID = 947, name = "Azeroth", mapType = 1, parentMapID = 0 } end
     end
-    C_Map.GetMapChildrenInfo = function(id)
-        if id == 1414 then return { { mapID = 1446, name = "Tanaris", mapType = 3 }, { mapID = 1444, name = "Feralas", mapType = 3 } } end
-        if id == 947 then return { { mapID = 1414, name = "Kalimdor", mapType = 2 } } end
+    C_Map.GetMapChildrenInfo = function(id, kind)
+        if id == 1414 and kind == 3 then return { { mapID = 1446, name = "Tanaris", mapType = 3 }, { mapID = 1444, name = "Feralas", mapType = 3 } } end
+        if id == 947 and kind == 2 then return { { mapID = 1414, name = "Kalimdor", mapType = 2 } } end
         return {}
     end
-    C_Map.GetMapInfoAtPosition = function(id) return id == 1414 and { mapID = 1446 } or nil end
+    C_Map.GetMapRectOnMap = function(child, parent)
+        if child == 1446 and parent == 1414 then return 0.4, 0.6, 0.6, 0.8 end
+        if child == 1444 and parent == 1414 then return 0.1, 0.3, 0.5, 0.7 end
+        if child == 1414 and parent == 947 then return 0.0, 0.5, 0.0, 1.0 end
+    end
+    C_Map.GetMapInfoAtPosition = function(id, x, y)
+        if id ~= 1414 then return nil end
+        if x >= 0.4 and x <= 0.6 and y >= 0.6 and y <= 0.8 then return { mapID = 1446 } end
+        if x >= 0.1 and x <= 0.3 and y >= 0.5 and y <= 0.7 then return { mapID = 1444 } end
+        return { mapID = 1414 }
+    end
+    C_Map.GetMapHighlightInfoAtPosition = function(id, x, y)
+        if id == 1414 and x >= 0.4 and x <= 0.6 and y >= 0.6 then return 9001, nil, 0.8, 0.9, 0.22, 0.21, 0.39, 0.6 end
+        return 0
+    end
     local methods = getmetatable(UIParent).__index
     function methods:GetLeft() return 100 end
     function methods:GetTop() return 600 end
+    function methods:SetVertexColor(...) self.vertex = { ... } end
+    function methods:SetAlpha(value) self.alpha = value end
+    local cursorX, cursorY = 200, 200
+    GetCursorPosition = function() return cursorX, cursorY end
     click(f.tabs.lands)
     local landsPage = f.host.pages.lands
     local view = landsPage.map
-    assert(landsPage.mode == "map" and view:IsShown() and view.mapID == 1414 and not landsPage.rows[1]:IsShown())
-    assert(#view.entries == 1 and view.entries[1].child.name == "Tanaris" and view.badges[1]:IsShown())
-    assert(view.badges[1].count:GetText() == tostring(R.Lands()[1].deaths) and view.out:GetText() == "‹ Azeroth")
-    assert(view.caption:GetText():find("^Kalimdor · "), view.caption:GetText())
-    -- A click on the badge enters the zone: one point per fight that kept its position, and you.
-    click(view.badges[1])
-    assert(view.mapID == 1446 and #view.placed == 1 and view.points[1]:IsShown() and view.placed[1].event == event)
-    assert(view.dot:IsShown() and not view.badges[1]:IsShown() and view.hint:GetText():find("^1 combats placés"), view.hint:GetText())
-    -- The wheel goes up to the continent, then to the world, then stops; away from you it enters
-    -- the zone under the pointer.
-    view.canvas.scripts.OnMouseWheel(view.canvas, -1)
-    assert(view.mapID == 1414)
-    view.canvas.scripts.OnMouseWheel(view.canvas, -1)
-    assert(view.mapID == 947 and #view.entries == 1 and view.entries[1].child.name == "Kalimdor" and not view.out:IsShown())
-    assert(R.MapZoomOut() == false and view.mapID == 947)
-    view.mapID = 1414
-    R.Refresh()
-    view.canvas.scripts.OnMouseWheel(view.canvas, 1)
-    assert(view.mapID == 1446, "the wheel enters the zone under the pointer")
+    assert(landsPage.mode == "map" and view:IsShown() and view.mapID == 1414 and view.zoom == 1 and not landsPage.rows[1]:IsShown())
+    -- One region for the zone you fought in, in the game's shape; the worst zone is bright red.
+    assert(#view.tallies == 1 and view.tallies[1].zone.name == "Tanaris" and #view.shapes == 1 and view.regions[1]:IsShown())
+    assert(view.shapes[1].zone.shape.file == 9001 and view.shapes[1].alpha > 0.9, view.shapes[1].alpha)
+    assert(view.regions[1].vertex[1] > 0.8 and view.labels[1].count:GetText() == tostring(R.Lands()[1].deaths))
+    assert(view.out:GetText() == "‹ Azeroth" and view.caption:GetText():find("^Kalimdor · "), view.caption:GetText())
+    -- Zoomed out the fights are hidden; they are placed through the zone's rectangle on the continent.
+    assert(#view.placed == 1 and view.placed[1].event == event and not view.points[1]:IsShown())
+    assert(math.abs(view.placed[1].x - (0.4 + 0.512 * 0.2)) < 0.001 and math.abs(view.placed[1].y - (0.6 + 0.288 * 0.2)) < 0.001)
+    -- The wheel closes in on the pointer: the fights appear, the region fades.
+    local wheel = view.canvas.scripts.OnMouseWheel
+    for _ = 1, 3 do wheel(view.canvas, 1) end
+    assert(view.zoom > 1.9 and view.points[1]:IsShown() and view.regions[1].alpha < view.shapes[1].alpha, view.zoom)
+    -- Holding the button and moving drags the map; the view never leaves it.
+    local before = view.cx
+    view.canvas.scripts.OnMouseDown(view.canvas, "LeftButton")
+    cursorX = cursorX + 60
+    view.canvas.scripts.OnUpdate(view.canvas, 0.1)
+    view.canvas.scripts.OnMouseUp(view.canvas, "LeftButton")
+    assert(view.cx < before and view.cx >= 0.5 / view.zoom - 0.0001, view.cx)
+    -- At the deepest zoom the wheel enters the zone under the pointer; a click on a count does too.
+    R.MapEnter(1414, 4, 0.5, 0.7)
+    cursorX, cursorY = 100 + view.width / 2, 600 - view.height / 2
+    wheel(view.canvas, 1)
+    assert(view.mapID == 1446 and view.zoom == 1 and view.zoneMap and view.points[1]:IsShown() and view.dot:IsShown(), view.mapID)
+    assert(math.abs(view.placed[1].x - 0.512) < 0.001 and not view.regions[1]:IsShown())
+    -- Backing out of a zone returns to its continent, the zone still under your eyes; then the world,
+    -- where the zones of every continent are shown, not a total per continent.
+    wheel(view.canvas, -1)
+    assert(view.mapID == 1414 and view.zoom == 2.5 and math.abs(view.cx - 0.5) < 0.001, view.zoom)
+    R.MapEnter(1414)
+    wheel(view.canvas, -1)
+    assert(view.mapID == 947 and #view.tallies == 1 and view.tallies[1].zone.name == "Tanaris" and not view.out:IsShown())
+    assert(math.abs(view.tallies[1].zone.rect.left - 0.2) < 0.001 and math.abs(view.shapes[1].zone.shape.width - 0.11) < 0.001)
+    assert(R.MapOut() == false and view.mapID == 947)
+    R.MapEnter(1414)
+    click(view.labels[1])
+    assert(view.mapID == 1446)
     -- "Voir la liste" gives the list back; a client without map pictures only has the list.
     click(landsPage.toggle)
     assert(landsPage.mode == "list" and not view:IsShown() and landsPage.rows[1]:IsShown() and landsPage.toggle:GetText() == "Voir la carte")
     click(landsPage.toggle)
     C_Map.GetMapArtLayerTextures = function() return {} end
+    view.loaded = nil
     R.Refresh()
     assert(not view:IsShown() and landsPage.rows[1]:IsShown(), "no picture: the list")
     assert(#GL.errors == 0, (GL.errors[1] or {}).text)
-    print("PASS map: probe facts, position kept on fights, badges by zone, points in a zone, wheel zoom, list fallback")
+    print("PASS map: probe facts, position kept on fights, zones tinted in their shape, free zoom and drag, fights when zoomed, list fallback")
 end
