@@ -1822,21 +1822,22 @@ function R.MapProbe()
     return true
 end
 
--- The guild's journal (0.51.0, filters in 0.52.0): what happens to the members who share their
--- fights, yours included, the latest first. One line a fight: who, against whom, where, when.
--- Four filters above the lines: who (a member), against whom (an opponent), what (deaths or
--- victories) and when. A click on a line opens the opponent's sheet. Pages turn, nothing scrolls.
+-- The guild's journal (0.51.0; its filters work like the Journal's since 0.52.1): what happens to
+-- the members who share their fights, yours included, the latest first. One line a fight: who,
+-- against whom, where, when. Above the lines, the Journal's three controls: a search (a member or
+-- an opponent), one button naming the current list with its count (a click shows the next one),
+-- and "Filtres", a panel of grouped choices opened on demand. Pages turn, nothing scrolls.
 local GUILD_ROWS = 6
-local PICKS = 12 -- names on one page of the chooser, in two columns
+local GROUP_NAMES = 5 -- names offered in a group of the panel, after "everyone": the search finds the rest
 local PERIODS = { { 0, "Toujours" }, { 86400, "24 h" }, { 7 * 86400, "7 jours" }, { 30 * 86400, "30 jours" } }
-local KINDS = { { nil, "Morts et victoires" }, { "death", "Morts" }, { "kill", "Victoires" } }
+local VIEWS = { { "all", "Tous" }, { "death", "Morts" }, { "kill", "Victoires" }, { "mine", "Mes combats" } }
 local function elapsed(at)
     local delta = math.max(0, GL.Now() - at)
     if delta < 3600 then return L("il y a %d min"):format(math.max(1, math.floor(delta / 60))) end
     if delta < 86400 then return L("il y a %d h"):format(math.floor(delta / 3600)) end
     return L("il y a %d j"):format(math.floor(delta / 86400))
 end
--- Shortens a name on a character boundary, for the filter buttons.
+-- Shortens a name on a character boundary, for the buttons of the panel.
 local function short(text, most)
     local out, count = {}, 0
     for char in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
@@ -1857,27 +1858,30 @@ end
 local function foeName(point)
     return UI.plain(point.name or L("un joueur inconnu"))
 end
--- The guild's fights that pass the filters: who (member identifier), foe (opponent key), kind
--- ("death" or "kill") and period (seconds back from now, 0 for always). Left out, a filter keeps
--- everything; "skip" names one filter to leave out, for the chooser's counts.
+-- The guild's fights that pass the filters: view ("death", "kill", "mine" or "all"), who (member
+-- identifier), foe (opponent key), period (seconds back from now, 0 for always) and query (part of
+-- a member's or an opponent's name). "skip" leaves one filter out, for the counts of the panel.
 function R.GuildLog(filter, skip)
     filter = filter or {}
     local all = GL.GuildMap and GL.GuildMap.Points(true) or {}
     local since = (filter.period or 0) > 0 and skip ~= "period" and GL.Now() - filter.period or nil
     local who = skip ~= "who" and filter.who or nil
     local foe = skip ~= "foe" and filter.foe or nil
-    local kind = skip ~= "kind" and filter.kind or nil
-    if not (since or who or foe or kind) then return all end
+    local view = skip ~= "view" and filter.view ~= "all" and filter.view or nil
+    local query = type(filter.query) == "string" and filter.query ~= "" and filter.query:lower() or nil
+    if not (since or who or foe or view or query) then return all end
     local out = {}
     for _, point in ipairs(all) do
-        if (not who or point.actor == who) and (not kind or point.kind == kind) and (not since or point.time >= since)
-            and (not foe or foeKey(point) == foe) then
-            out[#out + 1] = point
+        local keep = (not who or point.actor == who) and (not since or point.time >= since) and (not foe or foeKey(point) == foe)
+            and (not view or (view == "mine" and point.mine) or point.kind == view)
+        if keep and query then
+            keep = memberName(point):lower():find(query, 1, true) ~= nil or foeName(point):lower():find(query, 1, true) ~= nil
         end
+        if keep then out[#out + 1] = point end
     end
     return out
 end
--- The names the chooser offers for "who" or "foe", with how many fights each, the most first.
+-- The names the panel offers for "who" or "foe", with how many fights each, the most first.
 function R.GuildLogChoices(filter, field)
     local counts, list = {}, {}
     for _, point in ipairs(R.GuildLog(filter, field)) do
@@ -1918,101 +1922,148 @@ local function wanted(row)
     end
     R.Refresh()
 end
--- The chooser: the members (or the opponents) of the guild's journal, on pages, in place of the lines.
-local function openChooser(page, field)
-    page.choosing = page.choosing ~= field and field or nil
-    page.pickOffset = 0
-    R.Refresh()
-end
-local function buildChooser(page)
-    local chooser = CreateFrame("Frame", nil, page)
-    chooser:SetPoint("TOPLEFT", X(26), -108)
-    chooser:SetSize(S(540), 352)
-    local band = chooser:CreateTexture(nil, "BACKGROUND")
-    band:SetAllPoints()
-    band:SetColorTexture(0.44, 0.28, 0.13, 0.12)
-    chooser.title = Panels.Text(chooser, S(12), -10, S(400), 14, true)
-    chooser.buttons = {}
-    for i = 1, PICKS do
-        local column, line = (i - 1) % 2, math.floor((i - 1) / 2)
-        local index = i
-        local button = UI.button(chooser, "", S(12) + column * S(262), -40 - line * 44, S(254), function()
-            local entry = chooser.entries and chooser.entries[page.pickOffset + index]
-            if index == 1 and page.pickOffset == 0 then
-                page.filter[page.choosing] = nil
-            elseif entry then
-                page.filter[page.choosing] = entry.key
-            end
-            page.choosing, page.offset = nil, 0
-            R.Refresh()
-        end, nil, true)
-        chooser.buttons[i] = button
+-- The panel of filters, drawn like the Journal's: a caption per group naming the current choice,
+-- the choices in two columns, then "Effacer" and "Fermer".
+local function buildFilterPanel(page)
+    local panel = CreateFrame("Frame", nil, page)
+    panel:SetPoint("TOPLEFT", X(283), -102)
+    panel:SetSize(283, 344)
+    panel:EnableMouse(true)
+    panel:SetFrameStrata("FULLSCREEN_DIALOG")
+    panel:SetToplevel(true)
+    -- Above the lines and their buttons, as the Journal's panel is above its list.
+    GL.Safe(panel.SetFrameLevel, panel, (GL.Safe(page.GetFrameLevel, page) or 1) + 20)
+    UI.surface(panel, UI.theme.gold)
+    UI.surface(panel, UI.theme.panel, 1)
+    panel:Hide()
+    local function group(y, count, onChoose)
+        local caption = UI.label(panel, "", nil, 8, -y, 267)
+        caption:SetTextColor(unpack(UI.theme.brass))
+        local choices = {}
+        for i = 1, count do
+            local index = i
+            choices[i] = UI.button(panel, "", 8 + ((i - 1) % 2) * 135, -(y + 18) - math.floor((i - 1) / 2) * 28, 133, function()
+                onChoose(index)
+                page.offset = 0
+                R.Refresh()
+            end, true)
+        end
+        return caption, choices
     end
-    chooser.previous = UI.button(chooser, "‹", S(12), -312, S(40), function()
-        page.pickOffset = math.max(0, page.pickOffset - PICKS)
+    panel.periodCaption, panel.periods = group(8, #PERIODS, function(i) page.filter.period = PERIODS[i][1] end)
+    panel.whoCaption, panel.who = group(90, GROUP_NAMES + 1, function(i)
+        page.filter.who = i > 1 and panel.whoKeys[i] or nil
+    end)
+    panel.foeCaption, panel.foe = group(200, GROUP_NAMES + 1, function(i)
+        page.filter.foe = i > 1 and panel.foeKeys[i] or nil
+    end)
+    panel.clear = UI.button(panel, L("Effacer"), 143, -310, 65, function()
+        page.filter = { view = "all" }
+        page.search:SetText("")
+        page.offset = 0
         R.Refresh()
-    end, nil, true)
-    chooser.next = UI.button(chooser, "›", S(488), -312, S(40), function()
-        page.pickOffset = page.pickOffset + PICKS
-        R.Refresh()
-    end, nil, true)
-    chooser:Hide()
-    return chooser
+    end)
+    panel.close = UI.button(panel, L("Fermer"), 211, -310, 65, function() panel:Hide() end)
+    return panel
 end
-local function paintChooser(page)
-    local chooser, field = page.chooser, page.choosing
-    chooser.title:SetText(field == "who" and L("Le journal de quel membre ?") or L("Les combats contre quel joueur ?"))
-    -- The first place is always "everyone"; the names follow, the most fights first.
-    local entries = { { label = field == "who" and L("Tous les membres") or L("Tous les ennemis") } }
-    for _, entry in ipairs(R.GuildLogChoices(page.filter, field)) do entries[#entries + 1] = entry end
-    chooser.entries = entries
-    page.pickOffset = math.min(page.pickOffset, math.max(0, math.floor((#entries - 1) / PICKS) * PICKS))
-    for i, button in ipairs(chooser.buttons) do
-        local entry = entries[page.pickOffset + i]
-        if entry then
-            local text = entry.count and (short(entry.label, 24) .. " · " .. entry.count) or entry.label
-            button:SetText(text)
-            UI.selectButton(button, page.filter[field] == entry.key)
+-- Fills a group of names: "everyone" first, then the members (or opponents) with the most fights.
+local function fillNames(choices, everyone, entries, chosen)
+    local keys = {}
+    for i, button in ipairs(choices) do
+        local entry = i > 1 and entries[i - 1]
+        if i == 1 then
+            button:SetText(everyone)
+            UI.selectButton(button, chosen == nil)
+            button:Show()
+        elseif entry then
+            keys[i] = entry.key
+            button:SetText(short(entry.label, 14) .. " · " .. entry.count)
+            UI.selectButton(button, chosen == entry.key)
             button:Show()
         else
             button:Hide()
         end
     end
-    chooser.previous:SetEnabled(page.pickOffset > 0)
-    chooser.next:SetEnabled(page.pickOffset + PICKS < #entries)
-    if #entries > PICKS then
-        chooser.previous:Show()
-        chooser.next:Show()
-    else
-        chooser.previous:Hide()
-        chooser.next:Hide()
+    return keys
+end
+local function paintFilterPanel(page)
+    local panel, filter = page.filterPanel, page.filter
+    local periodName = PERIODS[1][2]
+    for i, button in ipairs(panel.periods) do
+        button:SetText(L(PERIODS[i][2]))
+        UI.selectButton(button, (filter.period or 0) == PERIODS[i][1])
+        if (filter.period or 0) == PERIODS[i][1] then periodName = PERIODS[i][2] end
     end
+    panel.periodCaption:SetText(L("Période : %s"):format(L(periodName)))
+    local members, foes = R.GuildLogChoices(filter, "who"), R.GuildLogChoices(filter, "foe")
+    panel.whoKeys = fillNames(panel.who, L("Tous les membres"), members, filter.who)
+    panel.foeKeys = fillNames(panel.foe, L("Tous les ennemis"), foes, filter.foe)
+    local whoName, foeLabel = L("Tous les membres"), L("Tous les ennemis")
+    for _, entry in ipairs(members) do
+        if entry.key == filter.who then whoName = entry.label end
+    end
+    for _, entry in ipairs(foes) do
+        if entry.key == filter.foe then foeLabel = entry.label end
+    end
+    panel.whoCaption:SetText(L("Membre : %s"):format(whoName))
+    panel.foeCaption:SetText(L("Ennemi : %s"):format(foeLabel))
 end
 local function buildGuildJournal(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
     page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
     page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
-    page.filter, page.period, page.kind = {}, 1, 1
-    -- The filters: two choosers and two switches, and a way back to everything.
-    page.who = UI.button(page, "", X(26), -72, S(150), function() openChooser(page, "who") end, nil, true)
-    page.foe = UI.button(page, "", X(180), -72, S(150), function() openChooser(page, "foe") end, nil, true)
-    page.kindButton = UI.button(page, "", X(334), -72, S(104), function()
-        page.kind = page.kind % #KINDS + 1
-        page.filter.kind, page.offset, page.choosing = KINDS[page.kind][1], 0, nil
+    page.filter, page.offset = { view = "all" }, 0
+    -- The Journal's three controls, in the same order: search, list, filters.
+    page.search = CreateFrame("EditBox", nil, page)
+    page.search:SetPoint("TOPLEFT", X(26), -72)
+    page.search:SetSize(S(196), 26)
+    page.search:SetAutoFocus(false)
+    page.search:SetMaxLetters(60)
+    UI.styleInput(page.search, false, false)
+    page.search:SetTextInsets(8, 6, 3, 3)
+    local function applySearch()
+        page.filter.query = page.search:GetText():match("^%s*(.-)%s*$")
+        page.offset = 0
+        page.search:ClearFocus()
         R.Refresh()
-    end, nil, true)
-    page.periodButton = UI.button(page, "", X(442), -72, S(82), function()
-        page.period = page.period % #PERIODS + 1
-        page.filter.period, page.offset, page.choosing = PERIODS[page.period][1], 0, nil
+    end
+    page.search:SetScript("OnEnterPressed", applySearch)
+    page.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    page.searchHint = UI.label(page.search, L("Rechercher…"), nil, 8, -5, S(180))
+    page.searchHint:SetTextColor(unpack(UI.theme.muted))
+    page.search:SetScript("OnTextChanged", function(self)
+        if self:GetText():find("%S") then
+            page.searchHint:Hide()
+        else
+            page.searchHint:Show()
+            if page.filter.query and page.filter.query ~= "" then
+                page.filter.query, page.offset = nil, 0
+                R.Refresh()
+            end
+        end
+    end)
+    -- One button names the current list with its count; a click shows the next one. A list always
+    -- starts clean: the other filters are put back, as in the Journal.
+    page.viewCycle = UI.button(page, "", X(226), -72, S(196), function()
+        local following = VIEWS[1][1]
+        for i, view in ipairs(VIEWS) do
+            if view[1] == page.filter.view then following = VIEWS[i % #VIEWS + 1][1] end
+        end
+        page.filter, page.offset = { view = following }, 0
+        page.search:SetText("")
+        page.filterPanel:Hide()
         R.Refresh()
-    end, nil, true)
-    page.reset = UI.button(page, "×", X(528), -72, S(38), function()
-        page.filter, page.period, page.kind, page.offset, page.choosing = {}, 1, 1, 0, nil
-        R.Refresh()
-    end, nil, true)
-    page.reset:SetScript("OnEnter", function(self) tip(self, L("Tout afficher")) end)
-    page.reset:SetScript("OnLeave", hideTip)
+    end)
+    page.openFilters = UI.button(page, L("Filtres"), X(426), -72, S(140), function()
+        if page.filterPanel:IsShown() then
+            page.filterPanel:Hide()
+        else
+            page.filterPanel:Show()
+            page.filterPanel:Raise()
+            R.Refresh()
+        end
+    end)
     page.rows = {}
     for i = 1, GUILD_ROWS do
         local row = CreateFrame("Button", nil, page)
@@ -2035,9 +2086,9 @@ local function buildGuildJournal(host)
         row:SetScript("OnClick", openOpponent)
         page.rows[i] = row
     end
-    page.chooser = buildChooser(page)
+    page.filterPanel = buildFilterPanel(page)
+    page:SetScript("OnHide", function() page.filterPanel:Hide() end)
     page.empty = Panels.Text(page, X(26), -124, S(540), 13, false, UI.theme.inkMuted)
-    page.offset = 0
     page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
         page.offset = math.max(0, page.offset - GUILD_ROWS)
         R.Refresh()
@@ -2057,39 +2108,28 @@ local function paintGuildJournal(page)
     local filter = page.filter
     local lines = sharing and R.GuildLog(filter) or {}
     page.lead:SetText(sharing and L("Les victoires et les morts des membres qui partagent leurs combats.") or "")
-    -- The filter buttons say what they keep; a chosen name is shown on its button.
-    local whoName, foeLabel = L("Tous les membres"), L("Tous les ennemis")
-    for _, point in ipairs(sharing and GL.GuildMap.Points(true) or {}) do
-        if filter.who and point.actor == filter.who then whoName = memberName(point) end
-        if filter.foe and foeKey(point) == filter.foe then foeLabel = foeName(point) end
+    -- The list button: its name and how many lines it holds, as in the Journal.
+    local viewName = VIEWS[1][2]
+    for _, view in ipairs(VIEWS) do
+        if view[1] == filter.view then viewName = view[2] end
     end
-    page.who:SetText(short(whoName, 18))
-    page.foe:SetText(short(foeLabel, 18))
-    page.kindButton:SetText(L(KINDS[page.kind][2]))
-    page.periodButton:SetText(L(PERIODS[page.period][2]))
-    UI.selectButton(page.who, filter.who ~= nil or page.choosing == "who")
-    UI.selectButton(page.foe, filter.foe ~= nil or page.choosing == "foe")
-    UI.selectButton(page.kindButton, filter.kind ~= nil)
-    UI.selectButton(page.periodButton, (filter.period or 0) > 0)
-    local filtered = filter.who or filter.foe or filter.kind or (filter.period or 0) > 0
-    for _, control in ipairs({ page.who, page.foe, page.kindButton, page.periodButton }) do
+    page.viewCycle:SetText(L("%s · %d"):format(L(viewName), #lines))
+    UI.selectButton(page.viewCycle, filter.view ~= "all")
+    local active = (filter.who and 1 or 0) + (filter.foe and 1 or 0) + ((filter.period or 0) > 0 and 1 or 0)
+    page.openFilters:SetText(active > 0 and (L("Filtres") .. " · " .. active) or L("Filtres"))
+    UI.selectButton(page.openFilters, active > 0)
+    for _, control in ipairs({ page.search, page.viewCycle, page.openFilters }) do
         if sharing then control:Show() else control:Hide() end
     end
-    if sharing and filtered then page.reset:Show() else page.reset:Hide() end
-    if not sharing then page.choosing = nil end
-    if page.choosing then
-        page.chooser:Show()
-        paintChooser(page)
-    else
-        page.chooser:Hide()
-    end
+    if not sharing then page.filterPanel:Hide() end
+    if page.filterPanel:IsShown() then paintFilterPanel(page) end
     page.offset = math.min(page.offset, math.max(0, math.floor((#lines - 1) / GUILD_ROWS) * GUILD_ROWS))
     local deaths = 0
     for _, point in ipairs(lines) do
         if point.kind == "death" then deaths = deaths + 1 end
     end
     for i, row in ipairs(page.rows) do
-        local point = not page.choosing and lines[page.offset + i]
+        local point = lines[page.offset + i]
         if point then
             local member, enemy = memberName(point), foeName(point)
             local died = point.kind == "death"
@@ -2116,32 +2156,33 @@ local function paintGuildJournal(page)
             row:Hide()
         end
     end
+    local filtered = active > 0 or filter.view ~= "all" or (filter.query and filter.query ~= "")
     local empty = ""
     if not inGuild then
         empty = L("Vous n’êtes dans aucune guilde : ce journal raconte les combats de la vôtre.")
     elseif not sharing then
         empty = L("La vision de guilde est décochée. Cochez-la sur la carte pour lire ce journal et y figurer.")
     elseif #lines == 0 and filtered then
-        empty = L("Aucun combat pour ces filtres. La croix les retire.")
+        empty = L("Aucun combat ne correspond. « Effacer » dans les filtres remet tout.")
     elseif #lines == 0 then
         empty = L("Aucun combat partagé pour l’instant. Le journal se remplit quand un membre gagne ou meurt.")
     end
-    page.empty:SetText(not page.choosing and empty or "")
-    local turning = not page.choosing and #lines > GUILD_ROWS
+    page.empty:SetText(empty)
     page.previous:SetEnabled(page.offset > 0)
     page.next:SetEnabled(page.offset + GUILD_ROWS < #lines)
-    if turning then
+    if #lines > GUILD_ROWS then
         page.previous:Show()
         page.next:Show()
     else
         page.previous:Hide()
         page.next:Hide()
     end
-    page.count:SetText(not page.choosing and #lines > 0 and L("%d combats · %d morts"):format(#lines, deaths) or "")
+    page.count:SetText(#lines > 0 and L("%d combats · %d morts"):format(#lines, deaths) or "")
 end
 
 -- The book: the narrow format of the player sheet. Left, the seven entries and a few figures.
 -- Right, the page.
+local TALLY_LINES = 5
 local entries = { { "overview", "Vue d’ensemble" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "guilds", "Guildes" },
     { "lands", "Carte" }, { "guildlog", "Journal de guilde" }, { "rankings", "Classements" } }
 local function book()
@@ -2158,10 +2199,32 @@ local function book()
         tab:SetHeight(30)
         f.tabs[key] = tab
     end
-    f.figures = Panels.Text(f, 40, -426, 164, 12, false, UI.theme.muted)
-    f.figures:SetHeight(120)
-    GL.Safe(f.figures.SetWordWrap, f.figures, true)
-    GL.Safe(f.figures.SetJustifyV, f.figures, "TOP")
+    -- The key figures, drawn like those of the player sheet's left column: a caption, then one
+    -- line each, the name on the left and the number on the right. Each line opens its page.
+    f.keyHeading = Panels.Text(f, 40, -424, 166, 12, true, UI.theme.brass)
+    f.tally = {}
+    for i = 1, TALLY_LINES do
+        local cell = CreateFrame("Button", nil, f)
+        cell:SetPoint("TOPLEFT", 40, -444 - (i - 1) * 22)
+        cell:SetSize(166, 20)
+        cell.label = UI.label(cell, "", nil, 0, -3, 112)
+        UI.journalFont(cell.label, "GameFontHighlight", 11)
+        cell.label:SetTextColor(unpack(UI.theme.brass))
+        cell.value = UI.label(cell, "", nil, 102, -1, 64)
+        UI.journalFont(cell.value, "GameFontNormalLarge", 13)
+        cell.value:SetJustifyH("RIGHT")
+        local rule = cell:CreateTexture(nil, "BACKGROUND")
+        rule:SetPoint("BOTTOMLEFT")
+        rule:SetSize(166, 1)
+        rule:SetColorTexture(0.55, 0.40, 0.20, 0.30)
+        local hover = cell:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetAllPoints()
+        hover:SetColorTexture(0.91, 0.77, 0.48, 0.10)
+        cell:SetScript("OnClick", function(self)
+            if self.page then R.Open(self.page) end
+        end)
+        f.tally[i] = cell
+    end
     local host = CreateFrame("Frame", nil, f)
     host:SetPoint("TOPLEFT", 240, -152)
     host:SetSize(SHEET_W, SHEET_H)
@@ -2170,17 +2233,33 @@ local function book()
     f.host = host
     return f
 end
--- The few figures of the left column: what is owed, how many debts and rivalries.
-local function figures()
+-- The key figures of the left column, each with the page it opens: what is owed, the debts, the
+-- rivalries and, when the guild shares its fights, the guild's deaths of the week.
+function R.Tally()
     local open, settled, total = R.Debts()
-    local lines = { L("Reste dû : %d"):format(total), L("%d dettes ouvertes · %d réglées ce mois-ci"):format(#open, #settled) }
-    local rivals = #R.Rivals()
-    if rivals == 1 then
-        lines[#lines + 1] = L("1 rivalité")
-    elseif rivals > 1 then
-        lines[#lines + 1] = L("%d rivalités"):format(rivals)
+    local lines = { { L("Reste dû"), total, "debts" }, { L("Dettes ouvertes"), #open, "debts" },
+        { L("Réglées ce mois-ci"), #settled, "debts" }, { L("Rivalités"), #R.Rivals(), "rivals" } }
+    if GL.GuildMap and GL.GuildMap.Enabled() then
+        lines[#lines + 1] = { L("Morts de guilde · 7 j"), #R.GuildLog({ view = "death", period = 7 * 86400 }), "guildlog" }
     end
-    return table.concat(lines, "\n\n")
+    return lines
+end
+local function paintTally(f)
+    f.keyHeading:SetText(L("Chiffres clés"))
+    local lines = R.Tally()
+    for i, cell in ipairs(f.tally) do
+        local line = lines[i]
+        if line then
+            cell.label:SetText(line[1])
+            cell.value:SetText(tostring(line[2]))
+            -- What is owed reads in red, like the ledger's total.
+            if i == 1 and line[2] > 0 then cell.value:SetTextColor(0.85, 0.30, 0.25) else cell.value:SetTextColor(unpack(UI.theme.paper)) end
+            cell.page = line[3]
+            cell:Show()
+        else
+            cell:Hide()
+        end
+    end
 end
 function R.Open(key)
     local f = book()
@@ -2210,6 +2289,6 @@ function R.Refresh()
     local painters = { overview = paintOverview, debts = paintDebts, rivals = paintRivals, guilds = paintGuilds, lands = paintLands,
         guildlog = paintGuildJournal, rankings = paintRankings }
     painters[R.page](f.host.pages[R.page])
-    f.figures:SetText(figures())
+    paintTally(f)
 end
 GL.On("CHANGED", function() R.Refresh() end)

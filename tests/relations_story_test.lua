@@ -52,7 +52,14 @@ assert(overview.week:GetText():find("1 dette réglée.", 1, true), overview.week
 -- The ledger: the open debt first with its amount and buttons, the avenged one struck through.
 click(f.tabs.debts)
 assert(R.page == "debts" and ledger:IsShown() and not overview:IsShown())
-assert(f.figures:GetText():find("Reste dû : " .. GL.Debt(nemesis), 1, true), f.figures:GetText())
+-- The key figures of the left column, like the player sheet's; each line opens its page.
+assert(f.keyHeading:GetText() == "Chiffres clés" and f.tally[1].label:GetText() == "Reste dû")
+assert(tonumber(f.tally[1].value:GetText()) >= GL.Debt(nemesis) and f.tally[4].label:GetText() == "Rivalités", f.tally[1].value:GetText())
+click(f.tally[4])
+assert(R.page == "rivals")
+click(f.tally[1])
+assert(R.page == "debts")
+click(f.tabs.overview)
 local open, settled, total = R.Debts()
 assert(#open == 1 and #settled == 1 and settled[1].record == GL.Get(avenged) and total == GL.Debt(nemesis))
 assert(ledger.total:GetText() == tostring(total) and ledger.count:GetText() == "1 dettes ouvertes · 1 réglées ce mois-ci")
@@ -316,7 +323,8 @@ do
     assert(log:IsShown() and log.title:GetText() == "Journal de guilde" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
     assert(log.rows[2].story:GetText() == "Un membre de la guilde a tué Bad Guy" and log.rows[2].where:GetText() == "Feralas · il y a 2 h")
     assert(log.rows[6]:IsShown() and log.count:GetText() == "9 combats · 5 morts" and log.next:IsEnabled() and not log.previous:IsEnabled())
-    assert(not log.reset:IsShown() and log.who:GetText() == "Tous les membres")
+    -- The Journal's three controls: search, the list button with its count, "Filtres".
+    assert(log.viewCycle:GetText() == "Tous · 9" and log.openFilters:GetText() == "Filtres" and not log.filterPanel:IsShown())
     local opened
     local realDossier = GL.OpenPlayerDossier
     GL.OpenPlayerDossier = function(id, _, known) opened = id .. "/" .. tostring(known) end
@@ -337,41 +345,43 @@ do
     click(log.next)
     assert(log.rows[3].story:GetText() == "Un membre de la guilde a été tué par un joueur inconnu" and not log.rows[3].sheet:IsShown())
     assert(not log.rows[3].wanted:IsShown() and not log.rows[4]:IsShown() and not log.next:IsEnabled())
-    -- Filters (0.52.0): deaths only, then one member's journal, then one opponent, then a period.
-    click(log.kindButton)
-    assert(log.kindButton:GetText() == "Morts" and log.count:GetText() == "5 combats · 5 morts")
-    assert(log.offset == 0 and log.reset:IsShown())
-    click(log.kindButton)
-    click(log.kindButton)
-    assert(log.kindButton:GetText() == "Morts et victoires" and log.count:GetText() == "9 combats · 5 morts")
-    click(log.who)
-    assert(log.chooser:IsShown() and not log.rows[1]:IsShown() and log.chooser.buttons[1]:GetText() == "Tous les membres")
-    assert(log.chooser.buttons[2]:GetText() == "Vous · 1" and log.chooser.buttons[3]:GetText() == "Un membre de la guilde · 8")
-    click(log.chooser.buttons[3])
-    assert(not log.chooser:IsShown() and log.count:GetText() == "8 combats · 4 morts" and log.who:GetText() == "Un membre de la gu…")
-    click(log.foe)
-    assert(log.chooser.buttons[2]:GetText() == "Bad Guy · 7" and not log.chooser.buttons[3]:IsShown(), "an unnamed opponent cannot be chosen")
-    click(log.chooser.buttons[2])
-    assert(log.count:GetText() == "7 combats · 3 morts" and log.foe:GetText() == "Bad Guy")
-    click(log.periodButton)
-    click(log.periodButton)
-    assert(log.periodButton:GetText() == "7 jours" and log.count:GetText() == "7 combats · 3 morts")
-    click(log.periodButton)
-    click(log.periodButton)
-    click(log.periodButton)
-    assert(log.periodButton:GetText() == "24 h")
-    -- Nothing left: the page says how to get everything back, and the cross does it.
+    -- The list button: Tous, Morts, Victoires, Mes combats, each with its count; a new list starts clean.
+    click(log.viewCycle)
+    assert(log.viewCycle:GetText() == "Morts · 5" and log.count:GetText() == "5 combats · 5 morts" and log.offset == 0)
+    click(log.viewCycle)
+    assert(log.viewCycle:GetText() == "Victoires · 4")
+    click(log.viewCycle)
+    assert(log.viewCycle:GetText() == "Mes combats · 1" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
+    click(log.viewCycle)
+    assert(log.viewCycle:GetText() == "Tous · 9")
+    -- The search finds a member or an opponent by part of the name.
+    log.search:SetText("bad")
+    log.search.scripts.OnEnterPressed(log.search)
+    assert(log.count:GetText() == "8 combats · 4 morts", log.count:GetText())
+    log.search:SetText("")
+    log.search.scripts.OnTextChanged(log.search)
+    assert(log.count:GetText() == "9 combats · 5 morts")
+    -- "Filtres" opens the Journal's panel: period, member, enemy; the button counts what is chosen.
+    click(log.openFilters)
+    local panel = log.filterPanel
+    assert(panel:IsShown() and panel.periodCaption:GetText() == "Période : Toujours" and panel.whoCaption:GetText() == "Membre : Tous les membres")
+    assert(panel.who[1]:GetText() == "Tous les membres" and panel.who[2]:GetText() == "Vous · 1" and panel.who[3]:GetText() == "Un membre de l… · 8")
+    assert(panel.foe[2]:GetText() == "Bad Guy · 8" and not panel.foe[3]:IsShown(), "an unnamed opponent is not offered")
+    click(panel.who[3])
+    assert(panel:IsShown() and log.count:GetText() == "8 combats · 4 morts" and log.openFilters:GetText() == "Filtres · 1")
+    assert(panel.whoCaption:GetText() == "Membre : Un membre de la guilde")
+    click(panel.periods[3])
+    assert(panel.periodCaption:GetText() == "Période : 7 jours" and log.openFilters:GetText() == "Filtres · 2")
+    click(panel.foe[2])
+    assert(log.count:GetText() == "7 combats · 3 morts" and log.openFilters:GetText() == "Filtres · 3")
+    -- Nothing left: the page says how to get everything back, and "Effacer" does it.
     log.filter.who = "Player-1-Nobody01"
     R.Refresh()
-    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("croix", 1, true))
-    click(log.reset)
-    assert(log.count:GetText() == "9 combats · 5 morts" and not log.reset:IsShown() and log.kindButton:GetText() == "Morts et victoires")
-    -- The chooser lists everyone first; "Tous" takes a filter back.
-    click(log.who)
-    click(log.chooser.buttons[3])
-    click(log.who)
-    click(log.chooser.buttons[1])
-    assert(log.filter.who == nil and log.count:GetText() == "9 combats · 5 morts")
+    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("Effacer", 1, true))
+    click(panel.clear)
+    assert(log.count:GetText() == "9 combats · 5 morts" and log.openFilters:GetText() == "Filtres" and log.viewCycle:GetText() == "Tous · 9")
+    click(panel.close)
+    assert(not panel:IsShown())
     GL.OpenPlayerDossier = realDossier
     ticked = false
     R.Refresh()

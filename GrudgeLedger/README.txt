@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.52.0
+GRUDGE LEDGER — 0.52.1
+
+Journal de guilde : les filtres fonctionnent maintenant comme ceux du Journal. Une recherche (un membre ou un ennemi), un bouton qui fait défiler les listes (Tous, Morts, Victoires, Mes combats) avec leur nombre, et « Filtres » qui ouvre le même panneau que dans le Journal (période, membre, ennemi, Effacer, Fermer). Relations : les chiffres sous les onglets deviennent des « Chiffres clés » comme sur la fiche d’un joueur, et chacun ouvre sa page.
 
 Journal de guilde : quatre filtres au-dessus des lignes. Le journal d’un seul membre, les combats contre un seul joueur, les morts ou les victoires seulement, et la période (24 h, 7 jours, 30 jours). Carte : les zones où vous mourez sont nettement plus rouges, et le chiffre n’a plus de plaque : rouge pour vos morts, vert pour vos victoires.
 

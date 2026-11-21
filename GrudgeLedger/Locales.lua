@@ -4,6 +4,15 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Mes combats"] = "Mis combates",
+        ["Période : %s"] = "Periodo: %s",
+        ["Membre : %s"] = "Miembro: %s",
+        ["Ennemi : %s"] = "Enemigo: %s",
+        ["%s · %d"] = "%s · %d",
+        ["Aucun combat ne correspond. « Effacer » dans les filtres remet tout."] = "Ningún combate coincide. «Borrar» en los filtros lo devuelve todo.",
+        ["Dettes ouvertes"] = "Deudas abiertas",
+        ["Réglées ce mois-ci"] = "Saldadas este mes",
+        ["Morts de guilde · 7 j"] = "Muertes de la hermandad · 7 d",
         ["Toujours"] = "Siempre",
         ["24 h"] = "24 h",
         ["7 jours"] = "7 días",
@@ -1777,6 +1786,15 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Mes combats"] = "My fights",
+        ["Période : %s"] = "Period: %s",
+        ["Membre : %s"] = "Member: %s",
+        ["Ennemi : %s"] = "Enemy: %s",
+        ["%s · %d"] = "%s · %d",
+        ["Aucun combat ne correspond. « Effacer » dans les filtres remet tout."] = "No fight matches. “Clear” in the filters brings everything back.",
+        ["Dettes ouvertes"] = "Open debts",
+        ["Réglées ce mois-ci"] = "Settled this month",
+        ["Morts de guilde · 7 j"] = "Guild deaths · 7 d",
         ["Toujours"] = "Always",
         ["24 h"] = "24 h",
         ["7 jours"] = "7 days",

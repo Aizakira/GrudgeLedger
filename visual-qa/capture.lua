@@ -554,6 +554,10 @@ function QA.capture(name)
             end
         end
         GL.ShowRelations(page)
+        if name == "relations-guildlog-filters" then
+            local log = GrudgeLedgerRelations.host.pages.guildlog
+            log.openFilters.scripts.OnClick(log.openFilters, "LeftButton")
+        end
         return GrudgeLedgerRelations
     elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
