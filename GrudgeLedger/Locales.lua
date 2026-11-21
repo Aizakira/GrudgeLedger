@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Le contrat que vous lisiez a changé : il n’est plus dans cette liste."] = "El contrato que leías ha cambiado: ya no está en esta lista.",
         ["%s utilise une version de Grudge Ledger antérieure à la 0.58 : une partie des échanges de guilde ne lui parvient pas."] = "%s usa una versión de Grudge Ledger anterior a la 0.58: parte de los intercambios de hermandad no le llega.",
         ["%s utilise une ancienne version de Grudge Ledger (%s, la vôtre : %s) : une partie des échanges de guilde ne lui parvient pas."] = "%s usa una versión antigua de Grudge Ledger (%s, la tuya: %s): parte de los intercambios de hermandad no le llega.",
         ["Votre guilde utilise une version plus récente de Grudge Ledger (%s). Pensez à mettre à jour."] = "Tu hermandad usa una versión más reciente de Grudge Ledger (%s). Piensa en actualizar.",
@@ -1917,6 +1918,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Le contrat que vous lisiez a changé : il n’est plus dans cette liste."] = "The contract you were reading changed: it is no longer in this list.",
         ["%s utilise une version de Grudge Ledger antérieure à la 0.58 : une partie des échanges de guilde ne lui parvient pas."] = "%s runs a version of Grudge Ledger older than 0.58: part of the guild exchanges does not reach them.",
         ["%s utilise une ancienne version de Grudge Ledger (%s, la vôtre : %s) : une partie des échanges de guilde ne lui parvient pas."] = "%s runs an old version of Grudge Ledger (%s, yours: %s): part of the guild exchanges does not reach them.",
         ["Votre guilde utilise une version plus récente de Grudge Ledger (%s). Pensez à mettre à jour."] = "Your guild runs a newer version of Grudge Ledger (%s). Consider updating.",

@@ -40,6 +40,15 @@ local function scope()
     -- Owner report (0.47.1): on his client neither realm name could be read, and no bounty could be
     -- posted. The realm number carried by your own identifier always exists and is the same for
     -- every member of the guild on that realm.
+    if (type(realm)~="string" or realm=="" or not plain(realm,80)) and type(name)=="string" and name~="" then
+        -- The space this guild already has, named with a readable realm, comes first.
+        local known
+        for key in pairs(type(GL.db.bountyGuilds)=="table" and GL.db.bountyGuilds or {}) do
+            local r,n=tostring(key):match("^(.-)/(.*)$")
+            if n==name and r and r~="" and plain(r,80) and (not known or not r:match("^%d+$")) then known=r end
+        end
+        realm=known or realm
+    end
     if (type(realm)~="string" or realm=="" or not plain(realm,80)) and guid(me) then realm=me:match("^Player%-(%w+)%-") end
     -- Says which part cannot be read, for the message shown to the player.
     if not guid(me) then return nil,"player" end
@@ -773,8 +782,9 @@ local function receive(msg,sender)
     local relay=msg:sub(1,2)=="R;"
     local raw=relay and msg:sub(3) or msg
     -- The version each member runs (GuildMap.lua, 0.58.0).
-    if raw:sub(1,4)=="GLV;" then
-        if GL.GuildMap then GL.GuildMap.Version(s,me,sender,raw:sub(5),relay) end
+    if raw:sub(1,4)=="GLV;" or raw:sub(1,5)=="GLVR;" then
+        local reply=raw:sub(1,5)=="GLVR;"
+        if GL.GuildMap then GL.GuildMap.Version(s,me,sender,raw:sub(reply and 6 or 5),relay,reply) end
         return
     end
     -- Places of fights for the guild vision of the map (GuildMap.lua).

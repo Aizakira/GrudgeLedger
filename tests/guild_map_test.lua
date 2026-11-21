@@ -233,6 +233,17 @@ fourth.GL.GuildMap.Announce(fourth.GL.Bounties.GuildScope())
 flush()
 assert(b.m.messages[#b.m.messages]:find("plus récente", 1, true), tostring(b.m.messages[#b.m.messages]))
 fourth.GL.version = a.GL.version
+-- Two members arriving within a minute both learn every version (review 0.58.0).
+now = now + 61
+local fifth = client(5)
+flush()
+now = now + 20
+local sixth = client(6)
+flush()
+assert(select(1, sixth.GL.GuildMap.Versions()) >= 3 and select(1, fifth.GL.GuildMap.Versions()) >= 3,
+    select(1, sixth.GL.GuildMap.Versions()) .. " " .. select(1, fifth.GL.GuildMap.Versions()))
+assert(sentAbout(a, "^GLVR;") >= 2, "a member answers each arrival")
+fifth.online, sixth.online = false, false
 now = now + 60
 assert(fourth.GL.GuildMap.Enable(true) == true)
 flush()
