@@ -517,9 +517,15 @@ end
 local function scoreMessage(actor,target,wins,losses)
     return table.concat({"G",actor,target,wins,losses},";")
 end
+-- Sharing with the guild is on unless the member switched it off (0.51.0): the addon is about
+-- sharing, and nobody should have to tick boxes for it to work. Only an explicit "false" stops it.
+local function shared(consent,me)
+    return not (type(consent)=="table" and consent[me]==false)
+end
+B.Shared=shared
 local function countFight(target,index)
     local s,me=scope()
-    if not (s and s.shareFights and s.shareFights[me] and guid(target)) then return end
+    if not (s and shared(s.shareFights,me) and guid(target)) then return end
     local totals=s.scores and s.scores[target] and s.scores[target][me] or {0,0}
     local wins,losses=totals[1],totals[2]
     if index==1 then wins=wins+1 else losses=losses+1 end
@@ -532,7 +538,7 @@ function B.ShareFights(enabled)
 end
 function B.Sharing()
     local s,me=scope()
-    return (s and s.shareFights and s.shareFights[me])==true, (s and s.shareDeaths and s.shareDeaths[me])==true
+    return (s and shared(s.shareFights,me))==true, (s and shared(s.shareDeaths,me))==true
 end
 function B.GuildFights(target)
     local s=scope()
@@ -724,7 +730,7 @@ function B.Death(target,name)
     if GL.GuildMap then GL.GuildMap.Fight("d",target,name) end
     countFight(target,2)
     local s,me=scope()
-    if s and s.shareDeaths and s.shareDeaths[me] and guid(target) and plain(name,64) then
+    if s and shared(s.shareDeaths,me) and guid(target) and plain(name,64) then
         if declare("D",target,"",name) then autoOrder(s,me,target,name) end
     end
 end
@@ -1158,6 +1164,7 @@ frame:SetScript("OnEvent",function(_,event)
     end
     refreshRoster()
     join()
+    if GL.GuildMap then GL.GuildMap.Join() end
     if GL.db then reconcileInbox(scope(),GL.Safe(UnitGUID,"player")) end
 end)
 GL.On("BOUNTY_KILL",B.Kill)

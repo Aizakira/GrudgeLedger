@@ -31,8 +31,9 @@ local function scope()
     if not GL.Bounties or not GL.Bounties.GuildScope then return nil end
     return GL.Bounties.GuildScope()
 end
+-- On unless the member unticked the box (0.51.0).
 local function on(s, me)
-    return type(s) == "table" and type(s.shareMap) == "table" and s.shareMap[me] == true
+    return type(s) == "table" and not (type(s.shareMap) == "table" and s.shareMap[me] == false)
 end
 -- One fight, as kept and as sent: time, map, x and y in thousandths, d (death) or k (victory),
 -- then the opponent (identifier and name, either may be empty).
@@ -100,7 +101,8 @@ local function answer(s, me)
     for _, text in ipairs(type(s.places) == "table" and type(s.places[me]) == "table" and s.places[me] or {}) do
         if read(text) then own[#own + 1] = message(me, text) end
     end
-    if #own > 0 and not T.State(s, "map:own") then T.SendBatch(s, own, { key = "map:own" }) end
+    local sent = false
+    if #own > 0 and not T.State(s, "map:own") then sent = T.SendBatch(s, own, { key = "map:own" }) == true end
     local others = {}
     for actor, list in pairs(type(s.places) == "table" and s.places or {}) do
         if actor ~= me and guid(actor) and type(list) == "table" then
@@ -110,14 +112,14 @@ local function answer(s, me)
             end
         end
     end
-    if #others == 0 or T.State(s, "map:relay") then return end
+    if #others == 0 or T.State(s, "map:relay") then return sent end
     table.sort(others, function(a, b)
         if a.at ~= b.at then return a.at > b.at end
         return a.text < b.text
     end)
     local relayed = {}
     for i = 1, math.min(RELAYED, #others) do relayed[i] = others[i].text end
-    T.SendBatch(s, relayed, { key = "map:relay", delay = 4 + math.random(0, 16) })
+    return T.SendBatch(s, relayed, { key = "map:relay", delay = 4 + math.random(0, 16) }) == true or sent
 end
 -- Your latest fights from your own journal, so that ticking the box shows something at once.
 local function seed(s, me)
@@ -142,6 +144,22 @@ local function refresh()
     if GL.RelationsPages and GL.RelationsPages.Refresh then GL.RelationsPages.Refresh() end
 end
 
+-- Once the guild is known: your latest fights are made ready for the members who will ask, and
+-- the player is told once, in the chat, that the addon shares with the guild and where to stop it.
+local ready = {}
+function M.Join()
+    local s, me = scope()
+    if type(s) ~= "table" then return false end
+    if GL.db and not GL.db.sharingNotice then
+        GL.db.sharingNotice = GL.Now()
+        GL.Print(GL.L("Grudge Ledger partage avec votre guilde vos victoires, vos morts (avec l’endroit), vos repérages et vos avis. "
+            .. "Pour arrêter : options, pages Relations et Alertes, et la case « Vision de guilde » de la carte."))
+    end
+    if not on(s, me) or ready[s] then return false end
+    ready[s] = true
+    seed(s, me)
+    return true
+end
 -- Whether the box is ticked for this character, and whether there is a guild at all.
 function M.Enabled()
     local s, me = scope()
@@ -233,21 +251,21 @@ function M.CatchUp(s, me, sender)
     if not on(s, me) then return end
     local now = GL.Now()
     if sender and asked[sender] and now - asked[sender] < ASK_GAP then return end
-    if sender then asked[sender] = now end
-    answer(s, me)
+    -- An answer that had nothing to say does not use up the member's turn.
+    if answer(s, me) and sender then asked[sender] = now end
 end
 -- The guild's fights, the latest first: who, when, which map, where (0 to 1), death or kill, and
--- against whom.
-function M.Points()
+-- against whom. Yours are left out (the map reads them in your journal) unless asked for.
+function M.Points(withMine)
     local s, me = scope()
     local points = {}
     if not on(s, me) or type(s.places) ~= "table" then return points end
     for actor, list in pairs(s.places) do
-        if actor ~= me and guid(actor) and type(list) == "table" then
+        if (withMine or actor ~= me) and guid(actor) and type(list) == "table" then
             for i = 1, math.min(PER_MEMBER, #list) do
                 local at, map, x, y, kind, target, name = read(list[i])
                 if at then
-                    points[#points + 1] = { actor = actor, time = at, mapID = map, x = x / 1000, y = y / 1000,
+                    points[#points + 1] = { actor = actor, mine = actor == me or nil, time = at, mapID = map, x = x / 1000, y = y / 1000,
                         kind = kind == "d" and "death" or "kill", target = target ~= "" and target or nil, name = name ~= "" and name or nil }
                 end
             end

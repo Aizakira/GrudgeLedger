@@ -297,6 +297,49 @@ do
     landsPage.guild:SetChecked(false)
     landsPage.guild.scripts.OnClick(landsPage.guild)
     assert(#view.tallies == 1 and #view.placed == 1)
+    -- The guild's journal (0.51.0): one line a fight, yours included, a click opens the opponent's sheet.
+    ticked = true
+    GL.GuildMap.Points = function(withMine)
+        assert(withMine == true, "the journal asks for your own fights too")
+        local list = {}
+        for i = 1, 9 do
+            list[i] = { actor = "Player-1-Mate0001", time = GL.Now() - i * 3600, mapID = 1444, kind = i % 2 == 0 and "kill" or "death",
+                target = i < 9 and "Player-1-Foe0001" or nil, name = i < 9 and "Bad Guy" or nil }
+        end
+        list[1].mine = true
+        return list
+    end
+    click(f.tabs.guildlog)
+    local log = f.host.pages.guildlog
+    assert(log:IsShown() and log.title:GetText() == "Journal de guilde" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
+    assert(log.rows[2].story:GetText() == "Un membre de la guilde a tué Bad Guy" and log.rows[2].where:GetText() == "Feralas · il y a 2 h")
+    assert(log.rows[7]:IsShown() and log.count:GetText() == "9 combats partagés · 5 morts" and log.next:IsEnabled() and not log.previous:IsEnabled())
+    local opened
+    local realDossier = GL.OpenPlayerDossier
+    GL.OpenPlayerDossier = function(id, _, known) opened = id .. "/" .. tostring(known) end
+    click(log.rows[2])
+    assert(opened == "Player-1-Foe0001/Bad Guy", opened)
+    -- "Rechercher": a wanted notice without gold, in one click; the button leaves once one runs.
+    local posted
+    local realPost, realOpen = GL.Bounties.Post, GL.Bounties.OpenFor
+    GL.Bounties.Post = function(target, known, copper)
+        posted = target .. "/" .. known .. "/" .. copper
+        return "order-1"
+    end
+    GL.Bounties.OpenFor = function(target) return posted and target == "Player-1-Foe0001" and { state = "open" } or nil end
+    assert(log.rows[2].wanted:IsShown())
+    click(log.rows[2].wanted)
+    assert(posted == "Player-1-Foe0001/Bad Guy/0" and not log.rows[2].wanted:IsShown(), posted)
+    GL.Bounties.Post, GL.Bounties.OpenFor = realPost, realOpen
+    click(log.next)
+    assert(log.rows[2].story:GetText() == "Un membre de la guilde a été tué par un joueur inconnu" and not log.rows[2].sheet:IsShown())
+    assert(not log.rows[2].wanted:IsShown())
+    assert(not log.rows[3]:IsShown() and not log.next:IsEnabled())
+    GL.OpenPlayerDossier = realDossier
+    ticked = false
+    R.Refresh()
+    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("décochée", 1, true))
+    click(f.tabs.lands)
     GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable = realEnabled, realPoints, realEnable
     -- "Voir la liste" gives the list back; a client without map pictures only has the list.
     click(landsPage.toggle)

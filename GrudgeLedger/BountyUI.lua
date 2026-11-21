@@ -283,7 +283,9 @@ local function publish()
     if f.draftGuild and guild~=f.draftGuild then
         return message(L("Vous avez changé de guilde. Rouvrez la création pour la nouvelle guilde."))
     end
-    local amount, q = copper(f.form.gold:GetText()), f.form.quota:GetText():match("^%d+$")
+    -- An empty reward is a wanted notice: no gold, the guild is told and alerted all the same.
+    local reward = f.form.gold:GetText()
+    local amount, q = reward:match("^%s*$") and 0 or copper(reward), f.form.quota:GetText():match("^%d+$")
     q = tonumber(q)
     if not amount then return message(L("La récompense doit être comprise entre 0 et 1 000 PO.")) end
     if not q or q < 1 or q > 99 then return message(L("Choisissez entre 1 et 99 victoires.")) end
@@ -292,14 +294,18 @@ local function publish()
     if problem then return message(problem) end
     local options = {quota=q,group=f.draft.group,split=f.draft.split,souvenir=f.draft.souvenir,note=note}
     local id,err,why = B.Post(f.target.guid,f.target.fullName or f.target.name,amount,options)
-    if actionResult(id,err,why) then chooseTab("active"); selectOrder(id); message(L("Prime publiée à la guilde.")) end
+    if actionResult(id,err,why) then
+        chooseTab("active")
+        selectOrder(id)
+        message(amount==0 and L("Avis de recherche publié à la guilde, sans or.") or L("Prime publiée à la guilde."))
+    end
 end
 local function makeForm()
     local form=CreateFrame("Frame",nil,f); f.form=form; form:SetAllPoints(f); form.options={}
     text(form,358,163,525,26,20,nil,L("Créer une prime de guilde"))
     text(form,358,202,72,23,13,t.inkMuted,L("Cible"))
     form.target=text(form,430,197,457,44,18,t.ink)
-    text(form,358,251,250,24,14,nil,L("Récompense totale (PO)"))
+    text(form,358,251,270,24,14,nil,L("Récompense (PO) · vide : sans or"))
     text(form,642,251,250,24,14,nil,L("Victoires requises"))
     form.gold=input(form,358,277,243,12,true); form.quota=input(form,642,277,195,2,true)
     local function choice(key, value, label, x, y, w)

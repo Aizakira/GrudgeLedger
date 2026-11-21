@@ -536,6 +536,23 @@ function QA.capture(name)
             GL.db.players = saved
             return GrudgeLedgerRelations
         end
+        if page == "guildlog" and GL.GuildMap then
+            -- Synthetic guild fights: the renderer has no guild.
+            local at = GL.Now()
+            GL.GuildMap.Enabled = function() return true, true end
+            GL.GuildMap.Points = function()
+                return {
+                    { actor = "Player-1-QA000001", time = at - 600, mapID = 1, kind = "death", target = "Player-1-QA0000E1", name = "Krogan Sombrelame" },
+                    { actor = "Player-1-QA000000", mine = true, time = at - 4200, mapID = 1, kind = "kill", target = "Player-1-QA0000E1", name = "Krogan Sombrelame" },
+                    { actor = "Player-1-QA000002", time = at - 9000, mapID = 1, kind = "kill", target = "Player-1-QA0000E2", name = "Zulrak" },
+                    { actor = "Player-1-QA000001", time = at - 90000, mapID = 1, kind = "death", name = "Vexa la Très Longue Lame du Crépuscule Éternel" },
+                    { actor = "Player-1-QA000000", mine = true, time = at - 200000, mapID = 1, kind = "death", target = "Player-1-QA0000E3", name = "Morgash" },
+                    { actor = "Player-1-QA000003", time = at - 400000, mapID = 1, kind = "death" },
+                    { actor = "Player-1-QA000002", time = at - 500000, mapID = 1, kind = "kill", target = "Player-1-QA0000E4", name = "Thazdin" },
+                    { actor = "Player-1-QA000002", time = at - 600000, mapID = 1, kind = "kill", target = "Player-1-QA0000E4", name = "Thazdin" },
+                }
+            end
+        end
         GL.ShowRelations(page)
         return GrudgeLedgerRelations
     elseif name:find("^statistics") or name:find("^guild%-") then

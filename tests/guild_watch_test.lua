@@ -75,7 +75,9 @@ for _,member in ipairs({a,b}) do
     member.GL.RecordAggression(member.GL.IdentityFromName("Sneaky","Rogue",target),"confirmed",nil,"watch-attack")
 end
 now=now+300
--- Off by default: B sees the enemy, nothing leaves.
+-- On by default since 0.51.0. Switched off: B sees the enemy, nothing leaves.
+assert(b.GL.SharedDossiers.SharingSightings())
+for _,member in ipairs({a,b,c}) do member.GL.SharedDossiers.ShareSightings(false) end
 assert(not b.GL.SharedDossiers.SharingSightings())
 see(b,target,"Sneaky","Rogue")
 flush()

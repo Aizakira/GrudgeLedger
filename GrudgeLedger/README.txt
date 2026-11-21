@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.50.0
+GRUDGE LEDGER — 0.51.0
+
+Le partage avec la guilde est activé d’office : victoires et morts (avec l’endroit et l’adversaire), repérages, avis. Plus besoin de cocher quoi que ce soit pour que l’addon fonctionne en guilde. Un message unique le dit dans la discussion à la première connexion. Chaque partage se coupe dans les options (pages Relations et Alertes) et par la case « Vision de guilde » de la carte. Vos notes ne sont jamais partagées. Nouvelle page « Journal de guilde » dans Relations : qui a tué qui, où et quand, avec un clic vers la fiche de l’adversaire et un bouton « Rechercher » : un avis de recherche sans or, que toute la guilde voit dans Primes et qui l’alerte quand elle croise ce joueur. Dans la création d’une prime, une récompense laissée vide donne aussi un avis de recherche.
 
 Vision de guilde complétée. Chaque combat partagé dit aussi contre qui. Nouvelle alerte « Tueur de guilde », avec son propre son : elle s’affiche quand vous croisez un joueur qui a tué un membre de votre guilde, même s’il n’est pas dans votre journal, et dit qui il a tué et quand. Un nouveau membre qui coche la case reçoit ce que la guilde sait : chaque membre renvoie ses combats, et l’un d’eux transmet ceux des absents.
 

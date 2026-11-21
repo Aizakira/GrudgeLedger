@@ -12,6 +12,7 @@ Le jeu écrit cette table sur le disque au `/reload` et à la déconnexion. Elle
 
 | Clé | Contenu | Module qui écrit | Borne ou durée |
 | --- | --- | --- | --- |
+| `sharingNotice` | Date du message unique qui prévient le joueur que l'addon partage avec sa guilde (0.51.0) | `GuildMap.lua` | — |
 | `schema` | Numéro de schéma du carnet, actuellement 2 | `Core.lua` | — |
 | `players` | Fiches du carnet personnel, par clé `guid:Player-…` ou `name:prénom nom` | `Core.lua`, seul | Aucune : les souvenirs ne sont jamais supprimés en silence |
 | `aliases` | Nom complet en minuscules → clé de fiche ; `false` quand deux personnages portent le même nom | `Core.lua` | — |
@@ -65,9 +66,9 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `events` | Journal des événements de primes, tels que reçus, par `auteur:numéro` | 38 jours, sauf reçus encore utiles |
 | `seq` | Dernier numéro d'événement émis par ce client | — |
 | `scores` | Victoires et morts cumulées, par cible puis par membre | — |
-| `shareFights`, `shareDeaths`, `shareSocial` | Accords de partage, par personnage. Absents ou faux par défaut | — |
-| `shareSightings` | Accord d'envoi des repérages (veille de guilde, 0.30.0), par personnage. Absent ou faux par défaut : l'envoi révèle la zone où l'on se trouve. Les repérages reçus ne sont jamais sauvegardés | — |
-| `shareMap` | Accord « Vision de guilde » (0.49.0), par personnage. Absent ou faux par défaut : coché, le personnage envoie l'endroit de ses victoires et de ses morts et garde ceux des autres | — |
+| `shareFights`, `shareDeaths`, `shareSocial` | Partages, par personnage. Depuis la 0.51.0 ils sont actifs tant que la valeur n'est pas `false` : seul un refus explicite les coupe | — |
+| `shareSightings` | Accord d'envoi des repérages (veille de guilde, 0.30.0), par personnage. Actif depuis la 0.51.0 tant que la valeur n'est pas `false` : l'envoi révèle la zone où l'on se trouve. Les repérages reçus ne sont jamais sauvegardés | — |
+| `shareMap` | « Vision de guilde » (0.49.0), par personnage. Active depuis la 0.51.0 tant que la valeur n'est pas `false` : cochée, le personnage envoie l'endroit de ses victoires et de ses morts et garde ceux des autres | — |
 | `places` | Combats partagés, par membre : lignes `date;carte;x;y;genre;adversaire;nom` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée. Sert à la carte et à l'alerte « Tueur de guilde » | 150 membres, 40 lignes par membre, 38 jours |
 | `mapForgot` | Date du dernier `MX` de chaque membre : un relais plus ancien de ses combats est refusé. Effacée dès qu'il partage à nouveau | Un par membre |
 | `mailUncertain` | Envoi de courrier dont l'accusé n'a pas été reçu | Un par personnage |

@@ -76,7 +76,7 @@ local function socialEvent(e)
 end
 function S.SharingSocial()
     local s,me=B.GuildScope()
-    return s and s.shareSocial and s.shareSocial[me]==true or false
+    return s and B.Shared(s.shareSocial,me) or false
 end
 local function ownSocial(target)
     local r=GL.Get("guid:"..target)
@@ -526,7 +526,7 @@ local function playerMap()
 end
 function S.SharingSightings()
     local s,me=B.GuildScope()
-    return s and s.shareSightings and s.shareSightings[me]==true or false
+    return s and B.Shared(s.shareSightings,me) or false
 end
 function S.ShareSightings(enabled)
     local s,me=B.GuildScope()

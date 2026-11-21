@@ -91,9 +91,13 @@ local a, b, third = client(1), client(2), client(3)
 flush()
 local A, B, C = a.GL.GuildMap, b.GL.GuildMap, third.GL.GuildMap
 
--- Off by default: a fight sends nothing, and nothing is kept.
-assert(select(1, A.Enabled()) == false and select(2, A.Enabled()) == true)
-assert(A.Fight("k", enemy, "Bad Guy") == false and sentAbout(a, "^M") == 0 and #A.Points() == 0)
+-- On by default since 0.51.0, and the player is told once in the chat. Switched off: a fight sends
+-- nothing, and nothing is kept.
+assert(select(1, A.Enabled()) == true and select(2, A.Enabled()) == true and a.GL.db.sharingNotice)
+for _, member in ipairs({ A, B, C }) do assert(member.Enable(false) == true) end
+flush()
+assert(select(1, A.Enabled()) == false)
+assert(A.Fight("k", enemy, "Bad Guy") == false and sentAbout(a, "^M;") == 0 and #A.Points() == 0)
 
 -- One member ticks the box: their fight goes out with its opponent, but a member who did not tick
 -- keeps nothing.

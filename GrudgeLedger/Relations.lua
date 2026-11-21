@@ -1791,10 +1791,135 @@ function R.MapProbe()
     return true
 end
 
--- The book: the narrow format of the player sheet. Left, the six entries and a few figures. Right,
--- the page.
+-- The guild's journal (0.51.0): what happens to the members who share their fights, yours
+-- included, the latest first. One line a fight: who, against whom, where, when. A click opens the
+-- opponent's sheet. Pages turn, nothing scrolls.
+local GUILD_ROWS = 7
+local function elapsed(at)
+    local delta = math.max(0, GL.Now() - at)
+    if delta < 3600 then return L("il y a %d min"):format(math.max(1, math.floor(delta / 60))) end
+    if delta < 86400 then return L("il y a %d h"):format(math.floor(delta / 3600)) end
+    return L("il y a %d j"):format(math.floor(delta / 86400))
+end
+local function openOpponent(row)
+    if row.target and GL.OpenPlayerDossier then GL.OpenPlayerDossier(row.target, nil, row.enemy) end
+end
+-- A wanted notice on the opponent of a line: a bounty without gold, in one click. The guild sees
+-- it in Primes and is alerted when one of its members meets that player.
+local function wanted(row)
+    if not (row.target and row.enemy and GL.Bounties and GL.Bounties.Post) then return end
+    local id, err = GL.Bounties.Post(row.target, row.enemy, 0)
+    if id then
+        GL.Print(L("Avis de recherche publié : %s. Sans or, valable 7 jours."):format(UI.plain(row.enemy)))
+    elseif err == "duplicate" then
+        GL.Print(L("Une prime ou un avis de recherche existe déjà sur ce joueur."))
+    elseif err == "ally" then
+        GL.Print(L("Ce joueur est de votre faction : pas d’avis de recherche."))
+    else
+        GL.Print(L("L’avis de recherche n’a pas pu être publié."))
+    end
+    R.Refresh()
+end
+local function buildGuildJournal(host)
+    local page = CreateFrame("Frame", nil, host)
+    page:SetAllPoints()
+    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
+    page.rows = {}
+    for i = 1, GUILD_ROWS do
+        local row = CreateFrame("Button", nil, page)
+        row:SetPoint("TOPLEFT", X(26), -84 - (i - 1) * 54)
+        row:SetSize(S(540), 52)
+        local rule = row:CreateTexture(nil, "BORDER")
+        rule:SetPoint("BOTTOMLEFT")
+        rule:SetPoint("BOTTOMRIGHT")
+        rule:SetHeight(1)
+        rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+        row.mark = row:CreateTexture(nil, "ARTWORK")
+        row.mark:SetPoint("TOPLEFT", S(2), -12)
+        row.mark:SetSize(22, 22)
+        row.story = Panels.Text(row, S(32), -6, S(340), 15, true)
+        GL.Safe(row.story.SetWordWrap, row.story, false)
+        row.where = Panels.Text(row, S(32), -28, S(340), 12, false, UI.theme.inkMuted)
+        row.wanted = UI.button(row, L("Rechercher"), S(380), -13, S(92), function() wanted(row) end, nil, true)
+        GL.Safe(row.where.SetWordWrap, row.where, false)
+        row.sheet = UI.button(row, L("Fiche"), S(476), -13, S(64), function() openOpponent(row) end, nil, true)
+        row:SetScript("OnClick", openOpponent)
+        page.rows[i] = row
+    end
+    page.empty = Panels.Text(page, X(26), -100, S(540), 13, false, UI.theme.inkMuted)
+    page.offset = 0
+    page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
+        page.offset = math.max(0, page.offset - GUILD_ROWS)
+        R.Refresh()
+    end, nil, true)
+    page.next = UI.button(page, "›", X(526), -474, S(40), function()
+        page.offset = page.offset + GUILD_ROWS
+        R.Refresh()
+    end, nil, true)
+    page.count = Panels.Text(page, X(76), -480, S(440), 12, false, UI.theme.inkMuted)
+    page.count:SetJustifyH("CENTER")
+    return page
+end
+local function paintGuildJournal(page)
+    page.title:SetText(L("Journal de guilde"))
+    local sharing, inGuild = false, false
+    if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
+    local lines = sharing and GL.GuildMap.Points(true) or {}
+    page.lead:SetText(sharing and L("Les victoires et les morts des membres qui partagent leurs combats.") or "")
+    page.offset = math.min(page.offset, math.max(0, math.floor((#lines - 1) / GUILD_ROWS) * GUILD_ROWS))
+    local deaths = 0
+    for _, point in ipairs(lines) do
+        if point.kind == "death" then deaths = deaths + 1 end
+    end
+    for i, row in ipairs(page.rows) do
+        local point = lines[page.offset + i]
+        if point then
+            local member = point.mine and L("Vous") or GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(point.actor)
+            member = UI.plain(member or L("Un membre de la guilde"))
+            local enemy = UI.plain(point.name or L("un joueur inconnu"))
+            local died = point.kind == "death"
+            local story
+            if point.mine then
+                story = (died and L("Vous avez été tué par %s") or L("Vous avez tué %s")):format(enemy)
+            else
+                story = (died and L("%s a été tué par %s") or L("%s a tué %s")):format(member, enemy)
+            end
+            Panels.Fit(row.story, story, S(340), 15, 10, true)
+            if died then row.story:SetTextColor(0.55, 0.12, 0.12) else row.story:SetTextColor(0.18, 0.37, 0.20) end
+            row.mark:SetTexture(died and SKULL or SWORD)
+            local info = mapInfo(point.mapID)
+            local zone = info and type(info.name) == "string" and UI.plain(info.name)
+            row.where:SetText(zone and (zone .. " · " .. elapsed(point.time)) or elapsed(point.time))
+            row.target, row.enemy = point.target, point.name
+            if point.target then row.sheet:Show() else row.sheet:Hide() end
+            -- Wanted: only on a player known by name, and not while a notice or a bounty already runs.
+            local open = point.target and GL.Bounties and GL.Bounties.OpenFor and GL.Bounties.OpenFor(point.target)
+            if point.target and point.name and not open then row.wanted:Show() else row.wanted:Hide() end
+            row:Show()
+        else
+            row.target, row.enemy = nil, nil
+            row:Hide()
+        end
+    end
+    local empty = ""
+    if not inGuild then
+        empty = L("Vous n’êtes dans aucune guilde : ce journal raconte les combats de la vôtre.")
+    elseif not sharing then
+        empty = L("La vision de guilde est décochée. Cochez-la sur la carte pour lire ce journal et y figurer.")
+    elseif #lines == 0 then
+        empty = L("Aucun combat partagé pour l’instant. Le journal se remplit quand un membre gagne ou meurt.")
+    end
+    page.empty:SetText(empty)
+    page.previous:SetEnabled(page.offset > 0)
+    page.next:SetEnabled(page.offset + GUILD_ROWS < #lines)
+    page.count:SetText(#lines > 0 and L("%d combats partagés · %d morts"):format(#lines, deaths) or "")
+end
+
+-- The book: the narrow format of the player sheet. Left, the seven entries and a few figures.
+-- Right, the page.
 local entries = { { "overview", "Vue d’ensemble" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "guilds", "Guildes" },
-    { "lands", "Carte" }, { "rankings", "Classements" } }
+    { "lands", "Carte" }, { "guildlog", "Journal de guilde" }, { "rankings", "Classements" } }
 local function book()
     if R.window then return R.window end
     local f = UI.bookWindow("GrudgeLedgerRelations", "Grudge Ledger", true)
@@ -1809,15 +1934,15 @@ local function book()
         tab:SetHeight(30)
         f.tabs[key] = tab
     end
-    f.figures = Panels.Text(f, 40, -396, 164, 12, false, UI.theme.muted)
-    f.figures:SetHeight(150)
+    f.figures = Panels.Text(f, 40, -426, 164, 12, false, UI.theme.muted)
+    f.figures:SetHeight(120)
     GL.Safe(f.figures.SetWordWrap, f.figures, true)
     GL.Safe(f.figures.SetJustifyV, f.figures, "TOP")
     local host = CreateFrame("Frame", nil, f)
     host:SetPoint("TOPLEFT", 240, -152)
     host:SetSize(SHEET_W, SHEET_H)
     host.pages = { overview = buildOverview(host), debts = buildDebts(host), rivals = buildRivals(host),
-        guilds = buildGuilds(host), lands = buildLands(host), rankings = buildRankings(host) }
+        guilds = buildGuilds(host), lands = buildLands(host), guildlog = buildGuildJournal(host), rankings = buildRankings(host) }
     f.host = host
     return f
 end
@@ -1859,7 +1984,7 @@ function R.Refresh()
     local f = R.window
     if not f or not R.page or not f:IsShown() then return end
     local painters = { overview = paintOverview, debts = paintDebts, rivals = paintRivals, guilds = paintGuilds, lands = paintLands,
-        rankings = paintRankings }
+        guildlog = paintGuildJournal, rankings = paintRankings }
     painters[R.page](f.host.pages[R.page])
     f.figures:SetText(figures())
 end

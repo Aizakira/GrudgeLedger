@@ -78,7 +78,8 @@ local forA=a.GL.Remember(a.GL.IdentityFromName("Quiet","Target","Player-1-0d0d")
 sent={}
 assert(a.g.Publish(forA))
 flush()
-assert(from(b,"^J;S2;P;")==0,"B sends no dossier: nothing public to answer with")
+-- Since 0.51.0 B's testimony (balance, relation, dated facts) is shared by default, so B may
+-- answer; what B knows from its own journal (level, guild, note) still never leaves.
 local saved=a.GL.Bounties.GuildScope().dossiers
 local dossier=saved and saved[target.guid]
 for key,field in pairs(dossier and dossier.fields or {}) do
