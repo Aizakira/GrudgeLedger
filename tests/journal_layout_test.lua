@@ -82,7 +82,7 @@ for _, compact in ipairs({ true, false }) do
         assert(-row.anchor[3] + row:GetHeight() <= -f.previous.anchor[3], "list rows must end before pagination")
         assert(row.relation.anchor[2] + row.relation:GetWidth() < row:GetWidth(), "relationship labels stay inside the row")
     end
-    assert(f.storyHeading.anchor[3] == -389 and f.detailScroll.anchor[2] == 367 and f.detailScroll.anchor[3] == -412,
+    assert(f.storyHeading.anchor[3] == -389 and f.detailScroll.anchor[2] == 367 and f.detailScroll.anchor[3] == -418,
         "refresh must preserve the separate story heading and text positions")
     assert(-f.detailScroll.anchor[3] + f.detailScroll:GetHeight() < -f.actions[1].anchor[3], "story pagination clears the actions")
 end

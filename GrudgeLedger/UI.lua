@@ -403,14 +403,15 @@ local function portraitBackdrop(row, record)
     local public = profile and profile.identity
     local texture = portraitBackdrops[record.faction or (public and public.faction)]
     if texture then back:SetTexture(media .. texture) end
-    if texture and row.raceIcon:IsShown() then back:Show() else back:Hide() end
+    local overlay = row.portraitOverlay
+    if texture and row.raceIcon:IsShown() and (not overlay or overlay:IsShown()) then back:Show() else back:Hide() end
 end
 local function identityIcons(row, record)
     row.classIcon:SetDrawLayer("OVERLAY")
-    portraitBackdrop(row, record)
     portraitRows[row] = record
     paintPortrait(row, record, portraitUnit(record))
     portraitOverlay(row)
+    portraitBackdrop(row, record)
 end
 
 -- ponytail: the client paints a live texture, not a serializable image. Refresh
@@ -598,7 +599,7 @@ local function bookNavigation(f, selected)
     end
     GL.PaintBountyReminder()
     f.settingsButton = UI.iconButton(f, "JournalSettings", L("Réglages et aide"),
-        f.referenceSkin and 847 or 869, f.referenceSkin and -55 or -45, 32, showSettings)
+        f.referenceSkin and 862 or 869, f.referenceSkin and -27 or -45, 32, showSettings)
     if selected == "settings" then f.settingsButton:LockHighlight() end
 end
 
@@ -2332,15 +2333,21 @@ local function renderDetail()
             ledger.scoreContext:SetText(context)
             local contextHeight = math.max(17, GL.Safe(ledger.scoreContext.GetStringHeight, ledger.scoreContext) or 17)
             ledger.scoreContext:SetHeight(contextHeight)
-            -- The seal hangs 25 units above the heading: a context line pushes both down so they never touch.
-            local headingTop = context ~= "" and math.max(389, 369 + contextHeight + (ledger.summarySeal and 27 or 4)) or 389
+            local headingTop = context ~= "" and math.max(389, 369 + contextHeight + 4) or 389
             moveTo(ledger.storyHeading, 367, headingTop)
             moveTo(ledger.summaryRule, 367, headingTop - 3)
             if ledger.summarySeal then
                 ledger.summarySeal:ClearAllPoints()
-                ledger.summarySeal:SetPoint("CENTER", ledger, "TOPLEFT", 631, -(headingTop - 5))
+                ledger.summarySeal:SetPoint("CENTER", ledger, "TOPLEFT", 631, -(headingTop + 14))
             end
-            local bodyTop = headingTop + math.ceil(23 * (GL.Settings().readingScale or 1))
+            -- The page turner stays on the heading line, wherever the context line pushes it.
+            for _, entry in ipairs({ { ledger.detailScroll.prev, 767, 9 }, { ledger.detailScroll.pageLabel, 803, 3 },
+                { ledger.detailScroll.next, 861, 9 } }) do
+                entry[1]:ClearAllPoints()
+                entry[1]:SetPoint("TOPLEFT", ledger, "TOPLEFT", entry[2], -(headingTop - entry[3]))
+            end
+            -- The seal reaches 6 units below the heading line: the story starts under it.
+            local bodyTop = headingTop + math.ceil(23 * (GL.Settings().readingScale or 1)) + (ledger.summarySeal and 6 or 0)
             moveTo(ledger.detailScroll, 367, bodyTop)
             ledger.detailScroll:SetHeight(522 - bodyTop)
             local guildRule = GL.GetGuildRule(record)
@@ -3185,8 +3192,8 @@ local function buildLedger()
         -- Journal: the red seal on its gold cord closes the balance and opens the story, in place of the thin rule.
         f.summarySeal = f:CreateTexture(nil, "ARTWORK")
         f.summarySeal:SetTexture(media .. "JournalSeal")
-        f.summarySeal:SetSize(160, 40)
-        f.summarySeal:SetPoint("CENTER", f, "TOPLEFT", 631, -384)
+        f.summarySeal:SetSize(136, 34)
+        f.summarySeal:SetPoint("CENTER", f, "TOPLEFT", 631, -403)
         f.summaryRule:SetAlpha(0)
     end
     -- Pages instead of a scroll bar.
