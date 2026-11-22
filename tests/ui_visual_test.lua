@@ -153,10 +153,11 @@ for _, slot in ipairs({ledger, ledger.rows[1]}) do
 end
 assert(ledger.rows[1].name.wordWrap == false and ledger.rows[1].name.maxLines == 1)
 assert(ledger.rows[1].selection:IsShown() and ledger.reactions.friend.selection:IsShown())
-assert(ledger.openSheet.skin.texture:match("JournalReferenceButton$") and not ledger.openSheet.active
+assert(ledger.openSheet.skin.texture:match("JournalReferenceButtonRed$") and ledger.openSheet.active
     and ledger.detailScroll.next.skin.texture:match("JournalReferenceArrowRight$"),
-    "actions rest on parchment and page arrows use their complete directional artwork")
-assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] == 0)
+    "the primary action rests red and page arrows use their complete directional artwork")
+assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] == 1 and ledger.actions[2].caption.color[1] == 0,
+    "the chosen opinion is red with white text, the others rest black on parchment")
 assert(ledger.bookSurface.texture:match("JournalReferenceBook$") and ledger.bookSurface.allPoints == ledger)
 assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 720, "keep the complete reference book's 4:3 canvas")
 local previousTab
@@ -210,7 +211,7 @@ for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
     for key, control in pairs(ledger.reactions) do assert(control.selection:IsShown() == (key == relation)) end
     local row = ledger.rows[1]
     local names = { friend = "Ami", warning = "Méfiance", enemy = "Ennemi", neutral = "Neutre" }
-    local icons = { friend = "RelationFriend", warning = "JournalReferenceEye", enemy = "JournalReferenceHeart", neutral = "RelationNeutral" }
+    local icons = { friend = "RelationFriend", warning = "JournalReferenceEye", enemy = "RelationEnemy", neutral = "RelationNeutral" }
     assert(row.relation:GetText() == names[relation] and row.relation.wordWrap == false and row.relation.maxLines == 1)
     assert(row.name:GetText() == GL.Get(identity.key).fullName, "no cryptic prefix in the player's name")
     assert(row.relationIcon:IsShown() and row.relationIcon.texture:find(icons[relation], 1, true))

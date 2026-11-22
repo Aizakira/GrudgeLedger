@@ -100,21 +100,27 @@ local function updateButtonState(b)
     if b.referenceSkin then
         local navigation = b.selectionTexture == "JournalReferenceTabActive"
         local hot = enabled and b.hovered
-        local red = hot or (navigation and b.active)
+        -- The chosen opinion and the primary action are filled red, like the selected tab.
+        local red = hot or (b.active and enabled)
         local textureName = red and (navigation and "JournalReferenceTabActive" or "JournalReferenceButtonRed")
             or b.arrowTextureName or (navigation and "JournalReferenceTab" or b.paper and "JournalReferenceButton" or "JournalReferenceDarkButton")
-        local tint = not enabled and 0.82 or hot and b.pressed and 0.78 or 1
+        local tint = not enabled and not b.arrowTextureName and 0.82 or hot and b.pressed and 0.78 or 1
         paintReferenceButton(b, textureName, tint, not b.arrowTextureName or red)
         b.caption:SetTextColor(unpack(red and { 1, 1, 1 } or b.paper and (enabled and { 0, 0, 0 } or theme.disabledInk)
             or (enabled and theme.paper or theme.disabledGold)))
         b.caption:SetShown(not b.arrowTextureName or hot)
+        -- A page arrow keeps its look when there is no page that way; it only fades.
+        local fade = b.arrowTextureName and not enabled and 0.4 or 1
+        b.skin:SetAlpha(fade)
+        for _, piece in ipairs(b.skinCaps or {}) do piece:SetAlpha(fade) end
         b.normalSurface:SetColorTexture(unpack(red and theme.red or b.paper and theme.paper or theme.panel))
         b.normalSurface:SetAlpha(0.15)
         b.pressArtwork:SetAlpha(0)
         if b.selection then
             b.selection:SetAlpha(enabled and 1 or 0.6)
             if navigation then b.selection:SetVertexColor(tint, tint, tint)
-            else b.selection:SetColorTexture(unpack(red and { 1, 1, 1 } or b.paper and theme.ink or theme.paper)) end
+            -- The red face already says "chosen": the old underline stays logical but transparent.
+            else b.selection:SetColorTexture(0, 0, 0, 0) end
         end
         return
     end
@@ -440,6 +446,8 @@ local function bookWindow(name, title, narrow)
             texture:SetPoint("TOPLEFT", drape[2], -drape[3])
             texture:SetSize(drape[4], drape[5])
             texture:SetTexture(media .. "JournalReferenceDrape" .. drape[1])
+            -- Quieter cloth: the saturated red and blue drew the eye away from the page.
+            texture:SetVertexColor(0.74, 0.68, 0.64)
         end
     end
     return f

@@ -19,7 +19,7 @@ local record = GL.Get(id)
 GL.ShowLedger(record.key)
 local f = GrudgeLedgerWindow
 assert(f.referenceSkin and f:GetWidth() == 960 and f:GetHeight() == 720, "the main book preserves the reference aspect ratio")
-assert(f.search.referenceSkin and f.rows[1]:GetWidth() == 261)
+assert(f.search.referenceSkin and f.rows[1]:GetWidth() == 255)
 assert(f.rows[1].selection.texture:find("JournalReferenceSelected", 1, true))
 assert(f.metrics.deaths.skin.texture:find("JournalReferenceStats", 1, true))
 
@@ -110,11 +110,11 @@ GL.ShowLedger(record.key)
 local view = f.detailScroll
 assert(view.storyPageCount > 1 and f.storyHeading:GetText() == "Votre histoire" and not f.encounterHeading:IsShown())
 while view.page < view.storyPageCount do click(view.next) end
-assert(f.encounterHeading:IsShown() and f.encounterRule:IsShown(), "the next section is announced after the last story page")
+assert(not f.encounterHeading:IsShown() and not f.encounterRule:IsShown(), "no heading is shown without the text it titles")
 view.scripts.OnMouseWheel(view, -1)
 assert(f.storyHeading:GetText() == "Dernière rencontre" and not f.encounterHeading:IsShown())
 click(view.prev)
-assert(f.storyHeading:GetText() == "Votre histoire" and f.encounterHeading:IsShown())
+assert(f.storyHeading:GetText() == "Votre histoire" and not f.encounterHeading:IsShown())
 -- The renderer measured this combined explanation on two lines; the native measurement controls layout.
 local originalBalance = GL.AutomaticBalance
 local contextHeight = f.scoreContext.GetStringHeight
