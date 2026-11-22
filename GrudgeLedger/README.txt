@@ -2,6 +2,8 @@ GRUDGE LEDGER — 0.59.0
 
 Titres et surnoms. Le Bilan tire votre archétype d’une grande réserve : une douzaine de noms par façon de combattre, et des noms à vous quand les faits le permettent (« Le Jouet d’Arthas », « Le Fantôme de Tanaris », « Le Rival de Noni »). Deux amis qui combattent de la même façon lisent rarement le même nom, et il change chaque semaine. La phrase et le titre de zone varient aussi (« La Terreur de Feralas », « Le Shérif des Paluns »). Les surnoms des joueurs gagnent trois catégories (le campeur, votre cauchemar, le rival) et six noms au moins par catégorie ; un joueur garde toujours le même. Les articles sont justes : « d’Orgrimmar », « des Paluns », « du Bois de la Pénombre ».
 
+Traductions relues en entier. Anglais : « Profile » partout pour la fiche, « Presence » au lieu d’un doublon, « revenge wins », « Testimony », rappels de paiement plus clairs. Espagnol : « Se busca » pour l’avis de recherche, « golpe de gracia », « ganancia » pour l’honneur (plus confondu avec une prime), tournures valables en Espagne comme au Mexique.
+
 Le renvoi de vos propres messages pendant le rattrapage ne s’empile plus quand plusieurs membres arrivent à la suite. Un courrier déjà envoyé à quelqu’un qui a quitté la guilde reste affiché « en transit ».
 
 Dernières retouches du rattrapage de guilde : le membre qui connaît le plus de primes répond le premier, ses propres messages repartent si un second membre arrive pendant l’envoi, et la carte de guilde garde sa place. La fenêtre Primes garde ce qu’un ancien membre a déjà reçu.
