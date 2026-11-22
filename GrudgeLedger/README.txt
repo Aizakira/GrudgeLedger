@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.58.11
+GRUDGE LEDGER — 0.59.0
+
+Titres et surnoms. Le Bilan tire votre archétype d’une grande réserve : une douzaine de noms par façon de combattre, et des noms à vous quand les faits le permettent (« Le Jouet d’Arthas », « Le Fantôme de Tanaris », « Le Rival de Noni »). Deux amis qui combattent de la même façon lisent rarement le même nom, et il change chaque semaine. La phrase et le titre de zone varient aussi (« La Terreur de Feralas », « Le Shérif des Paluns »). Les surnoms des joueurs gagnent trois catégories (le campeur, votre cauchemar, le rival) et six noms au moins par catégorie ; un joueur garde toujours le même. Les articles sont justes : « d’Orgrimmar », « des Paluns », « du Bois de la Pénombre ».
 
 Le renvoi de vos propres messages pendant le rattrapage ne s’empile plus quand plusieurs membres arrivent à la suite. Un courrier déjà envoyé à quelqu’un qui a quitté la guilde reste affiché « en transit ».
 

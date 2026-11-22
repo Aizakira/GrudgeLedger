@@ -41,8 +41,9 @@ for i = 1, 6 do
     GL.RecordPvP(avenged, "kill", "confirmed", "fixture", "s" .. (i + 1))
 end
 local nemesis = GL.Get(noni)
-assert(I.Nickname(nemesis) == "Le Fléau de Tanaris", tostring(I.Nickname(nemesis)))
-assert(I.Nickname(GL.Get(prey)) == "Votre proie favorite" and R.Prey() == GL.Get(prey))
+-- 0.59.0: the nickname is drawn from a pool for its kind; here, the zone where you fell.
+assert(I.NicknameKind(nemesis) == "zone" and I.Nickname(nemesis):sub(-11) == " de Tanaris", tostring(I.Nickname(nemesis)))
+assert(I.NicknameKind(GL.Get(prey)) == "prey" and GL.Epithets.Known("prey", I.Nickname(GL.Get(prey))) and R.Prey() == GL.Get(prey))
 assert(I.Nickname(GL.Get(person("Sans", "Histoire", "0009")) or {}) == nil, "no nickname without facts")
 
 GL.ShowRelations()
@@ -65,7 +66,7 @@ assert(#open == 1 and #settled == 1 and settled[1].record == GL.Get(avenged) and
 assert(ledger.total:GetText() == tostring(total) and ledger.count:GetText() == "1 dette ouverte · 1 réglée ce mois-ci")
 local first, second = ledger.rows[1], ledger.rows[2]
 assert(first.record == nemesis and first.amount:GetText() == tostring(total) and first.bounty:IsShown() and not first.strike:IsShown())
-assert(first.detail:GetText() == "3 morts · « Le Fléau de Tanaris »", first.detail:GetText())
+assert(first.detail:GetText() == "3 morts · « " .. I.Nickname(nemesis) .. " »", first.detail:GetText())
 assert(second.record == GL.Get(avenged) and second.strike:IsShown() and second.state:GetText() == "Réglée" and not second.bounty:IsShown())
 assert(second.detail:GetText():find("^Vengé le "), second.detail:GetText())
 assert(not ledger.rows[3]:IsShown() and not ledger.previous:IsEnabled() and not ledger.next:IsEnabled())
@@ -80,7 +81,7 @@ assert(rivals.steps[1]:IsShown() and rivals.steps[1].story:GetText():find("Tanar
 click(rivals.next)
 assert(rivals.record == nemesis and rivals.facts[2]:GetText() == "Il vous doit encore " .. GL.Debt(nemesis) and rivals.count:GetText() == "2 / 3")
 click(rivals.next)
-assert(rivals.record == GL.Get(prey) and rivals.nick:GetText() == "« Votre proie favorite »" and not rivals.next:IsEnabled())
+assert(rivals.record == GL.Get(prey) and rivals.nick:GetText() == "« " .. I.Nickname(GL.Get(prey)) .. " »" and not rivals.next:IsEnabled())
 
 -- Dangerous lands: one line per zone, deaths first, with who killed you there.
 click(f.tabs.lands)
@@ -126,7 +127,7 @@ local rankings = f.host.pages.rankings
 assert(R.page == "rankings" and rankings:IsShown() and f.tabs.rankings.active and #rankings.groups == 4)
 assert(rankings.title:GetText() == "Rancunes les plus fortes" and rankings.tabs[1].active and rankings.chips[4]:IsShown() and not rankings.chips[5]:IsShown())
 assert(rankings.rows[1].item.record == nemesis and rankings.rows[1].value:GetText() == "−" .. GL.Debt(nemesis), rankings.rows[1].value:GetText())
-assert(rankings.rows[1].meta:GetText():find("Le Fléau de Tanaris", 1, true), rankings.rows[1].meta:GetText())
+assert(rankings.rows[1].meta:GetText():find(I.Nickname(nemesis), 1, true), rankings.rows[1].meta:GetText())
 click(rankings.tabs[3])
 click(rankings.chips[2])
 assert(rankings.title:GetText() == "Adversaires les plus vaincus" and rankings.rows[1].item.record == GL.Get(avenged) and rankings.rows[1].value:GetText() == "6")

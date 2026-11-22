@@ -93,35 +93,50 @@ function R.Facts(period, scope)
     end
     local k, d = facts.kills, facts.deaths
     local opened, answered, revenge = stats.initiated or 0, stats.responded or 0, stats.revengeKills or 0
-    -- The archetype: one word for the way you fought over the period.
-    local archetype, sentence
+    -- The archetype: one name for the way you fought over the period, drawn from a large pool
+    -- (Epithets.lua) with your identifier, the period and the week: two friends who fight the same
+    -- way rarely read the same name, and it changes from one week to the next.
+    local kind
     if k + d < 3 then
-        archetype = L("Le Voyageur")
-        sentence = L("Peu de combats sur cette période : vous traversez le monde sans faire de vagues.")
+        kind = "traveler"
     elseif revenge >= 3 and revenge * 3 >= k then
-        archetype = L("Le Vengeur")
-        sentence = L("Vous n’oubliez rien : %d de vos victoires sont des revanches."):format(revenge)
+        kind = "avenger"
     elseif k >= 2 * d and opened >= answered then
-        archetype = L("Le Prédateur")
-        sentence = L("Vous frappez le premier, et vous gagnez : %s pour %s."):format(wins(k), deaths(d))
-        -- Who struck first is not known for these fights: say only what is.
-        if opened + answered == 0 then
-            sentence = L("Vous gagnez bien plus que vous ne tombez : %s pour %s."):format(wins(k), deaths(d))
-        end
+        kind = "predator"
     elseif k >= 2 * d then
-        archetype = L("Le Rempart")
-        sentence = L("On vous attaque, et vous tenez : %s pour %s."):format(wins(k), deaths(d))
+        kind = "rampart"
     elseif d >= 2 * k then
-        archetype = L("La Cible")
-        sentence = L("On vous chasse : %s pour %s. Les dettes s’accumulent."):format(deaths(d), wins(k))
+        kind = "target"
     else
-        archetype = L("Le Duelliste")
-        sentence = L("Combat après combat, l’équilibre : %s, %s."):format(wins(k), deaths(d))
+        kind = "duelist"
     end
-    facts.archetype, facts.sentence = archetype, sentence
+    local E = GL.Epithets
+    local seed = table.concat({ tostring(GL.Safe(UnitGUID, "player") or ""), kind, tostring(period), tostring(math.floor(GL.Now() / (7 * DAY))) }, ":")
+    -- Your nemesis when they did a good part of the harm (three deaths, two fifths of yours), your
+    -- prey for the avenger, the zone where you fall or where you win.
+    local most, prey = stats.mostDeaths, stats.mostKilled
+    local nemesis = most and most.record and most.value >= 3 and most.value * 5 >= d * 2 and plain(most.record.fullName or most.record.name)
+    local victim = prey and prey.record and prey.value >= 3 and plain(prey.record.fullName or prey.record.name)
+    local about = {
+        nemesis = (kind == "avenger" and victim or nemesis) or nil,
+        zone = kind == "target" and facts.deadly and facts.deadly.deaths >= 3 and plain(facts.deadly.label)
+            or (kind == "predator" or kind == "rampart") and facts.home and facts.home.kills >= 3 and plain(facts.home.label) or nil,
+    }
+    facts.kind = kind
+    facts.archetype = E.Archetype(kind, seed, about)
+    local line = E.Sentence(kind == "predator" and opened + answered == 0 and "predatorUnknown" or kind, seed)
+    if kind == "traveler" then
+        facts.sentence = line
+    elseif kind == "avenger" then
+        facts.sentence = line:format(revenge)
+    elseif kind == "target" then
+        facts.sentence = line:format(deaths(d), wins(k))
+    else
+        facts.sentence = line:format(wins(k), deaths(d))
+    end
     -- A title earned in one place: most of your victories in the same zone.
     if facts.home and facts.home.kills >= 3 and facts.home.kills * 5 >= k * 2 then
-        facts.title = L("Le Fléau de %s"):format(plain(facts.home.label))
+        facts.title = E.Title(seed, plain(facts.home.label))
     end
     local details = {}
     if opened + answered > 0 then

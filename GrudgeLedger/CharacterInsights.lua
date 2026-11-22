@@ -389,19 +389,24 @@ end
 
 -- The facts shown under "À savoir", most telling first.
 -- A nickname drawn from the facts, the strongest first; none while the facts are too thin, because
--- a name without a nickname is better than a false one.
---   two deaths in the same zone           -> "Le Fléau de <zone>"
---   opens the fight three times out of four (three openings at least) -> "Frappe dans le dos"
---   half of your deaths with accomplices (two at least)               -> "Chasse en meute"
---   beaten three times, never the reverse -> "Votre proie favorite"
---   five groups or three hours together, and no enemy -> "Fidèle compagnon"
-function I.Nickname(record)
+-- a name without a nickname is better than a false one. Each kind has a pool of names
+-- (Epithets.lua), drawn with the player's identifier: the same player keeps the same nickname.
+--   three deaths within ten minutes                                    -> camper
+--   five deaths at least, never beaten                                 -> nemesis
+--   two deaths in the same zone                                        -> zone ("Le Fléau de <zone>")
+--   opens the fight three times out of four (three openings at least)  -> backstab
+--   half of your deaths with accomplices (two at least)                -> pack
+--   beaten three times, never the reverse                              -> prey
+--   three victories and three deaths at least, neither twice the other -> rival
+--   five groups or three hours together, and no enemy                  -> companion
+function I.NicknameKind(record)
     if type(record) ~= "table" then return nil end
-    local zones, deaths, packs, openings, first, seconds = {}, 0, 0, 0, 0, 0
+    local zones, deaths, packs, openings, first, seconds, times = {}, 0, 0, 0, 0, 0, {}
     for _, e in ipairs(record.history or {}) do
         if usable(e) then
             if e.kind == "death" then
                 deaths = deaths + 1
+                if type(e.time) == "number" then times[#times + 1] = e.time end
                 if type(e.zone) == "string" and e.zone ~= "" and e.zone ~= "?" then zones[e.zone] = (zones[e.zone] or 0) + 1 end
                 local rows = type(e.report) == "table" and (e.report.live or e.report.recap) or {}
                 for _, hit in ipairs(rows) do
@@ -419,20 +424,32 @@ function I.Nickname(record)
             end
         end
     end
+    local pvp = record.pvp or {}
+    local kills, killed = tonumber(pvp.kills) or 0, tonumber(pvp.deaths) or 0
+    table.sort(times)
+    for i = 3, #times do
+        if times[i] - times[i - 2] <= 600 then return "camper" end
+    end
+    if killed >= 5 and kills == 0 then return "nemesis" end
     local worst, most = nil, 1
     for zone, n in pairs(zones) do
         if n > most or (n == most and worst and zone < worst) then worst, most = zone, n end
     end
-    if worst then return L("Le Fléau de %s"):format(GL.UITheme.plain(worst)) end
-    if openings >= 3 and first * 4 >= openings * 3 then return L("Frappe dans le dos") end
-    if packs >= 2 and packs * 2 >= deaths then return L("Chasse en meute") end
-    local pvp = record.pvp or {}
-    if (tonumber(pvp.kills) or 0) >= 3 and (tonumber(pvp.deaths) or 0) == 0 then return L("Votre proie favorite") end
+    if worst then return "zone", worst end
+    if openings >= 3 and first * 4 >= openings * 3 then return "backstab" end
+    if packs >= 2 and packs * 2 >= deaths then return "pack" end
+    if kills >= 3 and killed == 0 then return "prey" end
+    if kills >= 3 and killed >= 3 and kills < 2 * killed and killed < 2 * kills then return "rival" end
     local relation = GL.Relation(record)
     if relation ~= "enemy" and relation ~= "warning" and ((tonumber(record.groupCount) or 0) >= 5 or seconds >= 3 * 3600) then
-        return L("Fidèle compagnon")
+        return "companion"
     end
     return nil
+end
+function I.Nickname(record)
+    local kind, zone = I.NicknameKind(record)
+    if not kind or not GL.Epithets then return nil end
+    return GL.Epithets.Nickname(kind, record.guid or record.key or record.fullName, zone and GL.UITheme.plain(zone))
 end
 
 function I.Facts(record, guid)
