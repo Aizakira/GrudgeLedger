@@ -108,6 +108,21 @@ assert(GrudgeLedgerWindow.balance:GetText() == "-5")
 GL.RecordPvP(aqua, "kill", "confirmed", "Direct", "ui-repayment")
 r.buttons.Automatique()
 assert(GL.Relation(aqua) == "warning" and aqua.reputation == -4)
+-- Owner report (0.61.1): once you are ahead, the figure says so ("+n") instead of "0", with a
+-- sentence; the relation still does not become a friendship.
+do
+    local probe = GL.IdentityFromName("Avance", "Exemple", "Player-1-ahead-example")
+    GL.RecordPvP(probe, "aggression", "confirmed", "Direct", "ahead-a")
+    GL.RecordPvP(probe, "death", "confirmed", "Direct", "ahead-d")
+    for i = 1, 12 do GL.RecordPvP(probe, "kill", "confirmed", "Direct", "ahead-k" .. i) end
+    local score, raw, gestures = GL.AutomaticBalance(GL.Get(probe))
+    assert(score == 0 and raw > 0 and gestures == 0, score .. " " .. raw)
+    GL.ShowLedger(GL.Get(probe).key)
+    assert(GrudgeLedgerWindow.balance:GetText() == "+" .. raw, GrudgeLedgerWindow.balance:GetText())
+    assert(GrudgeLedgerWindow.scoreContext:GetText():find("Vous menez de " .. raw, 1, true), GrudgeLedgerWindow.scoreContext:GetText())
+    assert(GL.Relation(GL.Get(probe)) ~= "friend")
+    GL.ShowLedger(aqua.key)
+end
 assert(GrudgeLedgerWindow.reactions.warning.selection:IsShown() and not GrudgeLedgerWindow.reactions.neutral.selection:IsShown(), "automatic selects the effective dangerous relation")
 assert(GrudgeLedgerWindow.detailStatus:GetText():find("Méfiance", 1, true))
 GL.SetReaction(aqua, "friend")

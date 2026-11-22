@@ -2251,7 +2251,11 @@ local function renderDetail()
         end
         if summary then
             local score, raw, gestures = GL.AutomaticBalance(record)
-            ledger.balance:SetText(tostring(score))
+            -- Owner report (0.61.1): two victories for one death showed "0" beside a calculation
+            -- giving 3. When you are ahead, the figure says so ("+3"); the relation does not change,
+            -- because a victory does not make a friend.
+            local ahead = gestures == 0 and raw > 0 and score == 0
+            ledger.balance:SetText(ahead and ("+" .. raw) or tostring(score))
             ledger.balance:SetTextColor(unpack(score < 0 and inkColors.enemy or score > 0 and inkColors.friend or theme.ink))
             local deaths = (pvp.deaths or 0)
             local wins = (pvp.kills or 0)
@@ -2266,7 +2270,10 @@ local function renderDetail()
             end
             ledger.formula:SetText(formula)
             local context = source == "manual" and L("Avis personnel prioritaire · %s"):format(relationNames[relation]) or ""
-            if score ~= raw + gestures then
+            if ahead then
+                local reason = L("Vous menez de %d : il ne vous doit plus rien. Une victoire ne crée pas d’amitié."):format(raw)
+                context = context ~= "" and context .. " · " .. reason or reason
+            elseif score ~= raw + gestures then
                 local reason = math.abs(score) == 100 and L("Solde plafonné à 100 en valeur absolue.")
                     or raw < 0 and L("Un geste amical n’efface pas une dette PvP.") or L("Une victoire seule ne crée pas d’amitié.")
                 context = context ~= "" and context .. " · " .. reason or reason

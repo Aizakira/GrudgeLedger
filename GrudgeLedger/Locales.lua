@@ -4,6 +4,7 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["Vous menez de %d : il ne vous doit plus rien. Une victoire ne crée pas d’amitié."] = "Vas %d por delante: ya no te debe nada. Una victoria no crea amistad.",
         ["note interne (détail dans /gl traces)"] = "nota interna (detalle en /gl traces)",
         ["Joueurs avec l’addon"] = "Jugadores con el addon",
         ["Langue : "] = "Idioma: ",
@@ -2659,6 +2660,7 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["Vous menez de %d : il ne vous doit plus rien. Une victoire ne crée pas d’amitié."] = "You are %d ahead: they owe you nothing more. A victory does not make a friend.",
         ["note interne (détail dans /gl traces)"] = "internal note (details in /gl traces)",
         ["Joueurs avec l’addon"] = "Players with the addon",
         ["Langue : "] = "Language: ",
