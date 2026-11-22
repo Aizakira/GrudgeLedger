@@ -308,6 +308,10 @@ assert(toastB.note:GetText():find("5 PO", 1, true) and #b.sounds > soundsB, toas
 local toastA = a.env.GrudgeLedgerNearbyAlert
 assert(toastA:IsShown() and toastA.title:GetText() == "Prime remportée" and toastA.note:GetText():find("5 PO", 1, true), toastA.title:GetText())
 local before = #b.m.messages
+-- 0.60.1: a banner on another subject waits while the first is on screen, then takes its place.
+b.GL.ShowStoryBanner("test:wait", "friend", "En attente", "File", "Une seconde bannière.", nil, nil, nil)
+assert(toastB.title:GetText() == "Prime à régler", "the first banner stays")
+now = now + 10
 b.GL.BountyPaymentsCheck(true)
 local remind = false
 for i = before + 1, #b.m.messages do remind = remind or b.m.messages[i]:find("Primes à régler", 1, true) ~= nil end
@@ -353,6 +357,7 @@ for i, target in ipairs({ "Player-1-enemy10", "Player-1-enemy11" }) do
     flush()
 end
 b.GL.BountyPaymentsCheck(false)
+now = now + 10
 b.GL.BountyPaymentsCheck(true)
 assert(b.GL.bountyDue.count == 2 and book.navigation.bounties.caption:GetText() == "Primes · 2")
 assert(toastB:IsShown() and toastB.note:GetText():find("pour 2 primes", 1, true), toastB.note:GetText())
@@ -371,6 +376,20 @@ for i = beforeA + 1, #a.m.messages do
     twoTold = twoTold or a.m.messages[i]:find("pour 2 primes", 1, true) ~= nil
 end
 assert(twoTold, "two bounties sent while away")
+-- 0.60.1, the last link of a bounty: the hunter opens the mailbox and finds B's mail for the first
+-- bounty. The addon tells "Paiement reçu", and for the payer the contract is paid.
+a.env.GetInboxNumItems = function() return 1 end
+a.env.GetInboxHeaderInfo = function() return nil, nil, "Member2", "[GL:" .. order .. "/0] Rich Target", 50000, 0 end
+beforeA = #a.m.messages
+a.m.Fire("MAIL_INBOX_UPDATE")
+flush()
+a.GL.BountyPaymentsCheck(false)
+local received = false
+for i = beforeA + 1, #a.m.messages do
+    received = received or a.m.messages[i]:find("Paiement reçu pour la prime sur Rich Target", 1, true) ~= nil
+end
+assert(received, "the hunter is told the payment arrived")
+assert(b.GL.Bounties.History()[order].state == "paid", tostring(b.GL.Bounties.History()[order].state))
 for _, c in ipairs(clients) do assert(#c.GL.errors == 0, (c.GL.errors[1] or {}).text) end
 print("PASS guild vision: off by default, one message a fight with its opponent, kept only by members who share, borrowed fights "
     .. "refused, forty a member, a newcomer receives the guild's fights, guild killer alert with its own sound, forgotten when unticked")

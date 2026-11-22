@@ -620,8 +620,19 @@ end
 -- suspicious, a bounty target, disliked by the guild), or when a guildmate's enemy is in your zone.
 local watchAlerts = {}
 -- A moment of your story, shown like an alert: revenge taken, a score settled, a good group.
+-- A banner never replaces another banner still on screen (0.60.1): it waits its turn, five at most, and
+-- shows when the first closes. Two payments at once are both read. A banner still replaces a plain
+-- nearby alert at once (a revenge is told when it happens), and a banner on the same subject is
+-- updated in place.
+local waitingBanners = {}
 local function banner(key, relation, title, name, note, hint, onClick, accent, action)
     if GL.IsPvPInstance() then return end
+    if toast and toast:IsShown() and toast.banner and toast.key ~= key and GL.Now() < (toast.expires or 0) then
+        if #waitingBanners < 5 then
+            waitingBanners[#waitingBanners + 1] = { key, relation, title, name, note, hint, onClick, accent, action }
+        end
+        return toast
+    end
     if previewToast and previewToast:IsShown() then previewToast:Hide() end
     local frame = makeToast()
     frame.key, frame.relation, frame.source, frame.expires = key, relation, "banner", GL.Now() + 8
@@ -954,6 +965,10 @@ eventFrame:SetScript("OnUpdate", function(_, delta)
     -- with ThreatPlates updates. Use its update hook if very large crowds prove costly.
     D.Refresh()
     if toast and toast:IsShown() and GL.Now() >= toast.expires then toast:Hide() end
+    if #waitingBanners > 0 and not (toast and toast:IsShown()) then
+        local next = table.remove(waitingBanners, 1)
+        banner(unpack(next, 1, 9))
+    end
     if previewToast and previewToast:IsShown() and GL.Now() >= previewToast.expires then previewToast:Hide() end
 end)
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",

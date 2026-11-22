@@ -151,6 +151,19 @@ a.m.Fire("PLAYER_LOGIN");flush()
 assert(not a.g.Withdraw(first))
 local fresh=assert(a.g.Publish(record));flush()
 assert(fresh.key~=first.key and #b.g.List()==1 and #b.g.View(b.g.List()[1])==0)
+-- 0.60.1: a catch-up sends your cards and opinions as one batch after the urgent messages; a
+-- second request while it waits adds nothing.
+do
+    local scope=a.GL.Bounties.GuildScope()
+    local urgentBefore=a.GL.Transport.Pending(scope)
+    a.g.CatchUp(scope,a.id)
+    local urgentAfter,bulk=a.GL.Transport.Pending(scope)
+    assert(urgentAfter==urgentBefore and bulk>=1 and a.GL.Transport.State(scope,"journal:own")=="queued", "cards wait in a batch")
+    a.g.CatchUp(scope,a.id)
+    local _,again=a.GL.Transport.Pending(scope)
+    assert(again==bulk, "no pile of copies")
+    flush()
+end
 local secret=assert(a.GL.Bounties.GuildScope().journal.withdrawn[first.key])
 b.m.Fire("CHAT_MSG_ADDON","GLBounty1","J;D;"..a.id..";"..first.target..";"..secret,"GUILD",c.name)
 assert(b.g.ForTarget(contact.guid).key==fresh.key)
