@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.60.1
+GRUDGE LEDGER — 0.61.0
+
+Qui utilise l’addon dans la guilde : l’onglet Guilde affiche « Joueurs avec l’addon », en comptant les joueurs et non les personnages (trois personnages du même joueur comptent pour un), grâce à une marque anonyme qui ne nomme personne. Rapport pour les tickets : /gl rapport (ou /gl debug) ouvre un rapport anonyme à copier, avec la langue, le nombre de fiches et de primes, les joueurs de la guilde équipés et les dernières erreurs, gardées d’une session à l’autre. Aucun nom n’y figure. Rien n’est envoyé nulle part : c’est vous qui copiez le texte.
 
 Consolidation. À la connexion d’un membre, vos fiches de guilde, vos avis et vos propres primes repartent en un seul lot, après les messages urgents : une victoire ou un paiement ne reste plus bloqué derrière eux. Deux bannières qui arrivent en même temps s’affichent l’une après l’autre au lieu de s’écraser. Un relais ne peut plus gonfler les totaux de combats d’un membre. Allemand : « von Unbekannt ».
 

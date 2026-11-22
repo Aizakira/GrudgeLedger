@@ -2035,6 +2035,45 @@ local function showDiagnostic(private)
     local lines = { "Grudge Ledger " .. version(GL.version), L("Client : ") .. version(client), L("Build : ") .. version(build),
         L("Interface : ") .. version(interface), L("Intégration détectée : ") .. (loaded and "Threat Plates" or L("aucune")),
         L("Erreurs conservées : ") .. #(GL.errors or {}), "", L("API disponibles :") }
+    -- 0.61.0: what a ticket needs. The language, how much the book holds, the guild's players with
+    -- the addon, and the last errors kept from one session to the next. Never a name: in the
+    -- anonymous report, player identifiers are masked.
+    local sheets = 0
+    for _ in pairs(GL.db and GL.db.players or {}) do sheets = sheets + 1 end
+    local open = 0
+    for _, order in pairs(GL.Bounties and GL.Bounties.List and GL.Bounties.List() or {}) do
+        if order.state == "open" or order.state == "claimed" then open = open + 1 end
+    end
+    local usage = { L("Langue : ") .. tostring(GL.Safe(GetLocale) or L("indisponible")), L("Fiches : ") .. sheets,
+        L("Primes en cours : ") .. open }
+    if GL.GuildMap and GL.GuildMap.Players then
+        local playerCount, characters = GL.GuildMap.Players()
+        usage[#usage + 1] = L("Joueurs de la guilde avec l’addon : %d (%d personnages)"):format(playerCount, characters)
+    end
+    for i, line in ipairs(usage) do table.insert(lines, 6 + i, line) end
+    local kept = GL.db and type(GL.db.errorLog) == "table" and GL.db.errorLog or {}
+    if #kept > 0 then
+        table.insert(lines, 7 + #usage, L("Dernières erreurs :"))
+        local at = 8 + #usage
+        for i = math.max(1, #kept - 9), #kept do
+            local entry = kept[i]
+            if type(entry) == "table" and type(entry.text) == "string" then
+                local text = entry.text:gsub("%c+", " ")
+                if private ~= true then
+                    -- Only a Lua error (file, line, technical message) is shown as it is: it never holds
+                    -- a value. Any other note may name a player: its text stays in /gl traces.
+                    if text:find("%.lua:%d+:") then
+                        text = text:gsub("Player%-[%w%-]+", "Player-…")
+                    else
+                        text = L("note interne (détail dans /gl traces)")
+                    end
+                end
+                table.insert(lines, at, ("  %s · %s · ×%d · %s"):format(date("%d/%m %H:%M", tonumber(entry.time) or 0),
+                    tostring(entry.version or "?"), tonumber(entry.count) or 1, text))
+                at = at + 1
+            end
+        end
+    end
     for _, api in ipairs({
         { "Menu.ModifyMenu", Menu and Menu.ModifyMenu }, { "C_NamePlate.GetNamePlateForUnit", C_NamePlate and C_NamePlate.GetNamePlateForUnit },
         { "GetGuildInfo", GetGuildInfo }, { "CombatLogGetCurrentEventInfo", CombatLogGetCurrentEventInfo },
@@ -3568,6 +3607,7 @@ local commandAliases = {
     guilds = "guildes", hermandades = "guildes", guild = "guilde", hermandad = "guilde",
     logs = "traces", registros = "traces", ajustes = "settings", opciones = "options",
     markers = "reperage", marcadores = "reperage", diagnostico = "debug", ["diagnóstico"] = "debug",
+    rapport = "debug", report = "debug", informe = "debug", bericht = "debug", relatorio = "debug", ["relatório"] = "debug",
     probe = "sonde", sonda = "sonde", map = "carte", mapa = "carte",
     estadisticas = "stats", ["estadísticas"] = "stats", nota = "note", guia = "guide", ["guía"] = "guide",
     friend = "ami", amigo = "ami", amiga = "ami", amie = "ami", enemy = "ennemi",

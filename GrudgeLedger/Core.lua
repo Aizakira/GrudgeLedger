@@ -62,9 +62,32 @@ function GL.Print(message)
     local chat = DEFAULT_CHAT_FRAME or ChatFrame1
     if chat then chat:AddMessage("|cffe4bc67[Grudge Ledger]|r " .. tostring(message)) end
 end
+-- The errors of the session, and the last twenty kept from one session to the next (0.61.0) for
+-- the report of /gl debug: a player who opens a ticket can paste what went wrong, even days later.
 function GL.Debug(message)
-    GL.errors[#GL.errors + 1] = { time = GL.Now(), text = tostring(message) }
+    local text = tostring(message)
+    GL.errors[#GL.errors + 1] = { time = GL.Now(), text = text }
     if #GL.errors > 30 then table.remove(GL.errors, 1) end
+    if type(GL.db) ~= "table" then return end
+    GL.db.errorLog = type(GL.db.errorLog) == "table" and GL.db.errorLog or {}
+    local log, short = GL.db.errorLog, text:sub(1, 400)
+    local last = log[#log]
+    if type(last) == "table" and last.text == short then
+        last.count, last.time = (tonumber(last.count) or 1) + 1, GL.Now()
+    else
+        log[#log + 1] = { time = GL.Now(), version = GL.version, text = short, count = 1 }
+    end
+    while #log > 20 do table.remove(log, 1) end
+end
+-- A Lua error raised in the addon's own code (a click, a page) is noted too. The game's own error
+-- handling goes on exactly as before: this only listens.
+if type(geterrorhandler) == "function" and type(seterrorhandler) == "function" then
+    local previous = geterrorhandler()
+    seterrorhandler(function(message, ...)
+        local text = tostring(message)
+        if text:find("GrudgeLedger", 1, true) then pcall(GL.Debug, text) end
+        if type(previous) == "function" then return previous(message, ...) end
+    end)
 end
 local traceReasons = {
     observed = "Identité reçue", unreadable = "Identité absente ou non lisible", unknown = "Aucun avis connu",

@@ -296,10 +296,46 @@ local function memberName(id)
     return GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(id) or GL.L("Un membre de la guilde")
 end
 -- GLV: "I arrive, here is my version". GLVR: the answer of a member already there.
+-- GLP (0.61.0): an anonymous mark of the player behind the character, so that the guild can count
+-- its players and not only its characters. It is drawn from the random code of this installation
+-- and the guild's name: it names nobody, and it is not the same from one guild to another.
+local players = {}
+local function playerMark(s)
+    local _, _, account = GL.Author()
+    if type(account) ~= "string" or type(s.guildKey) ~= "string" then return nil end
+    local text, h = account .. "/" .. s.guildKey, 5381
+    for i = 1, #text do
+        h = ((h + text:byte(i)) * 48271) % 2147483647
+    end
+    return ("%08x"):format(h)
+end
 function M.Announce(s, reply)
     if type(s) ~= "table" or type(GL.version) ~= "string" or not GL.version:match("^%d+%.%d+") then return false end
     GL.Transport.Send(s, (reply and "GLVR;" or "GLV;") .. GL.version)
+    local mark = playerMark(s)
+    if mark then GL.Transport.Send(s, "GLP;" .. mark) end
     return true
+end
+function M.Player(sender, value)
+    if guid(sender) and type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") then players[sender] = value end
+end
+-- How many players, and how many characters, were heard with the addon this session, you included.
+-- A member on a version without the mark counts as one player.
+function M.Players()
+    local s = scope()
+    local seen, count, characters = {}, 0, 1
+    local mine = type(s) == "table" and playerMark(s) or "me"
+    seen[mine] = true
+    count = 1
+    for sender in pairs(heard) do
+        characters = characters + 1
+        local mark = players[sender] or sender
+        if not seen[mark] then
+            seen[mark] = true
+            count = count + 1
+        end
+    end
+    return count, characters
 end
 -- Any guild message of the addon: its sender runs Grudge Ledger. Without a version a minute later,
 -- it runs one older than 0.58.0, and the player is told once.

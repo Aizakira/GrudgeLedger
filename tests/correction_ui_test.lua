@@ -108,6 +108,30 @@ assert(text:find("nameplateShowAll : indisponible", 1, true), "only allowlisted 
 for _, forbidden in ipairs({ "PRIVATE", "Aqua", "Megumin", "Player-1-", "Déduction", "Autre personne", "Forever", "unrelatedPrivateSetting" }) do
     assert(not text:find(forbidden, 1, true), "diagnostic leaked " .. forbidden)
 end
+-- 0.61.0: the last errors are kept from one session to the next and listed in the report. In the
+-- anonymous report a Lua error shows its file and line with player identifiers masked; any other
+-- note is replaced, because it may name a player.
+GL.db.errorLog = {
+    { time = GL.Now(), version = "0.61.0", count = 3, text = "Interface\AddOns\GrudgeLedger\UI.lua:12: attempt to index Player-1-PRIVATEID (a nil value)" },
+    { time = GL.Now(), version = "0.61.0", count = 1, text = "Entrée invalide : name:Megumin" },
+}
+SlashCmdList.GRUDGELEDGER("rapport")
+text = d.edit:GetText()
+assert(text:find("Dernières erreurs :", 1, true) and text:find("UI.lua:12: attempt to index Player-…", 1, true) and text:find("×3", 1, true), text)
+assert(text:find("note interne", 1, true) and not text:find("Megumin", 1, true) and not text:find("PRIVATEID", 1, true), "no name in the anonymous report")
+assert(text:find("Langue : ", 1, true) and text:find("Fiches : ", 1, true))
+SlashCmdList.GRUDGELEDGER("traces")
+assert(d.edit:GetText():find("Megumin", 1, true), "the local log keeps the full text")
+GL.db.errorLog = nil
+local before = #GL.errors
+GL.Debug("essai")
+GL.Debug("essai")
+assert(#GL.db.errorLog == 1 and GL.db.errorLog[1].count == 2 and GL.db.errorLog[1].version == GL.version, "a repeated error is counted, not piled")
+GL.db.errorLog = nil
+GL.errors[#GL.errors] = nil
+GL.errors[#GL.errors] = nil
+assert(#GL.errors == before, "the session list is as it was")
+SlashCmdList.GRUDGELEDGER("debug")
 local messageCount = #mock.messages
 local raised = d.raised
 SlashCmdList.GRUDGELEDGER("debug")
