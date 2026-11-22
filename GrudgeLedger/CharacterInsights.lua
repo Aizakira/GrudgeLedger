@@ -391,22 +391,45 @@ end
 -- A nickname drawn from the facts, the strongest first; none while the facts are too thin, because
 -- a name without a nickname is better than a false one. Each kind has a pool of names
 -- (Epithets.lua), drawn with the player's identifier: the same player keeps the same nickname.
+-- Enemies:
 --   three deaths within ten minutes                                    -> camper
 --   five deaths at least, never beaten                                 -> nemesis
+--   two deaths at least, mostly while 3+ levels above you              -> bully
+--   two deaths at least, mostly between midnight and 5 am              -> nightstalker
 --   two deaths in the same zone                                        -> zone ("Le Fléau de <zone>")
 --   opens the fight three times out of four (three openings at least)  -> backstab
 --   half of your deaths with accomplices (two at least)                -> pack
+--   beaten twice at least while 2+ levels above you, never the reverse  -> giant
+--   beaten three times, never the reverse, mostly 3+ levels below you  -> smallfry
 --   beaten three times, never the reverse                              -> prey
 --   three victories and three deaths at least, neither twice the other -> rival
---   five groups or three hours together, and no enemy                  -> companion
+-- Allies (never an enemy or a watched player):
+--   five groups or three hours together                                -> companion
+--   three duels at least                                               -> duelpartner
+--   three groups at least                                              -> dungeonbuddy
+--   marked as a friend                                                 -> friend
+--   known for three months and seen in the last two weeks              -> veteran
+--   crossed fifteen times                                              -> regular
+-- Anyone crossed eight times and never fought                          -> passerby
 function I.NicknameKind(record)
     if type(record) ~= "table" then return nil end
     local zones, deaths, packs, openings, first, seconds, times = {}, 0, 0, 0, 0, 0, {}
+    local leveledDeaths, bigger, nightDeaths, leveledKills, smaller, higher = 0, 0, 0, 0, 0, 0
     for _, e in ipairs(record.history or {}) do
         if usable(e) then
+            local combat = type(e.combat) == "table" and e.combat or {}
+            local mine, theirs = tonumber(combat.playerLevel), tonumber(combat.opponentLevel)
             if e.kind == "death" then
                 deaths = deaths + 1
-                if type(e.time) == "number" then times[#times + 1] = e.time end
+                if type(e.time) == "number" then
+                    times[#times + 1] = e.time
+                    local hour = type(date) == "function" and tonumber(date("%H", e.time))
+                    if hour and hour < 5 then nightDeaths = nightDeaths + 1 end
+                end
+                if mine and theirs then
+                    leveledDeaths = leveledDeaths + 1
+                    if theirs >= mine + 3 then bigger = bigger + 1 end
+                end
                 if type(e.zone) == "string" and e.zone ~= "" and e.zone ~= "?" then zones[e.zone] = (zones[e.zone] or 0) + 1 end
                 local rows = type(e.report) == "table" and (e.report.live or e.report.recap) or {}
                 for _, hit in ipairs(rows) do
@@ -415,6 +438,12 @@ function I.NicknameKind(record)
                         packs = packs + 1
                         break
                     end
+                end
+            elseif e.kind == "kill" then
+                if mine and theirs then
+                    leveledKills = leveledKills + 1
+                    if mine >= theirs + 3 then smaller = smaller + 1 end
+                    if theirs >= mine + 2 then higher = higher + 1 end
                 end
             elseif e.kind == "opening" then
                 openings = openings + 1
@@ -431,6 +460,8 @@ function I.NicknameKind(record)
         if times[i] - times[i - 2] <= 600 then return "camper" end
     end
     if killed >= 5 and kills == 0 then return "nemesis" end
+    if deaths >= 2 and leveledDeaths >= 2 and bigger * 2 >= leveledDeaths then return "bully" end
+    if deaths >= 2 and nightDeaths * 2 >= deaths then return "nightstalker" end
     local worst, most = nil, 1
     for zone, n in pairs(zones) do
         if n > most or (n == most and worst and zone < worst) then worst, most = zone, n end
@@ -438,12 +469,25 @@ function I.NicknameKind(record)
     if worst then return "zone", worst end
     if openings >= 3 and first * 4 >= openings * 3 then return "backstab" end
     if packs >= 2 and packs * 2 >= deaths then return "pack" end
+    if killed == 0 and kills >= 2 and higher >= 2 and higher * 2 >= leveledKills then return "giant" end
+    if killed == 0 and kills >= 3 and leveledKills >= 2 and smaller * 2 >= leveledKills then return "smallfry" end
     if kills >= 3 and killed == 0 then return "prey" end
     if kills >= 3 and killed >= 3 and kills < 2 * killed and killed < 2 * kills then return "rival" end
     local relation = GL.Relation(record)
-    if relation ~= "enemy" and relation ~= "warning" and ((tonumber(record.groupCount) or 0) >= 5 or seconds >= 3 * 3600) then
-        return "companion"
+    local fought = kills + killed + (tonumber(pvp.aggressions) or 0)
+    if relation ~= "enemy" and relation ~= "warning" then
+        local groups = tonumber(record.groupCount) or 0
+        local duels = type(record.duels) == "table" and record.duels or {}
+        local seen = type(record.encounters) == "table" and tonumber(record.encounters.count) or 0
+        local now, firstSeen, last = GL.Now(), tonumber(record.firstSeen), tonumber(record.lastEncounterAt)
+        if groups >= 5 or seconds >= 3 * 3600 then return "companion" end
+        if (tonumber(duels.wins) or 0) + (tonumber(duels.losses) or 0) >= 3 then return "duelpartner" end
+        if groups >= 3 then return "dungeonbuddy" end
+        if relation == "friend" then return "friend" end
+        if firstSeen and last and now - firstSeen >= 90 * 86400 and now - last <= 14 * 86400 then return "veteran" end
+        if seen >= 15 then return "regular" end
     end
+    if fought == 0 and (type(record.encounters) == "table" and tonumber(record.encounters.count) or 0) >= 8 then return "passerby" end
     return nil
 end
 function I.Nickname(record)

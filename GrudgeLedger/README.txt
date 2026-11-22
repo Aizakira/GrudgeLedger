@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.59.0
+GRUDGE LEDGER — 0.59.1
+
+Le grand catalogue des titres. Le Bilan connaît 16 façons de combattre au lieu de 6 : la victime des plus hauts niveaux, des meutes, des embuscades, d’un seul bourreau ou d’une zone maudite ; le chasseur de plus petits, le tueur de géants, le loup de meute ; le sauveur aux coups de main ; l’oiseau de nuit. Vingt noms par façon, cinq phrases, des noms à vous avec votre némésis ou votre zone, trente titres de zone. Les surnoms des joueurs passent à 18 catégories : le grand qui tape les petits, le rôdeur de nuit, le géant tombé, le petit que vous battez, le croisé sans combat, et six pour les alliés (compagnon, partenaire de duel, frère de donjon, ami, vieille connaissance, habitué), quatorze noms chacune. Plus de 700 noms en tout.
 
 Titres et surnoms. Le Bilan tire votre archétype d’une grande réserve : une douzaine de noms par façon de combattre, et des noms à vous quand les faits le permettent (« Le Jouet d’Arthas », « Le Fantôme de Tanaris », « Le Rival de Noni »). Deux amis qui combattent de la même façon lisent rarement le même nom, et il change chaque semaine. La phrase et le titre de zone varient aussi (« La Terreur de Feralas », « Le Shérif des Paluns »). Les surnoms des joueurs gagnent trois catégories (le campeur, votre cauchemar, le rival) et six noms au moins par catégorie ; un joueur garde toujours le même. Les articles sont justes : « d’Orgrimmar », « des Paluns », « du Bois de la Pénombre ».
 

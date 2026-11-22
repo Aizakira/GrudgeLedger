@@ -96,17 +96,44 @@ function R.Facts(period, scope)
     -- The archetype: one name for the way you fought over the period, drawn from a large pool
     -- (Epithets.lua) with your identifier, the period and the week: two friends who fight the same
     -- way rarely read the same name, and it changes from one week to the next.
+    -- The most telling shape first (0.59.1): a victim of bigger players, of packs, of ambushes, of
+    -- one tormentor or of one cursed zone; a bully, a giant slayer or a pack wolf; an owl of the night.
+    local most, prey = stats.mostDeaths, stats.mostKilled
     local kind
     if k + d < 3 then
         kind = "traveler"
     elseif revenge >= 3 and revenge * 3 >= k then
         kind = "avenger"
-    elseif k >= 2 * d and opened >= answered then
-        kind = "predator"
-    elseif k >= 2 * d then
-        kind = "rampart"
+    elseif (stats.assists or 0) >= 3 and (stats.assists or 0) > k then
+        kind = "savior"
     elseif d >= 2 * k then
-        kind = "target"
+        if (stats.levelDeaths or 0) >= 3 and (stats.higherDeaths or 0) * 2 >= stats.levelDeaths then
+            kind = "victimhigher"
+        elseif d >= 3 and (stats.packDeaths or 0) * 2 >= d then
+            kind = "victimpack"
+        elseif answered >= 3 and answered >= 2 * opened then
+            kind = "victimambush"
+        elseif most and most.value >= 3 and most.value * 2 >= d then
+            kind = "victimone"
+        elseif facts.deadly and facts.deadly.deaths >= 3 and facts.deadly.deaths * 2 >= d then
+            kind = "victimzone"
+        else
+            kind = "target"
+        end
+    elseif k >= 2 * d then
+        if (stats.levelKills or 0) >= 3 and (stats.lowerKills or 0) * 2 >= stats.levelKills then
+            kind = "ganker"
+        elseif (stats.higherKills or 0) >= 2 and (stats.higherKills or 0) * 3 >= (stats.levelKills or 0) then
+            kind = "giantslayer"
+        elseif k >= 3 and (stats.groupKills or 0) * 2 >= k then
+            kind = "teamplayer"
+        elseif opened >= answered then
+            kind = "predator"
+        else
+            kind = "rampart"
+        end
+    elseif k + d >= 4 and (stats.nightFights or 0) * 2 >= k + d then
+        kind = "nightowl"
     else
         kind = "duelist"
     end
@@ -114,13 +141,14 @@ function R.Facts(period, scope)
     local seed = table.concat({ tostring(GL.Safe(UnitGUID, "player") or ""), kind, tostring(period), tostring(math.floor(GL.Now() / (7 * DAY))) }, ":")
     -- Your nemesis when they did a good part of the harm (three deaths, two fifths of yours), your
     -- prey for the avenger, the zone where you fall or where you win.
-    local most, prey = stats.mostDeaths, stats.mostKilled
     local nemesis = most and most.record and most.value >= 3 and most.value * 5 >= d * 2 and plain(most.record.fullName or most.record.name)
     local victim = prey and prey.record and prey.value >= 3 and plain(prey.record.fullName or prey.record.name)
+    local deadlyZone = facts.deadly and facts.deadly.deaths >= 3 and plain(facts.deadly.label)
+    local homeZone = facts.home and facts.home.kills >= 3 and plain(facts.home.label)
+    local isVictim = kind == "target" or kind == "victimzone" or kind == "victimone" or kind == "victimhigher"
     local about = {
         nemesis = (kind == "avenger" and victim or nemesis) or nil,
-        zone = kind == "target" and facts.deadly and facts.deadly.deaths >= 3 and plain(facts.deadly.label)
-            or (kind == "predator" or kind == "rampart") and facts.home and facts.home.kills >= 3 and plain(facts.home.label) or nil,
+        zone = (isVictim and deadlyZone) or ((kind == "predator" or kind == "rampart" or kind == "ganker") and homeZone) or nil,
     }
     facts.kind = kind
     facts.archetype = E.Archetype(kind, seed, about)
@@ -129,7 +157,9 @@ function R.Facts(period, scope)
         facts.sentence = line
     elseif kind == "avenger" then
         facts.sentence = line:format(revenge)
-    elseif kind == "target" then
+    elseif kind == "savior" then
+        facts.sentence = line:format(stats.assists or 0)
+    elseif kind == "target" or kind:sub(1, 6) == "victim" then
         facts.sentence = line:format(deaths(d), wins(k))
     else
         facts.sentence = line:format(wins(k), deaths(d))
@@ -229,9 +259,10 @@ end
 local function paintWho(card, facts, period, scope)
     card.eyebrow:SetText(labelOf(SCOPES, scope) .. " · " .. labelOf(PERIODS, period))
     card.name:SetText(plain(scope == "character" and facts.stats.actorName or L("Tous vos personnages")))
-    card.archetype:SetText(facts.archetype)
+    -- A long personal name ("Le Souffre-douleur de Vachementop") shrinks to fit on one line.
+    Panels.Fit(card.archetype, facts.archetype, SHEET_W - 80, 34, 20, true)
     card.sentence:SetText(facts.sentence)
-    card.title:SetText(facts.title and ("« " .. facts.title .. " »") or "")
+    Panels.Fit(card.title, facts.title and ("« " .. facts.title .. " »") or "", SHEET_W - 80, 17, 12, true)
     card.details:SetText(facts.details)
 end
 local function bigNumbers(card, y)

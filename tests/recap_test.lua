@@ -38,7 +38,7 @@ for i = 1, 3 do
 end
 GL.RelationsPages.Refresh()
 assert(E.Known("duelist", who.archetype:GetText()), who.archetype:GetText())
-assert(who.sentence:GetText():find("3 victoires, 3 morts.", 1, true), who.sentence:GetText())
+assert(who.sentence:GetText():find("3 victoires", 1, true) and who.sentence:GetText():find("3 morts", 1, true), who.sentence:GetText())
 local shown = who.title:GetText()
 local bare = shown:sub(shown:find("L", 1, true) or 1, (shown:find("Feralas", 1, true) or 0) + 6)
 assert(bare:sub(-11) == " de Feralas" and E.Known("title", bare), shown)

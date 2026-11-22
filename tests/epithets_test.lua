@@ -41,6 +41,23 @@ end
 assert(E.Sentence("predatorUnknown", "x"):find("%s pour %s", 1, true))
 assert(E.Title("x", "Feralas"):sub(-11) == " de Feralas")
 
+-- 0.59.1: the owner's case. Killed four times by players four levels above: in the Bilan, a victim of
+-- bigger players; the killer is a bully.
+UnitLevel = function(unit) return unit == "player" and 30 or nil end
+local big = GL.IdentityFromName("Grand", "Costaud", "Player-9-0100")
+big.level = 34
+for i = 1, 4 do
+    now = now + 3600
+    GL.RecordPvP(big, "death", "confirmed", "fixture", "big" .. i)
+end
+local facts = GL.Recap.Facts("all", "character")
+assert(facts.kind == "victimhigher" and E.Known("victimhigher", facts.archetype), tostring(facts.kind) .. " " .. tostring(facts.archetype))
+assert(I.NicknameKind(GL.Get(big)) == "bully" and E.Known("bully", I.Nickname(GL.Get(big))), tostring(I.NicknameKind(GL.Get(big))))
+-- An ally met in three groups is a dungeon buddy.
+local buddy = GL.Remember(GL.IdentityFromName("Ami", "Donjon", "Player-9-0200"))
+buddy.groupCount = 3
+assert(I.NicknameKind(buddy) == "dungeonbuddy" and E.Known("dungeonbuddy", I.Nickname(buddy)), tostring(I.NicknameKind(buddy)))
+
 -- Nicknames: three deaths within ten minutes make a camper; five deaths and never beaten, a nemesis;
 -- even fights, a rival.
 local function person(first, id)
