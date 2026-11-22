@@ -122,7 +122,9 @@ class Layout:
 
     def visible(self, n):
         r = self.frames[n]
-        if r.get("buttonState") in ("pushed", "highlight") or r.get("layer") == "HIGHLIGHT": return False
+        parent = self.frames.get(r.get("parent"), {})
+        if r.get("buttonState") == "pushed" and not (parent.get("pressed") and parent.get("enabled", True)): return False
+        if (r.get("buttonState") == "highlight" or r.get("layer") == "HIGHLIGHT") and not (parent.get("hovered") and parent.get("enabled", True)): return False
         if r.get("buttonState") == "normal" and not self.frames[r["parent"]].get("enabled", True) and self.frames[r["parent"]].get("hasDisabledTexture"): return False
         if r.get("buttonState") == "disabled" and self.frames[r["parent"]].get("enabled",True): return False
         return r.get("shown", True) and (self.visible(r["parent"]) if r.get("parent") else True)
@@ -245,12 +247,14 @@ def render(name, frames, root):
     margin, banner = 22, 34
     # Minimap controls may deliberately extend beyond the map disc.
     if name.startswith("minimap"): margin = 48
-    transparent = name == "journal-transparent"
+    transparent = name in ("journal-transparent", "journal-reference-transparent")
     canvas = Image.new("RGBA", (math.ceil(rb[2] + margin*2), math.ceil(rb[3] + margin*2 + banner)), (0,0,0,0) if transparent else (20,21,23,255))
     offsetx, offsety = margin - rb[0], margin + banner - rb[1]
     heading = ImageDraw.Draw(canvas)
     if not transparent:
-        heading.text((12,10), "SIMULATION HORS JEU  /  " + name.upper(), font=font(11), fill=(183,174,155,255))
+        caption = "SIMULATION HORS JEU  /  " + name.upper()
+        if name.startswith("journal-reference"): caption += "  /  PORTRAITS INDISPONIBLES"
+        heading.text((12,10), caption, font=font(11), fill=(183,174,155,255))
     layers = {"BACKGROUND":0,"BORDER":1,"ARTWORK":2,"OVERLAY":3,"HIGHLIGHT":4}
     minimap_button = next((r["id"] for r in frames if r.get("name") == "GrudgeLedgerMinimapButton"), None)
     regions = [r for r in frames if (lay.descendant(r["id"], root) or
@@ -272,7 +276,7 @@ def render(name, frames, root):
             draw.text((x+w*.46,y+h*.04),"N",font=font(12),fill=(235,211,143,255))
             draw.ellipse((x+w*.47,y+h*.47,x+w*.53,y+h*.53),fill=(221,202,115,255))
         texture_name = r.get("texture") or ""
-        missing_paper = (name == "journal-no-paper" and any(asset in texture_name for asset in ("JournalPaper", "JournalBookSurface"))) or (name == "journal-no-book" and "JournalBookSurface" in texture_name)
+        missing_paper = (name == "journal-no-paper" and any(asset in texture_name for asset in ("JournalPaper", "JournalBookSurface", "JournalReferenceBook"))) or (name == "journal-no-book" and any(asset in texture_name for asset in ("JournalBookSurface", "JournalReferenceBook")))
         tex = None if missing_paper else actual_texture(r.get("texture"))
         if tex:
             coords = r.get("texCoord")
@@ -424,7 +428,7 @@ def render(name, frames, root):
     return issues, canvas.convert("RGB")
 
 
-def main():
+def new_runtime():
     lua=LuaRuntime(unpack_returned_tuples=True)
     g=lua.globals();g.TEST_ROOT=ADDON.as_posix();g.TEST_WORK=WORK.as_posix()
     g.GetLocale=lambda: LOCALE
@@ -433,6 +437,11 @@ def main():
     g.QA_TextWidth=lambda text,size,face=None: font(size,face).getlength(plaintext(text))
     g.QA_TextLines=lambda text,width,size,face=None: len(wrap(text,width,size,face))
     lua.execute((BASE/"capture.lua").read_text(encoding="utf-8"))
+    return lua
+
+
+def main():
+    normal_lua = new_runtime()
     views=["statistics", "statistics-small", "statistics-readable", "statistics-empty", "guild-rankings", "journal","journal-readable","journal-transparent","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","journal-readable-small-bottom","guilds","note","note-readable","settings","settings-readable","corrections","diagnostic","minimap","minimap-large","alert","alert-after-death","alert-long-guild"]
     views += ["note-edit", "note-delete", "honor", "honor-readable", "honor-small", "honor-empty", "honor-year",
               "chronicle", "chronicle-readable", "chronicle-small", "chronicle-empty", "chronicle-notes"]
@@ -455,20 +464,39 @@ def main():
     views += ["relations-overview", "relations-debts", "relations-overview-empty", "relations-debts-empty",
               "relations-rivals", "relations-guilds", "relations-lands", "relations-rankings", "relations-guildlog", "relations-guildlog-filters", "recap-1", "recap-2", "recap-3", "recap-4", "recap-5", "recap-6", "recap-7", "recap-8", "recap-9", "recap-1-copy", "relations-enemies"]
     views += ["journal-filters", "journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small", "guild-profiles"]
+    views += ["journal-reference", "journal-reference-transparent"]
+    views += ["journal-reference-hover-open", "journal-reference-hover-enemy", "journal-reference-hover-filter",
+              "journal-reference-hover-pages", "journal-reference-pressed-open", "journal-reference-after-hover"]
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
     if sys.argv[1:]: views = sys.argv[1:]
-    images, report, snapshots=[],{},{}
+    images, report, snapshots, references, interactions=[],{},{},{},{}
     for name in views:
+        # ponytail: a separate runtime isolates the reference's 79 synthetic
+        # contacts; ordinary capture flows keep their existing shared runtime.
+        lua = new_runtime() if name == "journal-reference" or name.startswith("journal-reference-") else normal_lua
+        g = lua.globals()
         root=g.QA.capture(name)
         assert root is not None, name+" frame absent"
         assert len(g.GrudgeLedger.errors) == 0, name+" raised an addon error"
         raw, root_id=g.QA.snapshot(root)
         frames=convert(raw)
+        if g.QA.reference: references[name] = convert(g.QA.reference)
         snapshots[name]={"root":root_id,"frames":frames}
+        if g.QA.interaction:
+            interactions[name] = convert(g.QA.interaction)
+            snapshots[name]["interaction"] = interactions[name]
         issues,img=render(name,frames,root_id)
         report[name]=issues
         images.append((name,img))
+    state_images = dict(images)
+    restored = None
+    if "journal-reference" in state_images and "journal-reference-after-hover" in state_images:
+        before, after = state_images["journal-reference"], state_images["journal-reference-after-hover"]
+        # Ignore only the external QA title, whose view name deliberately differs.
+        box = (22, 56, before.width - 22, before.height - 22)
+        restored = not ImageChops.difference(before.crop(box), after.crop(box)).getbbox()
+        assert restored, "The actual Lua UI did not return pixel-for-pixel to rest after OnLeave"
     # Native size thumbnails remain separate; contact sheet provides all real views.
     tilew,tileh=700,560
     sheet=Image.new("RGB",(tilew*3,tileh*math.ceil(len(images)/3)),(16,17,19))
@@ -489,9 +517,11 @@ def main():
     faces = {r["font"] for view in snapshots.values() for r in view["frames"] if r.get("font")}
     assets = {"fonts": {face: font_path(face).name for face in sorted(faces)},
               "missing_texture_files": sorted(path for path in requested if not actual_texture(path))}
+    if references: assets["reference_fixtures"] = references
     (OUT/"asset-report.json").write_text(json.dumps(assets,ensure_ascii=False,indent=2),encoding="utf-8")
     (OUT/"geometry-report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
     (OUT/"captured-frames.json").write_text(json.dumps(snapshots,ensure_ascii=False,indent=2),encoding="utf-8")
+    (OUT/"interaction-report.json").write_text(json.dumps({"views":interactions, "after_hover_restored_pixels":restored},ensure_ascii=False,indent=2),encoding="utf-8")
     print(json.dumps({"views":len(views),"issues":report,"contact_sheet":str(OUT/"contact-sheet.png")},ensure_ascii=False))
     assert not any(report.values()), "Visual geometry checks failed; inspect geometry-report.json"
 

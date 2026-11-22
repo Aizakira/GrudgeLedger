@@ -239,6 +239,64 @@ local function click(label)
     error("Missing UI action: " .. label)
 end
 QA = { mock = mock, records = records, selected = record }
+-- render.py runs each reference view in its own Lua runtime: these synthetic
+-- contacts cannot change the regular fixtures or any SavedVariables on disk.
+local function referenceJournal()
+    GL.db.players, GL.db.aliases, GL.db.guilds = {}, {}, {}
+    GL.db.unassignedHonor = {}
+    GL.SetSetting("listDetail", "pvp")
+    GL.SetSetting("grudgeAggression", 2)
+    GL.SetSetting("grudgeDeath", 5)
+    GL.SetSetting("grudgeVictory", 5)
+    local stamp = os.time({year=2026, month=11, day=22, hour=12})
+    local names = {
+        {"Nodby", "Druid", 0, 1}, {"Mortymmer", "Ap...", 2, 1},
+        {"Khäze", "Mog", 0, 1}, {"Father", "Emile", 0, 1},
+        {"Nhaya", "Forever", 2, 3}, {"Chirho", "Nika", 0, 3},
+        {"Rival", "Đyztw", 0, 1},
+    }
+    local zone = GetLocale() == "enUS" and "Searing Gorge" or GetLocale() == "esES" and "La Garganta de Fuego" or "Gorge des Vents brûlants"
+    GetRealZoneText, GetSubZoneText = function() return zone end, function() return "" end
+    local selected
+    for i = 1, 79 do
+        qaClock = stamp - (i - 1) * 60
+        local spec = names[i] or {"Contact", ("Fictif %02d"):format(i), 0, 0}
+        local id = GL.IdentityFromName(spec[1], spec[2], ("Player-999-%08X"):format(i))
+        id.guildKnown, id.realm = true, "QA"
+        if i == 1 then
+            id.faction, id.race, id.raceName, id.sex, id.level = "Horde", "Tauren", "Tauren", 2, 54
+            id.class = "DRUID"
+            id.className = GetLocale() == "enUS" and "Druid" or GetLocale() == "esES" and "Druida" or "Druide"
+        end
+        local contact = GL.Remember(id)
+        if i == 1 then
+            selected = contact
+            GL.RecordAggression(contact, "confirmed", nil, "qa-reference-aggression", {initiative="opponent", opponentLevel=54})
+        elseif i ~= 6 then
+            GL.SetReaction(contact, i <= 7 and "enemy" or "neutral")
+        end
+        -- Nhaya's older deaths leave Chirho as the recent nemesis, as in the reference.
+        if i == 5 then qaClock = qaClock - 14 * 86400 end
+        for n = 1, spec[4] do
+            GL.RecordPvP(contact, "death", "confirmed", nil, "qa-reference-death-" .. i .. "-" .. n,
+                {initiative="opponent", opponentLevel=contact.level}, nil, true)
+        end
+        qaClock = stamp - (i - 1) * 60
+        for n = 1, spec[3] do
+            GL.RecordPvP(contact, "kill", "confirmed", nil, "qa-reference-kill-" .. i .. "-" .. n)
+        end
+        contact.firstSeen = stamp
+        contact.lastEncounterAt, contact.lastEncounterZone = qaClock, zone
+    end
+    qaClock = stamp
+    record = selected
+    QA.selected = selected
+    assert(GL.JournalCounts().all == 79)
+    assert(selected.pvp.deaths == 1 and selected.pvp.kills == 0 and GL.AutomaticBalance(selected) == -7)
+    assert(GL.RelationSource(selected) == "pvp")
+    QA.reference = {synthetic=true, contacts=79, selected=selected.fullName,
+        portraits="Unavailable offline; actual addon fallback is shown, not a player portrait."}
+end
 local function dossierExample()
     local guid="Player-999-00DAABBA"
     if GL.Get("guid:"..guid) then return guid end
@@ -286,7 +344,49 @@ local function dossierExample()
     GrudgeLedgerArmory={profiles={[guid]=p},items=items}
     return guid
 end
+local function referenceInteraction(f, state)
+    if not state or state == "transparent" then return end
+    local targets = { ["hover-open"] = f.openSheet, ["hover-enemy"] = f.reactions.enemy,
+        ["hover-filter"] = f.openFilters, ["hover-pages"] = f.detailScroll.next,
+        ["pressed-open"] = f.openSheet, ["after-hover"] = f.openSheet }
+    local target = assert(targets[state], "Unknown reference interaction: " .. state)
+    assert(target:IsEnabled() and target:IsShown(), "Reference interaction target is unavailable")
+    local function appearance()
+        return { hovered = target.hovered == true, pressed = target.pressed == true,
+            caption = target.caption:GetText(), captionColor = {target.caption:GetTextColor()},
+            texture = target.skin.texture, tint = target.skin.qaTint, slices = #(target.skinCaps or {}) }
+    end
+    local before, events = appearance(), {"OnEnter"}
+    assert(target:GetScript("OnEnter"))(target)
+    if state == "pressed-open" then
+        assert(target:GetScript("OnMouseDown"))(target, "LeftButton")
+        events[#events + 1] = "OnMouseDown"
+    elseif state == "after-hover" then
+        assert(target:GetScript("OnLeave"))(target)
+        events[#events + 1] = "OnLeave"
+    end
+    local after = appearance()
+    assert(after.hovered == (state ~= "after-hover") and after.pressed == (state == "pressed-open"))
+    if state == "after-hover" then
+        assert(after.texture == before.texture, "Leaving hover did not restore the button texture")
+        for i = 1, 3 do assert(after.captionColor[i] == before.captionColor[i]) end
+    else
+        assert(after.texture:find("JournalReferenceButtonRed", 1, true), "Hover did not select the real red skin")
+        for i = 1, 3 do assert(after.captionColor[i] == 1, "Hover caption must be white") end
+        assert(after.slices == 2, "Hover must preserve the real three-piece skin")
+        if state == "pressed-open" then assert(after.tint[1] < 1, "Pressed skin must be darker") end
+    end
+    -- No OnClick dispatch: hovering must not change the synthetic contact or open its dossier.
+    assert(record.reaction == nil and record.pvp.deaths == 1 and record.pvp.kills == 0)
+    QA.interaction, QA.interactionTarget = { state = state, events = events, before = before, after = after }, target
+end
 function QA.capture(name)
+    local referenceState
+    if name == "journal-reference" or name:find("^journal%-reference%-") then
+        referenceState = name:match("^journal%-reference%-(.+)$")
+        referenceJournal()
+        name = "journal"
+    end
     -- Only the dossier-photos view has the Avatar Replay Lab's photos.
     AvatarReplayLabPhotos = nil
     hideWindows()
@@ -507,6 +607,11 @@ function QA.capture(name)
             assert(f.detailBody:GetHeight() >= f.detailText:GetStringHeight() + 12)
             f.detailScroll:SetVerticalScroll(math.max(0, f.detailBody:GetHeight() - f.detailScroll:GetHeight()))
         end
+        if QA.reference then
+            assert(f.pageSize == 7 and f.rows[1].key == record.key, "reference must show seven rows with Nodby first")
+            assert(f.rows[7]:IsShown() and not f.rows[8]:IsShown(), "reference pagination changed")
+            referenceInteraction(f, referenceState)
+        end
         return GrudgeLedgerWindow
     elseif name:find("^honor") or name:find("^chronicle") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end
@@ -688,6 +793,7 @@ end
 function QA.snapshot(root)
     local result = {}
     for i, f in ipairs(mock.frames) do f.qaID = i end
+    if QA.interaction then QA.interaction.target_id = QA.interactionTarget.qaID end
     for i, f in ipairs(mock.frames) do
         local anchors = {}
         for _, a in pairs(f.qaAnchors or {}) do
@@ -700,6 +806,7 @@ function QA.snapshot(root)
             layer = f.qaLayer, sublevel = f.qaSublevel, level = f.qaLevel, strata = f.qaStrata,
             shown = f.shown, enabled = f.enabled, text = f.text, checked = f.checked, fontString = f.fontString and f.fontString.qaID,
             buttonState = f.qaButtonState, hasDisabledTexture = f.disabledTexture ~= nil,
+            hovered = f.hovered == true, pressed = f.pressed == true, blendMode = f.blendMode,
             template = f.qaTemplate, fontObject = f.qaFontObject, font = (f.qaKind == "FontString" or f.qaKind == "EditBox") and f:GetFont() or nil, fontSize = f.qaFontSize,
             shadow = f.qaShadow, shadowOffset = f.qaShadowOffset,
             color = f.qaFill, textColor = f.qaTextColor, tint = f.qaTint, alpha = f.qaAlpha,

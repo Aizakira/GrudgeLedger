@@ -33,9 +33,11 @@ GL.InitDB()
 GL.SetSetting("guideSeen", true)
 GL.ShowLedger()
 local ledger = GrudgeLedgerWindow
+assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 720)
 drag(ledger, 110, -48)
 click(ledger.navigation.players)
 local stats = GrudgeLedgerStatistics
+assert(stats:GetHeight() == 700, "opening the reference journal must not stretch another page")
 at(stats, 110, -48)
 click(stats.sections[4])
 at(stats, 110, -48)
@@ -70,5 +72,14 @@ local anchor = GrudgeLedgerPlayerDossier.parent
 assert(anchor:GetWidth() * anchor:GetScale() <= 776 and anchor:GetHeight() * anchor:GetScale() <= 576)
 GL.ShowLedger()
 assert(ledger.parent == anchor)
+assert(anchor:GetHeight() == ledger:GetHeight() and anchor:GetHeight() * anchor:GetScale() <= 576,
+    "small screens fit the whole journal, including the suspended bookmarks")
+at(ledger, 60, 20)
+local ledgerScale = anchor:GetScale()
+GL.ShowGuide()
+assert(GrudgeLedgerGuide:IsShown() and ledger:IsShown(), "the guide overlays the journal")
+GrudgeLedgerGuide:Hide()
+assert(anchor:GetScale() == ledgerScale and anchor:GetHeight() == 720,
+    "closing a shorter overlay must keep the underlying journal fitted to the screen")
 at(ledger, 60, 20)
 print("PASS shared book position across tabs, overlay, reopen, interrupted drag, resize and independent dialog")

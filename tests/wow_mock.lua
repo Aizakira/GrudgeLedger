@@ -43,6 +43,8 @@ function methods:SetWidth(w) self.width = w end
 function methods:SetHeight(h) self.height = h end
 function methods:GetWidth() return self.width or 100 end
 function methods:GetHeight() return self.height or 100 end
+function methods:GetFrameLevel() return self.level or 1 end
+function methods:SetFrameLevel(value) self.level = value end
 function methods:SetScript(event, fn) self.scripts[event] = fn end
 function methods:GetScript(event) return self.scripts[event] end
 function methods:SetText(text)

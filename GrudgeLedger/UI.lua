@@ -20,6 +20,7 @@ local factionNames = { Alliance = GL.Clean(FACTION_ALLIANCE, "string") or L("All
 local colors = { friend = { 0.48, 0.86, 0.56 }, warning = { 0.97, 0.76, 0.39 }, enemy = { 0.98, 0.55, 0.50 }, neutral = { 0.79, 0.74, 0.65 } }
 local inkColors = { friend = { 0.10, 0.34, 0.15 }, warning = { 0.50, 0.22, 0.03 }, enemy = { 0.57, 0.12, 0.11 }, neutral = { 0.34, 0.27, 0.20 } }
 local relationIcons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy", neutral = "RelationNeutral" }
+local referenceRelationIcons = { warning = "JournalReferenceEye", enemy = "JournalReferenceHeart" }
 local media = "Interface\\AddOns\\GrudgeLedger\\Media\\"
 local pvpNames = { kill = L("Victoire"), death = L("Mort"), aggression = L("Agression") }
 local UI = GL.UITheme
@@ -374,7 +375,7 @@ local function portraitOverlay(row)
             row.portraitRim = overlay:CreateTexture(nil, "ARTWORK")
             row.portraitRim:SetPoint("TOPLEFT", anchor, "TOPLEFT", -3, 3)
             row.portraitRim:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 3, -3)
-            row.portraitRim:SetTexture(media .. "PortraitBezel")
+            row.portraitRim:SetTexture(media .. (row.referenceSkin and "JournalReferencePortrait" or "PortraitBezel"))
         end
         GL.Safe(row.classIcon.SetParent, row.classIcon, overlay)
     end
@@ -564,16 +565,23 @@ local function bookNavigation(f, selected)
         { "guild", L("Guilde"), function() GL.ShowGuild() end },
         { "bounties", L("Primes"), function() GL.OpenBounties() end },
     }) do
-        local b = button(f, entry[2], 72 + (i - 1) * 208, -96, 192, entry[3], true)
-        b:SetHeight(38)
+        local x = f.referenceSkin and ({ 105, 307, 503, 699 })[i] or 72 + (i - 1) * 208
+        local b = button(f, entry[2], x, f.referenceSkin and -103 or -96, f.referenceSkin and 186 or 192, entry[3], true)
+        b:SetHeight(f.referenceSkin and 34 or 38)
         journalFont(b.caption, "GameFontNormalLarge", 19)
         b.caption:SetHeight(32)
         f.navigation[entry[1]] = b
+        if f.referenceSkin then
+            b.selectionTexture = "JournalReferenceTabActive"
+            b.skin:SetTexture(media .. "JournalReferenceTab")
+        end
         UI.selectButton(b, entry[1] == selected)
+        if f.referenceSkin then b.selection:SetTexture(media .. "JournalReferenceTabActive") end
         if entry[1] == "bounties" then bountyTabs[#bountyTabs + 1] = b end
     end
     GL.PaintBountyReminder()
-    f.settingsButton = UI.iconButton(f, "JournalSettings", L("Réglages et aide"), 869, -45, 32, showSettings)
+    f.settingsButton = UI.iconButton(f, "JournalSettings", L("Réglages et aide"),
+        f.referenceSkin and 847 or 869, f.referenceSkin and -55 or -45, 32, showSettings)
     if selected == "settings" then f.settingsButton:LockHighlight() end
 end
 
@@ -836,7 +844,7 @@ local function journalTags(parent, record, compact)
         width = width + textWidth + 2
     end
     strip:SetSize(width, size)
-    moveTo(strip, (header and 919 or (compact and 209 or 273)) - width, header and 206 or (compact and 6 or 26))
+    moveTo(strip, (header and 895 or (compact and 184 or 256)) - width, header and 218 or (compact and 6 or 26))
     strip.record = record
     strip:Show()
     return width
@@ -2168,9 +2176,9 @@ end
 local function renderDetail()
     local record = currentRecord()
     local tagWidth = journalTags(ledger, record)
-    moveTo(ledger.detailSource, 753, tagWidth > 0 and 184 or 196)
+    moveTo(ledger.detailSource, 746, tagWidth > 0 and 194 or 206)
     ledger.detailSource:SetHeight(tagWidth > 0 and 21 or 39)
-    ledger.detailGuild:SetWidth(math.min(315, 480-tagWidth))
+    ledger.detailGuild:SetWidth(math.min(285, 446-tagWidth))
     local tab = ledger.detailTab or "summary"
     if record then ledger.emptyPage:Hide() else ledger.emptyPage:Show() end
     for key, control in pairs(ledger.detailTabs) do
@@ -2201,9 +2209,11 @@ local function renderDetail()
     else ledger.hint:Show() ledger.tools:Show() ledger.openSheet:Show() end
     showIf(ledger.counters, summary)
     showIf(ledger.balancePanel, summary)
+    showIf(ledger.summaryRule, summary)
     ledger.detailScroll:ClearAllPoints()
-    ledger.detailScroll:SetPoint("TOPLEFT", 356, summary and -417 or -283)
-    ledger.detailScroll:SetHeight(summary and 165 or 293)
+    local storyTop = 389 + math.ceil(23 * (GL.Settings().readingScale or 1))
+    ledger.detailScroll:SetPoint("TOPLEFT", 367, summary and -storyTop or -283)
+    ledger.detailScroll:SetHeight(summary and (522 - storyTop) or 293)
     ledger.detailTitle:SetTextColor(unpack(theme.ink))
     local profile = GL.ArmoryProfile(record)
     local public = profile and profile.identity
@@ -2211,7 +2221,7 @@ local function renderDetail()
     showIf(ledger.portraitRim, record ~= nil)
     showIf(ledger.levelBadge, level ~= nil)
     if level then ledger.levelBadge.caption:SetText(tostring(level)) end
-    local lines = {}
+    local lines, summaryStory, followingStart = {}, {}, 2
     if not record then
         ledger.detailTitle:SetText("")
         ledger.detailIcon:Hide()
@@ -2226,7 +2236,9 @@ local function renderDetail()
         ledger.detailIcon:Show()
         local relation, pvp = GL.Relation(record), record.pvp or {}
         ledger.detailTitle:SetText(plain(record.fullName or record.name or record.key))
-        ledger.detailIcon:SetTexture(media .. relationIcons[relation])
+        ledger.detailIcon:SetTexture(media .. (referenceRelationIcons[relation] or relationIcons[relation]))
+        ledger.detailIcon:SetSize(36, relation == "warning" and 22 or 36)
+        moveTo(ledger.detailIcon, 760, relation == "warning" and 171 or 164)
         local source = GL.RelationSource(record)
         local nemesisKey, companionKey = GL.Titles()
         ledger.detailStatus:SetText(record.key == nemesisKey and L("Némésis") or record.key == companionKey and L("Compagnon")
@@ -2288,6 +2300,14 @@ local function renderDetail()
                 context = context ~= "" and context .. " · " .. reason or reason
             end
             ledger.scoreContext:SetText(context)
+            local contextHeight = math.max(17, GL.Safe(ledger.scoreContext.GetStringHeight, ledger.scoreContext) or 17)
+            ledger.scoreContext:SetHeight(contextHeight)
+            local headingTop = context ~= "" and math.max(389, 369 + contextHeight + 4) or 389
+            moveTo(ledger.storyHeading, 367, headingTop)
+            moveTo(ledger.summaryRule, 367, headingTop - 3)
+            local bodyTop = headingTop + math.ceil(23 * (GL.Settings().readingScale or 1))
+            moveTo(ledger.detailScroll, 367, bodyTop)
+            ledger.detailScroll:SetHeight(522 - bodyTop)
             local guildRule = GL.GetGuildRule(record)
             lines = {
                 "|cff653c20" .. L("Dernière rencontre") .. "|r",
@@ -2296,9 +2316,13 @@ local function renderDetail()
             local story = GL.CharacterInsights and GL.CharacterInsights.Story(record) or {}
             if #story > 0 then
                 local told = { "|cff653c20" .. L("Votre histoire") .. "|r" }
-                for _, sentence in ipairs(story) do told[#told + 1] = plain(sentence) end
+                for _, sentence in ipairs(story) do
+                    summaryStory[#summaryStory + 1] = plain(sentence)
+                    told[#told + 1] = plain(sentence)
+                end
                 told[#told + 1] = ""
                 for i = #told, 1, -1 do table.insert(lines, 1, told[i]) end
+                followingStart = #told + 2
             end
             local note = record.notes and record.notes[#record.notes]
             if note then
@@ -2345,7 +2369,26 @@ local function renderDetail()
         end
     end
     ledger.detailText:SetSpacing(GL.Settings().compactMode and 2 or 4)
-    ledger.detailScroll:SetText(table.concat(lines, "\n"), true)
+    local view = ledger.detailScroll
+    local fullText = table.concat(lines, "\n")
+    view.summaryMode = summary
+    if summary then
+        local currentPage, pages = view.page, {}
+        -- ponytail: reuse measured text pages for the two sections; keep every sentence and the complete source text.
+        if #summaryStory > 0 then
+            view:SetText(table.concat(summaryStory, "\n"))
+            for _, page in ipairs(view.pages) do pages[#pages + 1] = page end
+        end
+        view.storyPageCount = #pages
+        view:SetText(table.concat(lines, "\n", followingStart))
+        for _, page in ipairs(view.pages) do pages[#pages + 1] = page end
+        view.pages, view.fullText = pages, fullText
+        view.page = math.min(currentPage, #pages)
+        view:Paint()
+    else
+        view.storyPageCount = 0
+        view:SetText(fullText, true)
+    end
 end
 
 local function enableRecognition()
@@ -2664,7 +2707,7 @@ local function buildLedger()
     ledger = f
     bookNavigation(f, "ledger")
     f.detailTab, f.query = "summary", ""
-    f.addTarget = button(f, L("Ajouter la cible"), 195, -155, 112, function()
+    f.addTarget = button(f, L("Ajouter la cible"), 233, -159, 105, function()
         local identity = GL.Identity("target")
         if not identity then GL.Print(L("Sélectionnez un joueur pour ouvrir sa fiche.")) return end
         local record = GL.Remember(identity, true)
@@ -2673,11 +2716,13 @@ local function buildLedger()
             GL.ShowLedger(record.key)
         end
     end, nil, false)
+    journalFont(f.addTarget.caption, "GameFontHighlightSmall", 12)
     f.search = CreateFrame("EditBox", nil, f)
-    f.search:SetPoint("TOPLEFT", 36, -155)
-    f.search:SetSize(154, 26)
+    f.search:SetPoint("TOPLEFT", 84, -159)
+    f.search:SetSize(145, 26)
     f.search:SetAutoFocus(false)
     f.search:SetMaxLetters(100)
+    f.search.referenceSkin = true
     styleInput(f.search, false, false)
     f.search:SetTextInsets(28, 6, 3, 3)
     local function applySearch() f.query = f.search:GetText():match("^%s*(.-)%s*$") offset = 0 f.search:ClearFocus() refresh() end
@@ -2691,7 +2736,7 @@ local function buildLedger()
         GameTooltip:SetText(L("Nom, guilde, note…")) GameTooltip:Show()
     end)
     f.searchButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    f.searchHint = label(f.search, L("Rechercher…"), nil, 28, -4, 120)
+    f.searchHint = label(f.search, L("Rechercher…"), nil, 28, -4, 110)
     f.searchHint:SetHeight(19)
     GL.Safe(f.searchHint.SetJustifyV, f.searchHint, "MIDDLE")
     GL.Safe(f.searchHint.SetWordWrap, f.searchHint, false)
@@ -2725,17 +2770,58 @@ local function buildLedger()
         factionFilter, notesOnly, offset = "all", false, 0
         refresh()
     end
-    f.viewCycle = button(f, L("Tous"), 36, -203, 168, function()
+    f.viewCycle = button(f, L("Tous"), 84, -193, 134, function()
         local following = "all"
         for i, key in ipairs(viewOrder) do
             if key == f.viewKey then following = viewOrder[i % #viewOrder + 1] end
         end
         f.ShowView(following)
     end, nil, false)
+    f.viewCycle:SetHeight(25)
+    f.bookmarks = {}
+    for _, entry in ipairs({ { "friend", "Friend", L("Amis"), L("Amis"), 101 },
+        { "debt", "Debt", L("À régler"), L("Comptes à régler"), 157 } }) do
+        local key, texture, caption, tooltip = entry[1], "JournalBookmark" .. entry[2], entry[3], entry[4]
+        local bookmark = CreateFrame("Button", nil, f)
+        bookmark:SetPoint("TOPLEFT", entry[5], -625)
+        bookmark:SetSize(42, 86)
+        bookmark:SetFrameLevel(f:GetFrameLevel() + 1)
+        bookmark.textureName = texture
+        bookmark.skin = bookmark:CreateTexture(nil, "ARTWORK")
+        bookmark.skin:SetAllPoints()
+        bookmark.skin:SetTexture(media .. texture)
+        bookmark:SetNormalTexture(bookmark.skin)
+        bookmark.caption = label(bookmark, caption, nil, 0, 0, 25)
+        bookmark:SetFontString(bookmark.caption)
+        bookmark.caption:Hide()
+        bookmark:SetScript("OnClick", function() f.ShowView(key) end)
+        bookmark:SetScript("OnEnter", function(self)
+            self.skin:SetVertexColor(1, 1, 1)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(tooltip)
+            GameTooltip:Show()
+        end)
+        bookmark:SetScript("OnLeave", function(self)
+            local shade = self.active and 1 or 0.88
+            self.skin:SetVertexColor(shade, shade, shade)
+            GameTooltip:Hide()
+        end)
+        f.bookmarks[key] = bookmark
+    end
+    -- Sample the actual cover edge in a foreground layer: its grain and shadows join exactly.
+    f.bookmarkCover = CreateFrame("Frame", nil, f)
+    f.bookmarkCover:SetPoint("TOPLEFT", 78, -620)
+    f.bookmarkCover:SetSize(268, 44)
+    f.bookmarkCover:SetFrameLevel(f:GetFrameLevel() + 2)
+    f.bookmarkCover:EnableMouse(false)
+    f.bookmarkCover.skin = f.bookmarkCover:CreateTexture(nil, "ARTWORK")
+    f.bookmarkCover.skin:SetAllPoints()
+    f.bookmarkCover.skin:SetTexture(media .. "JournalReferenceBook")
+    f.bookmarkCover.skin:SetTexCoord(78 / 960, 346 / 960, 620 / 720, 664 / 720)
     -- Every other filter lives in one panel, opened on demand; it stays open while you choose.
     local panel = CreateFrame("Frame", nil, f)
     f.filterPanel = panel
-    panel:SetPoint("TOPLEFT", 30, -246)
+    panel:SetPoint("TOPLEFT", 78, -228)
     panel:SetSize(283, 300)
     panel:EnableMouse(true)
     panel:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -2806,18 +2892,19 @@ local function buildLedger()
     end)
     f.closeFilters = button(panel, L("Fermer"), 211, -(tail + 60), 65, closeMenu)
     panel:SetHeight(tail + 94)
-    f.openFilters = button(f, L("Filtres"), 208, -203, 99, function() toggleMenu(panel) end)
+    f.openFilters = button(f, L("Filtres"), 225, -193, 113, function() toggleMenu(panel) end)
+    f.openFilters:SetHeight(25)
     for i = 1, 11 do
         local row = CreateFrame("Button", nil, f)
-        row:SetPoint("TOPLEFT", 32, -301 - (i - 1) * 53)
-        row:SetSize(277, 51)
+        row.referenceSkin = true
+        row:SetPoint("TOPLEFT", 82, -237 - (i - 1) * 50)
+        row:SetSize(261, 48)
         row.bg = row:CreateTexture(nil, "BACKGROUND")
         row.bg:SetAllPoints()
         row.bg:SetColorTexture(theme.red[1], theme.red[2], theme.red[3], 1)
         row.selection = row:CreateTexture(nil, "BORDER")
         row.selection:SetAllPoints()
-        row.selection:SetTexture(media .. "JournalButtons")
-        row.selection:SetTexCoord(36 / 1254, 1218 / 1254, 514 / 1254, 768 / 1254)
+        row.selection:SetTexture(media .. "JournalReferenceSelected")
         local rule = row:CreateTexture(nil, "BORDER")
         rule:SetPoint("BOTTOMLEFT") rule:SetPoint("BOTTOMRIGHT") rule:SetHeight(1)
         rule:SetColorTexture(theme.gold[1], theme.gold[2], theme.gold[3], 0.62)
@@ -2827,7 +2914,7 @@ local function buildLedger()
         row:SetHighlightTexture(hover)
         row.relationIcon = row:CreateTexture(nil, "ARTWORK")
         row.relationIcon:SetPoint("TOPLEFT", 193, -28)
-        row.relationIcon:SetSize(16, 16)
+        row.relationIcon:SetSize(18, 18)
         row.name = label(row, "", nil, 52, -4, 218)
         journalFont(row.name, "Fancy16Font", 16)
         row.name:SetHeight(23)
@@ -2869,21 +2956,21 @@ local function buildLedger()
         row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         f.rows[i] = row
     end
-    f.previous = button(f, "‹", 36, -634, 32, function() offset = math.max(0, offset - f.pageSize) refresh() end, nil, false)
-    f.next = button(f, "›", 275, -634, 32, function() offset = offset + f.pageSize refresh() end, nil, false)
-    f.total = label(f, "", nil, 72, -640, 199)
+    f.previous = button(f, "‹", 89, -588, 32, function() offset = math.max(0, offset - f.pageSize) refresh() end, nil, false)
+    f.next = button(f, "›", 305, -588, 32, function() offset = offset + f.pageSize refresh() end, nil, false)
+    f.total = label(f, "", nil, 125, -594, 176)
     f.total:SetHeight(20) f.total:SetJustifyH("CENTER")
     journalFont(f.total, "GameFontHighlightSmall", 12)
     GL.Safe(f.total.SetWordWrap, f.total, false)
     f.total:SetTextColor(unpack(theme.muted))
-    f.empty = label(f, "", nil, 45, -345, 249)
+    f.empty = label(f, "", nil, 90, -345, 245)
     f.empty:SetTextColor(unpack(theme.muted))
     f.raceIcon = f:CreateTexture(nil, "ARTWORK")
-    f.raceIcon:SetPoint("TOPLEFT", 357, -157) f.raceIcon:SetSize(67, 68)
+    f.raceIcon:SetPoint("TOPLEFT", 368, -166) f.raceIcon:SetSize(65, 66)
     f.portraitRim = f:CreateTexture(nil, "OVERLAY", nil, -1)
-    f.portraitRim:SetPoint("TOPLEFT", 354, -154)
-    f.portraitRim:SetSize(72, 74)
-    f.portraitRim:SetTexture(media .. "PortraitBezel")
+    f.portraitRim:SetPoint("TOPLEFT", 365, -163)
+    f.portraitRim:SetSize(71, 72)
+    f.portraitRim:SetTexture(media .. "JournalReferencePortrait")
     f.levelBadge = CreateFrame("Frame", nil, f)
     f.levelBadge:SetSize(28, 28)
     f.levelBadge:SetPoint("BOTTOMLEFT", f.raceIcon, "BOTTOMLEFT", -4, -4)
@@ -2898,7 +2985,7 @@ local function buildLedger()
         GameTooltip:Show()
     end)
     f.levelBadge:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    f.detailTitle = label(f, "", "large", 433, -149, 330)
+    f.detailTitle = label(f, "", "large", 449, -160, 272)
     f.detailTitle:SetHeight(37)
     local function dossier()
         local r = currentRecord()
@@ -2914,56 +3001,66 @@ local function buildLedger()
     GL.Safe(f.detailTitle.SetWordWrap, f.detailTitle, false)
     journalFont(f.detailTitle, "Fancy24Font", 24)
     f.detailIcon = f:CreateTexture(nil, "ARTWORK")
-    f.detailIcon:SetPoint("TOPLEFT", 772, -153)
-    f.detailIcon:SetSize(32, 32)
-    f.detailStatus = label(f, "", nil, 807, -157, 112)
+    f.detailIcon:SetPoint("TOPLEFT", 760, -164)
+    f.detailIcon:SetSize(36, 36)
+    f.detailStatus = label(f, "", nil, 801, -168, 94)
     journalFont(f.detailStatus, "GameFontNormalLarge", 18) f.detailStatus:SetHeight(29)
     GL.Safe(f.detailStatus.SetWordWrap, f.detailStatus, false)
     f.classIcon = f:CreateTexture(nil, "ARTWORK")
-    f.classIcon:SetPoint("TOPLEFT", 408, -209) f.classIcon:SetSize(15, 15)
-    f.detailFaction = bookIcon(f, 433, 186, 16)
-    f.detailIdentity = label(f, "", nil, 454, -185, 296)
+    f.classIcon:SetPoint("TOPLEFT", 421, -220) f.classIcon:SetSize(15, 15)
+    f.detailFaction = bookIcon(f, 449, 195, 16)
+    f.detailIdentity = label(f, "", nil, 470, -194, 270)
     journalFont(f.detailIdentity, "GameFontHighlightSmall", 13)
     f.detailIdentity:SetTextColor(unpack(theme.inkMuted))
     f.detailIdentity:SetHeight(20)
     GL.Safe(f.detailIdentity.SetWordWrap, f.detailIdentity, false)
-    f.detailGuild = label(f, "", nil, 433, -207, 315)
+    f.detailGuild = label(f, "", nil, 449, -215, 285)
     f.detailGuild:SetTextColor(unpack(theme.ink)) f.detailGuild:SetHeight(22)
     GL.Safe(f.detailGuild.SetWordWrap, f.detailGuild, false)
-    f.detailSource = label(f, "", nil, 753, -196, 166)
+    f.detailSource = label(f, "", nil, 746, -206, 149)
     journalFont(f.detailSource, "GameFontHighlight", 13, true)
     f.detailSource:SetJustifyH("RIGHT") f.detailSource:SetHeight(39) f.detailSource:SetTextColor(unpack(theme.inkMuted))
     f.actions, f.reactions = {}, {}
-    for _, option in ipairs({ { L("Ami"), "friend", 356, 74 }, { L("Méfiance"), "warning", 434, 100 }, { L("Ennemi"), "enemy", 538, 89 }, { L("Automatique"), "neutral", 631, 123 } }) do
+    for _, option in ipairs({ { L("Ami"), "friend", 365, 74 }, { L("Méfiance"), "warning", 444, 131 },
+        { L("Ennemi"), "enemy", 580, 89 }, { L("Automatique"), "neutral", 674, 96 } }) do
         local value = option[2]
-        local control = button(f, option[1], option[3], -592, option[4], function()
+        local control = button(f, option[1], option[3], -550, option[4], function()
             local record = currentRecord()
             if record then GL.SetReaction(record, value) end
         end, true, true)
+        control:SetHeight(27)
         if value ~= "neutral" then
             local icon = control:CreateTexture(nil, "OVERLAY")
-            icon:SetTexture(media .. relationIcons[value]) icon:SetSize(16, 16) icon:SetPoint("LEFT", 7, 0)
-            control.caption:ClearAllPoints() control.caption:SetPoint("TOPLEFT", 25, -5) control.caption:SetWidth(option[4] - 29)
+            control.relationIcon = icon
+            icon:SetTexture(media .. (referenceRelationIcons[value] or relationIcons[value]))
+            icon:SetSize(value == "warning" and 24 or 18, value == "warning" and 14 or 18)
+            icon:SetPoint("LEFT", 5, 0)
+            local inset = value == "warning" and 33 or 25
+            control.caption:ClearAllPoints()
+            control.caption:SetPoint("TOPLEFT", inset, -5)
+            control.caption:SetWidth(option[4] - inset - 4)
         end
         f.actions[#f.actions + 1], f.reactions[value] = control, control
     end
-    f.actions[#f.actions + 1] = button(f, L("Ajouter une note"), 758, -592, 156, function()
+    f.actions[#f.actions + 1] = button(f, L("Ajouter une note"), 775, -550, 120, function()
         local record = currentRecord()
         if record then GL.EditNote(record) end
     end, nil, true)
+    f.actions[#f.actions]:SetHeight(27)
     f.toolsMenu = CreateFrame("Frame", nil, f)
-    f.toolsMenu:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 734, -624) f.toolsMenu:SetSize(180, 206)
+    f.toolsMenu:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 705, -580) f.toolsMenu:SetSize(180, 206)
     f.toolsMenu:SetFrameStrata("FULLSCREEN_DIALOG") f.toolsMenu:SetToplevel(true) f.toolsMenu:EnableMouse(true)
     surface(f.toolsMenu, theme.gold) surface(f.toolsMenu, theme.panel, 1)
-    f.tools = button(f, L("Autres actions"), 734, -634, 180, function() toggleMenu(f.toolsMenu) end, nil, true)
+    f.tools = button(f, L("Autres actions"), 717, -586, 168, function() toggleMenu(f.toolsMenu) end, nil, true)
+    f.tools:SetHeight(29)
     -- The full sheet is one visible click away, not hidden behind the name.
-    f.openSheet = button(f, L("Ouvrir la fiche"), 356, -634, 182, function()
+    f.openSheet = button(f, L("Ouvrir la fiche"), 365, -586, 172, function()
         local r = currentRecord()
         if r and GL.OpenPlayerDossier then
             GL.OpenPlayerDossier(r.guid or r.key, function() GL.ShowLedger() end, r.fullName or r.name)
         end
     end, nil, true)
-    UI.selectButton(f.openSheet, true)
+    f.openSheet:SetHeight(29)
     for i, option in ipairs({ { L("Avis positif (+1)"), 1 }, { L("Avis négatif (-1)"), -1 } }) do
         local delta = option[2]
         f.actions[#f.actions + 1] = button(f.toolsMenu, option[1], 3, -3 - (i - 1) * 29, 174, function()
@@ -3009,10 +3106,11 @@ local function buildLedger()
         if record then StaticPopup_Show(deleteDialog, plain(record.fullName or record.key), nil, record) end
     end)
     f.toolsMenu:Hide()
-    f.contactBounty = button(f, L("Créer une prime"), 546, -634, 178, function()
+    f.contactBounty = button(f, L("Créer une prime"), 543, -586, 166, function()
         local r = currentRecord()
         if r then GL.OpenContactBounty(r.guid) end
     end, nil, true)
+    f.contactBounty:SetHeight(29)
     f.detailTabs = {}
     -- Never shown since 0.33.0: these three stay as the internal switches of the right page.
     for i, entry in ipairs({ { "summary", L("Synthèse") }, { "history", L("Histoire") }, { "notes", L("Notes") } }) do
@@ -3022,7 +3120,7 @@ local function buildLedger()
         end, true, true)
     end
     f.counters = CreateFrame("Frame", nil, f)
-    f.counters:SetPoint("TOPLEFT", 354, -236) f.counters:SetSize(558, 160)
+    f.counters:SetPoint("TOPLEFT", 365, -243) f.counters:SetSize(532, 138)
     f.backToSummary = button(f, "‹ " .. L("Retour au résumé"), 354, -234, 190, function()
         f.detailTab = "summary"
         f.detailScroll.page = 1
@@ -3031,25 +3129,28 @@ local function buildLedger()
     f.metrics = {}
     for i, entry in ipairs({ { "deaths", L("Vos morts") }, { "kills", L("Vous l’avez vaincu") } }) do
         local card = CreateFrame("Frame", nil, f.counters)
-        card:SetPoint("TOPLEFT", (i - 1) * 285, 0) card:SetSize(278, 69)
-        parchmentPanel(card)
-        card.caption = label(card, entry[2], nil, 6, -6, 262)
+        card:SetPoint("TOPLEFT", (i - 1) * 263, 0) card:SetSize(i == 1 and 256 or 269, 62)
+        surface(card, theme.paper, 1, 1)
+        card.skin = card:CreateTexture(nil, "BORDER")
+        card.skin:SetAllPoints()
+        card.skin:SetTexture(media .. "JournalReferenceStats")
+        card.caption = label(card, entry[2], nil, 6, -4, card:GetWidth() - 12)
         journalFont(card.caption, "GameFontNormalLarge", 16)
         card.caption:SetTextColor(unpack(theme.ink)) card.caption:SetHeight(23) card.caption:SetJustifyH("CENTER")
-        card.value = label(card, "0", "large", 6, -30, 266)
+        card.value = label(card, "0", "large", 6, -26, card:GetWidth() - 12)
         journalFont(card.value, "GameFontNormalLarge", 28)
         card.value:SetTextColor(unpack(theme.ink)) card.value:SetHeight(34) card.value:SetJustifyH("CENTER")
         f.metrics[entry[1]] = card
     end
     f.balancePanel = CreateFrame("Frame", nil, f.counters) f.balancePanel:SetAllPoints()
-    local balanceCaption = label(f.balancePanel, L("Solde automatique"), nil, 32, -98, 238)
+    local balanceCaption = label(f.balancePanel, L("Solde automatique"), nil, 32, -82, 238)
     journalFont(balanceCaption, "GameFontNormalLarge", 20) balanceCaption:SetTextColor(unpack(theme.ink)) balanceCaption:SetJustifyH("RIGHT")
-    f.balance = label(f.balancePanel, "", nil, 286, -89, 160)
+    f.balance = label(f.balancePanel, "", nil, 286, -74, 160)
     journalFont(f.balance, "GameFontNormalLarge", 31) f.balance:SetTextColor(unpack(inkColors.enemy)) f.balance:SetHeight(44)
     -- When you are ahead (0.61.2): the figure turns gold and a few small stars twinkle around it, a
     -- quiet reward for good numbers. The stars live in their own frame, which only runs while shown.
     f.balanceStars = CreateFrame("Frame", nil, f.balancePanel)
-    f.balanceStars:SetPoint("TOPLEFT", 272, -82)
+    f.balanceStars:SetPoint("TOPLEFT", 272, -67)
     f.balanceStars:SetSize(70, 58)
     f.balanceStars.stars = {}
     for i, spot in ipairs({ { "TOPLEFT", 3, -14, 10 }, { "TOPRIGHT", -3, -8, 9 }, { "TOPRIGHT", 3, -42, 11 },
@@ -3072,13 +3173,38 @@ local function buildLedger()
         end
     end)
     f.balanceStars:Hide()
-    f.formula = label(f.balancePanel, "", nil, 6, -128, 546)
+    f.formula = label(f.balancePanel, "", nil, 6, -108, 520)
     f.formula:SetTextColor(unpack(theme.ink)) f.formula:SetJustifyH("CENTER") f.formula:SetHeight(22)
-    f.scoreContext = label(f.balancePanel, "", nil, 6, -151, 546)
+    f.scoreContext = label(f.balancePanel, "", nil, 6, -126, 520)
     journalFont(f.scoreContext, "GameFontHighlightSmall", 11, true) f.scoreContext:SetTextColor(unpack(theme.inkMuted)) f.scoreContext:SetJustifyH("CENTER") f.scoreContext:SetHeight(17)
+    f.summaryRule = f:CreateTexture(nil, "ARTWORK")
+    f.summaryRule:SetPoint("TOPLEFT", 367, -386)
+    f.summaryRule:SetSize(528, 2)
+    f.summaryRule:SetTexture(media .. "JournalReferenceRule")
     -- Pages instead of a scroll bar.
-    f.detailScroll = UI.textPages(f, 544, 230)
-    f.detailScroll:SetPoint("TOPLEFT", 356, -379)
+    f.detailScroll = UI.textPages(f, 528, 110)
+    f.detailScroll:SetPoint("TOPLEFT", 367, -412)
+    f.storyHeading = bookText(f, 367, 389, 528, 28, 19, L("Votre histoire"))
+    f.encounterHeading = bookText(f, 367, 500, 360, 28, 19, L("Dernière rencontre"))
+    f.encounterRule = f:CreateTexture(nil, "ARTWORK")
+    f.encounterRule:SetPoint("TOPLEFT", 367, -496)
+    f.encounterRule:SetSize(528, 2)
+    f.encounterRule:SetTexture(media .. "JournalReferenceRule")
+    local paintSummary = f.detailScroll.Paint
+    function f.detailScroll:Paint()
+        paintSummary(self)
+        local storyPage = self.summaryMode and self.page <= (self.storyPageCount or 0)
+        f.storyHeading:SetText(storyPage and L("Votre histoire") or L("Dernière rencontre"))
+        showIf(f.storyHeading, self.summaryMode)
+        local following = storyPage and self.page == self.storyPageCount
+        showIf(f.encounterHeading, following)
+        showIf(f.encounterRule, following)
+    end
+    for _, entry in ipairs({ { f.detailScroll.prev, 767, 521 }, { f.detailScroll.pageLabel, 803, 527 },
+        { f.detailScroll.next, 861, 521 } }) do
+        entry[1]:ClearAllPoints()
+        entry[1]:SetPoint("TOPLEFT", f, "TOPLEFT", entry[2], -entry[3])
+    end
     local p = CreateFrame("Frame", nil, f)
     f.historyPage = p
     p:SetPoint("TOPLEFT", 353, -278) p:SetSize(561, 382)
@@ -3113,9 +3239,9 @@ local function buildLedger()
         p.rows[i] = row
     end
     p.empty = label(p, "", nil, 14, -104, 512) p.empty:SetTextColor(unpack(theme.inkMuted))
-    p.total = label(p, "", nil, 212, -343, 134) p.total:SetJustifyH("CENTER") p.total:SetTextColor(unpack(theme.ink))
-    p.prev = button(p, L("Précédent"), 61, -337, 124, function() p.offset = math.max(0, p.offset - #p.rows) renderDetail() end, nil, true)
-    p.next = button(p, L("Suivant"), 373, -337, 124, function() p.offset = p.offset + #p.rows renderDetail() end, nil, true)
+    p.total = label(p, "", nil, 212, -329, 134) p.total:SetJustifyH("CENTER") p.total:SetTextColor(unpack(theme.ink))
+    p.prev = button(p, L("Précédent"), 61, -323, 124, function() p.offset = math.max(0, p.offset - #p.rows) renderDetail() end, nil, true)
+    p.next = button(p, L("Suivant"), 373, -323, 124, function() p.offset = p.offset + #p.rows renderDetail() end, nil, true)
     p:HookScript("OnHide", function() p.menu:Hide() end)
     f.detailBody = f.detailScroll
     f.detailText = f.detailScroll.body
@@ -3150,13 +3276,13 @@ local function layoutIndex(f, compact)
     f.pageSize, offset = pageSize, 0
     for i, row in ipairs(f.rows) do
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 32, -250 - (i - 1) * (compact and 33 or 50))
-        row:SetHeight(compact and 31 or 48)
+        row:SetPoint("TOPLEFT", 82, -237 - (i - 1) * (compact and 31 or 50))
+        row:SetHeight(compact and 29 or 48)
         row.name:ClearAllPoints() row.name:SetPoint("TOPLEFT", compact and 34 or 52, compact and -7 or -4)
-        row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 205, compact and -8 or -6)
-        row.relation:SetWidth(68)
-        row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 187, -6)
-        row.relationIcon:SetSize(compact and 22 or 16, compact and 22 or 16)
+        row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 190, compact and -8 or -6)
+        row.relation:SetWidth(66)
+        row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 171, -6)
+        row.relationIcon:SetSize(compact and 20 or 18, compact and 20 or 18)
         for _, detail in ipairs({ row.raceIcon, row.classIcon, row.identity }) do
             if compact then detail:Hide() else detail:Show() end
         end
@@ -3203,7 +3329,7 @@ refresh = function(focusSelected)
             row.relation:SetText(title or relationNames[relation])
             row.relation:SetTextColor(color[1], color[2], color[3])
             if relationIcons[relation] then
-                row.relationIcon:SetTexture(media .. relationIcons[relation])
+                row.relationIcon:SetTexture(media .. (referenceRelationIcons[relation] or relationIcons[relation]))
                 row.relationIcon:Show()
             else
                 row.relationIcon:SetTexture(nil)
@@ -3232,9 +3358,13 @@ refresh = function(focusSelected)
             end
             row.identity:SetText(plain(detail):gsub("[\r\n]", " "))
             local compact = GL.Settings().compactMode == true
+            row.relationIcon:SetSize(relation == "warning" and 20 or compact and 20 or 18,
+                relation == "warning" and 12 or compact and 20 or 18)
+            moveTo(row.relationIcon, compact and 6 or relation == "warning" and 169 or 171,
+                relation == "warning" and (compact and 10 or 9) or 6)
             local tagWidth = journalTags(row, record, compact)
-            row.name:SetWidth(compact and (168-tagWidth) or 133)
-            row.identity:SetWidth(compact and 198 or (198-tagWidth))
+            row.name:SetWidth(compact and (150-tagWidth) or 115)
+            row.identity:SetWidth(compact and 186 or (186-tagWidth))
             identityIcons(row, record)
             local background = selectedKey == record.key and theme.red or theme.panel
             row.bg:SetColorTexture(unpack(background))
@@ -3278,6 +3408,12 @@ refresh = function(focusSelected)
         viewKey = "any"
     end
     ledger.viewKey = viewKey
+    for key, bookmark in pairs(ledger.bookmarks) do
+        bookmark.active = viewKey == key
+        bookmark.skin:SetTexture(media .. bookmark.textureName .. (bookmark.active and "Active" or ""))
+        local shade = bookmark.active and 1 or 0.88
+        bookmark.skin:SetVertexColor(shade, shade, shade)
+    end
     ledger.viewCycle:SetText(viewKey and (ledger.viewNames[viewKey] .. " · " .. counts[viewKey]) or L("Sélection · %d"):format(#records))
     UI.selectButton(ledger.viewCycle, viewKey ~= "all")
     local active = (filter ~= "all" and 1 or 0) + (factionFilter ~= "all" and 1 or 0) + (tagFilter ~= "all" and 1 or 0) + (notesOnly and 1 or 0)

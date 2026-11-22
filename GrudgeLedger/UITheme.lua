@@ -63,8 +63,61 @@ local function label(parent, text, size, x, y, width)
     return f
 end
 
+local function paintReferenceButton(b, textureName, tint, sliced)
+    b.skin:ClearAllPoints()
+    if sliced then
+        -- ponytail: 12px caps suit the Journal's 26–34px controls; rescale the caps if their height range changes.
+        local cap = math.min(12, (b:GetWidth() - 1) / 2)
+        b.skin:SetPoint("TOPLEFT", cap, 0)
+        b.skin:SetPoint("BOTTOMRIGHT", -cap, 0)
+        b.skin:SetTexCoord(0.125, 0.875, 0, 1)
+        if not b.skinCaps then
+            b.skinCaps = { b:CreateTexture(nil, "ARTWORK"), b:CreateTexture(nil, "ARTWORK") }
+            b.skinCaps[1]:SetPoint("TOPLEFT")
+            b.skinCaps[1]:SetPoint("BOTTOMLEFT")
+            b.skinCaps[1]:SetTexCoord(0, 0.125, 0, 1)
+            b.skinCaps[2]:SetPoint("TOPRIGHT")
+            b.skinCaps[2]:SetPoint("BOTTOMRIGHT")
+            b.skinCaps[2]:SetTexCoord(0.875, 1, 0, 1)
+        end
+        for _, piece in ipairs(b.skinCaps) do
+            piece:SetWidth(cap)
+            piece:SetTexture(media .. textureName)
+            piece:SetVertexColor(tint, tint, tint)
+            piece:Show()
+        end
+    else
+        b.skin:SetAllPoints()
+        b.skin:SetTexCoord(0, 1, 0, 1)
+        for _, piece in ipairs(b.skinCaps or {}) do piece:Hide() end
+    end
+    b.skin:SetTexture(media .. textureName)
+    b.skin:SetVertexColor(tint, tint, tint)
+end
+
 local function updateButtonState(b)
     local enabled = b:IsEnabled()
+    if b.referenceSkin then
+        local navigation = b.selectionTexture == "JournalReferenceTabActive"
+        local hot = enabled and b.hovered
+        local red = hot or (navigation and b.active)
+        local textureName = red and (navigation and "JournalReferenceTabActive" or "JournalReferenceButtonRed")
+            or b.arrowTextureName or (navigation and "JournalReferenceTab" or b.paper and "JournalReferenceButton" or "JournalReferenceDarkButton")
+        local tint = not enabled and 0.82 or hot and b.pressed and 0.78 or 1
+        paintReferenceButton(b, textureName, tint, not b.arrowTextureName or red)
+        b.caption:SetTextColor(unpack(red and { 1, 1, 1 } or b.paper and (enabled and { 0, 0, 0 } or theme.disabledInk)
+            or (enabled and theme.paper or theme.disabledGold)))
+        b.caption:SetShown(not b.arrowTextureName or hot)
+        b.normalSurface:SetColorTexture(unpack(red and theme.red or b.paper and theme.paper or theme.panel))
+        b.normalSurface:SetAlpha(0.15)
+        b.pressArtwork:SetAlpha(0)
+        if b.selection then
+            b.selection:SetAlpha(enabled and 1 or 0.6)
+            if navigation then b.selection:SetVertexColor(tint, tint, tint)
+            else b.selection:SetColorTexture(unpack(red and { 1, 1, 1 } or b.paper and theme.ink or theme.paper)) end
+        end
+        return
+    end
     local tint = enabled and 1 or (b.paper and 0.88 or 0.76)
     b.skin:SetVertexColor(tint, tint, tint)
     if b.selection then b.selection:SetAlpha(enabled and 1 or 0.86) end
@@ -77,6 +130,10 @@ end
 local function button(parent, text, x, y, width, callback, selectable, paper)
     local b = CreateFrame("Button", nil, parent)
     b.paper = paper
+    b.referenceSkin = parent.referenceSkin
+    if b.referenceSkin and width <= 40 and (text == "‹" or text == "›") then
+        b.arrowTextureName = "JournalReference" .. (paper and "" or "Dark") .. (text == "‹" and "ArrowLeft" or "ArrowRight")
+    end
     b:SetPoint("TOPLEFT", x, y)
     b:SetSize(width, 26)
     local edge = surface(b, theme.gold, 0, -1)
@@ -92,6 +149,7 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     b:SetNormalTexture(normal)
     normal:SetDrawLayer("BACKGROUND", 0)
     local pushed = surface(b, paper and theme.selection or theme.brass, 1)
+    b.pressArtwork = pushed
     pushed:SetAlpha(paper and 0.24 or 0.18)
     b:SetPushedTexture(pushed)
     pushed:SetDrawLayer("ARTWORK", 2)
@@ -103,19 +161,24 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     -- normal/disabled fills; only the translucent press feedback goes over it.
     local skin = b:CreateTexture(nil, "ARTWORK")
     skin:SetAllPoints()
-    skin:SetTexture(media .. "JournalButtons")
-    skin:SetTexCoord(36 / 1254, 1218 / 1254, (paper and 880 or 150) / 1254, (paper and 1130 or 402) / 1254)
+    if b.referenceSkin then
+        edge:SetAlpha(0)
+    else
+        skin:SetTexture(media .. "JournalButtons")
+        skin:SetTexCoord(36 / 1254, 1218 / 1254, (paper and 880 or 150) / 1254, (paper and 1130 or 402) / 1254)
+    end
     b.skin = skin
     local highlight = b:CreateTexture(nil, "HIGHLIGHT")
     highlight:SetPoint("TOPLEFT", 1, -1)
     highlight:SetPoint("BOTTOMRIGHT", -1, 1)
     highlight:SetColorTexture(0.57, 0.39, 0.18, 0.22)
+    if b.referenceSkin then highlight:SetAlpha(0) end
     b:SetHighlightTexture(highlight)
     local caption = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     b.caption = caption
     b:SetFontString(caption)
     b:SetText(text)
-    journalFont(caption, "GameFontHighlightSmall", 12)
+    journalFont(caption, "GameFontHighlightSmall", b.arrowTextureName and 18 or b.referenceSkin and 14 or 12)
     caption:ClearAllPoints()
     caption:SetPoint("CENTER")
     caption:SetSize(width - 14, 22)
@@ -127,15 +190,57 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     b:SetScript("OnDisable", updateButtonState)
     updateButtonState(b)
     b:SetScript("OnClick", callback)
+    if b.referenceSkin then
+        local function leave(self)
+            self.hovered, self.pressed = nil, nil
+            if self.tooltipActive and GameTooltip then GameTooltip:Hide() end
+            self.tooltipActive = nil
+            updateButtonState(self)
+        end
+        -- Large reading can ellipsize a fixed-width caption; its full translated label stays available.
+        b:SetScript("OnEnter", function(self)
+            self.hovered = self:IsEnabled()
+            updateButtonState(self)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(self.arrowTextureName and GL.L(text == "‹" and "Précédent" or "Suivant") or self.caption:GetText())
+                GameTooltip:Show()
+                self.tooltipActive = true
+            end
+        end)
+        b:SetScript("OnLeave", leave)
+        b:SetScript("OnHide", leave)
+        b:SetScript("OnDisable", leave)
+        b:SetScript("OnMouseDown", function(self, mouseButton)
+            self.pressed = mouseButton == "LeftButton" and self:IsEnabled() and self.hovered
+            updateButtonState(self)
+        end)
+        b:SetScript("OnMouseUp", function(self)
+            self.pressed = nil
+            updateButtonState(self)
+        end)
+        b:HookScript("OnSizeChanged", updateButtonState)
+    end
     return b
 end
 
 local function selectButton(control, active)
     if not control.selection then
         control.selection = control:CreateTexture(nil, "ARTWORK", nil, 1)
-        control.selection:SetAllPoints()
-        control.selection:SetTexture(media .. "JournalButtons")
-        control.selection:SetTexCoord(36 / 1254, 1218 / 1254, 514 / 1254, 768 / 1254)
+        if control.referenceSkin then
+            if control.selectionTexture == "JournalReferenceTabActive" then
+                control.selection:SetAllPoints()
+                control.selection:SetTexture(media .. control.selectionTexture)
+            else
+                control.selection:SetPoint("BOTTOMLEFT", 6, 3)
+                control.selection:SetPoint("BOTTOMRIGHT", -6, 3)
+                control.selection:SetHeight(2)
+            end
+        else
+            control.selection:SetAllPoints()
+            control.selection:SetTexture(media .. "JournalButtons")
+            control.selection:SetTexCoord(36 / 1254, 1218 / 1254, 514 / 1254, 768 / 1254)
+        end
     end
     control.active = active
     control.normalSurface:SetColorTexture(unpack(active and theme.red or (control.paper and theme.paper or theme.panel)))
@@ -147,6 +252,11 @@ end
 local function styleInput(edit, multiline, paper)
     local edge = surface(edit, theme.gold, 0, -1)
     local fill = surface(edit, paper and theme.paper or theme.background, 1)
+    if edit.referenceSkin and not paper then
+        local skin = edit:CreateTexture(nil, "BACKGROUND", nil, 1)
+        skin:SetAllPoints()
+        skin:SetTexture(media .. "JournalReferenceField")
+    end
     if paper then
         local texture = edit:CreateTexture(nil, "BACKGROUND", nil, 1)
         texture:SetAllPoints(fill)
@@ -162,6 +272,10 @@ local function styleInput(edit, multiline, paper)
 end
 
 local function iconButton(parent, textureName, title, x, y, size, onClick)
+    if parent.referenceSkin then
+        if textureName == "JournalSettings" then textureName = "JournalReferenceSettings"
+        elseif textureName == "JournalClose" then textureName = "JournalReferenceClose" end
+    end
     local b = CreateFrame("Button", nil, parent)
     b:SetPoint("TOPLEFT", x, y)
     b:SetSize(size, size)
@@ -195,7 +309,8 @@ end
 local bookAnchor = _G.GrudgeLedgerBookAnchor
 if not bookAnchor then
     bookAnchor = CreateFrame("Frame", "GrudgeLedgerBookAnchor", UIParent)
-    bookAnchor:SetSize(960, 700)
+    -- ponytail: fit the largest page once so overlays and tab changes never resize the underlying book.
+    bookAnchor:SetSize(960, 720)
     bookAnchor:SetPoint("CENTER")
     bookAnchor:SetMovable(true)
     bookAnchor:SetClampedToScreen(true)
@@ -205,6 +320,7 @@ end
 
 local function window(name, title, width, height, isBook)
     local f = CreateFrame("Frame", name, isBook and bookAnchor or UIParent)
+    f.referenceSkin = isBook and name == "GrudgeLedgerWindow"
     f:SetSize(width, height)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
@@ -263,7 +379,9 @@ end
 
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
-    local f = window(name, title, bookAnchor:GetWidth(), bookAnchor:GetHeight(), true)
+    local reference = name == "GrudgeLedgerWindow"
+    local f = window(name, title, 960, reference and 720 or 700, true)
+    f.referenceSkin = reference
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)
     f.closeButton:SetSize(32, 32)
@@ -296,6 +414,34 @@ local function bookWindow(name, title, narrow)
     f.bookSurface = f:CreateTexture(nil, "BACKGROUND", nil, 0)
     f.bookSurface:SetAllPoints()
     f.bookSurface:SetTexture(media .. (narrow and "JournalBookSurfaceSheet" or "JournalBookSurface"))
+    if reference then
+        -- ponytail: keep the approved whole canvas; its 4:3 display reverses the POT export stretch.
+        f.bookSurface:SetTexture(media .. "JournalReferenceBook")
+        f.lining:Hide()
+        titlePlate:Hide()
+        f.indexPaper:ClearAllPoints()
+        f.indexPaper:SetPoint("TOPLEFT", 74, -149)
+        f.indexPaper:SetSize(272, 476)
+        f.paper:ClearAllPoints()
+        f.paper:SetPoint("TOPLEFT", 356, -153)
+        f.paper:SetSize(541, 473)
+        f.closeButton:ClearAllPoints()
+        f.closeButton:SetPoint("TOPLEFT", 887, -55)
+        f.seal:ClearAllPoints()
+        f.seal:SetPoint("TOPLEFT", 303, -24)
+        f.seal:SetSize(74, 76)
+        f.title:ClearAllPoints()
+        f.title:SetPoint("TOPLEFT", 389, -37)
+        f.title:SetSize(272, 51)
+        f.wordmark:SetSize(250, 62)
+        -- Cloth and embroidery share one painting so the crests follow its folds.
+        for _, drape in ipairs({ { "Horde", 109, 30, 204, 69 }, { "Alliance", 653, 30, 197, 68 } }) do
+            local texture = f:CreateTexture(nil, "BORDER")
+            texture:SetPoint("TOPLEFT", drape[2], -drape[3])
+            texture:SetSize(drape[4], drape[5])
+            texture:SetTexture(media .. "JournalReferenceDrape" .. drape[1])
+        end
+    end
     return f
 end
 
@@ -303,6 +449,7 @@ end
 -- the line that would overflow it. The arrows at the bottom right and the wheel turn the pages.
 local function textPages(parent, width, height)
     local view = CreateFrame("Frame", nil, parent)
+    view.referenceSkin = parent.referenceSkin
     view:SetSize(width, height)
     view.body = label(view, "", nil, 0, 0, width - 4)
     view.body:SetTextColor(unpack(theme.ink))

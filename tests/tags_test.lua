@@ -70,7 +70,7 @@ GL.ShowLedger(sameFirst.key)
 assert(not strip:IsShown(), "selecting an untagged contact clears the previous header")
 GL.ShowLedger(record.key)
 for _, choice in ipairs(GL.TagChoices) do GL.ToggleTag(aqua, choice[1]) end
-assert(not strip:IsShown() and not selectedRow().tagStrip:IsShown() and selectedRow().name:GetWidth() == 168)
+assert(not strip:IsShown() and not selectedRow().tagStrip:IsShown() and selectedRow().name:GetWidth() == 150)
 GL.ToggleTag(aqua, "reliable")
 assert(strip.caption:GetText() == "Fiable" and not strip.icons[2]:IsShown())
 GL.SetSetting("compactMode", false)
