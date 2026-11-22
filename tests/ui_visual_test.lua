@@ -153,9 +153,9 @@ for _, slot in ipairs({ledger, ledger.rows[1]}) do
 end
 assert(ledger.rows[1].name.wordWrap == false and ledger.rows[1].name.maxLines == 1)
 assert(ledger.rows[1].selection:IsShown() and ledger.reactions.friend.selection:IsShown())
-assert(ledger.openSheet.skin.texture:match("JournalReferenceButtonRed$") and ledger.openSheet.active
+assert(ledger.openSheet.skin.texture:match("JournalReferenceButton$") and not ledger.openSheet.active
     and ledger.detailScroll.next.skin.texture:match("JournalReferenceArrowRight$"),
-    "the in-game revision keeps the primary action red and page arrows use their complete artwork")
+    "red means chosen: the sheet button rests on parchment and page arrows use their complete artwork")
 assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] == 1 and ledger.actions[2].caption.color[1] == 0,
     "the chosen opinion is red with white text, the others rest black on parchment")
 assert(ledger.bookSurface.texture:match("JournalReferenceBook$") and ledger.bookSurface.anchor[1] == "TOPLEFT")

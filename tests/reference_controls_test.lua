@@ -26,7 +26,7 @@ local function red(control)
     assert(control.skin.texture:match("JournalReferenceButtonRed$"), "the primary action and the chosen opinion rest red")
     white(control)
 end
-assert(f.openSheet.active, "opening the sheet is the one primary action, filled red as on the reference")
+assert(not f.openSheet.active, "only the chosen opinion and the open tab are red; opening the sheet rests on parchment")
 assert(not f.contactBounty.active and not f.contactBounty.selection)
 for _, action in ipairs({ f.openSheet, f.contactBounty }) do
     local idle = action.active and red or rest

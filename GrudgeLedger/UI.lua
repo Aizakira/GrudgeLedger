@@ -3077,7 +3077,6 @@ local function buildLedger()
         end
     end, nil, true)
     f.openSheet:SetHeight(29)
-    UI.selectButton(f.openSheet, true)
     for i, option in ipairs({ { L("Avis positif (+1)"), 1 }, { L("Avis négatif (-1)"), -1 } }) do
         local delta = option[2]
         f.actions[#f.actions + 1] = button(f.toolsMenu, option[1], 3, -3 - (i - 1) * 29, 174, function()
