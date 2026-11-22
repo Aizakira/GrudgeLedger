@@ -886,6 +886,11 @@ local function receive(msg,sender)
         if GL.GuildMap then GL.GuildMap.Version(s,me,sender,raw:sub(reply and 6 or 5),relay,reply) end
         return
     end
+    -- The anonymous mark of the player behind the character (GuildMap.lua, 0.61.0): never relayed.
+    if raw:sub(1,4)=="GLP;" then
+        if not relay and sender~=me and GL.GuildMap and GL.GuildMap.Player then GL.GuildMap.Player(sender,raw:sub(5)) end
+        return
+    end
     -- Places of fights for the guild vision of the map (GuildMap.lua).
     if raw=="MQ" or raw=="MX" or raw:sub(1,2)=="M;" then
         if GL.GuildMap then GL.GuildMap.Receive(s,me,sender,raw,relay) end

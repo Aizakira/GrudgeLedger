@@ -2188,7 +2188,7 @@ end
 -- the page. Two books are built the same way (0.55.0): Relations (your own story: the Bilan, the
 -- debts, the rivalries, the map, the rankings) and Guilde (the guild's journal, its enemies, the
 -- other guilds), each with its tab at the top.
-local TALLY_LINES = 5
+local TALLY_LINES = 6
 local BOOKS = {
     relations = { frame = "GrudgeLedgerRelations", nav = "players",
         entries = { { "recap", "Bilan" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "lands", "Carte" }, { "rankings", "Classements" } } },
@@ -2282,6 +2282,14 @@ local function versionLine()
     if total == 0 then return nil end
     return { L("Versions à jour"), current .. "/" .. total, "guildlog" }
 end
+-- How many players of the guild were heard with the addon this session, you included (0.61.0):
+-- three characters of the same player count once.
+local function playersLine()
+    if not (GL.GuildMap and GL.GuildMap.Players) then return nil end
+    local count, characters = GL.GuildMap.Players()
+    if characters <= 1 then return nil end
+    return { L("Joueurs avec l’addon"), count, "guildlog" }
+end
 -- The key figures of a book's left column, each with the page it opens. Relations: what is owed,
 -- the debts and the rivalries. Guilde: the guild's week, when it shares its fights.
 function R.Tally(key)
@@ -2299,7 +2307,7 @@ function R.Tally(key)
         return { { L("Morts · 7 j"), #R.GuildLog({ view = "death", period = week }), "guildlog" },
             { L("Victoires · 7 j"), #R.GuildLog({ view = "kill", period = week }), "guildlog" },
             { L("Ennemis · 7 j"), #R.GuildEnemies(week), "enemies" }, { L("Membres partageant"), sharing, "guildlog" },
-            versionLine() }
+            versionLine(), playersLine() }
     end
     local open, settled, total = R.Debts()
     return { { L("Reste dû"), total, "debts" }, { L("Dettes ouvertes"), #open, "debts" },

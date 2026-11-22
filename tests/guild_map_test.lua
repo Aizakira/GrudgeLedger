@@ -251,6 +251,15 @@ known = fourth.GL.GuildMap.Points()
 assert(from(known, a.id) == 40 and from(known, b.id) == 1 and from(known, third.id) == 1, #known)
 assert(sentAbout(a, "^R;M;1;") + sentAbout(b, "^R;M;1;") >= 1, "someone passed on the absent member's fights")
 assert(fourth.GL.GuildMap.Killer(enemy).deaths == 42, fourth.GL.GuildMap.Killer(enemy).deaths)
+-- 0.61.0: the guild counts its players, not only its characters. Each installation has its own
+-- anonymous mark; two characters of the same installation count once.
+local playersBefore, charactersBefore = fourth.GL.GuildMap.Players()
+assert(charactersBefore >= 3 and playersBefore == charactersBefore, playersBefore .. "/" .. charactersBefore)
+b.GL.db.authorAccount = a.GL.db.authorAccount
+b.GL.GuildMap.Announce(b.GL.Bounties.GuildScope())
+flush()
+local playersAfter, charactersAfter = fourth.GL.GuildMap.Players()
+assert(charactersAfter == charactersBefore and playersAfter == playersBefore - 1, playersAfter .. "/" .. charactersAfter)
 -- The same question twice in a row is answered once.
 now = now + 60
 local scopeA = a.GL.Bounties.GuildScope()

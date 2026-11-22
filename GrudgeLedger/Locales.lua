@@ -4,6 +4,13 @@ local locale = GetLocale and GetLocale() or "frFR"
 if locale == "frFR" then return end
 if locale == "esES" or locale == "esMX" then
     private.translations = {
+        ["note interne (détail dans /gl traces)"] = "nota interna (detalle en /gl traces)",
+        ["Joueurs avec l’addon"] = "Jugadores con el addon",
+        ["Langue : "] = "Idioma: ",
+        ["Fiches : "] = "Fichas: ",
+        ["Primes en cours : "] = "Recompensas en curso: ",
+        ["Joueurs de la guilde avec l’addon : %d (%d personnages)"] = "Jugadores de la hermandad con el addon: %d (%d personajes)",
+        ["Dernières erreurs :"] = "Últimos errores:",
         ["Le Figurant"] = "El Figurante",
         ["La Plante verte"] = "La Planta decorativa",
         ["Le Pacifiste convaincu"] = "El Pacifista convencido",
@@ -2652,6 +2659,13 @@ if locale == "esES" or locale == "esMX" then
     }
 else
     private.translations = {
+        ["note interne (détail dans /gl traces)"] = "internal note (details in /gl traces)",
+        ["Joueurs avec l’addon"] = "Players with the addon",
+        ["Langue : "] = "Language: ",
+        ["Fiches : "] = "Profiles: ",
+        ["Primes en cours : "] = "Open bounties: ",
+        ["Joueurs de la guilde avec l’addon : %d (%d personnages)"] = "Guild players with the addon: %d (%d characters)",
+        ["Dernières erreurs :"] = "Latest errors:",
         ["Le Figurant"] = "The Extra",
         ["La Plante verte"] = "The Houseplant",
         ["Le Pacifiste convaincu"] = "The Committed Pacifist",
