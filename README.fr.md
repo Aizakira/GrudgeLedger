@@ -1,6 +1,6 @@
 # Grudge Ledger — Le journal des rancunes
 
-**0.58.11.** Onglet Guilde (journal de guilde, ennemis de la guilde, alerte « Tueur de guilde »), le Bilan en cartes dans Relations, des primes refaites avec l’avis de recherche gratuit et des rappels de paiement, des contrôles contre les faux messages de guilde, un carnet par faction. Notes de version : [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
+**0.59.0.** Onglet Guilde (journal de guilde, ennemis de la guilde, alerte « Tueur de guilde »), le Bilan en cartes dans Relations, des primes refaites avec l’avis de recherche gratuit et des rappels de paiement, des contrôles contre les faux messages de guilde, un carnet par faction. Notes de version : [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
 
 
 <img src="docs/red-book.png" alt="Le livre rouge de Grudge Ledger" width="96" align="right">

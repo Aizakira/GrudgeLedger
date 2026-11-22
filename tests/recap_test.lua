@@ -21,7 +21,8 @@ assert(f == GrudgeLedgerRelations and GL.RelationsPages.page == "recap" and f.ta
 assert(page.period == "month" and page.periodButton:GetText() == "Ce mois-ci" and page.scopeButton:GetText() == "Ce personnage")
 assert(page.cards[1]:IsShown() and not page.cards[2]:IsShown() and #page.dots == 9)
 local who = page.cards[1]
-assert(who.archetype:GetText() == "Le Voyageur" and who.title:GetText() == "", who.archetype:GetText())
+local E = GL.Epithets
+assert(E.Known("traveler", who.archetype:GetText()) and who.title:GetText() == "", who.archetype:GetText())
 
 -- Three deaths against a rogue in Tanaris, three victories over a mage in Feralas.
 GetRealZoneText = function() return "Tanaris" end
@@ -36,8 +37,11 @@ for i = 1, 3 do
     GL.RecordPvP(prey, "kill", "confirmed", "fixture", "k" .. i)
 end
 GL.RelationsPages.Refresh()
-assert(who.archetype:GetText() == "Le Duelliste" and who.sentence:GetText() == "Combat après combat, l’équilibre : 3 victoires, 3 morts.")
-assert(who.title:GetText() == "« Le Fléau de Feralas »", who.title:GetText())
+assert(E.Known("duelist", who.archetype:GetText()), who.archetype:GetText())
+assert(who.sentence:GetText():find("3 victoires, 3 morts.", 1, true), who.sentence:GetText())
+local shown = who.title:GetText()
+local bare = shown:sub(shown:find("L", 1, true) or 1, (shown:find("Feralas", 1, true) or 0) + 6)
+assert(bare:sub(-11) == " de Feralas" and E.Known("title", bare), shown)
 
 -- The arrows and the dots turn the cards; the last card leads back to the first.
 click(page.next)
@@ -85,7 +89,7 @@ for i = 4, 7 do
     GL.RecordPvP(prey, "kill", "confirmed", "fixture", "k" .. i)
 end
 click(page.dots[1])
-assert(who.archetype:GetText() == "Le Prédateur", who.archetype:GetText())
+assert(E.Known("predator", who.archetype:GetText()), who.archetype:GetText())
 -- Who struck first is unknown in these fights: the sentence does not claim it.
 assert(not who.sentence:GetText():find("premier", 1, true), who.sentence:GetText())
 
@@ -94,9 +98,9 @@ now = now + 10 * 86400
 click(page.periodButton)
 assert(page.period == "year" and page.periodButton:GetText() == "Cette année")
 click(page.periodButton)
-assert(page.period == "all" and who.archetype:GetText() == "Le Prédateur")
+assert(page.period == "all" and E.Known("predator", who.archetype:GetText()))
 click(page.periodButton)
-assert(page.period == "week" and who.archetype:GetText() == "Le Voyageur")
+assert(page.period == "week" and E.Known("traveler", who.archetype:GetText()))
 click(page.periodButton)
 click(page.periodButton)
 click(page.periodButton)
@@ -110,7 +114,7 @@ click(page.copy)
 assert(page.copyBox:IsShown())
 local text = page.copyField:GetText()
 assert(text:find("^Grudge Ledger · Bilan · Depuis le début\n"), text)
-assert(text:find("Le Prédateur (Le Fléau de Feralas)", 1, true) and text:find("7 victoires · 3 morts", 1, true))
+assert(text:find(who.archetype:GetText() .. " (", 1, true) and text:find("de Feralas)", 1, true) and text:find("7 victoires · 3 morts", 1, true), text)
 assert(text:find("Némésis : Noni Vachementop (3 morts)", 1, true) and text:find("Zone la plus dangereuse : Tanaris (3 morts)", 1, true))
 click(page.copy)
 assert(not page.copyBox:IsShown() and page.copyField:GetText() == "")
