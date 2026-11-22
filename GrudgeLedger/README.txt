@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.61.0
+GRUDGE LEDGER — 0.61.1
+
+Solde automatique : quand vous avez l’avantage sur un adversaire (par exemple deux victoires pour une mort), la fiche affiche « +3 » et le dit en clair, au lieu d’un « 0 » trompeur. Il reste votre ennemi : une victoire ne crée pas d’amitié.
 
 Qui utilise l’addon dans la guilde : l’onglet Guilde affiche « Joueurs avec l’addon », en comptant les joueurs et non les personnages (trois personnages du même joueur comptent pour un), grâce à une marque anonyme qui ne nomme personne. Rapport pour les tickets : /gl rapport (ou /gl debug) ouvre un rapport anonyme à copier, avec la langue, le nombre de fiches et de primes, les joueurs de la guilde équipés et les dernières erreurs, gardées d’une session à l’autre. Aucun nom n’y figure. Rien n’est envoyé nulle part : c’est vous qui copiez le texte.
 
