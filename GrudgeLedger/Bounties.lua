@@ -893,7 +893,10 @@ local function receive(msg,sender)
     end
     if raw:sub(1,2)=="G;" then
         local actor,target,wins,losses=raw:match("^G;([^;]+);([^;]+);(%d+);(%d+)$")
-        wins,losses=number(wins,0,10000000),number(losses,0,10000000)
+        -- What a member says of their own fights is theirs; what a relay says of another member is
+        -- bounded (0.60.1): a forged relay cannot inflate a total beyond what a player really does.
+        local most=relay and 2000 or 100000
+        wins,losses=number(wins,0,most),number(losses,0,most)
         if guid(actor) and guid(target) and wins and losses and actor~=me and (relay and addresses[actor] or actor==sender) then
             if relay then GL.Transport.Cancel(s,"bounty:relay") end
             mergeScore(s,actor,target,wins,losses)
@@ -1303,10 +1306,17 @@ local function join()
             schedule(s,"Q")
             if GL.GuildMap then GL.GuildMap.Announce(s) end
             if GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me,true) end
+            -- Your own events again, the newest first, as one batch after the urgent messages
+            -- (0.60.1): they no longer hold back a claim or a payment made right after login.
+            local own={}
             for _,raw in pairs(s.events) do
                 local e=unpackEvent(raw)
-                if e and e.actor==UnitGUID("player") then schedule(s,raw) end
+                if e and e.actor==me then own[#own+1]={at=e.time,text=raw} end
             end
+            table.sort(own,function(x,y) return x.at>y.at end)
+            local batch={}
+            for i=1,math.min(300,#own) do batch[i]=own[i].text end
+            if #batch>0 and not GL.Transport.State(s,"bounty:join") then GL.Transport.SendBatch(s,batch,{key="bounty:join",delay=1}) end
         end
     end
 end

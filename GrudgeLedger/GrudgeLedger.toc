@@ -7,7 +7,7 @@
 ## Notes-deDE: Persönliches Journal für Freunde, Groll, Begegnungen und PvP-Verlauf.
 ## Notes-ptBR: Diário pessoal de amizades, rancores, encontros e histórico JxJ.
 ## Author: Grudge Ledger contributors
-## Version: 0.60.0
+## Version: 0.60.1
 ## OptionalDeps: GrudgeLedgerPortraits
 ## SavedVariables: GrudgeLedgerDB
 ## IconTexture: Interface\AddOns\GrudgeLedger\Media\LedgerBook

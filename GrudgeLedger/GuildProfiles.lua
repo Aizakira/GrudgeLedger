@@ -63,14 +63,24 @@ local function current(card)
     local s,me=B.GuildScope()
     if s and card and state(s).cards[card.key]==card and card.name then return s,me end
 end
+-- A catch-up gathers its messages in "gathered" and sends them as one batch after the urgent
+-- messages (0.60.1): hundreds of cards and opinions no longer delay a claim or a payment.
+local gathered
+local function emit(s,text)
+    if gathered then
+        gathered[#gathered+1]="J;"..text
+    else
+        B.SendJournal(s,text)
+    end
+end
 local function sendCreate(s,c)
-    B.SendJournal(s,table.concat({"C",c.target,c.digest,c.time,c.account,c.name},";"))
+    emit(s,table.concat({"C",c.target,c.digest,c.time,c.account,c.name},";"))
 end
 local function sendTag(s,c,e)
-    B.SendJournal(s,table.concat({"T",c.owner,c.target,c.digest,e.seq,e.time,e.account,e.tag,e.on and "1" or "0"},";"))
+    emit(s,table.concat({"T",c.owner,c.target,c.digest,e.seq,e.time,e.account,e.tag,e.on and "1" or "0"},";"))
 end
 local function sendDelete(s,owner,target,secret)
-    B.SendJournal(s,table.concat({"D",owner,target,secret},";"))
+    emit(s,table.concat({"D",owner,target,secret},";"))
 end
 local function find(s,target)
     local j=flags(s)
@@ -337,14 +347,27 @@ end
 function G.CatchUp(s,me,joining)
     local j=s.journal
     if not j then return end
-    for key,token in pairs(j.withdrawn) do
-        local owner,target=key:match("^([^:]+):([^:]+):")
+    -- One batch waiting at most, and one leaving: a third request is covered by the one waiting.
+    local T=GL.Transport
+    local first,second=T.State(s,"journal:own"),T.State(s,"journal:own:2")
+    local key=(first==nil and second~="queued" and "journal:own") or (second==nil and first~="queued" and "journal:own:2") or nil
+    if not key then return end
+    gathered={}
+    for cardKey,token in pairs(j.withdrawn) do
+        local owner,target=cardKey:match("^([^:]+):([^:]+):")
         if joining or owner==me then sendDelete(s,owner,target,token) end
     end
     for _,c in pairs(j.cards) do
         if not j.hidden[c.target] then GL.RequestArmory("guid:"..c.target,c.name,c.target) end
-        if joining and (c.owner~=me or not j.secrets[c.key]) then B.SendJournal(s,"V;"..c.key) end
+        if joining and (c.owner~=me or not j.secrets[c.key]) then emit(s,"V;"..c.key) end
         if c.owner==me and c.name and j.secrets[c.key] then sendCreate(s,c) end
-        for _,e in pairs(c.opinions) do if e.actor==me then sendTag(s,c,e) end end
+        for _,e in pairs(c.opinions) do
+            if e.actor==me then sendTag(s,c,e) end
+        end
     end
+    local batch=gathered
+    gathered=nil
+    local _,queued=T.Pending(s)
+    while #batch>math.max(0,480-queued) do batch[#batch]=nil end
+    if #batch>0 then T.SendBatch(s,batch,{key=key,delay=joining and 2 or 3+math.random(0,5)}) end
 end

@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.60.0
+GRUDGE LEDGER — 0.60.1
+
+Consolidation. À la connexion d’un membre, vos fiches de guilde, vos avis et vos propres primes repartent en un seul lot, après les messages urgents : une victoire ou un paiement ne reste plus bloqué derrière eux. Deux bannières qui arrivent en même temps s’affichent l’une après l’autre au lieu de s’écraser. Un relais ne peut plus gonfler les totaux de combats d’un membre. Allemand : « von Unbekannt ».
 
 Deux nouvelles langues : allemand et portugais du Brésil. Toute l’interface, les titres et les surnoms. Chaque langue a son fichier, qui ne se charge que pour les joueurs de cette langue ; une phrase absente s’affiche en anglais. Les autres langues du jeu (italien, russe, coréen, chinois) restent en anglais. Redémarrez le jeu après l’installation (nouveaux fichiers).
 
