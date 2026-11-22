@@ -2257,6 +2257,15 @@ local function renderDetail()
             local ahead = gestures == 0 and raw > 0 and score == 0
             ledger.balance:SetText(ahead and ("+" .. raw) or tostring(score))
             ledger.balance:SetTextColor(unpack(score < 0 and inkColors.enemy or score > 0 and inkColors.friend or theme.ink))
+            if ahead then
+                -- A deep gold that stays readable on the parchment, and the stars sized to the figure.
+                ledger.balance:SetTextColor(0.72, 0.50, 0.06)
+                local width = GL.Clean(GL.Safe(ledger.balance.GetStringWidth, ledger.balance), "number") or 40
+                ledger.balanceStars:SetWidth(math.max(40, width) + 28)
+                ledger.balanceStars:Show()
+            else
+                ledger.balanceStars:Hide()
+            end
             local deaths = (pvp.deaths or 0)
             local wins = (pvp.kills or 0)
             local hits = (pvp.aggressions or 0)
@@ -3037,6 +3046,32 @@ local function buildLedger()
     journalFont(balanceCaption, "GameFontNormalLarge", 20) balanceCaption:SetTextColor(unpack(theme.ink)) balanceCaption:SetJustifyH("RIGHT")
     f.balance = label(f.balancePanel, "", nil, 286, -89, 160)
     journalFont(f.balance, "GameFontNormalLarge", 31) f.balance:SetTextColor(unpack(inkColors.enemy)) f.balance:SetHeight(44)
+    -- When you are ahead (0.61.2): the figure turns gold and a few small stars twinkle around it, a
+    -- quiet reward for good numbers. The stars live in their own frame, which only runs while shown.
+    f.balanceStars = CreateFrame("Frame", nil, f.balancePanel)
+    f.balanceStars:SetPoint("TOPLEFT", 272, -82)
+    f.balanceStars:SetSize(70, 58)
+    f.balanceStars.stars = {}
+    for i, spot in ipairs({ { "TOPLEFT", 3, -14, 10 }, { "TOPRIGHT", -3, -8, 9 }, { "TOPRIGHT", 3, -42, 11 },
+        { "TOPLEFT", -1, -46, 8 }, { "TOP", 0, -2, 7 } }) do
+        local star = f.balanceStars:CreateTexture(nil, "OVERLAY")
+        star:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_1")
+        star:SetSize(spot[4], spot[4])
+        star:SetPoint("CENTER", f.balanceStars, spot[1], spot[2], spot[3])
+        star.phase, star.base = i * 1.3, spot[4]
+        f.balanceStars.stars[i] = star
+    end
+    f.balanceStars.clock = 0
+    f.balanceStars:SetScript("OnUpdate", function(self, elapsed)
+        self.clock = self.clock + (tonumber(elapsed) or 0)
+        for _, star in ipairs(self.stars) do
+            local glow = 0.5 + 0.5 * math.sin(self.clock * 2.2 + star.phase)
+            local side = star.base * (0.75 + 0.35 * glow)
+            star:SetAlpha(0.25 + 0.75 * glow)
+            star:SetSize(side, side)
+        end
+    end)
+    f.balanceStars:Hide()
     f.formula = label(f.balancePanel, "", nil, 6, -128, 546)
     f.formula:SetTextColor(unpack(theme.ink)) f.formula:SetJustifyH("CENTER") f.formula:SetHeight(22)
     f.scoreContext = label(f.balancePanel, "", nil, 6, -151, 546)

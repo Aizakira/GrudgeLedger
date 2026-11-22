@@ -121,7 +121,12 @@ do
     assert(GrudgeLedgerWindow.balance:GetText() == "+" .. raw, GrudgeLedgerWindow.balance:GetText())
     assert(GrudgeLedgerWindow.scoreContext:GetText():find("Vous menez de " .. raw, 1, true), GrudgeLedgerWindow.scoreContext:GetText())
     assert(GL.Relation(GL.Get(probe)) ~= "friend")
+    -- 0.61.2: the figure is gold and small stars twinkle around it; they stop when the page shows a debt.
+    local stars = GrudgeLedgerWindow.balanceStars
+    assert(stars:IsShown() and #stars.stars == 5)
+    stars:GetScript("OnUpdate")(stars, 0.1)
     GL.ShowLedger(aqua.key)
+    assert(not stars:IsShown(), "no stars on a debt")
 end
 assert(GrudgeLedgerWindow.reactions.warning.selection:IsShown() and not GrudgeLedgerWindow.reactions.neutral.selection:IsShown(), "automatic selects the effective dangerous relation")
 assert(GrudgeLedgerWindow.detailStatus:GetText():find("Méfiance", 1, true))

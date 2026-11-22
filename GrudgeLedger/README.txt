@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.61.1
+GRUDGE LEDGER — 0.61.2
+
+Quand vous menez contre un adversaire, le solde s’affiche en doré, entouré de petites étoiles qui scintillent.
 
 Solde automatique : quand vous avez l’avantage sur un adversaire (par exemple deux victoires pour une mort), la fiche affiche « +3 » et le dit en clair, au lieu d’un « 0 » trompeur. Il reste votre ennemi : une victoire ne crée pas d’amitié.
 
