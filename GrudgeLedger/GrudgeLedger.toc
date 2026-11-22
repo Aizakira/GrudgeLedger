@@ -4,8 +4,10 @@
 ## Notes-esES: Diario personal de amistades, rencores, encuentros e historial JcJ.
 ## Notes-esMX: Diario personal de amistades, rencores, encuentros e historial JcJ.
 ## Notes-frFR: Journal personnel des amis et des rancunes : notes, rencontres et historique PvP.
+## Notes-deDE: Persönliches Journal für Freunde, Groll, Begegnungen und PvP-Verlauf.
+## Notes-ptBR: Diário pessoal de amizades, rancores, encontros e histórico JxJ.
 ## Author: Grudge Ledger contributors
-## Version: 0.59.1
+## Version: 0.60.0
 ## OptionalDeps: GrudgeLedgerPortraits
 ## SavedVariables: GrudgeLedgerDB
 ## IconTexture: Interface\AddOns\GrudgeLedger\Media\LedgerBook
@@ -13,6 +15,8 @@
 ## X-Credits: Menu and nameplate techniques adapted from Worth Remembering by Kyle (GPLv3).
 
 Locales.lua
+Locales_deDE.lua
+Locales_ptBR.lua
 Core.lua
 Tags.lua
 ZoneTime.lua

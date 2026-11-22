@@ -14,6 +14,10 @@ if locale == "frFR" then
     language = "fr"
 elseif locale == "esES" or locale == "esMX" then
     language = "es"
+elseif locale == "deDE" then
+    language = "de"
+elseif locale == "ptBR" then
+    language = "pt"
 end
 
 -- "de Tanaris", "d’Orgrimmar", "des Paluns", "du Bois de la Pénombre"; "del Valle"; "of the Barrens".
@@ -51,6 +55,9 @@ for word in ("Picos Montes Baldíos Páramos Claros"):gmatch("%S+") do
 end
 function E.Of(name)
     name = tostring(name or "")
+    -- German and Brazilian Portuguese (0.60.0): "von Tanaris", "de Tanaris".
+    if language == "de" then return "von " .. name end
+    if language == "pt" then return "de " .. name end
     if language == "en" then
         local rest = name:match("^The (.+)$")
         return rest and ("of the " .. rest) or ("of " .. name)

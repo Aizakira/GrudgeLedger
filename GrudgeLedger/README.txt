@@ -1,4 +1,6 @@
-GRUDGE LEDGER — 0.59.1
+GRUDGE LEDGER — 0.60.0
+
+Deux nouvelles langues : allemand et portugais du Brésil. Toute l’interface, les titres et les surnoms. Chaque langue a son fichier, qui ne se charge que pour les joueurs de cette langue ; une phrase absente s’affiche en anglais. Les autres langues du jeu (italien, russe, coréen, chinois) restent en anglais. Redémarrez le jeu après l’installation (nouveaux fichiers).
 
 Le grand catalogue des titres. Le Bilan connaît 16 façons de combattre au lieu de 6 : la victime des plus hauts niveaux, des meutes, des embuscades, d’un seul bourreau ou d’une zone maudite ; le chasseur de plus petits, le tueur de géants, le loup de meute ; le sauveur aux coups de main ; l’oiseau de nuit. Vingt noms par façon, cinq phrases, des noms à vous avec votre némésis ou votre zone, trente titres de zone. Les surnoms des joueurs passent à 18 catégories : le grand qui tape les petits, le rôdeur de nuit, le géant tombé, le petit que vous battez, le croisé sans combat, et six pour les alliés (compagnon, partenaire de duel, frère de donjon, ami, vieille connaissance, habitué), quatorze noms chacune. Plus de 700 noms en tout.
 

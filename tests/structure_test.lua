@@ -153,7 +153,8 @@ end
 -- Rule 4: readable code. One statement per line and lines of at most 160 characters.
 -- Ceilings are today's counts: { lines with several statements, long lines }.
 -- A file may improve, never get worse. A new file starts at { 0, 0 }.
-local dataFiles = { ["Locales.lua"] = true, ["DossierTalentData.lua"] = true }
+local dataFiles = { ["Locales.lua"] = true, ["Locales_deDE.lua"] = true, ["Locales_ptBR.lua"] = true,
+    ["DossierTalentData.lua"] = true }
 local ceilings = {
     ["Core.lua"] = { 4, 7 }, ["Tracker.lua"] = { 0, 4 }, ["Display.lua"] = { 2, 3 },
     ["NativePortrait.lua"] = { 1, 0 }, ["UI.lua"] = { 6, 83 }, ["Menu.lua"] = { 0, 1 },
