@@ -1,9 +1,12 @@
 -- Use the WoW addon loader contract. A client allocates at most one dictionary.
+-- Locales.lua, then the German and Brazilian files that run over its English table (0.60.0).
 local function catalog(locale)
     local context = {}
-    local chunk = assert(loadfile(TEST_ROOT .. "/Locales.lua"))
-    setfenv(chunk, { GetLocale = function() return locale end })
-    chunk("GrudgeLedger", context)
+    for _, name in ipairs({ "Locales.lua", "Locales_deDE.lua", "Locales_ptBR.lua" }) do
+        local chunk = assert(loadfile(TEST_ROOT .. "/" .. name))
+        setfenv(chunk, { GetLocale = function() return locale end })
+        chunk("GrudgeLedger", context)
+    end
     return context.translations
 end
 
@@ -14,20 +17,23 @@ local function placeholders(text)
     for item in text:gmatch("%%[-+ #0%d%.]*[cdiouxXeEfgGqs%%]") do args[#args + 1] = item end
     return table.concat(args, ",")
 end
+local german, brazilian = catalog("deDE"), catalog("ptBR")
 for _, pair in ipairs({{english, spanish}, {spanish, english}, {english, catalog("enGB")},
-                       {spanish, catalog("esMX")}, {english, catalog("deDE")}}) do
+                       {spanish, catalog("esMX")}, {english, german}, {english, brazilian}}) do
     for key, translation in pairs(pair[1]) do
         assert(pair[2][key] and #translation > 0, key)
         assert(placeholders(key) == placeholders(translation), key .. ": invalid placeholders")
     end
 end
 assert(english["Ennemi"] == "Enemy" and spanish["Ennemi"] == "Enemigo")
-assert(catalog("enGB")["Ennemi"] == "Enemy" and catalog("deDE")["Ennemi"] == "Enemy")
+assert(catalog("enGB")["Ennemi"] == "Enemy" and german["Ennemi"] == "Feind" and brazilian["Ennemi"] == "Inimigo")
+-- Another language keeps the English table: Italian has no file of its own.
+assert(catalog("itIT")["Ennemi"] == "Enemy")
 assert(catalog("esMX")["Ennemi"] == "Enemigo")
 -- Parity alone misses a newly added source string absent from both catalogs.
 for line in io.lines(TEST_ROOT .. "/GrudgeLedger.toc") do
     local name=line:match("^%s*(.-%.lua)%s*$")
-    if name and name ~= "Locales.lua" then
+    if name and not name:match("^Locales") then
         local file=assert(io.open(TEST_ROOT.."/"..name))
         local source=file:read("*a")
         file:close()
@@ -44,8 +50,10 @@ local words = {
     fr = {"À chasser", "Publier l’avis", "Tête", "Aperçu", "Chiffres clés", "Butin ninja", "Aucun envoi incertain à vérifier."},
     en = {"To hunt", "Post the notice", "Head", "Overview", "Key figures", "Ninja looting", "No uncertain mail to check."},
     es = {"Por cazar", "Publicar el aviso", "Cabeza", "Resumen", "Cifras clave", "Robo de botín", "No hay envíos pendientes de verificación."},
+    de = {"Zu jagen", "Steckbrief veröffentlichen", "Kopf", "Übersicht", "Kennzahlen", "Ninja-Looten", "Keine unsichere Post zu prüfen."},
+    pt = {"A caçar", "Publicar o cartaz", "Cabeça", "Visão geral", "Números-chave", "Ninja de loot", "Nenhuma carta incerta para verificar."},
 }
-for locale, lang in pairs({frFR="fr", enUS="en", enGB="en", esES="es", esMX="es", deDE="en"}) do
+for locale, lang in pairs({frFR="fr", enUS="en", enGB="en", esES="es", esMX="es", deDE="de", ptBR="pt", itIT="en"}) do
     local e=setmetatable({}, {__index=_G})
     e._G=e
     e.GetLocale=function() return locale end
@@ -62,8 +70,8 @@ for locale, lang in pairs({frFR="fr", enUS="en", enGB="en", esES="es", esMX="es"
     assert(dossier.equipment.equipment.buttons[1].slotName==expected[3],locale.." item slot")
     assert(dossier.tabs.overview:GetText()==expected[4] and dossier.keyHeading:GetText()==expected[5],locale.." dossier")
     assert(not dossier.bounty:IsShown(),locale.." ally should not offer a bounty")
-    e.SlashCmdList.GLBOUNTY(lang=="es" and "correo enviado" or lang=="en" and "mail sent" or "courrier envoye")
+    e.SlashCmdList.GLBOUNTY(lang=="es" and "correo enviado" or lang=="fr" and "courrier envoye" or "mail sent")
     assert(mock.messages[#mock.messages]:find(expected[7],1,true),locale.." mail message: "..mock.messages[#mock.messages])
     assert(#GL.errors==0,locale.." runtime error")
 end
-print("PASS localized bounty controls, private tags, dossier, and mailbox reconciliation across six real TOC loads")
+print("PASS localized bounty controls, private tags, dossier, and mailbox reconciliation across eight real TOC loads")
