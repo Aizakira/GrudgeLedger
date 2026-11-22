@@ -155,11 +155,15 @@ assert(ledger.rows[1].name.wordWrap == false and ledger.rows[1].name.maxLines ==
 assert(ledger.rows[1].selection:IsShown() and ledger.reactions.friend.selection:IsShown())
 assert(ledger.openSheet.skin.texture:match("JournalReferenceButtonRed$") and ledger.openSheet.active
     and ledger.detailScroll.next.skin.texture:match("JournalReferenceArrowRight$"),
-    "the primary action rests red and page arrows use their complete directional artwork")
+    "the in-game revision keeps the primary action red and page arrows use their complete artwork")
 assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] == 1 and ledger.actions[2].caption.color[1] == 0,
     "the chosen opinion is red with white text, the others rest black on parchment")
-assert(ledger.bookSurface.texture:match("JournalReferenceBook$") and ledger.bookSurface.allPoints == ledger)
-assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 720, "keep the complete reference book's 4:3 canvas")
+assert(ledger.bookSurface.texture:match("JournalReferenceBook$") and ledger.bookSurface.anchor[1] == "TOPLEFT")
+assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 744, "include the clickable ribbon footer")
+assert(ledger.bookSurface:GetWidth() == 960 and ledger.bookSurface:GetHeight() == 720, "keep the complete reference book's 4:3 canvas")
+for _, region in ipairs(ledger.children) do
+    assert(not region.texture or not region.texture:find("JournalReferenceDrape", 1, true), "the V3 cloth is painted in the book itself")
+end
 local previousTab
 assert(not ledger.navigation.guilds, "guild rankings belong inside Rankings")
 for _, key in ipairs({"ledger", "players", "guild", "bounties"}) do
@@ -189,9 +193,9 @@ assert(activeTab.skin.drawLayer == "ARTWORK" and activeTab.selection.drawLayer =
 activeTab:SetEnabled(false)
 assert(activeTab.selection.alpha < 1, "disabled active tab visibly dims its selection")
 activeTab:SetEnabled(true)
-assert(activeTab.active and activeTab.selection:IsShown() and activeTab.selection.alpha == 1)
+assert(activeTab.active and activeTab.selection:IsShown() and activeTab.selection.alpha == 1 and activeTab.selection.color[4] == 0)
 assert(contrast(activeTab.caption.color, activeTab.normalSurface.color) >= 4.5,
-    "reenabling a selected parchment control restores dark text on its light face")
+    "reenabling a selected control restores white text on its red face")
 assert(ledger.seal.texture == GL.icon and ledger.title:GetText() == "Grudge Ledger",
     "keep the approved book medallion unchanged")
 assert(ledger.wordmark.texture:match("JournalWordmark$") and ledger.wordmark:IsShown() and not ledger.title:IsShown(),

@@ -352,11 +352,15 @@ local function referenceInteraction(f, state)
     local target = assert(targets[state], "Unknown reference interaction: " .. state)
     assert(target:IsEnabled() and target:IsShown(), "Reference interaction target is unavailable")
     local function appearance()
-        return { hovered = target.hovered == true, pressed = target.pressed == true,
+        return { active = target.active == true, hovered = target.hovered == true, pressed = target.pressed == true,
             caption = target.caption:GetText(), captionColor = {target.caption:GetTextColor()},
             texture = target.skin.texture, tint = target.skin.qaTint, slices = #(target.skinCaps or {}) }
     end
     local before, events = appearance(), {"OnEnter"}
+    if before.active then
+        assert(before.texture:find("JournalReferenceButtonRed", 1, true), "Selected action must already be red at rest")
+        for i = 1, 3 do assert(before.captionColor[i] == 1, "Selected action caption must already be white") end
+    end
     assert(target:GetScript("OnEnter"))(target)
     if state == "pressed-open" then
         assert(target:GetScript("OnMouseDown"))(target, "LeftButton")
@@ -366,6 +370,7 @@ local function referenceInteraction(f, state)
         events[#events + 1] = "OnLeave"
     end
     local after = appearance()
+    assert(after.active == before.active, "Pointer state must not change the selected action")
     assert(after.hovered == (state ~= "after-hover") and after.pressed == (state == "pressed-open"))
     if state == "after-hover" then
         assert(after.texture == before.texture, "Leaving hover did not restore the button texture")
@@ -806,7 +811,7 @@ function QA.snapshot(root)
             layer = f.qaLayer, sublevel = f.qaSublevel, level = f.qaLevel, strata = f.qaStrata,
             shown = f.shown, enabled = f.enabled, text = f.text, checked = f.checked, fontString = f.fontString and f.fontString.qaID,
             buttonState = f.qaButtonState, hasDisabledTexture = f.disabledTexture ~= nil,
-            hovered = f.hovered == true, pressed = f.pressed == true, blendMode = f.blendMode,
+            active = f.active == true, hovered = f.hovered == true, pressed = f.pressed == true, blendMode = f.blendMode,
             template = f.qaTemplate, fontObject = f.qaFontObject, font = (f.qaKind == "FontString" or f.qaKind == "EditBox") and f:GetFont() or nil, fontSize = f.qaFontSize,
             shadow = f.qaShadow, shadowOffset = f.qaShadowOffset,
             color = f.qaFill, textColor = f.qaTextColor, tint = f.qaTint, alpha = f.qaAlpha,

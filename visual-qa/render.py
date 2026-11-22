@@ -470,7 +470,7 @@ def main():
     # Explicit view names keep a visual correction cycle small; no arguments run
     # the complete set of real Lua page flows.
     if sys.argv[1:]: views = sys.argv[1:]
-    images, report, snapshots, references, interactions=[],{},{},{},{}
+    images, report, snapshots, references, interactions, view_sizes=[],{},{},{},{},{}
     for name in views:
         # ponytail: a separate runtime isolates the reference's 79 synthetic
         # contacts; ordinary capture flows keep their existing shared runtime.
@@ -487,6 +487,9 @@ def main():
             interactions[name] = convert(g.QA.interaction)
             snapshots[name]["interaction"] = interactions[name]
         issues,img=render(name,frames,root_id)
+        view_sizes[name] = {"native_root": [root.GetWidth(root), root.GetHeight(root)],
+                            "rendered_root": list(Layout(frames).resolve(root_id)[2:]),
+                            "qa_canvas": list(img.size)}
         report[name]=issues
         images.append((name,img))
     state_images = dict(images)
@@ -521,7 +524,8 @@ def main():
     (OUT/"asset-report.json").write_text(json.dumps(assets,ensure_ascii=False,indent=2),encoding="utf-8")
     (OUT/"geometry-report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
     (OUT/"captured-frames.json").write_text(json.dumps(snapshots,ensure_ascii=False,indent=2),encoding="utf-8")
-    (OUT/"interaction-report.json").write_text(json.dumps({"views":interactions, "after_hover_restored_pixels":restored},ensure_ascii=False,indent=2),encoding="utf-8")
+    (OUT/"interaction-report.json").write_text(json.dumps({"views":interactions, "view_sizes":view_sizes,
+        "after_hover_restored_pixels":restored},ensure_ascii=False,indent=2),encoding="utf-8")
     print(json.dumps({"views":len(views),"issues":report,"contact_sheet":str(OUT/"contact-sheet.png")},ensure_ascii=False))
     assert not any(report.values()), "Visual geometry checks failed; inspect geometry-report.json"
 

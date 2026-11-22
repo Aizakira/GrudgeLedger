@@ -2782,12 +2782,12 @@ local function buildLedger()
     end, nil, false)
     f.viewCycle:SetHeight(25)
     f.bookmarks = {}
-    for _, entry in ipairs({ { "friend", "Friend", L("Amis"), L("Amis"), 101 },
-        { "debt", "Debt", L("À régler"), L("Comptes à régler"), 157 } }) do
+    for _, entry in ipairs({ { "friend", "Friend", L("Amis"), L("Amis"), 94 },
+        { "debt", "Debt", L("À régler"), L("Comptes à régler"), 164 } }) do
         local key, texture, caption, tooltip = entry[1], "JournalBookmark" .. entry[2], entry[3], entry[4]
         local bookmark = CreateFrame("Button", nil, f)
         bookmark:SetPoint("TOPLEFT", entry[5], -625)
-        bookmark:SetSize(42, 86)
+        bookmark:SetSize(57, 118)
         bookmark:SetFrameLevel(f:GetFrameLevel() + 1)
         bookmark.textureName = texture
         bookmark.skin = bookmark:CreateTexture(nil, "ARTWORK")
@@ -2811,16 +2811,16 @@ local function buildLedger()
         end)
         f.bookmarks[key] = bookmark
     end
-    -- Sample the actual cover edge in a foreground layer: its grain and shadows join exactly.
+    -- The leather ends at 664; its generated shadow continues to 690 and falls over the fabric below it.
     f.bookmarkCover = CreateFrame("Frame", nil, f)
     f.bookmarkCover:SetPoint("TOPLEFT", 78, -620)
-    f.bookmarkCover:SetSize(268, 44)
+    f.bookmarkCover:SetSize(268, 70)
     f.bookmarkCover:SetFrameLevel(f:GetFrameLevel() + 2)
     f.bookmarkCover:EnableMouse(false)
     f.bookmarkCover.skin = f.bookmarkCover:CreateTexture(nil, "ARTWORK")
     f.bookmarkCover.skin:SetAllPoints()
     f.bookmarkCover.skin:SetTexture(media .. "JournalReferenceBook")
-    f.bookmarkCover.skin:SetTexCoord(78 / 960, 346 / 960, 620 / 720, 664 / 720)
+    f.bookmarkCover.skin:SetTexCoord(78 / 960, 346 / 960, 620 / 720, 690 / 720)
     -- Every other filter lives in one panel, opened on demand; it stays open while you choose.
     local panel = CreateFrame("Frame", nil, f)
     f.filterPanel = panel

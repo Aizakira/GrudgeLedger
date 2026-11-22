@@ -315,9 +315,9 @@ end
 local bookAnchor = _G.GrudgeLedgerBookAnchor
 if not bookAnchor then
     bookAnchor = CreateFrame("Frame", "GrudgeLedgerBookAnchor", UIParent)
-    -- ponytail: fit the largest page once so overlays and tab changes never resize the underlying book.
-    bookAnchor:SetSize(960, 720)
-    bookAnchor:SetPoint("CENTER")
+    -- ponytail: reserve 24 units below the 720-unit painting for longer ribbons, including their generated shadow.
+    bookAnchor:SetSize(960, 744)
+    bookAnchor:SetPoint("CENTER", UIParent, "CENTER", 0, -12)
     bookAnchor:SetMovable(true)
     bookAnchor:SetClampedToScreen(true)
     bookAnchor:EnableMouse(false)
@@ -375,7 +375,7 @@ local function window(name, title, width, height, isBook)
         fitToScreen(mover)
         if isBook then
             self:ClearAllPoints()
-            self:SetPoint("CENTER", bookAnchor, "CENTER")
+            self:SetPoint("CENTER", bookAnchor, "CENTER", 0, self.referenceSkin and 0 or 12)
         end
     end)
     if UISpecialFrames then table.insert(UISpecialFrames, name) end
@@ -386,7 +386,7 @@ end
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
     local reference = name == "GrudgeLedgerWindow"
-    local f = window(name, title, 960, reference and 720 or 700, true)
+    local f = window(name, title, 960, reference and 744 or 700, true)
     f.referenceSkin = reference
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)
@@ -422,6 +422,9 @@ local function bookWindow(name, title, narrow)
     f.bookSurface:SetTexture(media .. (narrow and "JournalBookSurfaceSheet" or "JournalBookSurface"))
     if reference then
         -- ponytail: keep the approved whole canvas; its 4:3 display reverses the POT export stretch.
+        f.bookSurface:ClearAllPoints()
+        f.bookSurface:SetPoint("TOPLEFT")
+        f.bookSurface:SetSize(960, 720)
         f.bookSurface:SetTexture(media .. "JournalReferenceBook")
         f.lining:Hide()
         titlePlate:Hide()
@@ -440,15 +443,6 @@ local function bookWindow(name, title, narrow)
         f.title:SetPoint("TOPLEFT", 389, -37)
         f.title:SetSize(272, 51)
         f.wordmark:SetSize(250, 62)
-        -- Cloth and embroidery share one painting so the crests follow its folds.
-        for _, drape in ipairs({ { "Horde", 109, 30, 204, 69 }, { "Alliance", 653, 30, 197, 68 } }) do
-            local texture = f:CreateTexture(nil, "BORDER")
-            texture:SetPoint("TOPLEFT", drape[2], -drape[3])
-            texture:SetSize(drape[4], drape[5])
-            texture:SetTexture(media .. "JournalReferenceDrape" .. drape[1])
-            -- Quieter cloth: the saturated red and blue drew the eye away from the page.
-            texture:SetVertexColor(0.74, 0.68, 0.64)
-        end
     end
     return f
 end

@@ -18,7 +18,8 @@ local friend = GL.SetReaction(GL.IdentityFromName("Kind", "Example", "Player-9-0
 local record = GL.Get(id)
 GL.ShowLedger(record.key)
 local f = GrudgeLedgerWindow
-assert(f.referenceSkin and f:GetWidth() == 960 and f:GetHeight() == 720, "the main book preserves the reference aspect ratio")
+assert(f.referenceSkin and f:GetWidth() == 960 and f:GetHeight() == 744, "the window includes the longer ribbon footer")
+assert(f.bookSurface:GetWidth() == 960 and f.bookSurface:GetHeight() == 720, "the book painting preserves the reference aspect ratio")
 assert(f.search.referenceSkin and f.rows[1]:GetWidth() == 255)
 assert(f.rows[1].selection.texture:find("JournalReferenceSelected", 1, true))
 assert(f.metrics.deaths.skin.texture:find("JournalReferenceStats", 1, true))
@@ -63,9 +64,13 @@ for _, bookmark in pairs(f.bookmarks) do
     assert(ratio > 0.47 and ratio < 0.51, "preserve the curved fabric proportions from the whole-book study")
     assert(f.bookmarkCover:GetFrameLevel() > bookmark:GetFrameLevel(), "leather must cover the fabric attachment")
     assert(-f.bookmarkCover.anchor[3] <= -bookmark.anchor[3], "the rolled fabric root must not peek above the foreground leather")
-    local edgeBottom = -f.bookmarkCover.anchor[3] + f.bookmarkCover:GetHeight()
-    assert(-bookmark.anchor[3] < edgeBottom and -bookmark.anchor[3] + bookmark:GetHeight() > edgeBottom + 40,
-        "the root is behind the cover, and the short curved end hangs below it")
+    local edgeBottom = 664 -- Physical leather edge; the sampled overlay also includes its translucent shadow.
+    assert(-f.bookmarkCover.anchor[3] + f.bookmarkCover:GetHeight() == 690,
+        "the foreground book sample includes the shadow cast by the leather onto the ribbon")
+    assert(f.bookmarkCover.skin.texCoord[3] == 620 / 720 and f.bookmarkCover.skin.texCoord[4] == 690 / 720)
+    local visible = -bookmark.anchor[3] + bookmark:GetHeight() - edgeBottom
+    assert(-bookmark.anchor[3] < edgeBottom and visible >= 70 and visible <= 80,
+        "the root stays behind the cover while 70 to 80 units of fabric hang below the physical leather edge")
     assert(-bookmark.anchor[3] + bookmark:GetHeight() <= f:GetHeight(), "the bookmark remains clickable inside the book window")
 end
 
