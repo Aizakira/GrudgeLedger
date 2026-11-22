@@ -216,7 +216,8 @@ for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
     local row = ledger.rows[1]
     local names = { friend = "Ami", warning = "Méfiance", enemy = "Ennemi", neutral = "Neutre" }
     local icons = { friend = "RelationFriend", warning = "JournalReferenceEye", enemy = "RelationEnemy", neutral = "RelationNeutral" }
-    assert(row.relation:GetText() == names[relation] and row.relation.wordWrap == false and row.relation.maxLines == 1)
+    -- The heart says the relation; only a title (Nemesis, Companion) is written in the row.
+    assert(row.relation:GetText() == "" and ledger.detailStatus:GetText() == names[relation] and row.relation.wordWrap == false and row.relation.maxLines == 1)
     assert(row.name:GetText() == GL.Get(identity.key).fullName, "no cryptic prefix in the player's name")
     assert(row.relationIcon:IsShown() and row.relationIcon.texture:find(icons[relation], 1, true))
     assert(ledger.detailIcon.texture:find(icons[relation], 1, true))

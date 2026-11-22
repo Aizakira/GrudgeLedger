@@ -81,7 +81,7 @@ assert(not f.backToSummary:IsShown() and f.openSheet:IsShown())
 local summary = f.detailScroll.fullText
 assert(summary:find("Votre histoire", 1, true) and summary:find("Il vous a tué 1 fois", 1, true), summary)
 assert(summary:find("Une note personnelle", 1, true))
-assert(f.detailGuild:GetText() == "Guilde non renseignée")
+assert(f.detailGuild:GetText() == "", "an unknown guild leaves its line empty")
 -- The detailed history and the notes open from "Autres actions", with a way back.
 click(f.openHistory)
 assert(f.historyPage:IsShown() and f.backToSummary:IsShown() and not f.openSheet:IsShown())
