@@ -23,7 +23,7 @@ end
 local function click(button) button:GetScript("OnClick")(button, "LeftButton") end
 local function drag(frame, x, y)
     frame:GetScript("OnDragStart")(frame)
-    moving:SetPoint("CENTER", UIParent, "CENTER", x, y - (moving == GrudgeLedgerBookAnchor and 12 or 0))
+    moving:SetPoint("CENTER", UIParent, "CENTER", x, y)
     frame:GetScript("OnDragStop")(frame)
     at(frame, x, y)
 end
@@ -35,7 +35,7 @@ GL.InitDB()
 GL.SetSetting("guideSeen", true)
 GL.ShowLedger()
 local ledger = GrudgeLedgerWindow
-assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 744)
+assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 720)
 assert(ledger.bookSurface:GetWidth() == 960 and ledger.bookSurface:GetHeight() == 720)
 assert(ledger.bookSurface.point[1] == "TOPLEFT", "the footer must not move or stretch the painted book")
 at(ledger, 0, 0)
@@ -75,7 +75,7 @@ UIParent:SetSize(800, 600)
 UIParent:GetScript("OnSizeChanged")(UIParent, 800, 600)
 local anchor = GrudgeLedgerPlayerDossier.parent
 assert(anchor:GetWidth() * anchor:GetScale() <= 776 and anchor:GetHeight() * anchor:GetScale() <= 576)
-assert(anchor:GetHeight() == 744, "screen fitting includes the ribbon footer even while another page is open")
+assert(anchor:GetHeight() == 720, "screen fitting includes the ribbon footer even while another page is open")
 assert(anchor.clamped, "dragging must clamp the complete painting and its ribbon footer")
 GL.ShowLedger()
 assert(ledger.parent == anchor)
@@ -86,7 +86,7 @@ local ledgerScale = anchor:GetScale()
 GL.ShowGuide()
 assert(GrudgeLedgerGuide:IsShown() and ledger:IsShown(), "the guide overlays the journal")
 GrudgeLedgerGuide:Hide()
-assert(anchor:GetScale() == ledgerScale and anchor:GetHeight() == 744,
+assert(anchor:GetScale() == ledgerScale and anchor:GetHeight() == 720,
     "closing a shorter overlay must keep the underlying journal fitted to the screen")
 at(ledger, 60, 20)
 print("PASS shared book position across tabs, overlay, reopen, interrupted drag, resize and independent dialog")

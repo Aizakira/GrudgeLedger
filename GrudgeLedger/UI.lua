@@ -390,8 +390,24 @@ local function portraitOverlay(row)
     row.raceIcon.portraitOverlay = overlay
     if row.faceAnchor then row.faceAnchor.portraitOverlay = overlay end
 end
+local portraitBackdrops = { Horde = "JournalPortraitHorde", Alliance = "JournalPortraitAlliance" }
+local function portraitBackdrop(row, record)
+    if not row.referenceSkin then return end
+    local back = row.portraitBack
+    if not back then
+        back = row:CreateTexture(nil, "ARTWORK", nil, -8)
+        row.portraitBack = back
+        back:SetAllPoints(row.faceAnchor or row.raceIcon)
+    end
+    local profile = GL.ArmoryProfile(record)
+    local public = profile and profile.identity
+    local texture = portraitBackdrops[record.faction or (public and public.faction)]
+    if texture then back:SetTexture(media .. texture) end
+    if texture and row.raceIcon:IsShown() then back:Show() else back:Hide() end
+end
 local function identityIcons(row, record)
     row.classIcon:SetDrawLayer("OVERLAY")
+    portraitBackdrop(row, record)
     portraitRows[row] = record
     paintPortrait(row, record, portraitUnit(record))
     portraitOverlay(row)
@@ -2241,6 +2257,7 @@ local function renderDetail()
         ledger.detailSource:SetText("") ledger.detailGuild:SetText("")
         if ledger.headshot then ledger.headshot.active = nil; ledger.headshot:Hide() end
         ledger.raceIcon:Hide() ledger.classIcon:Hide() ledger.detailFaction:Hide()
+        if ledger.portraitBack then ledger.portraitBack:Hide() end
         if ledger.portraitOverlay then ledger.portraitOverlay:Hide() end
     else
         ledger.detailIcon:Show()
@@ -2791,45 +2808,6 @@ local function buildLedger()
     end, nil, false)
     f.viewCycle:SetHeight(25)
     f.bookmarks = {}
-    for _, entry in ipairs({ { "friend", "Friend", L("Amis"), L("Amis"), 94 },
-        { "debt", "Debt", L("À régler"), L("Comptes à régler"), 164 } }) do
-        local key, texture, caption, tooltip = entry[1], "JournalBookmark" .. entry[2], entry[3], entry[4]
-        local bookmark = CreateFrame("Button", nil, f)
-        bookmark:SetPoint("TOPLEFT", entry[5], -625)
-        bookmark:SetSize(57, 118)
-        bookmark:SetFrameLevel(f:GetFrameLevel() + 1)
-        bookmark.textureName = texture
-        bookmark.skin = bookmark:CreateTexture(nil, "ARTWORK")
-        bookmark.skin:SetAllPoints()
-        bookmark.skin:SetTexture(media .. texture)
-        bookmark:SetNormalTexture(bookmark.skin)
-        bookmark.caption = label(bookmark, caption, nil, 0, 0, 25)
-        bookmark:SetFontString(bookmark.caption)
-        bookmark.caption:Hide()
-        bookmark:SetScript("OnClick", function() f.ShowView(key) end)
-        bookmark:SetScript("OnEnter", function(self)
-            self.skin:SetVertexColor(1, 1, 1)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(tooltip)
-            GameTooltip:Show()
-        end)
-        bookmark:SetScript("OnLeave", function(self)
-            local shade = self.active and 1 or 0.6
-            self.skin:SetVertexColor(shade, shade, shade)
-            GameTooltip:Hide()
-        end)
-        f.bookmarks[key] = bookmark
-    end
-    -- The leather ends at 664; its generated shadow continues to 690 and falls over the fabric below it.
-    f.bookmarkCover = CreateFrame("Frame", nil, f)
-    f.bookmarkCover:SetPoint("TOPLEFT", 78, -620)
-    f.bookmarkCover:SetSize(268, 70)
-    f.bookmarkCover:SetFrameLevel(f:GetFrameLevel() + 2)
-    f.bookmarkCover:EnableMouse(false)
-    f.bookmarkCover.skin = f.bookmarkCover:CreateTexture(nil, "ARTWORK")
-    f.bookmarkCover.skin:SetAllPoints()
-    f.bookmarkCover.skin:SetTexture(media .. "JournalReferenceBook")
-    f.bookmarkCover.skin:SetTexCoord(78 / 960, 346 / 960, 620 / 720, 690 / 720)
     -- Every other filter lives in one panel, opened on demand; it stays open while you choose.
     local panel = CreateFrame("Frame", nil, f)
     f.filterPanel = panel

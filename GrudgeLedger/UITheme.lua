@@ -315,9 +315,8 @@ end
 local bookAnchor = _G.GrudgeLedgerBookAnchor
 if not bookAnchor then
     bookAnchor = CreateFrame("Frame", "GrudgeLedgerBookAnchor", UIParent)
-    -- ponytail: reserve 24 units below the 720-unit painting for longer ribbons, including their generated shadow.
-    bookAnchor:SetSize(960, 744)
-    bookAnchor:SetPoint("CENTER", UIParent, "CENTER", 0, -12)
+    bookAnchor:SetSize(960, 720)
+    bookAnchor:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     bookAnchor:SetMovable(true)
     bookAnchor:SetClampedToScreen(true)
     bookAnchor:EnableMouse(false)
@@ -375,7 +374,7 @@ local function window(name, title, width, height, isBook)
         fitToScreen(mover)
         if isBook then
             self:ClearAllPoints()
-            self:SetPoint("CENTER", bookAnchor, "CENTER", 0, self.referenceSkin and 0 or 12)
+            self:SetPoint("CENTER", bookAnchor, "CENTER", 0, 0)
         end
     end)
     if UISpecialFrames then table.insert(UISpecialFrames, name) end
@@ -386,7 +385,7 @@ end
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
     local reference = name == "GrudgeLedgerWindow"
-    local f = window(name, title, 960, reference and 744 or 700, true)
+    local f = window(name, title, 960, reference and 720 or 700, true)
     f.referenceSkin = reference
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)

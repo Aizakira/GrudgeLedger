@@ -159,7 +159,7 @@ assert(ledger.openSheet.skin.texture:match("JournalReferenceButton$") and not le
 assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] == 1 and ledger.actions[2].caption.color[1] == 0,
     "the chosen opinion is red with white text, the others rest black on parchment")
 assert(ledger.bookSurface.texture:match("JournalReferenceBook$") and ledger.bookSurface.anchor[1] == "TOPLEFT")
-assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 744, "include the clickable ribbon footer")
+assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 720, "the window is exactly the painted book")
 assert(ledger.bookSurface:GetWidth() == 960 and ledger.bookSurface:GetHeight() == 720, "keep the complete reference book's 4:3 canvas")
 for _, region in ipairs(ledger.children) do
     assert(not region.texture or not region.texture:find("JournalReferenceDrape", 1, true), "the V3 cloth is painted in the book itself")

@@ -18,7 +18,7 @@ local friend = GL.SetReaction(GL.IdentityFromName("Kind", "Example", "Player-9-0
 local record = GL.Get(id)
 GL.ShowLedger(record.key)
 local f = GrudgeLedgerWindow
-assert(f.referenceSkin and f:GetWidth() == 960 and f:GetHeight() == 744, "the window includes the longer ribbon footer")
+assert(f.referenceSkin and f:GetWidth() == 960 and f:GetHeight() == 720, "the window includes the longer ribbon footer")
 assert(f.bookSurface:GetWidth() == 960 and f.bookSurface:GetHeight() == 720, "the book painting preserves the reference aspect ratio")
 assert(f.search.referenceSkin and f.rows[1]:GetWidth() == 255)
 assert(f.rows[1].selection.texture:find("JournalReferenceSelected", 1, true))
@@ -46,33 +46,13 @@ assert(f.viewCycle:GetText() == "Signalés · 0" and not f.rows[1]:IsShown())
 click(f.viewCycle)
 assert(f.viewCycle:GetText() == "Tous · 2")
 
--- Both hanging bookmarks use the existing quick view, including its filter/menu reset.
+-- The hanging bookmarks were removed (owner, 22/11): their two views stay reachable, with the same reset.
+assert(next(f.bookmarks) == nil and not f.bookmarkCover, "no bookmark hangs below the book")
 click(f.openFilters)
-click(f.bookmarks.friend)
+f.ShowView("friend")
 assert(not f.filterPanel:IsShown() and f.viewKey == "friend" and f.rows[1].key == friend.key)
-assert(f.bookmarks.friend.active and not f.bookmarks.debt.active)
-assert(f.bookmarks.friend.skin.texture:match("JournalBookmarkFriendActive$"))
-click(f.bookmarks.debt)
+f.ShowView("debt")
 assert(f.viewKey == "debt" and f.rows[1].key == record.key and not f.rows[2]:IsShown())
-assert(f.bookmarks.debt.active and not f.bookmarks.friend.active)
-assert(f.bookmarks.debt.skin.texture:match("JournalBookmarkDebtActive$"))
-click(f.filters.enemy)
-assert(not f.bookmarks.friend.active and not f.bookmarks.debt.active, "a custom filter must not claim a bookmark is selected")
-for _, bookmark in pairs(f.bookmarks) do
-    assert(not bookmark.caption:IsShown() and bookmark.caption:GetText() ~= "", "the small ribbons use a tooltip, not tiny lettering")
-    local ratio = bookmark:GetWidth() / bookmark:GetHeight()
-    assert(ratio > 0.47 and ratio < 0.51, "preserve the curved fabric proportions from the whole-book study")
-    assert(f.bookmarkCover:GetFrameLevel() > bookmark:GetFrameLevel(), "leather must cover the fabric attachment")
-    assert(-f.bookmarkCover.anchor[3] <= -bookmark.anchor[3], "the rolled fabric root must not peek above the foreground leather")
-    local edgeBottom = 664 -- Physical leather edge; the sampled overlay also includes its translucent shadow.
-    assert(-f.bookmarkCover.anchor[3] + f.bookmarkCover:GetHeight() == 690,
-        "the foreground book sample includes the shadow cast by the leather onto the ribbon")
-    assert(f.bookmarkCover.skin.texCoord[3] == 620 / 720 and f.bookmarkCover.skin.texCoord[4] == 690 / 720)
-    local visible = -bookmark.anchor[3] + bookmark:GetHeight() - edgeBottom
-    assert(-bookmark.anchor[3] < edgeBottom and visible >= 70 and visible <= 80,
-        "the root stays behind the cover while 70 to 80 units of fabric hang below the physical leather edge")
-    assert(-bookmark.anchor[3] + bookmark:GetHeight() <= f:GetHeight(), "the bookmark remains clickable inside the book window")
-end
 
 -- The right page has no tab bar; the summary tells the story.
 GL.ShowLedger(record.key)
