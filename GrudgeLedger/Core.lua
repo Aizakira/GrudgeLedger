@@ -1798,7 +1798,12 @@ function GL.PersonalStatistics(options)
         victims = 0, attackers = 0, initiated = 0, responded = 0, revengeKills = 0,
         initiatedKillsNoGrudge = 0, initiatedKillsGrudge = 0, responseKills = 0, unknownOpeningKills = 0,
         aggressions = 0, events = 0, unknownActorEvents = 0,
-        unlinkedEvents = 0, currentActor = actor, actorName = actorName, scope = scope, topDeaths = {} }
+        unlinkedEvents = 0, currentActor = actor, actorName = actorName, scope = scope, topDeaths = {},
+        -- The shape of your fights, for the archetypes of the Bilan (0.59.1): levels on both sides when
+        -- known, deaths against several attackers, group victories, night fights, helping hands.
+        levelDeaths = 0, higherDeaths = 0, levelKills = 0, lowerKills = 0, higherKills = 0,
+        packDeaths = 0, groupKills = 0, nightFights = 0, assists = 0 }
+    local helped = {}
     local counted, unknown, ranked, rankings = {}, {}, {}, { kill = {}, death = {} }
     local attackers, openings = {}, {}
     for _, row in ipairs(indexedJournal()) do
@@ -1814,6 +1819,12 @@ function GL.PersonalStatistics(options)
                 local field = event.opener == "player" and "initiated" or "responded"
                 stats[field] = stats[field] + 1
                 if event.opener == "opponent" then attackers[record.key] = true end
+            end
+        elseif event.kind == "assist" and not event.voided and event.voidReason ~= "battleground" and within(event, at) and inScope(row.actor, scope, actor) then
+            local id = pvpEventKey(row)
+            if not helped[id] then
+                helped[id] = true
+                stats.assists = stats.assists + 1
             end
         elseif event.kind == "honor" and not event.voided and event.voidReason ~= "battleground" and within(event, at) and inScope(row.actor, scope, actor) then
             sumHonor(stats, event.honor)
@@ -1849,6 +1860,26 @@ function GL.PersonalStatistics(options)
         if field == "kills" then
             local category = GL.KillOpeningCategory(row.record, event)
             stats[category] = stats[category] + 1
+        end
+        local combat = type(event.combat) == "table" and event.combat or {}
+        local mine, theirs = tonumber(combat.playerLevel), tonumber(combat.opponentLevel)
+        if field == "deaths" then
+            if mine and theirs then
+                stats.levelDeaths = stats.levelDeaths + 1
+                if theirs >= mine + 2 then stats.higherDeaths = stats.higherDeaths + 1 end
+            end
+            if (tonumber(combat.opponents) or 1) >= 2 then stats.packDeaths = stats.packDeaths + 1 end
+        elseif field == "kills" then
+            if mine and theirs then
+                stats.levelKills = stats.levelKills + 1
+                if mine >= theirs + 2 then stats.lowerKills = stats.lowerKills + 1 end
+                if theirs >= mine + 2 then stats.higherKills = stats.higherKills + 1 end
+            end
+            if combat.assist then stats.groupKills = stats.groupKills + 1 end
+        end
+        if field ~= "aggressions" and type(event.time) == "number" then
+            local hour = type(date) == "function" and tonumber(date("%H", event.time))
+            if hour and hour < 5 then stats.nightFights = stats.nightFights + 1 end
         end
         if type(id) == "table" then stats.unlinkedEvents = stats.unlinkedEvents + 1 end
     end
