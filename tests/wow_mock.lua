@@ -66,6 +66,7 @@ function methods:Hide() self.shown = false if self.scripts.OnHide then self.scri
 function methods:IsShown() return self.shown end
 function methods:SetShown(shown) if shown then self:Show() else self:Hide() end end
 function methods:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
+function methods:GetParent() return self.parent end
 function methods:SetEnabled(v)
     local changed = self.enabled ~= v
     self.enabled = v

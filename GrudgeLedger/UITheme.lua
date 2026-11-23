@@ -135,12 +135,26 @@ local function updateButtonState(b)
     b.edge:SetColorTexture(unpack(enabled and theme.gold or theme.disabledInk))
 end
 
+-- A book whose whole tree wears the Journal skin (Relations and Guilde, owner 23/11): its pages and their
+-- sub-frames inherit it, not only the controls placed straight on the window.
+local function inReferenceTree(frame)
+    for _ = 1, 16 do
+        if not frame then return false end
+        if frame.referenceTree then return true end
+        frame = frame.GetParent and frame:GetParent()
+    end
+    return false
+end
 local function button(parent, text, x, y, width, callback, selectable, paper)
     local b = CreateFrame("Button", nil, parent)
+    -- In the Relations and Guilde book, a control on a page (not on the window's leather) is a parchment one.
+    if paper == nil and not parent.referenceTree and inReferenceTree(parent) then paper = true end
     b.paper = paper
-    b.referenceSkin = parent.referenceSkin
-    if b.referenceSkin and width <= 40 and (text == "‹" or text == "›") then
+    b.referenceSkin = parent.referenceSkin or inReferenceTree(parent)
+    if b.referenceSkin and (text == "‹" or text == "›") and (width <= 40 or inReferenceTree(parent)) then
         b.arrowTextureName = "JournalReference" .. (paper and "" or "Dark") .. (text == "‹" and "ArrowLeft" or "ArrowRight")
+        -- The painted arrow keeps its shape: a wider slot gets the 32-unit arrow at its centre.
+        if width > 32 then x, width = x + math.floor((width - 32) / 2), 32 end
     end
     b:SetPoint("TOPLEFT", x, y)
     b:SetSize(width, 26)
@@ -392,8 +406,10 @@ end
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
     local reference = name == "GrudgeLedgerWindow"
+    local tree = name == "GrudgeLedgerRelations" or name == "GrudgeLedgerGuild"
     local f = window(name, title, 960, 700, true)
-    f.referenceSkin = reference
+    f.referenceSkin = reference or tree
+    f.referenceTree = tree
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)
     f.closeButton:SetSize(32, 32)
@@ -441,6 +457,13 @@ local function bookWindow(name, title, narrow)
         f.paper:ClearAllPoints()
         f.paper:SetPoint("TOPLEFT", 356, -153)
         f.paper:SetSize(541, 473)
+    elseif tree then
+        -- The Journal's book in its narrow form: same frame, drapes and parchment, divider at 220.
+        f.bookSurface:ClearAllPoints()
+        f.bookSurface:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 10)
+        f.bookSurface:SetSize(960, 720)
+        f.bookSurface:SetTexture(media .. "JournalReferenceSheetBook")
+        f.lining:Hide()
     end
     return f
 end
@@ -449,7 +472,7 @@ end
 -- the line that would overflow it. The arrows at the bottom right and the wheel turn the pages.
 local function textPages(parent, width, height)
     local view = CreateFrame("Frame", nil, parent)
-    view.referenceSkin = parent.referenceSkin
+    view.referenceSkin = parent.referenceSkin or inReferenceTree(parent)
     view:SetSize(width, height)
     view.body = label(view, "", nil, 0, 0, width - 4)
     view.body:SetTextColor(unpack(theme.ink))

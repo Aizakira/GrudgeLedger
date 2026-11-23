@@ -22,6 +22,7 @@ MEDIA = ROOT / "GrudgeLedger" / "Media"
 MANIFEST = MASTERS / "manifest.json"
 ASSETS = {
     "Livre": ("JournalReferenceBook", (2048, 2048)),
+    "LivreEtroit": ("JournalReferenceSheetBook", (2048, 2048)),  # Relations and Guilde (23/11)
     "Onglet": ("JournalReferenceTab", (512, 128)),
     "Onglet-actif": ("JournalReferenceTabActive", (512, 128)),
     "BoutonParchemin": ("JournalReferenceButton", (512, 128)),
@@ -103,6 +104,9 @@ def export(source):
     if images["Livre"].size != (1448, 1086):
         raise ValueError("Livre.png must retain the approved 1448 x 1086 coordinate system")
     boxes["Livre"] = (0, 0, 1448, 1086)
+    if images["LivreEtroit"].size != (1448, 1086):
+        raise ValueError("LivreEtroit.png must share the book's 1448 x 1086 coordinate system")
+    boxes["LivreEtroit"] = (0, 0, 1448, 1086)
     # Faction emblems keep their square canvas: a tall symbol (the Horde) must not be stretched to the square texture.
     for name in ("EmblemeHorde", "EmblemeAlliance"):
         boxes[name] = (0, 0, images[name].width, images[name].height)
