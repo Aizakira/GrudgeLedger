@@ -406,7 +406,7 @@ end
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
     local reference = name == "GrudgeLedgerWindow"
-    local tree = name == "GrudgeLedgerRelations" or name == "GrudgeLedgerGuild"
+    local tree = name == "GrudgeLedgerRelations" or name == "GrudgeLedgerGuild" or name == "GrudgeLedgerBounties"
     local f = window(name, title, 960, 700, true)
     f.referenceSkin = reference or tree
     f.referenceTree = tree
