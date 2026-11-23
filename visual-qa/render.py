@@ -455,21 +455,18 @@ def new_runtime():
 
 def main():
     normal_lua = new_runtime()
-    views=["statistics", "statistics-small", "statistics-readable", "statistics-empty", "guild-rankings", "journal","journal-readable","journal-transparent","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","journal-readable-small-bottom","guilds","note","note-readable","settings","settings-readable","corrections","diagnostic","minimap","minimap-large","alert","alert-after-death","alert-long-guild"]
+    views=["journal","journal-readable","journal-transparent","journal-no-paper","journal-no-book","journal-horde-friends","journal-empty","journal-small","journal-small-bottom","journal-readable-small-bottom","guilds","note","note-readable","settings","settings-readable","corrections","diagnostic","minimap","minimap-large","alert","alert-after-death","alert-long-guild"]
     views += ["note-edit", "note-delete", "honor", "honor-readable", "honor-small", "honor-empty", "honor-year",
               "chronicle", "chronicle-readable", "chronicle-small", "chronicle-empty", "chronicle-notes"]
-    views += ["statistics-encounters", "statistics-recent", "statistics-friends", "statistics-friends-recent",
-              "statistics-group", "statistics-combat", "statistics-horde", "guild-rankings-combat", "statistics-readable-small"]
     views += ["journal-history", "journal-notes", "journal-history-small", "journal-notes-readable-small",
               "settings-alerts", "settings-relations", "settings-shortcuts", "settings-data", "settings-readable-alerts-small",
               "honor-story", "guide"]
-    views += ["journal-largeprint", "journal-history-largeprint-small", "statistics-largeprint",
+    views += ["journal-largeprint", "journal-history-largeprint-small",
               "honor-largeprint-small", "settings-readable-alerts-largeprint-small"]
     views += ["journal-compact", "journal-history-page2", "journal-history-filter", "correction-voided",
               "honor-annual", "honor-annual-copy", "honor-annual-empty", "honor-annual-largeprint-small", "honor-podium",
               "honor-races", "honor-classes", "honor-zones", "honor-subzones", "honor-initiative",
               "honor-initiative-empty", "honor-initiative-largeprint-small", "chronicle-honor", "journal-history-honor",
-              "guild-exceptions", "guild-rankings-largeprint-small",
               "settings-appearance-markers", "settings-data-experimental", "alert-preview", "kill-details", "combat-report", "death-report", "death-export"]
     views += ["bounty-list", "bounty-form", "bounty-target", "bounty-contract", "bounty-history", "dossier-overview", "dossier-facts", "dossier-habits", "dossier-ally", "dossier-combat", "dossier-gear", "dossier-photos", "dossier-stats", "dossier-talents", "dossier-shared", "dossier-relations"]
     # The addon alone: no Armory archive, no studio photo. The state every user starts from.

@@ -1799,9 +1799,9 @@ end
 local function statisticsCopy(stats)
     local result = {}
     for key, value in pairs(stats) do
-        if key == "topDeaths" then
+        if key == "topDeaths" or key == "opponents" then
             result[key] = {}
-            for i, row in ipairs(value) do result[key][i] = { record = row.record, value = row.value } end
+            for i, row in ipairs(value) do result[key][i] = { record = row.record, value = row.value, deaths = row.deaths, kills = row.kills } end
         elseif key == "mostKilled" or key == "mostDeaths" then result[key] = { record = value.record, value = value.value }
         else result[key] = value end
     end
@@ -1924,6 +1924,26 @@ function GL.PersonalStatistics(options)
             end
         end
     end
+    -- Every opponent of the selection, for the detailed tables (23/11): your deaths first, then your
+    -- victories, the name last so that the order never moves between two openings.
+    local opponents, byKey = {}, {}
+    for kind, records in pairs(rankings) do
+        for recordKey, row in pairs(records) do
+            local line = byKey[recordKey]
+            if not line then
+                line = { record = row.record, deaths = 0, kills = 0 }
+                byKey[recordKey], opponents[#opponents + 1] = line, line
+            end
+            line[kind == "kill" and "kills" or "deaths"] = row.value
+        end
+    end
+    for _, line in ipairs(opponents) do line.value = line.deaths end
+    table.sort(opponents, function(a, b)
+        if a.deaths ~= b.deaths then return a.deaths > b.deaths end
+        if a.kills ~= b.kills then return a.kills > b.kills end
+        return tostring(a.record.key) < tostring(b.record.key)
+    end)
+    stats.opponents = opponents
     -- One bounded result cache; changing a filter replaces it. Rolling windows
     -- expire each server second, so events at the boundary never linger in totals.
     personalStatistics = { key = key, value = stats, at = now, nextAt = nextAt }

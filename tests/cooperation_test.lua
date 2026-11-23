@@ -91,9 +91,11 @@ area="none" fire("PLAYER_ENTERING_WORLD") now = now + 60 fire("PLAYER_LOGOUT")
 assert(session.seconds == 240 and aqua.groupCount == 1 and GL.Relation(aqua) == "friend")
 local ranked = GL.PlayerStatistics("friendsOnline")
 assert(#ranked == 1 and ranked[1].record == aqua and ranked[1].value == 240)
+-- The rankings are a page of the Relations book: Amis, then the fifth choice (time online).
 GL.ShowStatistics("players")
-local stats = GrudgeLedgerStatistics
-click(stats.sections[2]) click(stats.filters.players[2].choices[5])
+local stats = GrudgeLedgerRelations.host.pages.rankings
+assert(GrudgeLedgerRelations:IsShown() and GrudgeLedgerRelations.page == "rankings")
+click(stats.tabs[2]) click(stats.chips[5])
 assert(stats.rows[1].item.record == aqua and stats.rows[1].value:GetText() == "4 min")
 GL.ShowLedger(aqua.key) click(book.detailTabs.history) click(book.historyPage.options.group)
 assert(book.historyPage.rows[1].title:GetText():find("4 min en ligne",1,true))

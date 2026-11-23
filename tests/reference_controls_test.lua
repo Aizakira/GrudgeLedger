@@ -115,9 +115,12 @@ for _, width in ipairs({ 32, 74, 123, 185 }) do
         assert(piece:GetWidth() == 12 and piece.texture:match("JournalReferenceButtonRed$"))
     end
 end
-local legacy = UI.button(UIParent, "Legacy", 0, 0, 100, nil, true, true)
-UI.selectButton(legacy, true)
-assert(legacy.skin.texture:match("JournalButtons$") and legacy.selection:IsShown() and legacy.caption.color[1] > 0.9,
-    "other pages retain their legacy selection and colors")
+-- Owner, 23/11: no window keeps the old buttons, the small dialogs included.
+local dialog = UI.button(UIParent, "Dialogue", 0, 0, 100, nil, true, true)
+UI.selectButton(dialog, true)
+assert(dialog.referenceSkin and dialog.skin.texture:match("JournalReferenceButtonRed$") and dialog.caption.color[1] > 0.9,
+    "a dialog's chosen button is the red reference one")
+local pager = UI.button(UIParent, "›", 0, 0, 30)
+assert(pager.arrowTextureName == "JournalReferenceDarkArrowRight", "dialog pagers get the painted arrows")
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
 print("PASS reference controls: hover, press, leave, disable, hide, selections, directional arrows and fixed bevel caps")

@@ -3,7 +3,7 @@ local GL = GrudgeLedger
 local L = GL.L
 local ledger, noteWindow, settingsWindow, minimapButton, guildWindow
 local correctionWindow, diagnosticWindow
-local statisticsWindow, journalWindow, guideWindow
+local statisticsWindow, journalWindow, guideWindow, honorBook
 local showSettings, inspectEvent
 local selectedKey, filter, offset = nil, "all", 0
 local factionFilter = "all"
@@ -379,7 +379,10 @@ end
 
 -- The animated head is a child frame: it would cover the row's own textures. The gold frame,
 -- the class icon and the level medallion live on an overlay kept above it (owner report, 0.30.0).
+-- Every portrait wears the same frame and faction backdrop as the Journal's list, in the books and
+-- in the dialogs (owner request, 23/11).
 local function portraitOverlay(row)
+    row.referenceSkin = true
     local overlay = row.portraitOverlay
     if not overlay then
         overlay = CreateFrame("Frame", nil, row)
@@ -388,11 +391,12 @@ local function portraitOverlay(row)
         local anchor = row.faceAnchor or row.raceIcon
         if row.portraitRim then
             GL.Safe(row.portraitRim.SetParent, row.portraitRim, overlay)
+            row.portraitRim:SetTexture(media .. "JournalReferencePortrait")
         else
             row.portraitRim = overlay:CreateTexture(nil, "ARTWORK")
             row.portraitRim:SetPoint("TOPLEFT", anchor, "TOPLEFT", -3, 3)
             row.portraitRim:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 3, -3)
-            row.portraitRim:SetTexture(media .. (row.referenceSkin and "JournalReferencePortrait" or "PortraitBezel"))
+            row.portraitRim:SetTexture(media .. "JournalReferencePortrait")
         end
         GL.Safe(row.classIcon.SetParent, row.classIcon, overlay)
     end
@@ -450,7 +454,7 @@ portraitFrames:SetScript("OnEvent", function(self, event, unit)
         observeFace("focus")
     end
     if not ((ledger and ledger:IsShown()) or (statisticsWindow and statisticsWindow:IsShown())
-        or (journalWindow and journalWindow:IsShown()) or (correctionWindow and correctionWindow:IsShown())
+        or (journalWindow and journalWindow:IsVisible()) or (correctionWindow and correctionWindow:IsShown())
         or (GrudgeLedgerPlayerDossier and GrudgeLedgerPlayerDossier:IsShown()) or (GrudgeLedgerBounties and GrudgeLedgerBounties:IsShown())) then return end
     if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" or event == "PORTRAITS_UPDATED" then redrawPortraits = true end
     self:SetScript("OnUpdate", refreshPortraits)
@@ -573,7 +577,7 @@ local activeBook
 local function showBook(frame)
     if activeBook and activeBook ~= frame then activeBook:Hide() end
     activeBook = frame
-    for _, page in pairs({ ledger, statisticsWindow, journalWindow, settingsWindow }) do
+    for _, page in pairs({ ledger, statisticsWindow, honorBook, settingsWindow }) do
         if page ~= frame then page:Hide() end
     end
     if guideWindow then guideWindow:Hide() end
@@ -1113,6 +1117,9 @@ function GL.ShowRelations(page)
 end
 function GL.ShowStatistics(mode, category)
     if not GL.db then return end
+    -- The rankings live in the Relations book (/gl stats, /gl guildes). This old wide window only
+    -- serves when Relations.lua is not loaded, as in the tests that load the addon without it.
+    if GL.RelationsPages then return GL.RelationsPages.OpenRankings(mode == "guilds") end
     mode = mode or (statisticsWindow and statisticsWindow.mode)
     mode = mode == "guilds" and "guilds" or "players"
     if not statisticsChoices[mode][category] then category = nil end
@@ -1301,172 +1308,243 @@ local function nextChoice(choices, key)
     for i, entry in ipairs(choices) do if entry[1] == key then return choices[i % #choices + 1][1] end end
     return choices[1][1]
 end
+-- The detailed tables (owner, 23/11; audit briefs/audit-ui-tableaux-detailles.md): a page of the
+-- Relations book, after the Bilan. Every filter sits at the top of the sheet, one kind of list and one
+-- pager for every view, the figures of the selection in the key figures of the left column.
+-- Sheet coordinates: 664 x 510 from the host's top left corner (window 240, 152); nothing below 490.
+-- honorBook: the narrow book that carries the page when Relations.lua is not loaded (tests).
+local HONOR_ROWS, ZONE_ROWS, CHRONICLE_ROWS = 6, 5, 5
+local honorModes = {
+    { "summary", L("Vue d’ensemble"), L("Votre tableau d’honneur") },
+    { "history", L("Chronique"), L("La chronique de vos rencontres") },
+    { "year", L("Mon année"), L("Une année de rencontres") },
+    { "story", L("Récit"), L("Votre récit de campagne") },
+}
+local honorDimensions = { { "opponents", L("Adversaires") }, { "race", L("Par race") }, { "class", L("Par classe") },
+    { "zone", L("Par zone") }, { "initiative", L("Initiative") } }
+local function sheetText(parent, x, y, width, size, bold, color)
+    local region = label(parent, "", nil, x, -y, width)
+    journalFont(region, bold and "GameFontNormalLarge" or "GameFontHighlight", size)
+    region:SetTextColor(unpack(color or theme.ink))
+    GL.Safe(region.SetWordWrap, region, false)
+    return region
+end
+-- A value that never leaves its box in any language: the font shrinks down to the smallest size.
+local function fitText(region, text, width, biggest, smallest, bold)
+    region:SetText(text or "")
+    local size = biggest
+    journalFont(region, bold and "GameFontNormalLarge" or "GameFontHighlight", size)
+    while size > smallest and (GL.Safe(region.GetStringWidth, region) or 0) > width do
+        size = size - 1
+        journalFont(region, bold and "GameFontNormalLarge" or "GameFontHighlight", size)
+    end
+end
+local function sheetRule(parent)
+    local rule = parent:CreateTexture(nil, "BORDER")
+    rule:SetPoint("BOTTOMLEFT") rule:SetPoint("BOTTOMRIGHT") rule:SetHeight(1)
+    rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+    return rule
+end
+local function sheetFace(parent, x, y, size)
+    local face = CreateFrame("Frame", nil, parent)
+    face:SetPoint("TOPLEFT", x, -y) face:SetSize(size, size)
+    face.raceIcon = face:CreateTexture(nil, "ARTWORK") face.raceIcon:SetAllPoints()
+    face.classIcon = face:CreateTexture(nil, "OVERLAY") face.classIcon:SetSize(16, 16) face.classIcon:SetPoint("BOTTOMRIGHT")
+    return face
+end
+local function hoverHelp(control, title, text)
+    control:HookScript("OnEnter", function(self)
+        local body = type(text) == "function" and text() or text
+        if not GameTooltip or not body or body == "" then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine(title)
+        GameTooltip:AddLine(body, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    control:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+end
+-- The periods turn on one button: all, 7 days, 30 days, then each year of the journal. "Mon année"
+-- only turns through the years.
+local function periodChoices(annual)
+    local list = {}
+    if not annual then
+        for i = 1, 3 do list[#list + 1] = { journalPeriods[i][1], nil, journalPeriods[i][2] } end
+    end
+    for _, year in ipairs(GL.JournalYears()) do list[#list + 1] = { "year", year, L("Année : ") .. year } end
+    if #list == 0 then list[1] = { "year", tonumber(date("%Y")), L("Année : ") .. date("%Y") } end
+    return list
+end
+local function periodIndex(list, period, year)
+    for i, entry in ipairs(list) do
+        if entry[1] == period and (period ~= "year" or entry[2] == year) then return i end
+    end
+end
+local function helpText(f)
+    if f.mode == "history" then return L("Ouvrez les détails d’un événement. Validez la recherche avec Entrée.") end
+    if f.mode == "year" then return L("Cette carte résume les faits PvP conservés pour l’année et les personnages choisis.") end
+    if f.mode == "story" then return L("Choisissez une période et les personnages dont vous souhaitez relire les combats.") end
+    return f.dimension == "opponents" and L("Vos morts et vos victoires, adversaire par adversaire. Cliquez sur un nom pour ouvrir sa fiche.")
+        or f.dimension == "initiative" and L("La rancune est celle du journal avant le combat. Une revanche est une victoire que vous engagez après une mort contre ce joueur avec le même personnage.")
+        or f.dimension == "zone" and L("Cliquez sur une zone pour lire ses sous-zones. Le temps mesure la présence en monde ouvert depuis l’activation, hors absences et instances.")
+        or L("La race et la classe sont celles relevées au combat. « Inconnue » signifie que l'information manque.")
+end
+
 local function refreshJournal()
     local f = journalWindow
-    if not f or not f:IsShown() then return end
+    if not f or not f:IsVisible() then return end
     local history, annual = f.mode == "history", f.mode == "year"
+    local choices = periodChoices(annual)
+    if annual and f.period ~= "year" then f.period = "year" end
     f.year = tonumber(f.year) or GL.JournalYears()[1] or tonumber(date("%Y"))
-    local options = { period = annual and "year" or f.period, year = f.year, scope = f.scope, kind = f.kind, query = f.query or "" }
-    local period = choiceLabel(journalPeriods, options.period) .. (options.period == "year" and f.year and (" " .. f.year) or "")
-    local scope = choiceLabel(journalScopes, f.scope)
-    f.scopeButton:SetText(scope) f.kindButton:SetText(choiceLabel(journalKinds, f.kind))
-    f.yearButton:SetText(f.year and (L("Année : ") .. f.year) or L("Année inconnue"))
-    f.yearButton:SetEnabled(options.period == "year" and f.year ~= nil)
-    moveTo(f.yearButton, 36, annual and 341 or 416)
-    for _, control in ipairs({ f.kindButton, f.search, f.searchButton, f.searchLabel, f.reset }) do
-        if history then control:Show() else control:Hide() end
+    local options = { period = f.period, year = f.year, scope = f.scope, kind = f.kind, query = f.query or "" }
+    -- A year chosen elsewhere (the Bilan, an older card) may hold no fact yet: it is named all the same.
+    local entry = f.period == "year" and { "year", f.year, f.year and (L("Année : ") .. f.year) or L("Année inconnue") }
+        or choices[periodIndex(choices, f.period, f.year) or 1]
+    f.periodButton:SetText(entry[3]) f.scopeButton:SetText(choiceLabel(journalScopes, f.scope))
+    fitText(f.periodButton.caption, entry[3], 122, 12, 9)
+    fitText(f.scopeButton.caption, choiceLabel(journalScopes, f.scope), 122, 12, 9)
+    for _, mode in ipairs(honorModes) do
+        UI.selectButton(f.tabs[mode[1]], mode[1] == f.mode)
+        if mode[1] == f.mode then f.heading:SetText(mode[3]) end
     end
-    for key, control in pairs(f.tabs) do UI.selectButton(control, key == f.mode) end
-    for key, control in pairs(f.periodButtons) do UI.selectButton(control, key == options.period) showIf(control, not annual) end
-    for key, page in pairs({ summary = f.summary, history = f.history, story = f.story, year = f.annual }) do
-        if key == f.mode then page:Show() else page:Hide() end
+    for key, view in pairs(f.views) do showIf(view, key == f.mode) end
+    local notices = {}
+    local stats = GL.PersonalStatistics({ period = options.period, year = options.year, scope = options.scope, kind = "pvp", query = "" })
+    f.stats = stats
+    -- The key figures of the left column: the selection's victories, deaths, aggressions and honour.
+    local function chronicle(kind, scope)
+        return function()
+            f.mode, f.kind, f.query, f.offset = "history", kind, "", 0
+            if scope then f.scope = scope end
+            f.search:SetText("") GL.ShowJournal("history")
+        end
     end
-    f.heading:SetText(({ summary = L("Votre tableau d’honneur"), history = L("La chronique de vos rencontres"), story = L("Votre récit de campagne"), year = L("Une année de rencontres") })[f.mode])
-    f.subtitle:SetText(scope .. " · " .. period)
-    showIf(f.copyAnnual, annual)
-    showIf(f.exportDeaths, f.mode == "summary")
-    if not annual then f.cardCopy:Hide() end
-    local stats
-    if not history then
-        options.query, options.kind = "", "pvp"
-        stats = GL.PersonalStatistics(options)
-    end
+    f.tallyLines = {
+        { L("Victoires"), stats.kills, chronicle("pvp") }, { L("Morts"), stats.deaths, chronicle("pvp") },
+        { L("Agressions"), stats.aggressions, chronicle("pvp") }, { L("Honneur reçu"), stats.honor or 0, chronicle("honor") },
+        { L("Faits de combat"), stats.events or 0, chronicle("all") },
+    }
+    if (stats.unknownActorEvents or 0) > 0 then f.tallyLines[6] = { L("Sans auteur connu"), stats.unknownActorEvents, chronicle("all", "legacy") } end
+    if f.mode == "summary" and stats.honorAwards > 0 then notices[#notices + 1] = honorDetail(stats) end
     if f.mode == "summary" then
-        f.cardName:SetText(f.scope == "character" and plain(stats.actorName or L("Votre personnage"))
-            or f.scope == "legacy" and L("Archives sans auteur") or L("Les personnages de ce compte"))
-        f.honor:SetText(honorTotal(stats))
-        f.honor:SetEnabled(stats.honorAwards > 0)
-        for key, metric in pairs(f.metrics) do
-            local value = stats[key] or 0
-            metric.value:SetText(tostring(value))
-        end
-        for key, control in pairs(f.recaps) do
-            local item = stats[key]
-            control.record = item and item.record
-            local deaths = key == "mostDeaths"
-            control.name:SetText(item and plain(item.record.fullName)
-                or (deaths and L("Aucune mort") or L("Aucune victoire")))
-            moveTo(control.name, item and 54 or 10, item and 27 or 36)
-            control.name:SetWidth(item and 207 or 250)
-            control.detail:SetText(item and counted(item.value, deaths and "mort" or "victoire",
-                deaths and "morts" or "victoires") or "")
-            if item then identityIcons(control, item.record) else portraitRows[control] = nil end
-            showIf(control.raceIcon, item ~= nil) showIf(control.classIcon, item ~= nil)
-            control:SetEnabled(item ~= nil)
-        end
-        local unknown = stats.unknownActorEvents or 0
-        local coverage = counted(stats.events or 0, "fait de combat", "faits de combat")
-        if unknown > 0 then
-            coverage = coverage .. " · " .. unknown .. L(" sans auteur connu") .. (f.scope == "character" and L(" (hors bilan)") or "")
-        end
-        f.coverage:SetText(coverage)
-        local podium = f.dimension == "opponents"
-        local initiative = f.dimension == "initiative"
-        local geographic = f.dimension == "zone"
+        for _, dimension in ipairs(honorDimensions) do UI.selectButton(f.chips[dimension[1]], dimension[1] == f.dimension) end
+        local initiative, geographic = f.dimension == "initiative", f.dimension == "zone"
         local zoom = geographic and f.zoneKey
-        options.zone = zoom
-        local breakdown = not podium and not initiative and GL.PvPBreakdown(options, zoom and "subzone" or f.dimension) or {}
-        local exposure, partial = {}
-        if geographic and not zoom and GL.ZoneTimes then exposure, partial = GL.ZoneTimes(options) end
-        if geographic and not zoom then
-            local known, peaceful = {}, {}
-            for _, item in ipairs(breakdown) do known[item.key] = true end
-            for place, seconds in pairs(exposure) do
-                if not known[place] then peaceful[#peaceful + 1] = {key = place, label = place, kills = 0,
-                    deaths = 0, correctedKills = 0, correctedDeaths = 0, seconds = seconds} end
-            end
-            table.sort(peaceful, function(a, b) return a.seconds > b.seconds or a.seconds == b.seconds and a.key < b.key end)
-            for _, item in ipairs(peaceful) do breakdown[#breakdown + 1] = item end
-        end
-        local showTime = geographic and not zoom and (GL.Settings().zoneTime or next(exposure) ~= nil)
-        showIf(f.zoneBack, zoom) showIf(f.breakdownTime, showTime)
-        showIf(f.zoneTracking, geographic and GL.ZoneTimes ~= nil)
-        f.zoneTracking:SetText(GL.Settings().zoneTime and L("Suspendre le suivi du temps") or L("Mesurer le temps par zone"))
-        f.zoneBack:SetText(L("‹ Toutes les zones"))
-        f.breakdownLabel:SetText(zoom and plain(f.zoneLabel) or geographic and L("Zone · ouvrir les lieux") or L("Combats"))
-        moveTo(f.breakdownLabel, zoom and 484 or 356, 451)
-        f.breakdownLabel:SetWidth(zoom and 150 or showTime and 176 or 270)
-        showIf(f.podium, podium) showIf(f.initiative, initiative) showIf(f.breakdown, not podium and not initiative)
+        showIf(f.initiative, initiative) showIf(f.table, not initiative)
         if initiative then
             local ratio = "—"
             if stats.attackers > 0 then
                 local decimal = DECIMAL_SEPERATOR or (frenchNumbers and "," or ".")
                 ratio = ("%.2f"):format(stats.victims / stats.attackers):gsub("%.", decimal)
             end
-            for key, value in pairs(f.initiative.values) do
-                value:SetText(key == "ratio" and ratio or tostring(stats[key]))
-            end
+            for key, value in pairs(f.initiative.values) do value:SetText(key == "ratio" and ratio or tostring(stats[key])) end
             local openings = stats.initiated + stats.responded
             if openings > 0 then
                 local share = math.floor(100 * stats.initiated / openings + 0.5)
                 f.initiative.values.initiated:SetText(L("%d · %d %%"):format(stats.initiated, share))
                 f.initiative.values.responded:SetText(L("%d · %d %%"):format(stats.responded, 100 - share))
             end
-        end
-        if podium then
-            for i, control in ipairs(f.podium.rows) do
-                local item = stats.topDeaths[i]
-                control.record = item and item.record
-                showIf(control, item ~= nil)
+        else
+            local opponents = f.dimension == "opponents"
+            options.zone = zoom
+            local lines = opponents and (stats.opponents or {}) or GL.PvPBreakdown(options, zoom and "subzone" or f.dimension) or {}
+            local exposure, partial = {}, nil
+            if geographic and not zoom and GL.ZoneTimes then exposure, partial = GL.ZoneTimes(options) end
+            if geographic and not zoom then
+                local known, peaceful = {}, {}
+                for _, item in ipairs(lines) do known[item.key] = true end
+                for place, seconds in pairs(exposure) do
+                    if not known[place] then peaceful[#peaceful + 1] = { key = place, label = place, kills = 0, deaths = 0,
+                        correctedKills = 0, correctedDeaths = 0, seconds = seconds } end
+                end
+                table.sort(peaceful, function(a, b) return a.seconds > b.seconds or a.seconds == b.seconds and a.key < b.key end)
+                for _, item in ipairs(peaceful) do lines[#lines + 1] = item end
+            end
+            local showTime = geographic and not zoom and (GL.Settings().zoneTime or next(exposure) ~= nil)
+            local perPage = geographic and not zoom and ZONE_ROWS or HONOR_ROWS
+            f.breakdownPerPage = perPage
+            f.breakdownOffset = math.min(f.breakdownOffset, math.max(0, math.floor((#lines - 1) / perPage) * perPage))
+            local corrected = 0
+            for _, item in ipairs(lines) do corrected = corrected + (item.correctedKills or 0) + (item.correctedDeaths or 0) end
+            if corrected > 0 then notices[#notices + 1] = counted(corrected, "rapport annulé", "rapports annulés") .. L(", hors totaux") end
+            if showTime and partial then notices[#notices + 1] = L("Durées minimales · archives de présence partielles") end
+            showIf(f.zoneBack, zoom) showIf(f.zoneTracking, geographic and not zoom and GL.ZoneTimes ~= nil)
+            f.zoneTracking:SetText(GL.Settings().zoneTime and L("Suspendre le suivi du temps") or L("Mesurer le temps par zone"))
+            fitText(f.zoneTracking.caption, f.zoneTracking:GetText(), 226, 12, 9)
+            f.columnName:SetText(zoom and plain(f.zoneLabel) or opponents and L("Adversaire")
+                or f.dimension == "race" and L("Race") or f.dimension == "class" and L("Classe") or L("Zone · ouvrir les lieux"))
+            moveTo(f.columnName, zoom and 160 or 4, 154)
+            showIf(f.columnTime, showTime)
+            f.columnDeaths:SetText(L("Morts"))
+            for i, row in ipairs(f.breakdownRows) do
+                local item = i <= perPage and lines[f.breakdownOffset + i]
+                row.item, row.zone = item or nil, nil
                 if item then
-                    control.name:SetText(i .. ". " .. plain(item.record.fullName))
-                    control.bar:SetWidth(160 * item.value / stats.topDeaths[1].value)
-                    control.count:SetText(tostring(item.value))
-                    identityIcons(control, item.record)
+                    row.rank:SetText(tostring(f.breakdownOffset + i))
+                    if opponents then
+                        local record = item.record
+                        row.face:Show()
+                        GL.PaintBookPortrait(row.face, record)
+                        moveTo(row.name, 70, 4)
+                        fitText(row.name, plain(record.fullName), 300, 14, 10, true)
+                        row.name:SetTextColor(unpack(inkColors[GL.Relation(record)] or theme.ink))
+                        local faction, _, class = GL.IdentityLabels(record)
+                        local meta = { (plain(faction)), (plain(class)) }
+                        if record.guild then meta[#meta + 1] = plain(record.guild) end
+                        fitText(row.meta, table.concat(meta, " · "), 400, 11, 9)
+                        row.meta:Show()
+                        row.kills:SetText(tostring(item.kills))
+                    else
+                        row.face:Hide()
+                        row.meta:Hide()
+                        if geographic and not zoom and item.key ~= "mixed" and item.key ~= "unknown" then row.zone = item end
+                        local text = item.label
+                        if item.key == "unknown" or item.key == "mixed" then text = L(text)
+                        elseif f.dimension == "race" then text = raceLabel(item.key, text, item.raceID)
+                        elseif f.dimension == "class" then text = classLabel(item.key, text) end
+                        moveTo(row.name, 30, 12)
+                        fitText(row.name, plain(text), showTime and 240 or 360, 14, 10, true)
+                        row.name:SetTextColor(unpack(theme.ink))
+                        row.kills:SetText(tostring(item.kills))
+                    end
+                    showIf(row.time, showTime)
+                    if showTime then row.time:SetText(exposure[item.key] and groupDurationText(exposure[item.key]) or "—") end
+                    row.deaths:SetText(tostring(item.deaths))
+                    -- A death reads in red; no death stays quiet.
+                    row.deaths:SetTextColor(unpack(item.deaths > 0 and inkColors.enemy or theme.inkMuted))
+                    row:EnableMouse(opponents or row.zone ~= nil)
+                    row:Show()
+                else
+                    row:Hide()
                 end
             end
-            f.podium.empty:SetText(#stats.topDeaths == 0 and L("Aucun adversaire sur cette période.") or "")
+            f.tableEmpty:SetText(#lines == 0 and (opponents and L("Aucun adversaire sur cette période.")
+                or zoom and L("Aucun combat enregistré dans cette zone pour cette sélection.")
+                or L("Aucune victoire ni mort enregistrée pour cette sélection.")) or "")
+            f.listTotal = #lines
         end
-        f.breakdownOffset = math.min(f.breakdownOffset, math.max(0, math.floor((#breakdown - 1) / #f.breakdownRows) * #f.breakdownRows))
-        local corrected = 0
-        for _, item in ipairs(breakdown) do corrected = corrected + item.correctedKills + item.correctedDeaths end
-        for i, row in ipairs(f.breakdownRows) do
-            local item = breakdown[f.breakdownOffset + i]
-            if item then
-                row.zone = geographic and not zoom and item.key ~= "mixed" and item.key ~= "unknown" and item or nil
-                row:EnableMouse(row.zone ~= nil)
-                local text = item.label
-                if item.key == "unknown" or item.key == "mixed" then text = L(text)
-                elseif f.dimension == "race" then text = raceLabel(item.key, text, item.raceID)
-                elseif f.dimension == "class" then text = classLabel(item.key, text) end
-                row.name:SetText(plain(text))
-                row.name:SetWidth(showTime and 177 or 270)
-                local seconds = exposure[item.key]
-                showIf(row.time, showTime)
-                if showTime then
-                    row.time:SetText(seconds and groupDurationText(seconds) or "—")
-                end
-                row.kills:SetText(tostring(item.kills))
-                row.deaths:SetText(tostring(item.deaths))
-                row:Show()
-            else row:Hide() end
-        end
-        for key, control in pairs(f.dimensionButtons) do
-            UI.selectButton(control, key == f.dimension)
-        end
-        f.breakdownEmpty:SetText(#breakdown == 0 and (zoom and L("Aucun combat enregistré dans cette zone pour cette sélection.") or L("Aucune victoire ni mort enregistrée pour cette sélection.")) or "")
-        local notices = {}
-        if corrected > 0 then notices[#notices + 1] = counted(corrected, "rapport annulé", "rapports annulés") .. L(", hors totaux") end
-        if showTime and partial then notices[#notices + 1] = L("Durées minimales · archives de présence partielles") end
-        f.breakdownInfo:SetText(table.concat(notices, "\n"))
-        f.breakdownPrevious:SetEnabled(f.breakdownOffset > 0)
-        f.breakdownNext:SetEnabled(f.breakdownOffset + #f.breakdownRows < #breakdown)
     elseif annual then
         local card = f.annual
         card.name:SetText(f.scope == "character" and plain(stats.actorName or L("Votre personnage")) or f.scope == "legacy" and L("Archives sans auteur") or L("Votre compte"))
         card.period:SetText(f.year and (L("Votre campagne de ") .. f.year) or L("Année inconnue"))
-        for key, metric in pairs(card.metrics) do metric:SetText(tostring(stats[key])) end
+        for key, metric in pairs(card.metrics) do metric:SetText(tostring(key == "honor" and (stats.honor or 0) or stats[key])) end
         for key, recap in pairs(card.recaps) do
             local item = stats[key]
             recap.record = item and item.record
-            recap.name:SetText(item and plain(item.record.fullName) or L("Aucun adversaire"))
+            if item then
+                recap.face:Show() GL.PaintBookPortrait(recap.face, item.record)
+                fitText(recap.name, plain(item.record.fullName), 400, 14, 10, true)
+                recap.name:SetTextColor(unpack(inkColors[GL.Relation(item.record)] or theme.ink))
+            else
+                recap.face:Hide()
+                recap.name:SetText(L("Aucun adversaire")) recap.name:SetTextColor(unpack(theme.inkMuted))
+            end
             recap.score:SetText(item and counted(item.value, key == "mostDeaths" and "mort" or "victoire") or "—")
-            if item then identityIcons(recap, item.record) end
-            showIf(recap.raceIcon, item ~= nil) showIf(recap.classIcon, item ~= nil) recap:SetEnabled(item ~= nil)
+            recap:EnableMouse(item ~= nil)
         end
-        card.honor:SetText(honorTotal(stats))
         card.coverage:SetText((stats.events > 0 or stats.honorAwards > 0) and counted(stats.events, "fait de combat", "faits de combat") .. L(" · Hors champs de bataille et arènes.") or L("Aucun fait PvP conservé pour cette année et cette sélection."))
-        local text = table.concat({ "Grudge Ledger · " .. period .. " · " .. scope,
+        local period = choiceLabel(journalPeriods, "year") .. " " .. tostring(f.year or "?")
+        local text = table.concat({ "Grudge Ledger · " .. period .. " · " .. choiceLabel(journalScopes, f.scope),
             L("Bilan : ") .. counted(stats.kills, "victoire") .. ", " .. counted(stats.deaths, "mort") .. ", " .. counted(stats.aggressions, "agression") .. ".",
             honorTotal(stats) }, "\n")
         if text ~= f.annualText then f.cardCopy:Hide() end
@@ -1487,7 +1565,11 @@ local function refreshJournal()
         f.storyPages:SetText(table.concat(story, "\n"), true)
     else
         local events = GL.JournalEvents(options)
-        f.offset = math.min(f.offset, math.max(0, math.floor((#events - 1) / #f.rows) * #f.rows))
+        f.kindButton:SetText(choiceLabel(journalKinds, f.kind) .. " · " .. #events)
+        fitText(f.kindButton.caption, f.kindButton:GetText(), 228, 12, 9)
+        UI.selectButton(f.kindButton, f.kind ~= "all")
+        showIf(f.reset, f.kind ~= "all" or (f.query or "") ~= "")
+        f.offset = math.min(f.offset, math.max(0, math.floor((#events - 1) / CHRONICLE_ROWS) * CHRONICLE_ROWS))
         for i, row in ipairs(f.rows) do
             local item = events[f.offset + i] row.item = item
             if item then
@@ -1497,272 +1579,270 @@ local function refreshJournal()
                 if event.voided then title = title .. L(" — exclu des compteurs") end
                 local place = event.subzone or event.zone
                 local author = not event.actorGUID and L(" · auteur inconnu") or f.scope == "all" and (" · " .. plain(event.actorName or L("Autre personnage"))) or ""
-                if record then identityIcons(row, record) else portraitRows[row] = nil end
-                showIf(row.raceIcon, record ~= nil) showIf(row.classIcon, record ~= nil)
+                if record then row.face:Show() GL.PaintBookPortrait(row.face, record) else row.face:Hide() end
                 local hasTime = type(event.time) == "number" and event.time > 0
-                row.name:SetText((hasTime and date("%H:%M", event.time) .. "  ·  " or "") .. (record and plain(record.fullName) or L("Adversaire non identifié")))
-                row.action:SetText(plain(title):gsub("[\r\n]+", " "))
-                row.meta:SetText((hasTime and date("%d/%m/%Y", event.time) or L("Date inconnue")) .. (place and (" · " .. plain(place)) or "") .. author)
-                row.context:SetText(event.kind == "trade" and plain((eventEvidence(event) or ""):gsub("\n", " · ")) or combatDetails(event, true) or event.questTitle and L("Quête suivie · ") .. plain(event.questTitle)
-                    or event.guild and L("Guilde lors du combat · ") .. plain(event.guild) or "")
+                fitText(row.name, (hasTime and date("%H:%M", event.time) .. "  ·  " or "") .. (record and plain(record.fullName) or L("Adversaire non identifié")), 396, 14, 10, true)
+                row.name:SetTextColor(unpack(record and inkColors[GL.Relation(record)] or theme.ink))
+                row.when:SetText(hasTime and date("%d/%m/%Y", event.time) or L("Date inconnue"))
+                local context = event.kind == "trade" and plain((eventEvidence(event) or ""):gsub("\n", " · ")) or combatDetails(event, true)
+                    or event.questTitle and L("Quête suivie · ") .. plain(event.questTitle) or event.guild and L("Guilde lors du combat · ") .. plain(event.guild) or ""
+                local second = plain(title):gsub("[\r\n]+", " ")
+                local tail = (place and (" · " .. plain(place)) or "") .. (context ~= "" and (" · " .. context) or "") .. author
+                fitText(row.action, second .. "|cff6b5038" .. tail .. "|r", 526, 12, 10)
                 row.stripe:SetColorTexture(unpack(inkColors[GL.Relation(record)] or inkColors.neutral)) row:Show()
             else row:Hide() end
         end
         f.empty:SetText(#events == 0 and L("Aucune rencontre dans cette sélection.\nÉlargissez la période ou les filtres.") or "")
-        f.total:SetText(#events == 0 and L("Aucun événement") or (f.offset + 1) .. "–" .. math.min(f.offset + #f.rows, #events) .. " / " .. #events)
-        f.previous:SetEnabled(f.offset > 0) f.next:SetEnabled(f.offset + #f.rows < #events)
+        f.listTotal = #events
     end
-    f.help:ClearAllPoints() f.help:SetPoint("TOPLEFT", 36, history and -608 or annual and -396 or -465) f.help:SetHeight(history and 46 or annual and 60 or 180)
-    local help = history and L("Ouvrez les détails d’un événement. Validez la recherche avec Entrée ou OK.")
-        or annual and L("Cette carte résume les faits PvP conservés pour l’année et les personnages choisis.")
-        or f.mode == "story" and L("Choisissez une période et les personnages dont vous souhaitez relire les combats.")
-        or f.dimension == "opponents" and L("Seules les morts figurent au podium. Cliquez sur un adversaire pour ouvrir sa fiche.")
-        or f.dimension == "initiative" and L("La rancune est celle du journal avant le combat. Une revanche est une victoire que vous engagez après une mort contre ce joueur avec le même personnage.")
-        or f.dimension == "zone" and L("Cliquez sur une zone pour lire ses sous-zones. Le temps mesure la présence en monde ouvert depuis l’activation, hors absences et instances.")
-        or L("La race et la classe sont celles relevées au combat. « Inconnue » signifie que l'information manque.")
-    if f.mode == "summary" and stats.honorAwards > 0 then help = honorDetail(stats) .. "\n\n" .. help end
-    f.help:SetText(help)
+    -- One pager for the lists: the chronicle and the tables of the overview.
+    local list = history or (f.mode == "summary" and f.dimension ~= "initiative")
+    local perPage = history and CHRONICLE_ROWS or f.breakdownPerPage or HONOR_ROWS
+    local first = history and f.offset or f.breakdownOffset
+    local total = list and f.listTotal or 0
+    showIf(f.previous, list) showIf(f.next, list) showIf(f.count, list)
+    f.previous:SetEnabled(first > 0)
+    f.next:SetEnabled(first + perPage < total)
+    f.count:SetText(total > 0 and L("%d à %d sur %d"):format(first + 1, math.min(first + perPage, total), total) or "")
+    f.lead:SetText(#notices > 0 and table.concat(notices, " · ") or helpText(f))
+    if f.paintTally then f.paintTally() end
 end
 
-function GL.ShowJournal(mode)
-    if not GL.db then return end
-    if not journalWindow then
-        local f = bookWindow("GrudgeLedgerJournal", "Grudge Ledger") journalWindow = f
-        f.mode, f.period, f.scope, f.kind, f.offset, f.dimension, f.breakdownOffset = "summary", "all", "character", "all", 0, "opponents", 0
-        f.year = GL.JournalYears()[1] or tonumber(date("%Y"))
-        bookNavigation(f, "players")
-        f.tabs = {}
-        for i, entry in ipairs({ { "summary", L("Vue d’ensemble") }, { "history", L("Chronique") }, { "year", L("Mon année") }, { "story", L("Récit") } }) do
-            local key = entry[1]
-            f.tabs[key] = button(f, entry[2], 36 + ((i - 1) % 2) * 131, -157 - math.floor((i - 1) / 2) * 33, 125, function() GL.ShowJournal(key) end, true)
-        end
-        label(f, L("Personnages"), nil, 36, -245, 256):SetTextColor(unpack(theme.muted))
-        f.scopeButton = button(f, "", 36, -267, 256, function() f.scope, f.offset, f.breakdownOffset = nextChoice(journalScopes, f.scope), 0, 0 refreshJournal() end)
-        label(f, L("Période"), nil, 36, -315, 256):SetTextColor(unpack(theme.muted))
-        f.periodButtons = {}
-        for i, entry in ipairs(journalPeriods) do
-            local key = entry[1]
-            f.periodButtons[key] = button(f, entry[2], 36 + ((i - 1) % 2) * 133, -341 - math.floor((i - 1) / 2) * 32, 123, function()
-                f.period, f.offset, f.breakdownOffset = key, 0, 0 refreshJournal()
-            end, true)
-        end
-        f.yearButton = button(f, "", 36, -416, 256, function()
-            local years = GL.JournalYears()
-            for i, year in ipairs(years) do if year == f.year then f.year = years[i % #years + 1] break end end
-            f.offset, f.breakdownOffset = 0, 0 refreshJournal()
-        end)
-        f.kindButton = button(f, "", 36, -465, 256, function() f.kind, f.offset = nextChoice(journalKinds, f.kind), 0 refreshJournal() end)
-        f.searchLabel = label(f, L("Rechercher dans la chronique"), nil, 36, -510, 256) f.searchLabel:SetTextColor(unpack(theme.muted))
-        f.search = CreateFrame("EditBox", nil, f) f.search:SetPoint("TOPLEFT", 36, -534) f.search:SetSize(195, 26)
-        f.search:SetAutoFocus(false) f.search:SetMaxLetters(200) styleInput(f.search, false, false)
-        local function searchJournal() f.query, f.offset = f.search:GetText(), 0 f.search:ClearFocus() refreshJournal() end
-        f.search:SetScript("OnEnterPressed", searchJournal) f.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-        f.searchButton = button(f, "OK", 241, -534, 51, searchJournal)
-        f.reset = button(f, L("Effacer les filtres"), 36, -572, 256, function()
-            f.query, f.kind, f.period, f.scope, f.offset = "", "all", "all", "character", 0 f.search:SetText("") refreshJournal()
-        end)
-        f.help = label(f, "", nil, 36, -608, 256) f.help:SetTextColor(unpack(theme.muted)) f.help:SetHeight(46) journalFont(f.help, "GameFontHighlightSmall", 12)
-        -- Recent deaths as plain text for an AI assistant, without player names.
-        f.exportDeaths = button(f, L("Exporter mes morts pour une IA"), 36, -628, 256, function()
-            GL.DeathReport.ShowExport()
-        end)
-        f.heading = label(f, "", "large", 372, -165, 532) f.heading:SetTextColor(unpack(theme.ink))
-        journalFont(f.heading, "GameFontNormalLarge", 21)
-        f.subtitle = label(f, "", nil, 372, -194, 532) f.subtitle:SetTextColor(unpack(theme.inkMuted))
-        f.summary = CreateFrame("Frame", nil, f) f.summary:SetAllPoints(f)
-        f.history = CreateFrame("Frame", nil, f) f.history:SetAllPoints(f)
-        f.story = CreateFrame("Frame", nil, f) f.story:SetAllPoints(f)
-        f.cardName = label(f.summary, "", "large", 356, -216, 300) f.cardName:SetTextColor(unpack(theme.ink))
-        f.cardName:SetHeight(26) GL.Safe(f.cardName.SetWordWrap, f.cardName, false)
-        f.honor = button(f.summary, "", 661, -211, 243, function()
-            f.kind, f.query, f.offset = "honor", "", 0
-            f.search:SetText("") GL.ShowJournal("history")
-        end, nil, true)
-        f.metrics = {}
-        for i, entry in ipairs({ { "kills", L("Victoires") }, { "deaths", L("Morts") }, { "aggressions", L("Agressions") } }) do
-            local card = CreateFrame("Frame", nil, f.summary) card:SetPoint("TOPLEFT", 356 + (i - 1) * 185, -245) card:SetSize(176, 80)
-            parchmentPanel(card)
-            local icons = { "Interface\\Icons\\Ability_DualWield", "Interface\\Icons\\Ability_Rogue_FeignDeath", "Interface\\Icons\\Ability_Warrior_Challange" }
-            bookIcon(card, 9, 10, 25, icons[i])
-            local value = bookText(card, 42, 0, 128, 34, 23, "0")
-            local caption = label(card, entry[2], nil, 8, -34, 160) caption:SetTextColor(unpack(theme.inkMuted))
-            journalFont(caption, "GameFontHighlightSmall", 11) caption:SetHeight(30)
-            f.metrics[entry[1]] = { value = value, caption = caption }
-        end
-        f.recaps = {}
-        for i, entry in ipairs({ { "mostDeaths", L("Votre pire antagoniste") }, { "mostKilled", L("Votre adversaire le plus vaincu") } }) do
-            local row = CreateFrame("Button", nil, f.summary)
-            row:SetPoint("TOPLEFT", 356 + (i - 1) * 277, -331) row:SetSize(270, 76)
-            parchmentPanel(row)
-            local title = bookText(row, 10, 5, 250, 21, 14, entry[2], theme.inkMuted)
-            journalFont(title, "QuestFont_Large", 14, true)
-            row.raceIcon = bookIcon(row, 10, 30, 36) row.classIcon = bookIcon(row, 34, 54, 15)
-            row.name = bookText(row, 54, 27, 207, 23, 16)
-            row.detail = bookText(row, 54, 52, 207, 20, 12, "", theme.inkMuted)
-            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-            row:SetScript("OnClick", function(self) if self.record then GL.ShowLedger(self.record.key) end end)
-            f.recaps[entry[1]] = row
-        end
-        f.dimensionButtons = {}
-        for i, entry in ipairs({ { "opponents", L("Adversaires") }, { "race", L("Par race") }, { "class", L("Par classe") }, { "zone", L("Par zone") }, { "initiative", L("Initiative") } }) do
-            local key = entry[1]
-            f.dimensionButtons[key] = button(f.summary, entry[2], 356 + (i - 1) * 111, -413, 104, function() f.dimension, f.breakdownOffset, f.zoneKey = key, 0, nil refreshJournal() end, true, true)
-        end
-        f.initiative = CreateFrame("Frame", nil, f.summary) f.initiative:SetAllPoints(f)
-        f.initiative.values = {}
-        for _, group in ipairs({
-            { x = 356, y = 449, title = L("Joueurs distincts"), {"victims", L("Vaincus")}, {"attackers", L("Vous ayant blessé")}, {"ratio", L("Vaincus / attaquants")} },
-            { x = 356, y = 556, title = L("Premier dégât observé"), {"initiated", L("Porté par vous")}, {"responded", L("Porté par l’adversaire")} },
-            { x = 633, y = 449, title = L("Victoires"), {"initiatedKillsNoGrudge"}, {"initiatedKillsGrudge"},
-                {"revengeKills"}, {"responseKills"}, {"unknownOpeningKills"} },
-        }) do
-            bookText(f.initiative, group.x, group.y, 271, 25, 16, group.title)
-            for i, entry in ipairs(group) do
-                local y = group.y + 26 + (i - 1) * 24
-                local share = entry[1] == "initiated" or entry[1] == "responded"
-                bookText(f.initiative, group.x, y, share and 153 or 198, 23, 13, entry[2] or killOpeningLabels[entry[1]], theme.inkMuted)
-                local value = bookText(f.initiative, group.x + (share and 157 or 201), y, share and 97 or 53, 23, 14)
-                value:SetJustifyH("RIGHT") f.initiative.values[entry[1]] = value
-            end
-        end
-        f.podium = CreateFrame("Frame", nil, f.summary) f.podium:SetAllPoints(f)
-        bookText(f.podium, 356, 449, 548, 25, 16, L("Vos morts par adversaire"))
-        f.podium.empty = bookText(f.podium, 356, 485, 548, 29, 13, "", theme.inkMuted)
-        f.podium.rows = {}
-        for i = 1, 3 do
-            local row = CreateFrame("Button", nil, f.podium)
-            row:SetPoint("TOPLEFT", 356, -480 - (i - 1) * 41) row:SetSize(548, 39)
-            row.raceIcon = bookIcon(row, 2, 2, 30) row.classIcon = bookIcon(row, 23, 21, 13)
-            row.name = bookText(row, 43, 5, 242, 26, 15)
-            local track = row:CreateTexture(nil, "BACKGROUND")
-            track:SetPoint("TOPLEFT", 305, -12) track:SetSize(162, 12) track:SetColorTexture(0.46, 0.32, 0.16, 0.32)
-            row.bar = row:CreateTexture(nil, "ARTWORK") row.bar:SetPoint("TOPLEFT", 306, -13) row.bar:SetHeight(10) row.bar:SetColorTexture(0.50, 0.12, 0.10, 1)
-            row.count = bookText(row, 475, 5, 65, 27, 16) row.count:SetJustifyH("RIGHT")
-            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-            row:SetScript("OnClick", function(self) if self.record then GL.ShowLedger(self.record.key) end end)
-            f.podium.rows[i] = row
-        end
-        f.breakdown = CreateFrame("Frame", nil, f.summary) f.breakdown:SetAllPoints(f)
-        f.breakdownLabel = bookText(f.breakdown, 356, 451, 270, 23, 12, "", theme.inkMuted)
-        f.breakdownTime = bookText(f.breakdown, 539, 451, 96, 23, 12, L("Présence"), theme.inkMuted)
-        f.zoneBack = button(f.breakdown, L("‹ Toutes les zones"), 356, -447, 125, function()
-            f.zoneKey, f.breakdownOffset = nil, 0 refreshJournal()
-        end, nil, true)
-        f.zoneTracking = button(f.summary, "", 36, -620, 256, function()
-            GL.SetSetting("zoneTime", not GL.Settings().zoneTime) refreshJournal()
-        end)
-        label(f.breakdown, L("Victoires"), nil, 642, -451, 125):SetTextColor(unpack(theme.inkMuted))
-        label(f.breakdown, L("Morts"), nil, 787, -451, 117):SetTextColor(unpack(theme.inkMuted))
-        f.breakdownRows = {}
-        for i = 1, 5 do
-            local row = CreateFrame("Button", nil, f.breakdown) row:SetPoint("TOPLEFT", 356, -476 - (i - 1) * 24) row:SetSize(548, 22)
-            surface(row, theme.selection):SetAlpha(i % 2 == 0 and 0.35 or 0)
-            row.name = label(row, "", nil, 5, -2, 270) row.name:SetTextColor(unpack(theme.ink))
-            row.time = bookText(row, 183, 2, 96, 20, 12, "", theme.inkMuted)
-            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-            row:SetScript("OnClick", function(self)
-                if self.zone then f.zoneKey, f.zoneLabel, f.breakdownOffset = self.zone.key, self.zone.label, 0 refreshJournal() end
-            end)
-            row.kills = label(row, "", nil, 286, -2, 125) row.kills:SetTextColor(unpack(theme.ink))
-            row.deaths = label(row, "", nil, 431, -2, 117) row.deaths:SetTextColor(unpack(theme.ink))
-            for _, text in ipairs({ row.name, row.kills, row.deaths }) do text:SetHeight(20) GL.Safe(text.SetWordWrap, text, false) end
-            f.breakdownRows[i] = row
-        end
-        f.breakdownEmpty = label(f.breakdown, "", nil, 356, -497, 548) f.breakdownEmpty:SetTextColor(unpack(theme.inkMuted))
-        f.breakdownInfo = label(f.breakdown, "", nil, 356, -604, 410) f.breakdownInfo:SetTextColor(unpack(theme.inkMuted)) journalFont(f.breakdownInfo, "GameFontHighlightSmall", 12)
-        f.breakdownPrevious = button(f.breakdown, "<", 808, -598, 42, function() f.breakdownOffset = math.max(0, f.breakdownOffset - #f.breakdownRows) refreshJournal() end, nil, true)
-        f.breakdownNext = button(f.breakdown, ">", 862, -598, 42, function() f.breakdownOffset = f.breakdownOffset + #f.breakdownRows refreshJournal() end, nil, true)
-        f.coverage = label(f.summary, "", nil, 356, -645, 548) f.coverage:SetTextColor(unpack(theme.inkMuted)) journalFont(f.coverage, "GameFontHighlightSmall", 12) f.coverage:SetHeight(17)
-        f.storyPages = UI.textPages(f.story, 536, 405)
-        f.storyPages:SetPoint("TOPLEFT", 356, -221)
-        f.storyText = f.storyPages.body
-        journalFont(f.storyText, "QuestFont_Large", 15)
-        f.storyText:SetSpacing(5)
-        local annual = CreateFrame("Frame", nil, f)
-        annual:SetPoint("TOPLEFT", 356, -213) annual:SetSize(548, 435)
-        f.annual, annual.metrics, annual.recaps = annual, {}, {}
-        surface(annual, theme.gold):SetAlpha(0.72)
-        local annualPaper = annual:CreateTexture(nil, "BACKGROUND", nil, 1)
-        annualPaper:SetPoint("TOPLEFT", 2, -2) annualPaper:SetPoint("BOTTOMRIGHT", -2, 2)
-        annualPaper:SetTexture(media .. "JournalPaper")
-        for _, entry in ipairs({ { "TOPLEFT", 1, -1, 0 }, { "TOPRIGHT", -1, -1, 1 }, { "BOTTOMLEFT", 1, 1, 2 }, { "BOTTOMRIGHT", -1, 1, 3 } }) do
-            local corner = annual:CreateTexture(nil, "BORDER")
-            corner:SetPoint(entry[1], entry[2], entry[3]) corner:SetSize(18, 18)
-            corner:SetTexture("Interface\\AchievementFrame\\UI-Achievement-IconFrame")
-            local u, v = entry[4] % 2 * 0.65, math.floor(entry[4] / 2) * 0.65
-            corner:SetTexCoord(u, u + 0.35, v, v + 0.35)
-        end
-        annual.name = bookText(annual, 14, 14, 520, 40, 25) annual.name:SetJustifyH("CENTER")
-        annual.period = bookText(annual, 14, 55, 520, 28, 16, "", theme.inkMuted) annual.period:SetJustifyH("CENTER")
-        for i, entry in ipairs({ { "kills", L("Victoires") }, { "deaths", L("Morts PvP") }, { "aggressions", L("Agressions") } }) do
-            local x = 12 + (i - 1) * 176
-            annual.metrics[entry[1]] = bookText(annual, x, 89, 172, 49, 30)
-            annual.metrics[entry[1]]:SetJustifyH("CENTER")
-            bookText(annual, x, 142, 172, 25, 15, entry[2]):SetJustifyH("CENTER")
-        end
-        bookText(annual, 14, 173, 520, 21, 12, L("Faits PvP"), theme.inkMuted):SetJustifyH("CENTER")
-        for i, entry in ipairs({ { "mostDeaths", L("Votre pire antagoniste") }, { "mostKilled", L("Votre adversaire le plus vaincu") } }) do
-            local row = CreateFrame("Button", nil, annual)
-            row:SetPoint("TOPLEFT", 16, -207 - (i - 1) * 58) row:SetSize(516, 54)
-            surface(row, theme.gold):SetAlpha(0.14)
-            row.raceIcon = bookIcon(row, 7, 6, 37) row.classIcon = bookIcon(row, 32, 32, 15)
-            row.name = bookText(row, 54, 3, 326, 24, 15)
-            bookText(row, 54, 29, 326, 21, 12, entry[2], theme.inkMuted)
-            row.score = bookText(row, 390, 11, 117, 27, 15) row.score:SetJustifyH("RIGHT")
-            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-            row:SetScript("OnClick", function(self) if self.record then GL.ShowLedger(self.record.key) end end)
-            annual.recaps[entry[1]] = row
-        end
-        annual.honor = bookText(annual, 16, 345, 516, 22, 14)
-        annual.coverage = bookText(annual, 16, 369, 516, 26, 12)
-        GL.Safe(annual.coverage.SetWordWrap, annual.coverage, true)
-        annual.events = button(annual, L("Voir les événements de l’année"), 95, -397, 358, function()
-            f.period, f.kind, f.query, f.offset = "year", "pvp", "", 0
-            f.search:SetText("") GL.ShowJournal("history")
-        end, nil, true)
-        f.cardCopy = CreateFrame("Frame", nil, f)
-        f.cardCopy:SetPoint("TOPLEFT", 36, -502) f.cardCopy:SetSize(256, 145)
-        local copyField = CreateFrame("EditBox", nil, f.cardCopy)
-        copyField:SetPoint("TOPLEFT") copyField:SetSize(256, 115) copyField:SetMultiLine(true)
-        copyField:SetAutoFocus(false) styleInput(copyField, true)
-        copyField:SetScript("OnEscapePressed", function() f.cardCopy:Hide() end)
-        f.cardCopy:SetScript("OnHide", function() copyField:ClearFocus() end)
-        label(f.cardCopy, L("Ctrl+C pour copier."), nil, 0, -119, 256):SetTextColor(unpack(theme.muted))
-        f.cardCopy:Hide()
-        f.copyAnnual = button(f, L("Copier le bilan annuel"), 36, -464, 256, function()
-            f.cardCopy:Show() copyField:SetText(f.annualText) copyField:SetFocus() copyField:HighlightText()
-        end, true)
-        f.rows = {}
-        for i = 1, 5 do
-            local row = CreateFrame("Button", nil, f.history) row:SetPoint("TOPLEFT", 356, -216 - (i - 1) * 80) row:SetSize(548, 76)
-            surface(row, theme.selection):SetAlpha(i % 2 == 0 and 0.25 or 0.08)
-            row.stripe = row:CreateTexture(nil, "ARTWORK") row.stripe:SetPoint("TOPLEFT") row.stripe:SetPoint("BOTTOMLEFT") row.stripe:SetWidth(2)
-            row.raceIcon = bookIcon(row, 8, 10, 37) row.classIcon = bookIcon(row, 32, 36, 15)
-            row.name = bookText(row, 54, 3, 305, 24, 15)
-            row.action = bookText(row, 54, 29, 480, 22, 13)
-            row.meta = bookText(row, 366, 5, 174, 36, 10, "", theme.inkMuted) GL.Safe(row.meta.SetWordWrap, row.meta, true)
-            row.context = bookText(row, 54, 53, 367, 21, 11, "", theme.inkMuted)
-            row.details = button(row, L("Détails"), 432, -47, 108, function()
-                local item = row.item
-                if not item then return end
-                if item.event.note then GL.EditNote(item.record, item.event.note)
-                else inspectEvent(item.record, item.event) end
-            end, nil, true)
-            for _, text in ipairs({ row.name, row.action, row.meta }) do GL.Safe(text.SetWordWrap, text, false) end
-            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-            row:SetScript("OnClick", function(self)
-                if not self.item then return end
-                if self.item.record then GL.ShowLedger(self.item.record.key) else inspectEvent(nil, self.item.event) end
-            end)
-            f.rows[i] = row
-        end
-        f.empty = label(f.history, "", nil, 365, -238, 520) f.empty:SetTextColor(unpack(theme.inkMuted))
-        f.previous = button(f.history, L("Précédent"), 356, -628, 120, function() f.offset = math.max(0, f.offset - #f.rows) refreshJournal() end, nil, true)
-        f.total = label(f.history, "", nil, 486, -635, 284) f.total:SetJustifyH("CENTER") f.total:SetTextColor(unpack(theme.inkMuted))
-        f.next = button(f.history, L("Suivant"), 784, -628, 120, function() f.offset = f.offset + #f.rows refreshJournal() end, nil, true)
+-- Builds the page in a host of 664 x 510: the Relations book's sheet, or the fallback book.
+function GL.BuildHonorPage(host)
+    local f = CreateFrame("Frame", "GrudgeLedgerJournal", host)
+    f:SetAllPoints(host)
+    journalWindow = f
+    f.mode, f.period, f.scope, f.kind, f.offset, f.dimension, f.breakdownOffset = "summary", "all", "character", "all", 0, "opponents", 0
+    f.year = GL.JournalYears()[1] or tonumber(date("%Y"))
+    f.heading = sheetText(f, 0, 18, 380, 21, true)
+    f.periodButton = button(f, "", 392, -14, 134, function()
+        local list = periodChoices(f.mode == "year")
+        local nextEntry = list[(periodIndex(list, f.period, f.year) or 0) % #list + 1]
+        f.period, f.year, f.offset, f.breakdownOffset = nextEntry[1], nextEntry[2] or f.year, 0, 0
+        refreshJournal()
+    end, nil, true)
+    f.scopeButton = button(f, "", 530, -14, 134, function()
+        f.scope, f.offset, f.breakdownOffset = nextChoice(journalScopes, f.scope), 0, 0
+        refreshJournal()
+    end, nil, true)
+    f.lead = sheetText(f, 0, 47, 664, 13, false, theme.inkMuted)
+    f.lead:SetHeight(30) GL.Safe(f.lead.SetWordWrap, f.lead, true)
+    f.tabs = {}
+    for i, mode in ipairs(honorModes) do
+        local key = mode[1]
+        f.tabs[key] = button(f, mode[2], (i - 1) * 167, -84, 162, function() GL.ShowJournal(key) end, true, true)
     end
-    journalWindow.mode = (mode == "history" or mode == "story" or mode == "year") and mode or "summary"
-    showBook(journalWindow) refreshJournal()
+    f.views = {}
+    for _, mode in ipairs(honorModes) do
+        local view = CreateFrame("Frame", nil, f) view:SetAllPoints(f) f.views[mode[1]] = view
+    end
+    -- Vue d'ensemble: five chips, then one table or the initiative's two columns.
+    local summary = f.views.summary
+    f.chips = {}
+    for i, dimension in ipairs(honorDimensions) do
+        local key = dimension[1]
+        local chip = button(summary, dimension[2], (i - 1) * 134, -116, 128, function()
+            f.dimension, f.breakdownOffset, f.zoneKey = key, 0, nil refreshJournal()
+        end, true, true)
+        fitText(chip.caption, dimension[2], 116, 12, 9)
+        f.chips[key] = chip
+    end
+    f.table = CreateFrame("Frame", nil, summary) f.table:SetAllPoints(f)
+    local band = f.table:CreateTexture(nil, "BORDER")
+    band:SetPoint("TOPLEFT", 0, -150) band:SetSize(664, 22) band:SetColorTexture(0.44, 0.28, 0.13, 0.18)
+    f.columnName = sheetText(f.table, 4, 154, 270, 12, false, theme.inkMuted)
+    f.columnTime = sheetText(f.table, 280, 154, 110, 12, false, theme.inkMuted) f.columnTime:SetJustifyH("RIGHT")
+    f.columnTime:SetText(L("Présence"))
+    f.columnKills = sheetText(f.table, 400, 154, 120, 12, false, theme.inkMuted) f.columnKills:SetJustifyH("RIGHT")
+    f.columnKills:SetText(L("Victoires"))
+    f.columnDeaths = sheetText(f.table, 544, 154, 116, 12, false, theme.inkMuted) f.columnDeaths:SetJustifyH("RIGHT")
+    f.zoneBack = button(f.table, L("‹ Toutes les zones"), 0, -148, 150, function()
+        f.zoneKey, f.breakdownOffset = nil, 0 refreshJournal()
+    end, nil, true)
+    f.breakdownRows = {}
+    for i = 1, HONOR_ROWS do
+        local row = CreateFrame("Button", nil, f.table)
+        row:SetPoint("TOPLEFT", 0, -174 - (i - 1) * 44) row:SetSize(664, 42)
+        sheetRule(row)
+        row.rank = sheetText(row, 0, 12, 22, 12, false, theme.inkMuted)
+        row.face = sheetFace(row, 28, 4, 34)
+        row.name = sheetText(row, 70, 4, 300, 14, true)
+        row.meta = sheetText(row, 70, 23, 400, 11, false, theme.inkMuted)
+        row.time = sheetText(row, 280, 12, 110, 14, false, theme.inkMuted) row.time:SetJustifyH("RIGHT")
+        row.kills = sheetText(row, 400, 10, 120, 16, true) row.kills:SetJustifyH("RIGHT")
+        row.deaths = sheetText(row, 544, 10, 116, 16, true, inkColors.enemy) row.deaths:SetJustifyH("RIGHT")
+        row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+        row:SetScript("OnClick", function(self)
+            if self.zone then f.zoneKey, f.zoneLabel, f.breakdownOffset = self.zone.key, self.zone.label, 0 refreshJournal()
+            elseif self.item and self.item.record then GL.ShowLedger(self.item.record.key) end
+        end)
+        f.breakdownRows[i] = row
+    end
+    f.tableEmpty = sheetText(f.table, 0, 182, 664, 13, false, theme.inkMuted)
+    f.zoneTracking = button(f.table, "", 0, -420, 240, function()
+        GL.SetSetting("zoneTime", not GL.Settings().zoneTime) refreshJournal()
+    end, nil, true)
+    f.initiative = CreateFrame("Frame", nil, summary) f.initiative:SetAllPoints(f)
+    f.initiative.values = {}
+    for _, group in ipairs({
+        { x = 0, y = 152, title = L("Joueurs distincts"), { "victims", L("Vaincus") }, { "attackers", L("Vous ayant blessé") }, { "ratio", L("Vaincus / attaquants") } },
+        { x = 0, y = 270, title = L("Premier dégât observé"), { "initiated", L("Porté par vous") }, { "responded", L("Porté par l’adversaire") } },
+        { x = 344, y = 152, title = L("Victoires"), { "initiatedKillsNoGrudge" }, { "initiatedKillsGrudge" },
+            { "revengeKills" }, { "responseKills" }, { "unknownOpeningKills" } },
+    }) do
+        sheetText(f.initiative, group.x, group.y, 320, 14, true):SetText(group.title)
+        for i, entry in ipairs(group) do
+            local line = CreateFrame("Frame", nil, f.initiative)
+            line:SetPoint("TOPLEFT", group.x, -(group.y + 26 + (i - 1) * 26)) line:SetSize(320, 24)
+            sheetRule(line)
+            local caption = sheetText(line, 0, 5, 226, 13, false, theme.inkMuted)
+            fitText(caption, entry[2] or killOpeningLabels[entry[1]], 226, 13, 10)
+            local value = sheetText(line, 230, 3, 90, 15, true) value:SetJustifyH("RIGHT")
+            f.initiative.values[entry[1]] = value
+        end
+    end
+    -- Chronique: the guild journal's bar (search, kind with its count, clear), then five lines.
+    local chronicle = f.views.history
+    f.search = CreateFrame("EditBox", nil, chronicle) f.search:SetPoint("TOPLEFT", 0, -116) f.search:SetSize(241, 26)
+    f.search:SetAutoFocus(false) f.search:SetMaxLetters(200) styleInput(f.search, false, true)
+    f.searchHint = sheetText(f.search, 8, 6, 225, 12, false, theme.inkMuted) f.searchHint:SetText(L("Rechercher dans la chronique"))
+    local function searchJournal() f.query, f.offset = f.search:GetText(), 0 f.search:ClearFocus() refreshJournal() end
+    f.search:SetScript("OnEnterPressed", searchJournal)
+    f.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    f.search:SetScript("OnTextChanged", function(self) showIf(f.searchHint, (self:GetText() or "") == "") end)
+    f.kindButton = button(chronicle, "", 249, -116, 241, function() f.kind, f.offset = nextChoice(journalKinds, f.kind), 0 refreshJournal() end, nil, true)
+    f.reset = button(chronicle, L("Effacer les filtres"), 498, -116, 166, function()
+        f.query, f.kind, f.offset = "", "all", 0 f.search:SetText("") refreshJournal()
+    end, nil, true)
+    f.rows = {}
+    for i = 1, CHRONICLE_ROWS do
+        local row = CreateFrame("Button", nil, chronicle) row:SetPoint("TOPLEFT", 0, -150 - (i - 1) * 56) row:SetSize(664, 54)
+        sheetRule(row)
+        row.stripe = row:CreateTexture(nil, "ARTWORK") row.stripe:SetPoint("TOPLEFT", 0, -4) row.stripe:SetPoint("BOTTOMLEFT", 0, 5) row.stripe:SetWidth(2)
+        row.face = sheetFace(row, 8, 10, 34)
+        row.name = sheetText(row, 50, 7, 396, 14, true)
+        row.when = sheetText(row, 452, 9, 120, 11, false, theme.inkMuted) row.when:SetJustifyH("RIGHT")
+        row.action = sheetText(row, 50, 30, 526, 12)
+        row.details = button(row, L("Détails"), 585, -14, 79, function()
+            local item = row.item
+            if not item then return end
+            if item.event.note then GL.EditNote(item.record, item.event.note) else inspectEvent(item.record, item.event) end
+        end, nil, true)
+        row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+        row:SetScript("OnClick", function(self)
+            if not self.item then return end
+            if self.item.record then GL.ShowLedger(self.item.record.key) else inspectEvent(nil, self.item.event) end
+        end)
+        f.rows[i] = row
+    end
+    f.empty = sheetText(chronicle, 0, 160, 664, 13, false, theme.inkMuted)
+    f.empty:SetHeight(40) GL.Safe(f.empty.SetWordWrap, f.empty, true)
+    -- Mon année: the Bilan's centred card, without a frame inside the frame.
+    local annual = f.views.year
+    f.annual, annual.metrics, annual.recaps = annual, {}, {}
+    annual.name = sheetText(annual, 40, 122, 584, 22, true) annual.name:SetJustifyH("CENTER")
+    annual.period = sheetText(annual, 40, 152, 584, 14, false, theme.inkMuted) annual.period:SetJustifyH("CENTER")
+    for i, entry in ipairs({ { "kills", L("Victoires") }, { "deaths", L("Morts PvP") }, { "aggressions", L("Agressions") }, { "honor", L("Honneur reçu") } }) do
+        local x = (i - 1) * 166
+        annual.metrics[entry[1]] = sheetText(annual, x, 182, 166, 30, true)
+        annual.metrics[entry[1]]:SetJustifyH("CENTER")
+        local caption = sheetText(annual, x, 218, 166, 13)
+        caption:SetJustifyH("CENTER") caption:SetText(entry[2])
+    end
+    for i, entry in ipairs({ { "mostDeaths", L("Votre pire antagoniste") }, { "mostKilled", L("Votre adversaire le plus vaincu") } }) do
+        local row = CreateFrame("Button", nil, annual)
+        row:SetPoint("TOPLEFT", 0, -250 - (i - 1) * 44) row:SetSize(664, 42)
+        sheetRule(row)
+        row.face = sheetFace(row, 28, 4, 34)
+        row.name = sheetText(row, 70, 4, 400, 14, true)
+        sheetText(row, 70, 23, 400, 11, false, theme.inkMuted):SetText(entry[2])
+        row.score = sheetText(row, 480, 10, 180, 16, true) row.score:SetJustifyH("RIGHT")
+        row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+        row:SetScript("OnClick", function(self) if self.record then GL.ShowLedger(self.record.key) end end)
+        annual.recaps[entry[1]] = row
+    end
+    annual.coverage = sheetText(annual, 40, 350, 584, 12, false, theme.inkMuted) annual.coverage:SetJustifyH("CENTER")
+    annual.events = button(annual, L("Voir les événements de l’année"), 102, -392, 226, function()
+        f.period, f.kind, f.query, f.offset = "year", "pvp", "", 0
+        f.search:SetText("") GL.ShowJournal("history")
+    end, nil, true)
+    fitText(annual.events.caption, L("Voir les événements de l’année"), 214, 12, 9)
+    f.cardCopy = CreateFrame("Frame", nil, annual)
+    f.cardCopy:SetPoint("TOPLEFT", 155, -120) f.cardCopy:SetSize(354, 176)
+    surface(f.cardCopy, theme.paper):SetAlpha(0.96)
+    local copyField = CreateFrame("EditBox", nil, f.cardCopy)
+    copyField:SetPoint("TOPLEFT", 8, -8) copyField:SetSize(338, 136) copyField:SetMultiLine(true)
+    copyField:SetAutoFocus(false) styleInput(copyField, true, true)
+    copyField:SetScript("OnEscapePressed", function() f.cardCopy:Hide() end)
+    f.cardCopy:SetScript("OnHide", function() copyField:ClearFocus() end)
+    sheetText(f.cardCopy, 8, 152, 338, 12, false, theme.inkMuted):SetText(L("Ctrl+C pour copier."))
+    f.cardCopy:Hide()
+    f.copyAnnual = button(annual, L("Copier le bilan annuel"), 336, -392, 226, function()
+        f.cardCopy:Show() copyField:SetText(f.annualText) copyField:SetFocus() copyField:HighlightText()
+    end, nil, true)
+    -- Récit: the paged text, and the export of your deaths, which is text as well.
+    local story = f.views.story
+    f.storyPages = UI.textPages(story, 664, 362)
+    f.storyPages:SetPoint("TOPLEFT", 0, -128)
+    f.storyText = f.storyPages.body
+    journalFont(f.storyText, "QuestFont_Large", 15)
+    f.storyText:SetSpacing(5)
+    f.exportDeaths = button(story, L("Exporter mes morts pour une IA"), 0, -464, 260, function() GL.DeathReport.ShowExport() end, nil, true)
+    fitText(f.exportDeaths.caption, L("Exporter mes morts pour une IA"), 248, 12, 9)
+    -- The one pager of the lists.
+    f.previous = button(f, "‹", 0, -464, 49, function()
+        if f.mode == "history" then f.offset = math.max(0, f.offset - CHRONICLE_ROWS)
+        else f.breakdownOffset = math.max(0, f.breakdownOffset - (f.breakdownPerPage or HONOR_ROWS)) end
+        refreshJournal()
+    end, nil, true)
+    f.next = button(f, "›", 615, -464, 49, function()
+        if f.mode == "history" then f.offset = f.offset + CHRONICLE_ROWS
+        else f.breakdownOffset = f.breakdownOffset + (f.breakdownPerPage or HONOR_ROWS) end
+        refreshJournal()
+    end, nil, true)
+    f.count = sheetText(f, 60, 470, 544, 12, false, theme.inkMuted) f.count:SetJustifyH("CENTER")
+    for _, mode in ipairs(honorModes) do
+        hoverHelp(f.tabs[mode[1]], mode[2], function()
+            local saved = f.mode f.mode = mode[1] local text = helpText(f) f.mode = saved return text
+        end)
+    end
+    for _, dimension in ipairs(honorDimensions) do
+        hoverHelp(f.chips[dimension[1]], dimension[2], function()
+            local saved = f.dimension f.dimension = dimension[1] local text = helpText(f) f.dimension = saved return text
+        end)
+    end
+    f:SetScript("OnShow", refreshJournal)
+    return f
+end
+function GL.PaintHonorPage() refreshJournal() end
+-- The figures of the left column on this page (Relations.lua paints them): label, value, action.
+function GL.HonorTally() return journalWindow and journalWindow.tallyLines or {} end
+
+-- Opens the tables on a mode. context: the Bilan's period and characters, carried over.
+function GL.ShowJournal(mode, context)
+    if not GL.db then return end
+    mode = (mode == "history" or mode == "story" or mode == "year") and mode or "summary"
+    if GL.RelationsPages then
+        GL.RelationsPages.Open("honor")
+    elseif not honorBook then
+        -- Without Relations.lua: the same page in a narrow book of its own.
+        honorBook = bookWindow("GrudgeLedgerJournalBook", "Grudge Ledger", true)
+        bookNavigation(honorBook, "players")
+        local host = CreateFrame("Frame", nil, honorBook)
+        host:SetPoint("TOPLEFT", 240, -152) host:SetSize(664, 510)
+        GL.BuildHonorPage(host)
+    end
+    local f = journalWindow
+    if type(context) == "table" then
+        f.scope = context.scope == "all" and "all" or "character"
+        f.period = context.period == "week" and "week" or context.period == "month" and "month" or context.period == "year" and "year" or "all"
+        if f.period == "year" then f.year = tonumber(date("%Y")) end
+        f.offset, f.breakdownOffset = 0, 0
+    end
+    f.mode = mode
+    if not GL.RelationsPages then showBook(honorBook) end
+    refreshJournal()
 end
 GL.On("CHANGED", refreshJournal)
 
@@ -2485,7 +2565,19 @@ local function enableRecognition()
         or L("Icônes et couleurs activées, mais le jeu n'a pas confirmé toutes les barres de noms. Vérifiez les réglages d'affichage."))
 end
 
+-- The settings were laid out on the old wide page (x 356 to 905). In the narrow book the sheet runs
+-- from 240 to 900: positions and widths are spread over it, sizes of small controls are kept.
+local SHEET_K = 660 / 549
+local function sheetX(x) return math.floor(240 + (x - 356) * SHEET_K + 0.5) end
+local function sheetW(w) return w < 40 and w or math.floor(w * SHEET_K + 0.5) end
+-- Heights: the old page ran from 160 to 650; the sheet's last line must stay above 620.
+local function sheetY(y) return math.floor(162 + (y - 160) * 0.92 + 0.5) end
+local function sheetButton(page, text, x, y, width, ...)
+    return button(page, text, sheetX(x), -sheetY(-y), sheetW(width), ...)
+end
+local function sheetIcon(page, x, y, size, texture) return bookIcon(page, sheetX(x), sheetY(y), size, texture) end
 local function settingText(page, text, x, y, width, size, color)
+    if page.onSheet then x, y, width = sheetX(x), sheetY(y), sheetW(width) end
     local region = label(page, text, size and size >= 16 and "large" or nil, x, -y, width)
     if size then journalFont(region, size >= 16 and "GameFontNormalLarge" or "GameFontHighlight", size) end
     region:SetTextColor(unpack(color or theme.ink))
@@ -2500,10 +2592,9 @@ end
 
 showSettings = function()
     if not settingsWindow then
-        local f = bookWindow("GrudgeLedgerSettings", "Grudge Ledger")
+        local f = bookWindow("GrudgeLedgerSettings", "Grudge Ledger", true)
         settingsWindow = f
         bookNavigation(f, "settings")
-        settingText(f, L("Réglages"), 40, 163, 255, 24, theme.paper)
         f.tabs, f.pages, f.checks, f.sliders, f.previewRows = {}, {}, {}, {}, {}
         local categories = {
             {"appearance", L("Apparence"), L("Apparence et lisibilité")},
@@ -2522,24 +2613,26 @@ showSettings = function()
         end
         for i, entry in ipairs(categories) do
             local key = entry[1]
-            local tab = button(f, entry[2], 36, -221 - (i - 1) * 62, 263, function() f:SelectCategory(key) end, true)
-            tab:SetHeight(41) tab.caption:ClearAllPoints() tab.caption:SetPoint("CENTER") tab.caption:SetHeight(29)
-            journalFont(tab.caption, "GameFontNormalLarge", 16)
+            -- The entries of the Relations book: same place, size and step.
+            local tab = button(f, entry[2], 38, -158 - (i - 1) * 36, 168, function() f:SelectCategory(key) end, true)
+            tab:SetHeight(30)
             f.tabs[key] = tab
             local page = CreateFrame("Frame", nil, f)
-            page:SetAllPoints(f) f.pages[key] = page
-            settingText(page, entry[3], 356, 160, 554, 24)
+            page:SetAllPoints(f) page.onSheet = true f.pages[key] = page
+            settingText(page, entry[3], 356, 160, 554, 22)
         end
         local function check(category, key, text, y, width, x, save)
             local control = CreateFrame("CheckButton", nil, f.pages[category], "UICheckButtonTemplate")
-            control:SetPoint("TOPLEFT", (x or 356) - 3, -y) control:SetSize(26, 26)
-            control:SetHitRectInsets(0, -(width or 522) + 28, 0, 0)
-            settingText(control, text, 32, 4, (width or 522) - 33, 14)
+            width = sheetW(width or 522)
+            control:SetPoint("TOPLEFT", sheetX(x or 356) - 3, -sheetY(y)) control:SetSize(26, 26)
+            control:SetHitRectInsets(0, -width + 28, 0, 0)
+            settingText(control, text, 32, 4, width - 33, 14)
             control:SetScript("OnClick", function(self) if save then save(self:GetChecked() and true or false) else GL.SetSetting(key, self:GetChecked() and true or false) end end)
             if not save then f.checks[key] = control end
             return control
         end
         local function range(page, key, title, x, y, width, low, high, step, format)
+            x, y, width = sheetX(x), sheetY(y), sheetW(width) - 8
             local slider = CreateFrame("Slider", nil, page)
             slider:SetPoint("TOPLEFT", x + 32, -(y + 24))
             slider:SetSize(width - 64, 26)
@@ -2551,7 +2644,8 @@ showSettings = function()
             local thumb = slider:CreateTexture(nil, "OVERLAY")
             thumb:SetSize(9, 17) thumb:SetColorTexture(unpack(theme.red))
             if slider.SetThumbTexture then slider:SetThumbTexture(thumb) end
-            local valueText = settingText(page, "", x, y, width, 14)
+            local valueText = label(page, "", nil, x, -y, width)
+            journalFont(valueText, "GameFontHighlight", 14) valueText:SetTextColor(unpack(theme.ink))
             local function draw(value)
                 if not slider.SetThumbTexture then
                     thumb:ClearAllPoints()
@@ -2578,13 +2672,13 @@ showSettings = function()
         end
         local p = f.pages.appearance
         settingText(p, L("Police de lecture"), 356, 209, 266, 16)
-        f.grimoire = button(p, L("Grimoire · PT Serif"), 356, -243, 145, function() GL.SetSetting("readableFont", false) end, true, true)
-        f.classic = button(p, L("Classique"), 509, -243, 127, function() GL.SetSetting("readableFont", true) end, true, true)
+        f.grimoire = sheetButton(p, L("Grimoire · PT Serif"), 356, -243, 145, function() GL.SetSetting("readableFont", false) end, true, true)
+        f.classic = sheetButton(p, L("Classique"), 509, -243, 127, function() GL.SetSetting("readableFont", true) end, true, true)
         check("appearance", "compactMode", L("Espacement compact"), 282, 266)
         f.readingLabel = settingText(p, "", 356, 326, 142, 13)
-        button(p, "−", 500, -317, 29, function() GL.SetSetting("readingScale", (GL.Settings().readingScale or 1) - 0.05) end, nil, true)
-        button(p, "+", 535, -317, 29, function() GL.SetSetting("readingScale", (GL.Settings().readingScale or 1) + 0.05) end, nil, true)
-        button(p, "100 %", 569, -317, 68, function() GL.SetSetting("readingScale", 1) end, nil, true)
+        sheetButton(p, "−", 500, -317, 29, function() GL.SetSetting("readingScale", (GL.Settings().readingScale or 1) - 0.05) end, nil, true)
+        sheetButton(p, "+", 535, -317, 29, function() GL.SetSetting("readingScale", (GL.Settings().readingScale or 1) + 0.05) end, nil, true)
+        sheetButton(p, "100 %", 569, -317, 68, function() GL.SetSetting("readingScale", 1) end, nil, true)
         check("appearance", "markers", L("Icônes près des noms"), 368, 272)
         check("appearance", "nameColor", L("Colorer aussi le nom"), 402, 272)
         check("appearance", "chatBadges", L("Marquer les contacts dans le chat"), 482, 272, 640)
@@ -2592,7 +2686,7 @@ showSettings = function()
         settingText(p, L("Aperçu des marqueurs"), 640, 213, 261, 17)
         for i, data in ipairs({{"friend", L("Oriane · Ami")}, {"warning", L("Hélène · Méfiance")}, {"enemy", L("Bastian · Ennemi")}, {"neutral", L("Neutre")}}) do
             local y = 256 + (i-1)*52
-            local icon = bookIcon(p, 644, y, 20, media .. relationIcons[data[1]])
+            local icon = sheetIcon(p, 644, y, 20, media .. relationIcons[data[1]])
             local name = settingText(p, data[2], 697, y+4, 205, 15)
             f.previewRows[data[1]] = {icon=icon, name=name}
         end
@@ -2611,7 +2705,7 @@ showSettings = function()
             end
             self.plateStatus:SetText(L("Barres alliées : %s · Ennemies : %s"):format(status("nameplateShowFriendlyPlayers"), status("nameplateShowEnemies")))
         end
-        button(p, L("Activer le repérage"), 356, -586, 222, enableRecognition, nil, true)
+        sheetButton(p, L("Activer le repérage"), 356, -586, 222, enableRecognition, nil, true)
         settingText(p, L("Le repérage utilise les barres de nom compatibles."), 590, 586, 315, 13, theme.inkMuted)
         check("appearance", "compactTooltips", L("Infobulle compacte (Maj pour les détails)"), 626)
         p = f.pages.alerts
@@ -2637,8 +2731,8 @@ showSettings = function()
         settingText(p, L("Tester au-dessus du chat"), 638, 213, 275, 17)
         for i, entry in ipairs({{"enemy", L("Aperçu d’une menace")}, {"friend", L("Aperçu d’un ami")}}) do
             local relation, y = entry[1], 254 + (i-1)*67
-            bookIcon(p, 641, y, 34, media .. relationIcons[relation])
-            local b = button(p, entry[2], 688, -y-3, 219, function()
+            sheetIcon(p, 641, y, 34, media .. relationIcons[relation])
+            local b = sheetButton(p, entry[2], 688, -y-3, 219, function()
                 if not GL.Display or not GL.Display.PreviewAlert then
                     f.testStatus:SetText(L("L’aperçu est indisponible."))
                 elseif not GL.Display.PreviewAlert(relation) then
@@ -2685,11 +2779,11 @@ showSettings = function()
         check("shortcuts", "quickGestures", L("Afficher les boutons bisou et crachat"), 219)
         for i, entry in ipairs({{media.."GestureKiss", L("Envoyer un baiser · +1")}, {"Interface\\Icons\\Spell_Nature_CorrosiveBreath", L("Cracher · −1")}}) do
             local x = 358 + (i-1)*280
-            bookIcon(p, x+6, 284, 64, entry[1])
+            sheetIcon(p, x+6, 284, 64, entry[1])
             settingText(p, entry[2], x, 362, 260, 16)
         end
         settingText(p, L("Sélectionnez d’abord un joueur. Les deux gestes utilisent votre cible actuelle."), 356, 419, 547, 15)
-        button(p, L("Replacer les boutons"), 356, -494, 245, function() if GL.ResetGesturePosition then GL.ResetGesturePosition() end end, nil, true)
+        sheetButton(p, L("Replacer les boutons"), 356, -494, 245, function() if GL.ResetGesturePosition then GL.ResetGesturePosition() end end, nil, true)
         settingText(p, L("Ctrl + glisser pour les déplacer. Par défaut, ils se trouvent au-dessus du chat."), 616, 487, 288, 13)
         settingText(p, L("Glissez le livre autour de la minimap. Clic gauche : Journal. Clic droit : Réglages."), 356, 564, 544, 14)
         settingText(p, L("Commandes : /gl · /gl note · /gl + · /gl -"), 356, 632, 546, 13, theme.inkMuted)
@@ -2700,16 +2794,16 @@ showSettings = function()
         settingText(p, L("Version, API disponibles et réglages."), 356, 389, 258, 13, theme.inkMuted)
         settingText(p, L("Journal des détections"), 644, 344, 264, 16)
         settingText(p, L("Les traces privées peuvent contenir des noms."), 644, 389, 264, 13, theme.inkMuted)
-        f.report = button(p, L("Afficher le rapport"), 356, -437, 253, function() showDiagnostic(false) end, nil, true)
-        f.traces = button(p, L("Consulter les traces"), 644, -437, 260, function() showDiagnostic(true) end, nil, true)
+        f.report = sheetButton(p, L("Afficher le rapport"), 356, -437, 253, function() showDiagnostic(false) end, nil, true)
+        f.traces = sheetButton(p, L("Consulter les traces"), 644, -437, 260, function() showDiagnostic(true) end, nil, true)
         settingText(p, L("Version de l’addon : %s"):format(tostring(GL.version)), 356, 491, 548, 13)
-        f.guide = button(p, L("Revoir les premiers pas"), 356, -530, 253, function() GL.ShowGuide() end, nil, true)
-        f.clearAction = button(p, L("Effacer les traces…"), 644, -530, 260, function(self)
+        f.guide = sheetButton(p, L("Revoir les premiers pas"), 356, -530, 253, function() GL.ShowGuide() end, nil, true)
+        f.clearAction = sheetButton(p, L("Effacer les traces…"), 644, -530, 260, function(self)
             if self.armed then
                 GL.ClearDetectionLog() self.armed = false self:SetText(L("Effacer les traces…"))
             else self.armed = true self:SetText(L("Confirmer l’effacement")) end
         end, nil, true)
-        f.experimental = button(p, L("Outils expérimentaux"), 356, -596, 253, function()
+        f.experimental = sheetButton(p, L("Outils expérimentaux"), 356, -596, 253, function()
             showIf(f.experimentalText, not f.experimentalText:IsShown())
         end, nil, true)
         f.experimentalText = settingText(p, L("Radar druide en recherche. L’essai manuel reste accessible dans le diagnostic."), 644, 591, 262, 13, theme.inkMuted)
@@ -2745,32 +2839,28 @@ end
 function GL.ShowGuide()
     if not GL.db then return end
     if not guideWindow then
-        local f = bookWindow("GrudgeLedgerGuide", "Grudge Ledger")
+        local f = bookWindow("GrudgeLedgerGuide", "Grudge Ledger", true)
         guideWindow = f
         bookNavigation(f, "ledger")
-        -- Reuse the book's parchment panel, including its painted edge, across both columns.
-        local sheet = f:CreateTexture(nil, "BACKGROUND", nil, 1)
-        sheet:SetPoint("TOPLEFT", 21, -145) sheet:SetSize(917, 525)
-        sheet:SetTexture(media .. "JournalBookSurface")
-        sheet:SetTexCoord(345/960, 938/960, 145/700, 670/700)
-        bookIcon(f, 114, 313, 154, GL.icon)
-        local heading = settingText(f, L("Votre livre commence ici"), 44, 178, 872, 28)
+        -- The narrow book: the emblem in the leather column, the three steps on the sheet.
+        bookIcon(f, 44, 190, 154, GL.icon)
+        local heading = settingText(f, L("Votre livre commence ici"), 262, 172, 620, 24)
         heading:SetJustifyH("CENTER")
-        settingText(f, L("1. Sélectionnez un joueur"), 344, 260, 540, 20)
-        settingText(f, L("Cliquez sur son personnage ou sur son portrait."), 344, 299, 535, 15)
-        settingText(f, L("2. Donnez votre avis"), 344, 355, 540, 20)
-        bookIcon(f, 345, 395, 44, media .. "GestureKiss")
-        settingText(f, L("Bisou  +1"), 402, 408, 159, 17)
-        bookIcon(f, 584, 395, 44, "Interface\\Icons\\Spell_Nature_CorrosiveBreath")
-        settingText(f, L("Crachat  −1"), 642, 408, 226, 17)
-        settingText(f, L("Le clic droit sur le portrait permet aussi de choisir un statut."), 344, 453, 535, 14)
+        settingText(f, L("1. Sélectionnez un joueur"), 282, 236, 600, 20)
+        settingText(f, L("Cliquez sur son personnage ou sur son portrait."), 282, 272, 600, 15)
+        settingText(f, L("2. Donnez votre avis"), 282, 326, 600, 20)
+        bookIcon(f, 284, 364, 44, media .. "GestureKiss")
+        settingText(f, L("Bisou  +1"), 340, 377, 200, 17)
+        bookIcon(f, 562, 364, 44, "Interface\Icons\Spell_Nature_CorrosiveBreath")
+        settingText(f, L("Crachat  −1"), 618, 377, 230, 17)
+        settingText(f, L("Le clic droit sur le portrait permet aussi de choisir un statut."), 282, 424, 600, 14)
         -- The first thing a new player must know: the book fills itself in PvP, nothing to set up.
-        settingText(f, L("3. Le reste se fait seul"), 344, 502, 541, 20)
+        settingText(f, L("3. Le reste se fait seul"), 282, 474, 600, 20)
         settingText(f, L("Un joueur qui vous attaque ou vous tue entre dans le Journal, avec le récit du combat. Vos avis et vos notes s’y retrouvent."),
-            344, 544, 535, 14)
-        f.openJournal = button(f, L("Ouvrir le Journal"), 306, -602, 348, function() GL.ShowLedger() end, nil, true)
+            282, 512, 600, 14)
+        f.openJournal = button(f, L("Ouvrir le Journal"), 412, -574, 340, function() GL.ShowLedger() end, nil, true)
         UI.selectButton(f.openJournal, true)
-        local revisit = settingText(f, L("Retrouvez ce guide dans les réglages, sous Données et diagnostic."), 62, 643, 836, 12, theme.inkMuted)
+        local revisit = settingText(f, L("Retrouvez ce guide dans les réglages, sous Données et diagnostic."), 262, 614, 620, 12, theme.inkMuted)
         revisit:SetJustifyH("CENTER")
     end
     if not GL.Settings().guideSeen then GL.SetSetting("guideSeen", true) end
@@ -3510,7 +3600,7 @@ function GL.ShowLedger(key)
     buildLedger()
     ledger.closeMenu()
     if statisticsWindow then statisticsWindow:Hide() end
-    if journalWindow then journalWindow:Hide() end
+    if honorBook then honorBook:Hide() end
     if key then
         selectedKey = record.key
         filter, factionFilter, tagFilter, offset, notesOnly = "all", "all", "all", 0, false

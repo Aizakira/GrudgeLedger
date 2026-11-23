@@ -85,7 +85,7 @@ do
     record.raceID = 89
     GL.RecordPvP(record, "death", "confirmed", nil, "localized-race")
     GL.ShowJournal("summary")
-    click(GrudgeLedgerJournal.dimensionButtons.race)
+    click(GrudgeLedgerJournal.chips.race)
     assert(GrudgeLedgerJournal.breakdownRows[1].name:GetText() == "Eólido", "event snapshot retains its custom race ID")
     record.race, record.raceName, record.raceID = "Dwarf", "Naine", nil
     record.class, record.className = "SHAMAN", "Chamane"

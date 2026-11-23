@@ -37,84 +37,98 @@ local legacy = ra.history[#ra.history]
 legacy.actorGUID, legacy.actorName = nil, nil
 GL.InitDB()
 
+-- The detailed tables are a page of the Relations book (23/11); without Relations.lua, of a narrow
+-- book of their own. Their figures are the key figures of the left column.
 GL.ShowJournal("summary")
 local f = GrudgeLedgerJournal
-assert(f.summary:IsShown() and not f.history:IsShown())
-assert(f.metrics.deaths.value:GetText() == "1" and f.metrics.kills.value:GetText() == "1")
-assert(not f.metrics.probableKills)
-assert(f.coverage:GetText():find("1 sans auteur connu", 1, true))
-assert(f.recaps.mostDeaths.record == ra and f.recaps.mostKilled.record == ra)
-assert(f.recaps.mostDeaths.name:GetText() == ra.fullName and f.recaps.mostDeaths.detail:GetText() == "1 mort")
-assert(f.recaps.mostDeaths.raceIcon:IsShown() and f.recaps.mostKilled.raceIcon:IsShown())
-assert(f.recaps.mostKilled.name:GetText() == ra.fullName and f.recaps.mostKilled:IsEnabled())
-assert(f.podium:IsShown() and f.podium.rows[1].record == ra and not f.podium.rows[2]:IsShown())
-click(f.dimensionButtons.race)
+local function tally(caption)
+    for _, line in ipairs(GL.HonorTally()) do if line[1] == caption then return line[2] end end
+end
+local function period(key, year)
+    for _ = 1, 12 do
+        if f.period == key and (not year or f.year == year) then return end
+        click(f.periodButton)
+    end
+    error("period not reached: " .. key)
+end
+assert(f.views.summary:IsShown() and not f.views.history:IsShown())
+assert(tally("Morts") == 1 and tally("Victoires") == 1)
+assert(tally("Sans auteur connu") == 1)
+assert(f.table:IsShown() and f.breakdownRows[1].item.record == ra and not f.breakdownRows[2]:IsShown())
+assert(f.breakdownRows[1].kills:GetText() == "1" and f.breakdownRows[1].deaths:GetText() == "1")
+assert(f.breakdownRows[1].face.raceIcon:IsShown() and f.breakdownRows[1].name:GetText() == ra.fullName)
+click(f.chips.race)
 assert(f.breakdownRows[1].kills:GetText() == "1" and f.breakdownRows[1].deaths:GetText() == "1",
     "breakdown must agree with the scoped summary and keep probable facts distinct")
-assert(f.breakdownInfo:GetText():find("1 rapport annulé", 1, true))
+assert(f.lead:GetText():find("1 rapport annulé", 1, true))
 local zoneReads = 0
 GL.ZoneTimes = function()
     zoneReads = zoneReads + 1
     return { ["Hurlevent"] = 3600 }, true
 end
-click(f.dimensionButtons.zone)
-assert(f.dimension == "zone" and f.breakdown:IsShown() and f.breakdownRows[1].name:GetText() ~= "")
-assert(f.breakdownInfo:GetText():find("1 rapport annulé", 1, true) and f.breakdownInfo:GetText():find("archives de présence partielles", 1, true))
+click(f.chips.zone)
+assert(f.dimension == "zone" and f.table:IsShown() and f.breakdownRows[1].name:GetText() ~= "")
+assert(f.lead:GetText():find("1 rapport annulé", 1, true) and f.lead:GetText():find("archives de présence partielles", 1, true))
+assert(f.zoneTracking:IsShown() and f.columnTime:IsShown())
 local area = f.breakdownRows[1].name:GetText()
 local beforeZoom = zoneReads
 click(f.breakdownRows[1])
-assert(f.zoneKey == area and f.zoneBack:IsShown() and f.breakdownLabel:GetText() == area)
+assert(f.zoneKey == area and f.zoneBack:IsShown() and f.columnName:GetText() == area)
 assert(zoneReads == beforeZoom, "the subzone view does not read or show zone-wide presence")
 click(f.zoneBack)
 GL.ZoneTimes = nil
 assert(not f.zoneKey and not f.zoneBack:IsShown())
-click(f.dimensionButtons.class)
+click(f.chips.class)
 assert(f.dimension == "class" and f.breakdownRows[1]:IsShown())
-assert(not f.search:IsShown() and not f.kindButton:IsShown(), "history controls must not imply they affect the summary")
+assert(not f.search:IsVisible() and not f.kindButton:IsVisible(), "history controls must not imply they affect the summary")
 click(f.scopeButton)
-assert(f.scope == "all" and f.metrics.kills.value:GetText() == "2" and f.metrics.deaths.value:GetText() == "2")
+assert(f.scope == "all" and tally("Victoires") == 2 and tally("Morts") == 2)
 click(f.scopeButton)
-assert(f.scope == "legacy" and f.metrics.deaths.value:GetText() == "1")
+assert(f.scope == "legacy" and tally("Morts") == 1)
 click(f.scopeButton)
 f.year = nil GL.ShowJournal("summary")
-assert(not f.yearButton:GetText():find("nil", 1, true))
-click(f.periodButtons.year) assert(f.yearButton.enabled)
-click(f.periodButtons.week) assert(not f.yearButton.enabled)
-click(f.periodButtons.all)
+assert(not f.periodButton:GetText():find("nil", 1, true))
+period("year") assert(f.periodButton:GetText():find("2026", 1, true))
+period("week") period("all")
 click(f.tabs.year)
-assert(f.annual:IsShown() and f.annual.metrics.deaths:GetText() == "1" and f.annual.metrics.kills:GetText() == "1")
-assert(f.yearButton.enabled and not f.periodButtons.week:IsShown() and f.annual.recaps.mostDeaths.record == ra)
+assert(f.views.year:IsShown() and f.annual.metrics.deaths:GetText() == "1" and f.annual.metrics.kills:GetText() == "1")
+assert(f.annual.recaps.mostDeaths.record == ra)
+click(f.periodButton)
+assert(f.period == "year", "Mon année only turns through the years")
+f.year = 2026 GL.ShowJournal("year")
 click(f.copyAnnual)
-assert(f.cardCopy.children[1].highlighted == f.annualText)
+assert(f.cardCopy.children[2].highlighted == f.annualText)
 assert(f.cardCopy:IsShown() and f.annualText:find("1 mort", 1, true) and not f.annualText:find("Alpha", 1, true)
     and not f.annualText:find("Golden Library", 1, true) and not f.annualText:find("dungeon", 1, true))
 f.year = 2025 GL.ShowJournal("year")
 assert(not f.cardCopy:IsShown(), "a previous selection must not remain available as the new year's copy")
-assert(f.annual.metrics.deaths:GetText() == "0" and f.annual.coverage:GetText():find("Aucun fait PvP", 1, true) and not f.annual.recaps.mostDeaths.enabled)
+assert(f.annual.metrics.deaths:GetText() == "0" and f.annual.coverage:GetText():find("Aucun fait PvP", 1, true) and not f.annual.recaps.mostDeaths.record)
 f.year = 2026 GL.ShowJournal("year")
 click(f.annual.events)
 assert(f.mode == "history" and f.period == "year" and f.kind == "pvp" and f.scope == "character")
 click(f.reset)
+period("all")
 click(f.tabs.story)
-assert(f.story:IsShown() and not f.summary:IsShown() and not f.history:IsShown())
+assert(f.views.story:IsShown() and not f.views.summary:IsShown() and not f.views.history:IsShown())
 assert(f.storyPages.fullText:find("remporté 1 victoire", 1, true), "story must use the selected character, not account totals")
 click(f.scopeButton)
 assert(f.storyPages.fullText:find("remporté 2 victoires et subi 2 morts", 1, true))
 f.storyPages.page = 99
-click(f.periodButtons.week)
+period("week")
 assert(f.storyPages.page <= #f.storyPages.pages, "the story stays on an existing page")
-click(f.scopeButton) click(f.scopeButton) click(f.periodButtons.all)
+click(f.scopeButton) click(f.scopeButton) period("all")
 
 click(f.tabs.history)
-assert(f.search:IsShown() and f.kindButton.enabled and not f.summary:IsShown())
-local before = f.total:GetText()
+assert(f.search:IsVisible() and f.kindButton.enabled and not f.views.summary:IsShown())
+local before = f.count:GetText()
 f.search:SetText("dungeon")
-assert(f.total:GetText() == before, "large history is not searched on every keystroke")
+assert(f.count:GetText() == before, "large history is not searched on every keystroke")
 f.search.scripts.OnEnterPressed(f.search)
 assert(f.rows[1].item.record == rb and f.rows[1].item.event.kind == "note" and not f.rows[2]:IsShown())
-f.search:SetText("") click(f.searchButton)
+assert(f.reset:IsShown(), "a search shows the clear button")
+f.search:SetText("") f.search.scripts.OnEnterPressed(f.search)
 click(f.kindButton)
-assert(f.kind == "pvp")
+assert(f.kind == "pvp" and f.kindButton:GetText():find(" · ", 1, true))
 local corrected
 for _, row in ipairs(f.rows) do
     if row.item and row.item.event.voided then corrected = row end
@@ -128,9 +142,9 @@ local alt
 for _, row in ipairs(f.rows) do
     if row.item and row.item.event.actorGUID == "Player-1-alt" then alt = row end
 end
-assert(alt and alt.meta:GetText():find("Autre Exemple", 1, true), "account history identifies the actor")
+assert(alt and alt.action:GetText():find("Autre Exemple", 1, true), "account history identifies the actor")
 click(f.rows[1])
-assert(not f:IsShown() and GrudgeLedgerWindow:IsShown())
+assert(not GrudgeLedgerJournalBook:IsShown() and GrudgeLedgerWindow:IsShown())
 
 -- Every chronicle page remains bounded, including the final partial page.
 for i = 1, 10 do now = now + 1 GL.AddNote(b, "Page note " .. i) end
@@ -141,7 +155,7 @@ local first = f.rows[1].item.event
 click(f.next) assert(f.previous.enabled and f.rows[1].item.event ~= first)
 while f.next.enabled do click(f.next) end
 assert(f.rows[1].item and not f.next.enabled)
-f.search:SetText("nothing matches this") click(f.searchButton)
+f.search:SetText("nothing matches this") f.search.scripts.OnEnterPressed(f.search)
 assert(not f.rows[1]:IsShown() and not f.previous.enabled and not f.next.enabled)
 
 -- Rich search composes with notes-only, and display/sort choices persist.
@@ -302,7 +316,7 @@ local formatDate = date
 date = function(format, at) return format == "%Y" and "?" or formatDate(format, at) end
 f.year = nil
 GL.ShowJournal("year")
-assert(f.annual.period:GetText() == "Année inconnue" and not f.yearButton:IsEnabled())
+assert(f.annual.period:GetText() == "Année inconnue")
 date = formatDate
 do
     IsInInstance = function() return false, "none" end
@@ -323,9 +337,9 @@ do
     local revenge = win(opponent, "player", true, "revenge")
     GL.ShowJournal("summary")
     f.scope = "character"
-    click(f.periodButtons.all) click(f.dimensionButtons.initiative)
+    period("all") click(f.chips.initiative)
     local fields = f.initiative.values
-    assert(f.initiative:IsShown() and not f.podium:IsShown() and not f.breakdown:IsShown())
+    assert(f.initiative:IsShown() and not f.table:IsShown() and not f.next:IsShown())
     assert(fields.initiatedKillsNoGrudge:GetText() == "1" and fields.initiatedKillsGrudge:GetText() == "1")
     assert(fields.responseKills:GetText() == "1" and fields.revengeKills:GetText() == "1")
     assert(tonumber(fields.unknownOpeningKills:GetText()) > 0 and tonumber(fields.victims:GetText()) >= 2)
@@ -336,7 +350,7 @@ do
     assert(f.scope == "legacy" and fields.revengeKills:GetText() == "0" and fields.initiated:GetText() == "0")
     click(f.scopeButton)
     assert(fields.revengeKills:GetText() == "1")
-    click(f.periodButtons.year)
+    period("year")
     f.year = 2025 GL.ShowJournal("summary")
     assert(fields.ratio:GetText() == "—" and fields.initiated:GetText() == "0" and fields.revengeKills:GetText() == "0")
     GL.ShowLedger(opponent.key)
