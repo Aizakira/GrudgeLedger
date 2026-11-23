@@ -3059,7 +3059,7 @@ local function buildLedger()
     f.addNote:SetHeight(26)
     f.actions[#f.actions + 1] = f.addNote
     f.toolsMenu = CreateFrame("Frame", nil, f)
-    f.toolsMenu:SetSize(180, 206)
+    f.toolsMenu:SetSize(180, 154)
     f.toolsMenu:SetFrameStrata("FULLSCREEN_DIALOG") f.toolsMenu:SetToplevel(true) f.toolsMenu:EnableMouse(true)
     surface(f.toolsMenu, theme.gold) surface(f.toolsMenu, theme.panel, 1)
     f.tools = button(f, L("Autres actions"), 717, -602, 168, function() toggleMenu(f.toolsMenu) end, nil, true)
@@ -3074,20 +3074,14 @@ local function buildLedger()
         end
     end, nil, true)
     f.openSheet:SetHeight(26)
-    for i, option in ipairs({ { L("Avis positif (+1)"), 1 }, { L("Avis négatif (-1)"), -1 } }) do
-        local delta = option[2]
-        f.actions[#f.actions + 1] = button(f.toolsMenu, option[1], 3, -3 - (i - 1) * 29, 174, function()
-            local record = currentRecord()
-            if record then GL.AdjustReputation(record, delta, "Avis personnel", "manual") end
-            f.toolsMenu:Hide()
-        end)
-    end
-    f.guildButton = button(f.toolsMenu, L("Guilde"), 3, -61, 174, function()
+    -- No "+1 / -1" here any more (owner 23/11): Ami, Méfiance and Ennemi on the page, and the portrait's
+    -- right-click menu, already set the opinion; a third way only blurred which one counts.
+    f.guildButton = button(f.toolsMenu, L("Guilde"), 3, -3, 174, function()
         local record = currentRecord()
         f.toolsMenu:Hide()
         if record and record.guild then GL.ShowGuilds(record) end
     end)
-    f.actions[#f.actions + 1] = button(f.toolsMenu, L("Corriger le PvP"), 3, -90, 174, function()
+    f.actions[#f.actions + 1] = button(f.toolsMenu, L("Corriger le PvP"), 3, -32, 174, function()
         f.toolsMenu:Hide()
         f.detailTab, f.historyPage.kind, f.historyPage.offset = "history", "pvp", 0
         renderDetail()
@@ -3103,17 +3097,18 @@ local function buildLedger()
         end,
     }
     f:HookScript("OnHide", function() StaticPopup_Hide(deleteDialog) end)
-    f.openHistory = button(f.toolsMenu, L("Histoire détaillée"), 3, -119, 174, function()
+    f.openHistory = button(f.toolsMenu, L("Histoire détaillée"), 3, -61, 174, function()
         f.toolsMenu:Hide()
         f.detailTab, f.historyPage.kind, f.historyPage.offset = "history", "all", 0
         renderDetail()
     end)
-    f.openNotes = button(f.toolsMenu, L("Toutes les notes"), 3, -148, 174, function()
+    f.openNotes = button(f.toolsMenu, L("Toutes les notes"), 3, -90, 174, function()
         f.toolsMenu:Hide()
         f.detailTab = "notes"
         renderDetail()
     end)
-    f.actions[#f.actions + 1] = button(f.toolsMenu, L("Supprimer la fiche…"), 3, -177, 174, function()
+    -- Deleting stands a little apart from the harmless entries.
+    f.actions[#f.actions + 1] = button(f.toolsMenu, L("Supprimer la fiche…"), 3, -125, 174, function()
         closeMenu()
         local record = currentRecord()
         if record then StaticPopup_Show(deleteDialog, plain(record.fullName or record.key), nil, record) end
