@@ -1399,6 +1399,7 @@ local function sourceText(f,d)
 end
 draw=function(f)
     local d=resolve(f)
+    UI.paintStains(f,tostring(f.guid or f.key or f.knownName)..":"..tostring(f.page))
     drawIdentity(f,d)
     f.source:SetText(sourceText(f,d))
     local public=object(d.profile.identity)

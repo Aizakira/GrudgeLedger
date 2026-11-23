@@ -403,6 +403,57 @@ local function window(name, title, width, height, isBook)
     return f
 end
 
+-- Stains on the parchment (owner 23/11): two or three discreet marks per sheet, drawn under the text and
+-- the controls, only in the zones a book declares as quiet parchment. The draw comes from a seed (the
+-- contact or the page), so a sheet keeps its stains when it is opened again, like a real book.
+-- JournalStains.tga: cells 0-5 diffuse blood, 6-11 sharp drops, 12-15 free for ink later.
+local function setupStains(frame, zones)
+    frame.stainZones, frame.stains = zones, {}
+    for i = 1, 3 do
+        local stain = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
+        stain:SetTexture(media .. "JournalStains")
+        stain:Hide()
+        frame.stains[i] = stain
+    end
+end
+local function paintStains(frame, seed)
+    if not frame.stains then return end
+    local h = 7
+    seed = tostring(seed or "")
+    for i = 1, #seed do h = (h * 31 + seed:byte(i)) % 2147483647 end
+    if h == 0 then h = 1 end
+    local function draw() h = (h * 48271) % 2147483647 return h / 2147483647 end
+    local free = {}
+    for i = 1, #frame.stainZones do free[i] = i end
+    local count = math.min(#free, 2 + (draw() < 0.5 and 1 or 0))
+    for i, stain in ipairs(frame.stains) do
+        if i > count then stain:Hide() else
+            local zone = frame.stainZones[table.remove(free, 1 + math.floor(draw() * #free))]
+            local diffuse = i == 1 or draw() < 0.6
+            local cell = (diffuse and 0 or 6) + math.floor(draw() * 6)
+            local size = diffuse and (34 + draw() * 26) or (16 + draw() * 16)
+            local l, t = (cell % 4) / 4, math.floor(cell / 4) / 4
+            local r, b = l + 0.25, t + 0.25
+            -- A quarter turn and a mirror out of eight, with the corner form every client knows.
+            local corners = { { l, t }, { r, t }, { r, b }, { l, b } }
+            local k = math.floor(draw() * 4)
+            local ul, ur, lr, ll = corners[k % 4 + 1], corners[(k + 1) % 4 + 1], corners[(k + 2) % 4 + 1], corners[(k + 3) % 4 + 1]
+            if draw() < 0.5 then ul, ur, ll, lr = ur, ul, lr, ll end
+            stain:SetTexCoord(ul[1], ul[2], ll[1], ll[2], ur[1], ur[2], lr[1], lr[2])
+            stain:SetSize(size, size)
+            stain:ClearAllPoints()
+            stain:SetPoint("CENTER", frame, "TOPLEFT", zone[1] + draw() * (zone[3] - zone[1]), -(zone[2] + draw() * (zone[4] - zone[2])))
+            stain:SetAlpha(diffuse and (0.55 + draw() * 0.35) or (0.45 + draw() * 0.3))
+            stain:Show()
+        end
+    end
+end
+-- Quiet parchment where a stain may fall, as centre ranges {x0, y0, x1, y1} in window units. Every
+-- centre keeps the largest stain (60) on the top sheet: paper 358 (226 narrow) to 925, 147 to 641.
+local stainZones = {
+    journal = { { 765, 305, 885, 345 }, { 700, 480, 880, 528 }, { 390, 500, 560, 528 }, { 850, 215, 895, 235 } },
+    narrow = { { 420, 590, 760, 608 }, { 870, 260, 895, 520 }, { 860, 180, 895, 195 }, { 256, 300, 262, 560 } },
+}
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
     local reference = name == "GrudgeLedgerWindow"
@@ -466,6 +517,7 @@ local function bookWindow(name, title, narrow)
         f.bookSurface:SetTexture(media .. "JournalReferenceSheetBook")
         f.lining:Hide()
     end
+    if reference or tree then setupStains(f, reference and stainZones.journal or stainZones.narrow) end
     if reference or tree then
         -- Each book keeps the other painting loaded, invisible: going from the Journal to another tab
         -- no longer blanks the window while the game reads the big texture (owner 23/11).
@@ -546,7 +598,9 @@ local function wheelScroll(scroll)
     end)
 end
 
+
 GL.UITheme = {
+    setupStains = setupStains, paintStains = paintStains,
     textPages = textPages, wheelScroll = wheelScroll,
     theme = theme, journalFonts = journalFonts,
     surface = surface, plain = plain, label = label, button = button,

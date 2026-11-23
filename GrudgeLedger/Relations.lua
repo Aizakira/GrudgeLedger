@@ -2346,6 +2346,7 @@ function R.Open(key)
     end
     for tabKey, tab in pairs(f.tabs) do UI.selectButton(tab, tabKey == f.page) end
     R.page = f.page
+    UI.paintStains(f, f.page)  -- each page keeps its own stains
     GL.ShowBookPage(f)
     R.Refresh()
     return f

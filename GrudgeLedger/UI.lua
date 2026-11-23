@@ -2221,6 +2221,7 @@ local function renderDetail()
         UI.selectButton(control, tab == key)
     end
     showIf(ledger.backToSummary, record ~= nil and tab ~= "summary")
+    UI.paintStains(ledger, record and record.key or "")  -- each contact's sheet keeps its own stains
     for _, b in ipairs(ledger.actions) do b:SetEnabled(record ~= nil) end
     ledger.guildButton:SetEnabled(record ~= nil and record.guild ~= nil)
     ledger.tools:SetEnabled(record ~= nil)
@@ -2228,6 +2229,7 @@ local function renderDetail()
     -- The prime keeps its place in the row (greyed when no prime can be made): the row never reflows.
     showIf(ledger.contactBounty, tab == "summary" and record ~= nil)
     ledger.contactBounty:SetEnabled(bountyMode and true or false)
+    ledger.contactBounty.actionIcon:SetAlpha(bountyMode and 1 or 0.45)
     ledger.contactBounty:SetText(bountyMode=="view" and L("Voir la prime") or L("Créer une prime"))
     if not record then ledger.toolsMenu:Hide() end
     -- Red marks only your own opinion. Without one, "Automatique" is lit and the relation the PvP balance
@@ -3154,6 +3156,19 @@ local function buildLedger()
         if r then GL.OpenContactBounty(r.guid) end
     end, nil, true)
     f.contactBounty:SetHeight(26)
+    -- Ink icons before the four actions (owner 23/11): open book, target, quill, menu.
+    for i, control in ipairs({ f.openSheet, f.contactBounty, f.addNote, f.tools }) do
+        local icon = control:CreateTexture(nil, "OVERLAY")
+        icon:SetTexture(media .. "JournalActionIcons")
+        icon:SetTexCoord((i - 1) / 4, i / 4, 0, 1)
+        icon:SetSize(16, 16)
+        icon:SetPoint("LEFT", 5, 0)
+        control.actionIcon = icon
+        control.caption:ClearAllPoints()
+        control.caption:SetPoint("LEFT", 21, 0)
+        control.caption:SetPoint("RIGHT", -4, 0)
+        journalFont(control.caption, "GameFontHighlightSmall", 13)  -- as the opinions row, room for the icon
+    end
     f.detailTabs = {}
     -- Never shown since 0.33.0: these three stay as the internal switches of the right page.
     for i, entry in ipairs({ { "summary", L("Synthèse") }, { "history", L("Histoire") }, { "notes", L("Notes") } }) do

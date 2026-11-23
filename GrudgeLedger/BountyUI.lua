@@ -722,6 +722,7 @@ local function kindOf(o)
 end
 refresh=function()
     if not f or not f:IsShown() then return end
+    UI.paintStains(f,(f.creating and "create" or f.tab or "")..":"..tostring(f.selected or ""))
     local creating=f.creating==true
     local choosing=creating and f.choosing
     local query=f.search:GetText():lower()

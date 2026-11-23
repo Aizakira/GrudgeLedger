@@ -283,6 +283,17 @@ def render(name, frames, root):
             if coords and len(coords) == 4:
                 left, right, top, bottom = coords
                 tex = tex.crop((round(left*tex.width), round(top*tex.height), round(right*tex.width), round(bottom*tex.height)))
+            elif coords and len(coords) == 8:
+                # UL, LL, UR, LR corners: quarter turns and mirrors of an atlas cell (book stains).
+                xs, ys = coords[0::2], coords[1::2]
+                left, right, top, bottom = min(xs), max(xs), min(ys), max(ys)
+                tex = tex.crop((round(left*tex.width), round(top*tex.height), round(right*tex.width), round(bottom*tex.height)))
+                side = lambda x, y: ("l" if abs(x-left) < 1e-6 else "r") + ("t" if abs(y-top) < 1e-6 else "b")
+                key = side(coords[0], coords[1]) + side(coords[4], coords[5])
+                T = Image.Transpose
+                op = {"ltrt": None, "rtlt": T.FLIP_LEFT_RIGHT, "lbrb": T.FLIP_TOP_BOTTOM, "rblb": T.ROTATE_180,
+                      "lblt": T.ROTATE_270, "rtrb": T.ROTATE_90, "ltlb": T.TRANSPOSE, "rbrt": T.TRANSVERSE}.get(key)
+                if op is not None: tex = tex.transpose(op)
             tex = tex.resize((max(1,round(w)),max(1,round(h))), Image.Resampling.LANCZOS)
             if r.get("desaturated"):
                 gray=tex.convert("L")
