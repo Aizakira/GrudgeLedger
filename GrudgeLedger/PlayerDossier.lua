@@ -1682,7 +1682,8 @@ local function build()
     f.tabs,f.rows,f.statCells,f.pills={},{},{},{}
     for i,s in ipairs(tabs) do
         local key=s[1]
-        f.tabs[key]=UI.button(f,L(s[2]),232+(i-1)*106,-156,102,function()
+        -- 3 lower than before: clear of the torn top edge of the Journal parchment (owner 23/11).
+        f.tabs[key]=UI.button(f,L(s[2]),232+(i-1)*106,-159,102,function()
             f.page,f.pageNumber,f.factsMode=key,1,false
             draw(f)
         end,true,true)
@@ -1704,7 +1705,7 @@ local function build()
     f.ilvl:SetTextColor(unpack(UI.theme.ink))
     f.body=CreateFrame("Frame",nil,f)
     f.body:SetPoint("TOPLEFT",232,-225)
-    f.body:SetSize(640,408)
+    f.body:SetSize(640,390)
     GL.Safe(f.body.EnableMouseWheel,f.body,true)
     f.body:SetScript("OnMouseWheel",function(_,delta) turnPage(f,delta>0 and -1 or 1) end)
     f.overview=buildOverview(f)
@@ -1712,17 +1713,18 @@ local function build()
     f.expanded={}
     f.equipment=CreateFrame("Frame",nil,f)
     f.equipment:SetPoint("TOPLEFT",239,-229)
-    f.equipment:SetSize(635,398)
+    f.equipment:SetSize(635,380)
     f.talents=CreateFrame("Frame",nil,f)
     f.talents:SetPoint("TOPLEFT",232,-225)
-    f.talents:SetSize(649,403)
-    f.statsToggle=UI.button(f,"",232,-645,230,function()
+    f.talents:SetSize(649,390)
+    -- The bottom row stays on the top sheet, above the stacked sheet edges (front sheet ends near 641).
+    f.statsToggle=UI.button(f,"",232,-620,230,function()
         f.gearStats,f.pageNumber=not f.gearStats,1
         draw(f)
     end,nil,true)
-    f.pagePrev=UI.button(f,"‹",770,-645,30,function() turnPage(f,-1) end,nil,true)
-    f.pageNext=UI.button(f,"›",860,-645,30,function() turnPage(f,1) end,nil,true)
-    f.pageLabel=UI.label(f,"",nil,802,-652,56)
+    f.pagePrev=UI.button(f,"‹",770,-620,30,function() turnPage(f,-1) end,nil,true)
+    f.pageNext=UI.button(f,"›",860,-620,30,function() turnPage(f,1) end,nil,true)
+    f.pageLabel=UI.label(f,"",nil,802,-627,56)
     f.pageLabel:SetJustifyH("CENTER")
     f.pageLabel:SetTextColor(unpack(UI.theme.inkMuted))
     f.filters={}

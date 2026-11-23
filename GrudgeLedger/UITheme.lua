@@ -407,6 +407,7 @@ end
 local function bookWindow(name, title, narrow)
     local reference = name == "GrudgeLedgerWindow"
     local tree = name == "GrudgeLedgerRelations" or name == "GrudgeLedgerGuild" or name == "GrudgeLedgerBounties"
+        or name == "GrudgeLedgerPlayerDossier"
     local f = window(name, title, 960, 700, true)
     f.referenceSkin = reference or tree
     f.referenceTree = tree

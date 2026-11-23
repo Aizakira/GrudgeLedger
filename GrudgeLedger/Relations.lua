@@ -157,15 +157,15 @@ local function buildDebts(host)
     for i = 1, DEBT_ROWS do page.rows[i] = debtRow(page, i) end
     page.empty = Panels.Text(page, X(26), -130, S(540), 13, false, UI.theme.inkMuted)
     page.offset = 0
-    page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
+    page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - DEBT_ROWS)
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", X(526), -474, S(40), function()
+    page.next = UI.button(page, "›", X(526), -464, S(40), function()
         page.offset = page.offset + DEBT_ROWS
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, X(76), -480, S(440), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
     return page
 end
@@ -328,19 +328,19 @@ local function buildRivals(host)
     end
     page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
     page.index = 1
-    page.bounty = UI.button(page, L("Poser une prime"), X(26), -474, S(150), function()
+    page.bounty = UI.button(page, L("Poser une prime"), X(26), -464, S(150), function()
         if page.record and page.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(page.record.guid) end
     end, nil, true)
-    page.sheet = UI.button(page, L("Ouvrir sa fiche"), X(182), -474, S(140), function() openSheet(page.record) end, nil, true)
-    page.previous = UI.button(page, "‹", X(440), -474, S(40), function()
+    page.sheet = UI.button(page, L("Ouvrir sa fiche"), X(182), -464, S(140), function() openSheet(page.record) end, nil, true)
+    page.previous = UI.button(page, "‹", X(440), -464, S(40), function()
         page.index = page.index - 1
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", X(526), -474, S(40), function()
+    page.next = UI.button(page, "›", X(526), -464, S(40), function()
         page.index = page.index + 1
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, X(480), -480, S(46), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(480), -470, S(46), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
     return page
 end
@@ -464,7 +464,7 @@ local function buildGuilds(host)
         page.cards[i] = card
     end
     page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
-    page.all = Panels.Link(page, X(304), -474, S(262), function() R.OpenRankings(true) end)
+    page.all = Panels.Link(page, X(304), -464, S(262), function() R.OpenRankings(true) end)
     return page
 end
 local function paintGuilds(page)
@@ -1381,7 +1381,7 @@ local function buildLands(host)
         page.rows[i] = row
     end
     page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
-    page.note = Panels.Text(page, X(26), -480, S(540), 11, false, UI.theme.inkMuted)
+    page.note = Panels.Text(page, X(26), -470, S(540), 11, false, UI.theme.inkMuted)
     return page
 end
 local function paintLands(page)
@@ -1532,15 +1532,15 @@ local function buildRankings(host)
         page.rows[i] = row
     end
     page.empty = Panels.Text(page, X(26), -212, S(540), 13, false, UI.theme.inkMuted)
-    page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
+    page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - RANK_ROWS)
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", X(526), -474, S(40), function()
+    page.next = UI.button(page, "›", X(526), -464, S(40), function()
         page.offset = page.offset + RANK_ROWS
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, X(76), -480, S(440), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
     return page
 end
@@ -1961,15 +1961,15 @@ local function buildGuildJournal(host)
     page.filterPanel = buildFilterPanel(page)
     page:SetScript("OnHide", function() page.filterPanel:Hide() end)
     page.empty = Panels.Text(page, X(26), -124, S(540), 13, false, UI.theme.inkMuted)
-    page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
+    page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - GUILD_ROWS)
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", X(526), -474, S(40), function()
+    page.next = UI.button(page, "›", X(526), -464, S(40), function()
         page.offset = page.offset + GUILD_ROWS
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, X(76), -480, S(440), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
     return page
 end
@@ -2121,15 +2121,15 @@ local function buildEnemies(host)
         page.rows[i] = row
     end
     page.empty = Panels.Text(page, X(26), -124, S(540), 13, false, UI.theme.inkMuted)
-    page.previous = UI.button(page, "‹", X(26), -474, S(40), function()
+    page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - ENEMY_ROWS)
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", X(526), -474, S(40), function()
+    page.next = UI.button(page, "›", X(526), -464, S(40), function()
         page.offset = page.offset + ENEMY_ROWS
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, X(76), -480, S(440), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
     return page
 end
