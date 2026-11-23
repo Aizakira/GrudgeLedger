@@ -18,9 +18,9 @@ local friend = GL.SetReaction(GL.IdentityFromName("Kind", "Example", "Player-9-0
 local record = GL.Get(id)
 GL.ShowLedger(record.key)
 local f = GrudgeLedgerWindow
-assert(f.referenceSkin and f:GetWidth() == 960 and f:GetHeight() == 720, "the window includes the longer ribbon footer")
+assert(f.referenceSkin and f:GetWidth() == 960 and f:GetHeight() == 700, "the Journal has the window of the other pages")
 assert(f.bookSurface:GetWidth() == 960 and f.bookSurface:GetHeight() == 720, "the book painting preserves the reference aspect ratio")
-assert(f.search.referenceSkin and f.rows[1]:GetWidth() == 255)
+assert(f.search.referenceSkin and f.rows[1]:GetWidth() == 300, "the list fills the centred left column")
 assert(f.rows[1].selection.texture:find("JournalReferenceSelected", 1, true))
 assert(f.metrics.deaths.skin.texture:find("JournalReferenceStats", 1, true))
 
@@ -75,10 +75,11 @@ for i = 1, 13 do GL.SetReaction(GL.IdentityFromName("LayoutExtra" .. i, "Example
 GL.ShowLedger(record.key)
 for _, compact in ipairs({ true, false }) do
     GL.SetSetting("compactMode", compact)
-    assert(f.pageSize == (compact and 11 or 7))
+    assert(f.pageSize == (compact and 13 or 8))
     for i = 1, f.pageSize do
         local row = f.rows[i]
-        assert(row.anchor[2] >= 74 and row.anchor[2] + row:GetWidth() <= 345, "list rows stay on the leather")
+        -- The leather of the V8 frame runs from 23 to 347 (owner 23/11: centred column).
+        assert(row.anchor[2] >= 23 and row.anchor[2] + row:GetWidth() <= 347, "list rows stay on the leather")
         assert(-row.anchor[3] + row:GetHeight() <= -f.previous.anchor[3], "list rows must end before pagination")
         assert(row.relation.anchor[2] + row.relation:GetWidth() < row:GetWidth(), "relationship labels stay inside the row")
     end

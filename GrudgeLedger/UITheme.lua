@@ -278,10 +278,6 @@ local function styleInput(edit, multiline, paper)
 end
 
 local function iconButton(parent, textureName, title, x, y, size, onClick)
-    if parent.referenceSkin then
-        if textureName == "JournalSettings" then textureName = "JournalReferenceSettings"
-        elseif textureName == "JournalClose" then textureName = "JournalReferenceClose" end
-    end
     local b = CreateFrame("Button", nil, parent)
     b:SetPoint("TOPLEFT", x, y)
     b:SetSize(size, size)
@@ -385,7 +381,7 @@ end
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
     local reference = name == "GrudgeLedgerWindow"
-    local f = window(name, title, 960, reference and 720 or 700, true)
+    local f = window(name, title, 960, 700, true)
     f.referenceSkin = reference
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)
@@ -420,30 +416,20 @@ local function bookWindow(name, title, narrow)
     f.bookSurface:SetAllPoints()
     f.bookSurface:SetTexture(media .. (narrow and "JournalBookSurfaceSheet" or "JournalBookSurface"))
     if reference then
-        -- ponytail: keep the approved whole canvas; its 4:3 display reverses the POT export stretch.
+        -- The same window, title and buttons as the other pages: the book must not jump between tabs
+        -- (owner, 23/11). The painting keeps its 960 x 720 canvas, 10 units above and below the window,
+        -- and its frame is painted on the frame of the other pages.
         f.bookSurface:ClearAllPoints()
-        f.bookSurface:SetPoint("TOPLEFT")
+        f.bookSurface:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 10)
         f.bookSurface:SetSize(960, 720)
         f.bookSurface:SetTexture(media .. "JournalReferenceBook")
         f.lining:Hide()
-        -- The old title, as on Relations (owner, 22/11), 5 units lower because this frame starts lower.
-        titlePlate:ClearAllPoints()
-        titlePlate:SetPoint("TOPLEFT", 323, -24)
         f.indexPaper:ClearAllPoints()
         f.indexPaper:SetPoint("TOPLEFT", 74, -149)
         f.indexPaper:SetSize(272, 476)
         f.paper:ClearAllPoints()
         f.paper:SetPoint("TOPLEFT", 356, -153)
         f.paper:SetSize(541, 473)
-        f.closeButton:ClearAllPoints()
-        f.closeButton:SetPoint("TOPLEFT", 899, -27)
-        f.seal:ClearAllPoints()
-        f.seal:SetPoint("TOPLEFT", 289, -13)
-        f.seal:SetSize(76, 76)
-        f.title:ClearAllPoints()
-        f.title:SetPoint("TOPLEFT", 362, -25)
-        f.title:SetSize(289, 51)
-        f.wordmark:SetSize(248, 62)
     end
     return f
 end

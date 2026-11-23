@@ -378,7 +378,9 @@ def render(name, frames, root):
                 scroll_ancestor |= lay.frames[p]["kind"]=="ScrollFrame"
                 p=lay.frames[p].get("parent")
             xx,yy,ww,hh=lay.resolve(r["id"])
-            if not scroll_ancestor and (xx<rb[0]-4 or yy<rb[1]-4 or xx+ww>rb[0]+rb[2]+4 or yy+hh>rb[1]+rb[3]+4):
+            # The Journal painting is 720 high, 10 units above and below its 700 window, by design.
+            book=str(r.get("texture") or "").endswith("JournalReferenceBook")
+            if not scroll_ancestor and not book and (xx<rb[0]-4 or yy<rb[1]-4 or xx+ww>rb[0]+rb[2]+4 or yy+hh>rb[1]+rb[3]+4):
                 issues.append({"kind":"outside_window","id":r["id"],"text":r.get("text","")[:100],"bounds":[xx-rb[0],yy-rb[1],ww,hh]})
             if r["kind"] == "FontString" and r.get("parent") and lay.frames[r["parent"]]["kind"] == "Button":
                 px,py,pw,ph=lay.resolve(r["parent"])

@@ -159,7 +159,7 @@ assert(ledger.openSheet.skin.texture:match("JournalReferenceButton$") and not le
 assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] == 1 and ledger.actions[2].caption.color[1] == 0,
     "the chosen opinion is red with white text, the others rest black on parchment")
 assert(ledger.bookSurface.texture:match("JournalReferenceBook$") and ledger.bookSurface.anchor[1] == "TOPLEFT")
-assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 720, "the window is exactly the painted book")
+assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 700, "the Journal has the window of the other pages")
 assert(ledger.bookSurface:GetWidth() == 960 and ledger.bookSurface:GetHeight() == 720, "keep the complete reference book's 4:3 canvas")
 for _, region in ipairs(ledger.children) do
     assert(not region.texture or not region.texture:find("JournalReferenceDrape", 1, true), "the V3 cloth is painted in the book itself")
@@ -183,8 +183,8 @@ for _, key in ipairs({"ledger", "players", "guild", "bounties"}) do
     assert(control.scripts.OnMouseDown and control.scripts.OnMouseUp and control.scripts.OnEnter,
         "navigation keeps explicit press and hover feedback")
 end
-assert(ledger.navigation.ledger.anchor[2] >= 100 and previousTab.anchor[2] + previousTab:GetWidth() <= 900,
-    "tabs stay between the spine and right-hand brass corners")
+assert(ledger.navigation.ledger.anchor[2] == 72 and previousTab.anchor[2] + previousTab:GetWidth() <= 900,
+    "tabs sit where the other pages put them, inside the brass corners")
 local activeTab = ledger.detailTabs.summary
 assert(activeTab.active and activeTab.selection:IsShown())
 assert(activeTab.normalTexture.drawLayer == "BACKGROUND" and activeTab.disabledTexture.drawLayer == "BACKGROUND")
@@ -200,8 +200,9 @@ assert(ledger.seal.texture == GL.icon and ledger.title:GetText() == "Grudge Ledg
     "keep the approved book medallion unchanged")
 assert(ledger.wordmark.texture:match("JournalWordmark$") and ledger.wordmark:IsShown() and not ledger.title:IsShown(),
     "the independent gold wordmark replaces the visible title exactly once")
-assert(ledger.closeButton.normalTexture.texture:match("JournalReferenceClose$")
-    and ledger.settingsButton.normalTexture.texture:match("JournalReferenceSettings$"))
+-- The Journal keeps the close and settings buttons of the other pages (owner, 23/11).
+assert(ledger.closeButton.normalTexture.texture:match("JournalClose$")
+    and ledger.settingsButton.normalTexture.texture:match("JournalSettings$"))
 ledger.bookSurface:Hide()
 click(ledger.closeButton)
 assert(not ledger:IsShown(), "the close action must work independently of the illustrated background")

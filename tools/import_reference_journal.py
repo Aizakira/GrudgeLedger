@@ -33,8 +33,6 @@ ASSETS = {
     "FlecheDroite": ("JournalReferenceArrowRight", (128, 128)),
     "FlecheCuirGauche": ("JournalReferenceDarkArrowLeft", (128, 128)),
     "FlecheCuirDroite": ("JournalReferenceDarkArrowRight", (128, 128)),
-    "Reglages": ("JournalReferenceSettings", (128, 128)),
-    "Fermer": ("JournalReferenceClose", (128, 128)),
     "CadrePortrait": ("JournalReferencePortrait", (256, 256)),
     "CadreChiffres": ("JournalReferenceStats", (512, 128)),
     "LigneChoisie": ("JournalReferenceSelected", (512, 128)),
@@ -55,7 +53,6 @@ STATE_GROUPS = (
     ("Onglet", "Onglet-actif"),
     ("BoutonParchemin", "BoutonRouge"),
     ("FlecheGauche", "FlecheDroite", "FlecheCuirGauche", "FlecheCuirDroite"),
-    ("Reglages", "Fermer"),
     ("SignetAmis", "SignetAmis-choisi"),
     ("SignetRancunes", "SignetRancunes-choisi"),
 )

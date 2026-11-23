@@ -17,7 +17,6 @@ local function center(frame)
 end
 local function at(frame, x, y)
     local actualX, actualY = center(frame)
-    if frame.referenceSkin then actualY = actualY + (frame:GetHeight() - frame.bookSurface:GetHeight()) / 2 end
     assert(frame:IsVisible() and actualX == x and actualY == y, tostring(frame.name) .. " lost the book position")
 end
 local function click(button) button:GetScript("OnClick")(button, "LeftButton") end
@@ -35,9 +34,11 @@ GL.InitDB()
 GL.SetSetting("guideSeen", true)
 GL.ShowLedger()
 local ledger = GrudgeLedgerWindow
-assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 720)
+-- Same window as the other pages; the 720 painting overflows it by 10 units above and below.
+assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 700)
 assert(ledger.bookSurface:GetWidth() == 960 and ledger.bookSurface:GetHeight() == 720)
-assert(ledger.bookSurface.point[1] == "TOPLEFT", "the footer must not move or stretch the painted book")
+assert(ledger.bookSurface.point[1] == "TOPLEFT" and ledger.bookSurface.point[#ledger.bookSurface.point] == 10,
+    "the painting starts 10 units above the window")
 at(ledger, 0, 0)
 drag(ledger, 110, -48)
 click(ledger.navigation.players)
@@ -79,7 +80,7 @@ assert(anchor:GetHeight() == 720, "screen fitting includes the ribbon footer eve
 assert(anchor.clamped, "dragging must clamp the complete painting and its ribbon footer")
 GL.ShowLedger()
 assert(ledger.parent == anchor)
-assert(anchor:GetHeight() == ledger:GetHeight() and anchor:GetHeight() * anchor:GetScale() <= 576,
+assert(anchor:GetHeight() == 720 and anchor:GetHeight() * anchor:GetScale() <= 576,
     "small screens fit the whole journal, including the suspended bookmarks")
 at(ledger, 60, 20)
 local ledgerScale = anchor:GetScale()

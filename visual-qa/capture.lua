@@ -613,8 +613,8 @@ function QA.capture(name)
             f.detailScroll:SetVerticalScroll(math.max(0, f.detailBody:GetHeight() - f.detailScroll:GetHeight()))
         end
         if QA.reference then
-            assert(f.pageSize == 7 and f.rows[1].key == record.key, "reference must show seven rows with Nodby first")
-            assert(f.rows[7]:IsShown() and not f.rows[8]:IsShown(), "reference pagination changed")
+            assert(f.pageSize == 8 and f.rows[1].key == record.key, "reference must show eight rows with Nodby first")
+            assert(f.rows[8]:IsShown() and not f.rows[9]:IsShown(), "reference pagination changed")
             referenceInteraction(f, referenceState)
         end
         return GrudgeLedgerWindow

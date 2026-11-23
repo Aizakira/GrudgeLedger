@@ -583,9 +583,9 @@ local function bookNavigation(f, selected)
         { "guild", L("Guilde"), function() GL.ShowGuild() end },
         { "bounties", L("Primes"), function() GL.OpenBounties() end },
     }) do
-        local x = f.referenceSkin and ({ 105, 307, 503, 699 })[i] or 72 + (i - 1) * 208
-        local b = button(f, entry[2], x, f.referenceSkin and -103 or -96, f.referenceSkin and 186 or 192, entry[3], true)
-        b:SetHeight(f.referenceSkin and 34 or 38)
+        -- Same place and size on every page, the Journal included: the tabs must not jump (owner, 23/11).
+        local b = button(f, entry[2], 72 + (i - 1) * 208, -96, 192, entry[3], true)
+        b:SetHeight(38)
         journalFont(b.caption, "GameFontNormalLarge", 19)
         b.caption:SetHeight(32)
         f.navigation[entry[1]] = b
@@ -598,8 +598,7 @@ local function bookNavigation(f, selected)
         if entry[1] == "bounties" then bountyTabs[#bountyTabs + 1] = b end
     end
     GL.PaintBountyReminder()
-    f.settingsButton = UI.iconButton(f, "JournalSettings", L("Réglages et aide"),
-        f.referenceSkin and 862 or 869, f.referenceSkin and -27 or -45, 32, showSettings)
+    f.settingsButton = UI.iconButton(f, "JournalSettings", L("Réglages et aide"), 869, -45, 32, showSettings)
     if selected == "settings" then f.settingsButton:LockHighlight() end
 end
 
@@ -862,7 +861,7 @@ local function journalTags(parent, record, compact)
         width = width + textWidth + 2
     end
     strip:SetSize(width, size)
-    moveTo(strip, (header and 895 or (compact and 184 or 256)) - width, header and 218 or (compact and 6 or 26))
+    moveTo(strip, (header and 895 or (compact and 229 or 301)) - width, header and 218 or (compact and 6 or 26))
     strip.record = record
     strip:Show()
     return width
@@ -2749,7 +2748,8 @@ local function buildLedger()
     ledger = f
     bookNavigation(f, "ledger")
     f.detailTab, f.query = "summary", ""
-    f.addTarget = button(f, L("Ajouter la cible"), 233, -159, 105, function()
+    -- Left column centred on the leather (23 to 347, owner 23/11): 300 units from x 35.
+    f.addTarget = button(f, L("Ajouter la cible"), 206, -159, 129, function()
         local identity = GL.Identity("target")
         if not identity then GL.Print(L("Sélectionnez un joueur pour ouvrir sa fiche.")) return end
         local record = GL.Remember(identity, true)
@@ -2760,8 +2760,8 @@ local function buildLedger()
     end, nil, false)
     journalFont(f.addTarget.caption, "GameFontHighlightSmall", 12)
     f.search = CreateFrame("EditBox", nil, f)
-    f.search:SetPoint("TOPLEFT", 84, -159)
-    f.search:SetSize(145, 26)
+    f.search:SetPoint("TOPLEFT", 35, -159)
+    f.search:SetSize(166, 26)
     f.search:SetAutoFocus(false)
     f.search:SetMaxLetters(100)
     f.search.referenceSkin = true
@@ -2778,7 +2778,7 @@ local function buildLedger()
         GameTooltip:SetText(L("Nom, guilde, note…")) GameTooltip:Show()
     end)
     f.searchButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    f.searchHint = label(f.search, L("Rechercher…"), nil, 28, -4, 110)
+    f.searchHint = label(f.search, L("Rechercher…"), nil, 28, -4, 131)
     f.searchHint:SetHeight(19)
     GL.Safe(f.searchHint.SetJustifyV, f.searchHint, "MIDDLE")
     GL.Safe(f.searchHint.SetWordWrap, f.searchHint, false)
@@ -2812,7 +2812,7 @@ local function buildLedger()
         factionFilter, notesOnly, offset = "all", false, 0
         refresh()
     end
-    f.viewCycle = button(f, L("Tous"), 84, -193, 134, function()
+    f.viewCycle = button(f, L("Tous"), 35, -193, 147, function()
         local following = "all"
         for i, key in ipairs(viewOrder) do
             if key == f.viewKey then following = viewOrder[i % #viewOrder + 1] end
@@ -2824,7 +2824,7 @@ local function buildLedger()
     -- Every other filter lives in one panel, opened on demand; it stays open while you choose.
     local panel = CreateFrame("Frame", nil, f)
     f.filterPanel = panel
-    panel:SetPoint("TOPLEFT", 78, -228)
+    panel:SetPoint("TOPLEFT", 43, -228)
     panel:SetSize(283, 300)
     panel:EnableMouse(true)
     panel:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -2895,13 +2895,13 @@ local function buildLedger()
     end)
     f.closeFilters = button(panel, L("Fermer"), 211, -(tail + 60), 65, closeMenu)
     panel:SetHeight(tail + 94)
-    f.openFilters = button(f, L("Filtres"), 225, -193, 113, function() toggleMenu(panel) end)
+    f.openFilters = button(f, L("Filtres"), 188, -193, 147, function() toggleMenu(panel) end)
     f.openFilters:SetHeight(25)
-    for i = 1, 11 do
+    for i = 1, 13 do
         local row = CreateFrame("Button", nil, f)
         row.referenceSkin = true
-        row:SetPoint("TOPLEFT", 82, -237 - (i - 1) * 50)
-        row:SetSize(255, 48)
+        row:SetPoint("TOPLEFT", 35, -230 - (i - 1) * 50)
+        row:SetSize(300, 48)
         row.bg = row:CreateTexture(nil, "BACKGROUND")
         row.bg:SetAllPoints()
         row.bg:SetColorTexture(theme.red[1], theme.red[2], theme.red[3], 1)
@@ -2916,9 +2916,9 @@ local function buildLedger()
         hover:SetColorTexture(0.57, 0.39, 0.18, 0.16)
         row:SetHighlightTexture(hover)
         row.relationIcon = row:CreateTexture(nil, "ARTWORK")
-        row.relationIcon:SetPoint("TOPLEFT", 193, -28)
+        row.relationIcon:SetPoint("TOPLEFT", 238, -28)
         row.relationIcon:SetSize(18, 18)
-        row.name = label(row, "", nil, 52, -4, 218)
+        row.name = label(row, "", nil, 52, -4, 263)
         journalFont(row.name, "Fancy16Font", 16)
         row.name:SetHeight(23)
         GL.Safe(row.name.SetWordWrap, row.name, false)
@@ -2929,13 +2929,13 @@ local function buildLedger()
         row.classIcon = row:CreateTexture(nil, "ARTWORK")
         row.classIcon:SetPoint("TOPLEFT", 51, -29)
         row.classIcon:SetSize(15, 15)
-        row.identity = label(row, "", nil, 70, -29, 119)
+        row.identity = label(row, "", nil, 70, -29, 164)
         journalFont(row.identity, "GameFontHighlightSmall", 12)
         row.identity:SetTextColor(unpack(theme.muted))
         row.identity:SetHeight(18)
         GL.Safe(row.identity.SetWordWrap, row.identity, false)
         GL.Safe(row.identity.SetMaxLines, row.identity, 1)
-        row.relation = label(row, "", nil, 210, -29, 63)
+        row.relation = label(row, "", nil, 255, -29, 63)
         journalFont(row.relation, "GameFontHighlightSmall", 12)
         row.relation:SetJustifyH("RIGHT")
         row.relation:SetHeight(18)
@@ -2959,14 +2959,14 @@ local function buildLedger()
         row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         f.rows[i] = row
     end
-    f.previous = button(f, "‹", 89, -588, 32, function() offset = math.max(0, offset - f.pageSize) refresh() end, nil, false)
-    f.next = button(f, "›", 305, -588, 32, function() offset = offset + f.pageSize refresh() end, nil, false)
-    f.total = label(f, "", nil, 125, -594, 176)
+    f.previous = button(f, "‹", 42, -638, 32, function() offset = math.max(0, offset - f.pageSize) refresh() end, nil, false)
+    f.next = button(f, "›", 298, -638, 32, function() offset = offset + f.pageSize refresh() end, nil, false)
+    f.total = label(f, "", nil, 78, -644, 216)
     f.total:SetHeight(20) f.total:SetJustifyH("CENTER")
     journalFont(f.total, "GameFontHighlightSmall", 12)
     GL.Safe(f.total.SetWordWrap, f.total, false)
     f.total:SetTextColor(unpack(theme.muted))
-    f.empty = label(f, "", nil, 90, -345, 245)
+    f.empty = label(f, "", nil, 43, -345, 284)
     f.empty:SetTextColor(unpack(theme.muted))
     f.raceIcon = f:CreateTexture(nil, "ARTWORK")
     f.raceIcon:SetPoint("TOPLEFT", 368, -166) f.raceIcon:SetSize(65, 66)
@@ -3286,17 +3286,18 @@ local function buildLedger()
 end
 
 local function layoutIndex(f, compact)
-    local pageSize = compact and 11 or 7
+    -- The list fills the column down to the pager (owner 23/11: no empty band under it).
+    local pageSize = compact and 13 or 8
     if f.pageSize == pageSize then return end
     f.pageSize, offset = pageSize, 0
     for i, row in ipairs(f.rows) do
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 82, -237 - (i - 1) * (compact and 31 or 50))
+        row:SetPoint("TOPLEFT", 35, -230 - (i - 1) * (compact and 31 or 50))
         row:SetHeight(compact and 29 or 48)
         row.name:ClearAllPoints() row.name:SetPoint("TOPLEFT", compact and 34 or 52, compact and -7 or -4)
-        row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 186, compact and -8 or -6)
+        row.relation:ClearAllPoints() row.relation:SetPoint("TOPLEFT", 231, compact and -8 or -6)
         row.relation:SetWidth(62)
-        row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 171, -6)
+        row.relationIcon:ClearAllPoints() row.relationIcon:SetPoint("TOPLEFT", compact and 6 or 216, -6)
         row.relationIcon:SetSize(compact and 20 or 18, compact and 20 or 18)
         for _, detail in ipairs({ row.raceIcon, row.classIcon, row.identity }) do
             if compact then detail:Hide() else detail:Show() end
@@ -3378,12 +3379,12 @@ refresh = function(focusSelected)
             local compact = GL.Settings().compactMode == true
             row.relationIcon:SetSize(relation == "warning" and 20 or compact and 20 or 18,
                 relation == "warning" and 12 or compact and 20 or 18)
-            local iconX = title and (relation == "warning" and 169 or 171) or (relation == "warning" and 227 or 229)
+            local iconX = title and (relation == "warning" and 214 or 216) or (relation == "warning" and 272 or 274)
             moveTo(row.relationIcon, compact and 6 or iconX,
                 relation == "warning" and (compact and 10 or 9) or 6)
             local tagWidth = journalTags(row, record, compact)
-            row.name:SetWidth(compact and (150-tagWidth) or (title and 115 or 172))
-            row.identity:SetWidth(compact and 180 or (180-tagWidth))
+            row.name:SetWidth(compact and (195-tagWidth) or (title and 160 or 217))
+            row.identity:SetWidth(compact and 225 or (225-tagWidth))
             identityIcons(row, record)
             local background = selectedKey == record.key and theme.red or theme.panel
             row.bg:SetColorTexture(unpack(background))
