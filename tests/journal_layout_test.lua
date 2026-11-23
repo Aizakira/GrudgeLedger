@@ -24,27 +24,20 @@ assert(f.search.referenceSkin and f.rows[1]:GetWidth() == 300, "the list fills t
 assert(f.rows[1].selection.texture:find("JournalReferenceSelected", 1, true))
 assert(f.metrics.deaths.skin.texture:find("JournalReferenceStats", 1, true))
 
--- One button names the list and its count; each click shows the next list (0.39.0).
-assert(f.viewCycle:GetText() == "Tous · 2" and not f.viewCycle.active and f.openFilters:GetText() == "Filtres", f.viewCycle:GetText())
-click(f.viewCycle)
-assert(f.viewCycle:GetText() == "À régler · 1" and f.viewCycle.active and f.rows[1].key == record.key and not f.rows[2]:IsShown())
-click(f.viewCycle)
-assert(f.viewCycle:GetText() == "Amis · 1", f.viewCycle:GetText())
-assert(f.rows[1].key == friend.key and f.openFilters:GetText() == "Filtres · 1")
--- The panel holds the other filters and stays open while choosing; a quick view closes it.
+-- No list cycle button any more (owner, 23/11): the panel holds every filter and stays open while choosing.
+assert(f.viewCycle == nil and f.openFilters:GetText() == "Filtres")
 click(f.openFilters)
 assert(f.filterPanel:IsShown())
+click(f.filters.debt)
+assert(f.filterPanel:IsShown() and f.rows[1].key == record.key and not f.rows[2]:IsShown() and f.openFilters:GetText() == "Filtres · 1")
+click(f.filters.friend)
+assert(f.rows[1].key == friend.key and f.openFilters:GetText() == "Filtres · 1")
 click(f.filters.enemy)
-assert(f.filterPanel:IsShown() and f.rows[1].key == record.key and f.viewCycle:GetText() == "Sélection · 1", f.viewCycle:GetText())
--- The order of the list is chosen in the panel. From a custom selection the button returns to
--- everyone, closes the panel and puts the other filters back; two more clicks reach "Signalés".
+assert(f.filterPanel:IsShown() and f.rows[1].key == record.key)
 assert(f.sort.parent == f.filterPanel)
-click(f.viewCycle)
-assert(not f.filterPanel:IsShown() and f.rows[2]:IsShown() and f.viewCycle:GetText() == "Tous · 2")
-f.ShowView("any")
-assert(f.viewCycle:GetText() == "Signalés · 0" and not f.rows[1]:IsShown())
-click(f.viewCycle)
-assert(f.viewCycle:GetText() == "Tous · 2")
+click(f.filters.all)
+assert(f.rows[2]:IsShown() and f.openFilters:GetText() == "Filtres")
+f.ShowView("all")
 
 -- The hanging bookmarks were removed (owner, 22/11): their two views stay reachable, with the same reset.
 assert(next(f.bookmarks) == nil and not f.bookmarkCover, "no bookmark hangs below the book")
@@ -59,7 +52,8 @@ GL.ShowLedger(record.key)
 for key, tab in pairs(f.detailTabs) do assert(not tab:IsShown(), key .. " tab is hidden") end
 assert(not f.backToSummary:IsShown() and f.openSheet:IsShown())
 local summary = f.detailScroll.fullText
-assert(summary:find("Votre histoire", 1, true) and summary:find("Il vous a tué 1 fois", 1, true), summary)
+-- The counters say the tally; the Journal story does not repeat it (owner, 23/11).
+assert(summary:find("Votre histoire", 1, true) and not summary:find("Il vous a tué 1 fois", 1, true), summary)
 assert(summary:find("Une note personnelle", 1, true))
 assert(f.detailGuild:GetText() == "", "an unknown guild leaves its line empty")
 -- The detailed history and the notes open from "Autres actions", with a way back.

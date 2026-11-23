@@ -22,6 +22,22 @@ local inkColors = { friend = { 0.10, 0.34, 0.15 }, warning = { 0.50, 0.22, 0.03 
 local relationIcons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy", neutral = "RelationNeutral" }
 local referenceRelationIcons = { warning = "JournalReferenceEye" }
 local referenceFactionIcons = { Horde = "JournalReferenceHorde", Alliance = "JournalReferenceAlliance" }
+-- A thin red outline inside an opinion button: the relation the addon computed, not one you chose.
+local function suggestedOutline(control, shown)
+    if not control.outline then
+        if not shown then return end
+        control.outline = {}
+        for _, side in ipairs({ { "TOPLEFT", 3, -2, "TOPRIGHT", -3, -2, nil, 2 }, { "BOTTOMLEFT", 3, 2, "BOTTOMRIGHT", -3, 2, nil, 2 },
+            { "TOPLEFT", 2, -3, "BOTTOMLEFT", 2, 3, 2 }, { "TOPRIGHT", -2, -3, "BOTTOMRIGHT", -2, 3, 2 } }) do
+            local line = control:CreateTexture(nil, "OVERLAY")
+            line:SetColorTexture(0.62, 0.12, 0.09, 0.9)
+            line:SetPoint(side[1], side[2], side[3]) line:SetPoint(side[4], side[5], side[6])
+            if side[7] then line:SetWidth(side[7]) else line:SetHeight(side[8]) end
+            control.outline[#control.outline + 1] = line
+        end
+    end
+    for _, line in ipairs(control.outline) do if shown then line:Show() else line:Hide() end end
+end
 local media = "Interface\\AddOns\\GrudgeLedger\\Media\\"
 local pvpNames = { kill = L("Victoire"), death = L("Mort"), aggression = L("Agression") }
 local UI = GL.UITheme
@@ -2209,11 +2225,19 @@ local function renderDetail()
     ledger.guildButton:SetEnabled(record ~= nil and record.guild ~= nil)
     ledger.tools:SetEnabled(record ~= nil)
     local bountyMode=tab=="summary" and ledger:IsShown() and GL.ContactBountyMode(record)
-    showIf(ledger.contactBounty,bountyMode)
-    if bountyMode then ledger.contactBounty:SetText(bountyMode=="view" and L("Voir la prime") or L("Créer une prime")) end
+    -- The prime keeps its place in the row (greyed when no prime can be made): the row never reflows.
+    showIf(ledger.contactBounty, tab == "summary" and record ~= nil)
+    ledger.contactBounty:SetEnabled(bountyMode and true or false)
+    ledger.contactBounty:SetText(bountyMode=="view" and L("Voir la prime") or L("Créer une prime"))
     if not record then ledger.toolsMenu:Hide() end
+    -- Red marks only your own opinion. Without one, "Automatique" is lit and the relation the PvP balance
+    -- or a guild rule computes gets a thin outline: clicking Automatique visibly does something (owner 23/11).
+    local shownRelation, relationSource = "neutral", "neutral"
+    if record then shownRelation, relationSource = GL.Relation(record), GL.RelationSource(record) end
+    local chosenOpinion = record and (relationSource == "manual" and shownRelation or "neutral")
     for reaction, control in pairs(ledger.reactions) do
-        UI.selectButton(control, record and GL.Relation(record) == reaction)
+        UI.selectButton(control, chosenOpinion == reaction)
+        suggestedOutline(control, record ~= nil and relationSource ~= "manual" and shownRelation ~= "neutral" and shownRelation == reaction)
     end
     local showHistory, showNotes = record and tab == "history", record and tab == "notes"
     local summary = tab == "summary" and record ~= nil
@@ -2227,7 +2251,7 @@ local function renderDetail()
     if not summary then ledger.hint:Hide() ledger.tools:Hide() ledger.toolsMenu:Hide() ledger.openSheet:Hide()
     else ledger.hint:Show() ledger.tools:Show() ledger.openSheet:Show() end
     local row = { ledger.openSheet }
-    if bountyMode then row[#row + 1] = ledger.contactBounty end
+    row[#row + 1] = ledger.contactBounty
     row[#row + 1] = ledger.addNote
     row[#row + 1] = ledger.tools
     local width = math.floor((530 - 6 * (#row - 1)) / #row)
@@ -2290,7 +2314,7 @@ local function renderDetail()
             for _, field in ipairs({ "kills", "deaths" }) do
                 local card = ledger.metrics[field]
                 local n = pvp[field] or 0
-                card.caption:SetText(field == "kills" and L("Vous l’avez vaincu") or L("Vos morts"))
+                card.caption:SetText(field == "kills" and L("Vous l’avez tué") or L("Il vous a tué"))
                 card.value:SetText(n == 1 and L("1 fois") or L("%d fois"):format(n))
             end
         end
@@ -2361,9 +2385,15 @@ local function renderDetail()
             local story = GL.CharacterInsights and GL.CharacterInsights.Story(record) or {}
             if #story > 0 then
                 local told = { "|cff653c20" .. L("Votre histoire") .. "|r" }
+                -- The two counters just above already say it: the Journal skips that sentence (the sheet keeps it).
+                local tally = record.pvp or {}
+                local repeated = L("Il vous a tué %d fois ; vous l’avez vaincu %d fois."):format(tally.deaths or 0, tally.kills or 0)
                 for _, sentence in ipairs(story) do
+                    if sentence == repeated then sentence = nil end
+                    if sentence then
                     summaryStory[#summaryStory + 1] = plain(sentence)
                     told[#told + 1] = plain(sentence)
+                    end
                 end
                 told[#told + 1] = ""
                 for i = #told, 1, -1 do table.insert(lines, 1, told[i]) end
@@ -2753,7 +2783,7 @@ local function buildLedger()
     bookNavigation(f, "ledger")
     f.detailTab, f.query = "summary", ""
     -- Left column centred on the leather (23 to 347, owner 23/11): 300 units from x 35.
-    f.addTarget = button(f, L("Ajouter la cible"), 206, -159, 129, function()
+    f.addTarget = button(f, L("Ajouter la cible"), 188, -193, 147, function()
         local identity = GL.Identity("target")
         if not identity then GL.Print(L("Sélectionnez un joueur pour ouvrir sa fiche.")) return end
         local record = GL.Remember(identity, true)
@@ -2765,7 +2795,7 @@ local function buildLedger()
     journalFont(f.addTarget.caption, "GameFontHighlightSmall", 12)
     f.search = CreateFrame("EditBox", nil, f)
     f.search:SetPoint("TOPLEFT", 35, -159)
-    f.search:SetSize(166, 26)
+    f.search:SetSize(300, 26)
     f.search:SetAutoFocus(false)
     f.search:SetMaxLetters(100)
     f.search.referenceSkin = true
@@ -2782,16 +2812,28 @@ local function buildLedger()
         GameTooltip:SetText(L("Nom, guilde, note…")) GameTooltip:Show()
     end)
     f.searchButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    f.searchHint = label(f.search, L("Rechercher…"), nil, 28, -4, 131)
+    f.searchHint = label(f.search, L("Rechercher…"), nil, 28, -4, 260)
     f.searchHint:SetHeight(19)
     GL.Safe(f.searchHint.SetJustifyV, f.searchHint, "MIDDLE")
     GL.Safe(f.searchHint.SetWordWrap, f.searchHint, false)
     f.searchHint:SetTextColor(unpack(theme.muted))
-    f.search:SetScript("OnTextChanged", function(self)
+    -- The list follows the typing (owner 23/11), a quarter of a second after the last key.
+    local typed = 0
+    f.search:SetScript("OnTextChanged", function(self, userInput)
         if self:GetText():find("%S") then f.searchHint:Hide() else
             f.searchHint:Show()
             if f.query and f.query ~= "" then f.query, offset = "", 0 refresh() end
+            return
         end
+        if not userInput then return end
+        typed = typed + 1
+        local mine = typed
+        local function follow()
+            if mine ~= typed then return end
+            local query = self:GetText():match("^%s*(.-)%s*$")
+            if query ~= (f.query or "") then f.query, offset = query, 0 refresh() end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0.25, follow) else follow() end
     end)
     f.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     local openMenu
@@ -2807,7 +2849,6 @@ local function buildLedger()
     f:HookScript("OnHide", closeMenu)
     -- One button names the current list with its count; a click shows the next of the four lists
     -- people open most. A list always starts clean: the other filters are put back.
-    local viewOrder = { "all", "debt", "friend", "any" }
     f.viewNames = { all = L("Tous"), debt = L("À régler"), friend = L("Amis"), any = L("Signalés") }
     function f.ShowView(key)
         closeMenu()
@@ -2816,14 +2857,8 @@ local function buildLedger()
         factionFilter, notesOnly, offset = "all", false, 0
         refresh()
     end
-    f.viewCycle = button(f, L("Tous"), 35, -193, 147, function()
-        local following = "all"
-        for i, key in ipairs(viewOrder) do
-            if key == f.viewKey then following = viewOrder[i % #viewOrder + 1] end
-        end
-        f.ShowView(following)
-    end, nil, false)
-    f.viewCycle:SetHeight(25)
+    -- No "Tous · N" button any more (owner 23/11): it cycled four hidden lists and silently reset the
+    -- other filters; the same lists are in the Filtres panel (Avis, Étiquettes).
     f.bookmarks = {}
     -- Every other filter lives in one panel, opened on demand; it stays open while you choose.
     local panel = CreateFrame("Frame", nil, f)
@@ -2899,7 +2934,7 @@ local function buildLedger()
     end)
     f.closeFilters = button(panel, L("Fermer"), 211, -(tail + 60), 65, closeMenu)
     panel:SetHeight(tail + 94)
-    f.openFilters = button(f, L("Filtres"), 188, -193, 147, function() toggleMenu(panel) end)
+    f.openFilters = button(f, L("Filtres"), 35, -193, 147, function() toggleMenu(panel) end)
     f.openFilters:SetHeight(25)
     for i = 1, 13 do
         local row = CreateFrame("Button", nil, f)
@@ -3395,7 +3430,9 @@ refresh = function(focusSelected)
             row:Show()
         else row.key = nil row:Hide() end
     end
-    ledger.total:SetText(counted(#records, "personne"))
+    local pages = math.max(1, math.ceil(#records / ledger.pageSize))
+    ledger.total:SetText(pages > 1 and L("Page %d/%d · %s"):format(math.floor(offset / ledger.pageSize) + 1, pages, counted(#records, "personne"))
+        or counted(#records, "personne"))
     ledger.filtersActive = (ledger.query or "") ~= "" or filter ~= "all" or factionFilter ~= "all" or tagFilter ~= "all" or notesOnly
     if #records == 0 then
         ledger.empty:SetText(ledger.filtersActive and L("Aucun résultat.") or L("Aucune fiche enregistrée."))
@@ -3420,8 +3457,7 @@ refresh = function(focusSelected)
     ledger.relationFilter:SetText(L("Avis") .. " : " .. relationName)
     local factionName = factionNames[factionFilter] or (factionFilter == "unknown" and L("Inconnue") or L("Toutes factions"))
     ledger.factionFilter:SetText(L("Faction") .. " : " .. factionName)
-    -- The list button names the list shown and its count; with other filters it says "Sélection".
-    local counts = GL.JournalCounts()
+    -- The quick view the filters amount to (used by the bookmarks).
     local unfiltered = factionFilter == "all" and not notesOnly
     local viewKey
     if unfiltered and tagFilter == "all" and (filter == "all" or filter == "debt" or filter == "friend") then
@@ -3436,8 +3472,6 @@ refresh = function(focusSelected)
         local shade = bookmark.active and 1 or 0.6
         bookmark.skin:SetVertexColor(shade, shade, shade)
     end
-    ledger.viewCycle:SetText(viewKey and (ledger.viewNames[viewKey] .. " · " .. counts[viewKey]) or L("Sélection · %d"):format(#records))
-    UI.selectButton(ledger.viewCycle, viewKey ~= "all")
     local active = (filter ~= "all" and 1 or 0) + (factionFilter ~= "all" and 1 or 0) + (tagFilter ~= "all" and 1 or 0) + (notesOnly and 1 or 0)
     ledger.openFilters:SetText(active > 0 and (L("Filtres") .. " · " .. active) or L("Filtres"))
     UI.selectButton(ledger.openFilters, active > 0)
