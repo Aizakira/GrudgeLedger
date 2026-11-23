@@ -21,8 +21,8 @@ MASTERS = ROOT / "art" / "reference-journal"
 MEDIA = ROOT / "GrudgeLedger" / "Media"
 MANIFEST = MASTERS / "manifest.json"
 ASSETS = {
-    "Livre": ("JournalReferenceBook", (2048, 2048)),
-    "LivreEtroit": ("JournalReferenceSheetBook", (2048, 2048)),  # Relations and Guilde (23/11)
+    "Livre": ("JournalReferenceBook", (2048, 1024)),  # 1086 rows in the source: 1024 loses almost nothing, half the weight
+    "LivreEtroit": ("JournalReferenceSheetBook", (2048, 1024)),  # Relations and Guilde (23/11)
     "Onglet": ("JournalReferenceTab", (512, 128)),
     "Onglet-actif": ("JournalReferenceTabActive", (512, 128)),
     "BoutonParchemin": ("JournalReferenceButton", (512, 128)),

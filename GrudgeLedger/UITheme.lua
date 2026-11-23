@@ -189,9 +189,9 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
             -- A soft shadow under the parchment buttons, as on the reference pages (owner 23/11).
             local shadow = b:CreateTexture(nil, "BACKGROUND", nil, -8)
             shadow:SetTexture(media .. "JournalButtonShadow")
-            shadow:SetPoint("TOPLEFT", -6, 5)
-            shadow:SetPoint("BOTTOMRIGHT", 10, -11)
-            shadow:SetAlpha(0.85)
+            shadow:SetPoint("TOPLEFT", -3, 1)
+            shadow:SetPoint("BOTTOMRIGHT", 4, -5)
+            shadow:SetAlpha(0.45)
             b.shadow = shadow
         end
     else
@@ -465,6 +465,15 @@ local function bookWindow(name, title, narrow)
         f.bookSurface:SetSize(960, 720)
         f.bookSurface:SetTexture(media .. "JournalReferenceSheetBook")
         f.lining:Hide()
+    end
+    if reference or tree then
+        -- Each book keeps the other painting loaded, invisible: going from the Journal to another tab
+        -- no longer blanks the window while the game reads the big texture (owner 23/11).
+        f.bookPreload = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+        f.bookPreload:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        f.bookPreload:SetSize(1, 1)
+        f.bookPreload:SetTexture(media .. (reference and "JournalReferenceSheetBook" or "JournalReferenceBook"))
+        f.bookPreload:SetAlpha(0)
     end
     return f
 end
