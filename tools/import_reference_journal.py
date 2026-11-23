@@ -103,6 +103,9 @@ def export(source):
     if images["Livre"].size != (1448, 1086):
         raise ValueError("Livre.png must retain the approved 1448 x 1086 coordinate system")
     boxes["Livre"] = (0, 0, 1448, 1086)
+    # Faction emblems keep their square canvas: a tall symbol (the Horde) must not be stretched to the square texture.
+    for name in ("EmblemeHorde", "EmblemeAlliance"):
+        boxes[name] = (0, 0, images[name].width, images[name].height)
     for group in STATE_GROUPS:
         if len({images[name].size for name in group}) != 1:
             raise ValueError(f"State canvases differ: {group}")
