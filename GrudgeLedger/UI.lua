@@ -2233,7 +2233,7 @@ local function renderDetail()
     local width = math.floor((530 - 6 * (#row - 1)) / #row)
     for i, control in ipairs(row) do
         control:SetWidth(width)
-        moveTo(control, 365 + (i - 1) * (width + 6), 599)
+        moveTo(control, 365 + (i - 1) * (width + 6), 602)
     end
     showIf(ledger.counters, summary)
     showIf(ledger.balancePanel, summary)
@@ -2335,21 +2335,22 @@ local function renderDetail()
             ledger.scoreContext:SetText(context)
             local contextHeight = math.max(17, GL.Safe(ledger.scoreContext.GetStringHeight, ledger.scoreContext) or 17)
             ledger.scoreContext:SetHeight(contextHeight)
-            local headingTop = context ~= "" and math.max(389, 369 + contextHeight + 4) or 389
+            -- The seal band hangs under the balance (and its context line), the heading just under its cord.
+            local sealCentre = (context ~= "" and 359 + contextHeight or 357) + 22
+            local headingTop = sealCentre + 16
             moveTo(ledger.storyHeading, 367, headingTop)
             moveTo(ledger.summaryRule, 367, headingTop - 3)
             if ledger.summarySeal then
                 ledger.summarySeal:ClearAllPoints()
-                ledger.summarySeal:SetPoint("CENTER", ledger, "TOPLEFT", 631, -(headingTop + 14))
+                ledger.summarySeal:SetPoint("CENTER", ledger, "TOPLEFT", 631, -sealCentre)
             end
-            -- The page turner stays on the heading line, wherever the context line pushes it.
-            for _, entry in ipairs({ { ledger.detailScroll.prev, 767, 9 }, { ledger.detailScroll.pageLabel, 803, 3 },
-                { ledger.detailScroll.next, 861, 9 } }) do
+            -- The page turner sits at the bottom right, just above the opinions (owner 23/11, reference).
+            for _, entry in ipairs({ { ledger.detailScroll.prev, 767, 542 }, { ledger.detailScroll.pageLabel, 803, 548 },
+                { ledger.detailScroll.next, 861, 542 } }) do
                 entry[1]:ClearAllPoints()
-                entry[1]:SetPoint("TOPLEFT", ledger, "TOPLEFT", entry[2], -(headingTop - entry[3]))
+                entry[1]:SetPoint("TOPLEFT", ledger, "TOPLEFT", entry[2], -entry[3])
             end
-            -- The seal reaches 6 units below the heading line: the story starts under it.
-            local bodyTop = headingTop + math.ceil(23 * (GL.Settings().readingScale or 1)) + (ledger.summarySeal and 6 or 0)
+            local bodyTop = headingTop + math.ceil(23 * (GL.Settings().readingScale or 1))
             moveTo(ledger.detailScroll, 367, bodyTop)
             ledger.detailScroll:SetHeight(535 - bodyTop)
             local guildRule = GL.GetGuildRule(record)
@@ -3015,7 +3016,7 @@ local function buildLedger()
     GL.Safe(f.detailStatus.SetWordWrap, f.detailStatus, false)
     f.classIcon = f:CreateTexture(nil, "ARTWORK")
     f.classIcon:SetPoint("TOPLEFT", 421, -220) f.classIcon:SetSize(15, 15)
-    f.detailFaction = bookIcon(f, 447, 193, 20)
+    f.detailFaction = bookIcon(f, 447, 190, 20)  -- 3 higher: centred on the identity line (owner 23/11)
     f.detailIdentity = label(f, "", nil, 470, -194, 270)
     journalFont(f.detailIdentity, "GameFontHighlightSmall", 13)
     f.detailIdentity:SetTextColor(unpack(theme.inkMuted))
@@ -3032,11 +3033,11 @@ local function buildLedger()
         { L("Ennemi"), "enemy", 629, 128 }, { L("Automatique"), "neutral", 763, 132 } }) do
         local value = option[2]
         -- Reactions and actions end on the list's last row (628, owner 23/11): 13 lower than before.
-        local control = button(f, option[1], option[3], -563, option[4], function()
+        local control = button(f, option[1], option[3], -572, option[4], function()
             local record = currentRecord()
             if record then GL.SetReaction(record, value) end
         end, true, true)
-        control:SetHeight(27)
+        control:SetHeight(25)
         journalFont(control.caption, "GameFontHighlightSmall", 13)
         if value ~= "neutral" then
             local icon = control:CreateTexture(nil, "OVERLAY")
@@ -3051,28 +3052,28 @@ local function buildLedger()
         end
         f.actions[#f.actions + 1], f.reactions[value] = control, control
     end
-    f.addNote = button(f, L("Ajouter une note"), 763, -599, 132, function()
+    f.addNote = button(f, L("Ajouter une note"), 763, -602, 132, function()
         local record = currentRecord()
         if record then GL.EditNote(record) end
     end, nil, true)
-    f.addNote:SetHeight(29)
+    f.addNote:SetHeight(26)
     f.actions[#f.actions + 1] = f.addNote
     f.toolsMenu = CreateFrame("Frame", nil, f)
     f.toolsMenu:SetSize(180, 206)
     f.toolsMenu:SetFrameStrata("FULLSCREEN_DIALOG") f.toolsMenu:SetToplevel(true) f.toolsMenu:EnableMouse(true)
     surface(f.toolsMenu, theme.gold) surface(f.toolsMenu, theme.panel, 1)
-    f.tools = button(f, L("Autres actions"), 717, -599, 168, function() toggleMenu(f.toolsMenu) end, nil, true)
-    f.tools:SetHeight(29)
+    f.tools = button(f, L("Autres actions"), 717, -602, 168, function() toggleMenu(f.toolsMenu) end, nil, true)
+    f.tools:SetHeight(26)
     -- The menu opens above its button, right edges aligned, wherever the row places it.
     f.toolsMenu:SetPoint("BOTTOMRIGHT", f.tools, "TOPRIGHT", 0, 6)
     -- The full sheet is one visible click away, not hidden behind the name.
-    f.openSheet = button(f, L("Ouvrir la fiche"), 365, -599, 172, function()
+    f.openSheet = button(f, L("Ouvrir la fiche"), 365, -602, 172, function()
         local r = currentRecord()
         if r and GL.OpenPlayerDossier then
             GL.OpenPlayerDossier(r.guid or r.key, function() GL.ShowLedger() end, r.fullName or r.name)
         end
     end, nil, true)
-    f.openSheet:SetHeight(29)
+    f.openSheet:SetHeight(26)
     for i, option in ipairs({ { L("Avis positif (+1)"), 1 }, { L("Avis négatif (-1)"), -1 } }) do
         local delta = option[2]
         f.actions[#f.actions + 1] = button(f.toolsMenu, option[1], 3, -3 - (i - 1) * 29, 174, function()
@@ -3118,11 +3119,11 @@ local function buildLedger()
         if record then StaticPopup_Show(deleteDialog, plain(record.fullName or record.key), nil, record) end
     end)
     f.toolsMenu:Hide()
-    f.contactBounty = button(f, L("Créer une prime"), 543, -599, 166, function()
+    f.contactBounty = button(f, L("Créer une prime"), 543, -602, 166, function()
         local r = currentRecord()
         if r then GL.OpenContactBounty(r.guid) end
     end, nil, true)
-    f.contactBounty:SetHeight(29)
+    f.contactBounty:SetHeight(26)
     f.detailTabs = {}
     -- Never shown since 0.33.0: these three stay as the internal switches of the right page.
     for i, entry in ipairs({ { "summary", L("Synthèse") }, { "history", L("Histoire") }, { "notes", L("Notes") } }) do
@@ -3158,7 +3159,8 @@ local function buildLedger()
     local balanceCaption = label(f.balancePanel, L("Solde automatique"), nil, 32, -70, 238)
     journalFont(balanceCaption, "GameFontNormalLarge", 20) balanceCaption:SetTextColor(unpack(theme.ink)) balanceCaption:SetJustifyH("RIGHT")
     f.balance = label(f.balancePanel, "", nil, 286, -62, 160)
-    journalFont(f.balance, "GameFontNormalLarge", 31) f.balance:SetTextColor(unpack(inkColors.enemy)) f.balance:SetHeight(44)
+    -- The figure in Spectral SemiBold Italic, the face of the first reference pages (owner 23/11).
+    journalFont(f.balance, "GameFontNormalLarge", 34, "Spectral-SemiBoldItalic") f.balance:SetTextColor(unpack(inkColors.enemy)) f.balance:SetHeight(44)
     -- When you are ahead (0.61.2): the figure turns gold and a few small stars twinkle around it, a
     -- quiet reward for good numbers. The stars live in their own frame, which only runs while shown.
     f.balanceStars = CreateFrame("Frame", nil, f.balancePanel)
@@ -3197,8 +3199,8 @@ local function buildLedger()
         -- Journal: the red seal on its gold cord closes the balance and opens the story, in place of the thin rule.
         f.summarySeal = f:CreateTexture(nil, "ARTWORK")
         f.summarySeal:SetTexture(media .. "JournalSeal")
-        f.summarySeal:SetSize(136, 34)
-        f.summarySeal:SetPoint("CENTER", f, "TOPLEFT", 631, -403)
+        f.summarySeal:SetSize(464, 58)
+        f.summarySeal:SetPoint("CENTER", f, "TOPLEFT", 631, -379)
         f.summaryRule:SetAlpha(0)
     end
     -- Pages instead of a scroll bar.
@@ -3220,8 +3222,8 @@ local function buildLedger()
         showIf(f.encounterHeading, false)
         showIf(f.encounterRule, false)
     end
-    for _, entry in ipairs({ { f.detailScroll.prev, 767, 380 }, { f.detailScroll.pageLabel, 803, 386 },
-        { f.detailScroll.next, 861, 380 } }) do
+    for _, entry in ipairs({ { f.detailScroll.prev, 767, 542 }, { f.detailScroll.pageLabel, 803, 548 },
+        { f.detailScroll.next, 861, 542 } }) do
         entry[1]:ClearAllPoints()
         entry[1]:SetPoint("TOPLEFT", f, "TOPLEFT", entry[2], -entry[3])
     end

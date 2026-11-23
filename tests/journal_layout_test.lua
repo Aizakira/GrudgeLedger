@@ -83,7 +83,7 @@ for _, compact in ipairs({ true, false }) do
         assert(-row.anchor[3] + row:GetHeight() <= -f.previous.anchor[3], "list rows must end before pagination")
         assert(row.relation.anchor[2] + row.relation:GetWidth() < row:GetWidth(), "relationship labels stay inside the row")
     end
-    assert(f.storyHeading.anchor[3] == -389 and f.detailScroll.anchor[2] == 367 and f.detailScroll.anchor[3] == -418,
+    assert(f.storyHeading.anchor[3] == -395 and f.detailScroll.anchor[2] == 367 and f.detailScroll.anchor[3] == -418,
         "refresh must preserve the separate story heading and text positions")
     assert(-f.detailScroll.anchor[3] + f.detailScroll:GetHeight() < -f.actions[1].anchor[3], "story pagination clears the actions")
 end
@@ -131,7 +131,7 @@ GL.CharacterInsights.Story = originalStory
 GL.SetSetting("readingScale", 1)
 GL.SetReaction(record, "neutral")
 GL.ShowLedger(record.key)
-assert(f.scoreContext:GetText() == "" and f.storyHeading.anchor[3] == -389, "empty context restores the reference position")
+assert(f.scoreContext:GetText() == "" and f.storyHeading.anchor[3] == -395, "empty context restores the reference position")
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
 print("PASS journal layout: quick views with counts, one filter panel, no tab bar, story in the summary, "
     .. "history and notes with a way back, hanging bookmark states and both reference list densities")

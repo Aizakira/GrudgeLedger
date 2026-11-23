@@ -31,10 +31,12 @@ local function journalFont(region, decorative, size, italic)
     region:SetFontObject(classic and "ChatFontNormal" or (heading and "GameFontNormalLarge" or decorative))
     local nativePath, _, flags = region:GetFont()
     local pixels = size * (settings.readingScale or 1)
+    -- italic may also name a font file of Media\Fonts (the balance figure in Spectral, owner 23/11).
+    local custom = type(italic) == "string" and italic
     local face = italic and "Italic" or heading and "Bold" or "Regular"
     local loaded = false
     if not classic and not nativeScript then
-        local path = fontDir .. face .. ".ttf"
+        local path = custom and (media .. "Fonts\\" .. custom .. ".ttf") or fontDir .. face .. ".ttf"
         local ok, result = pcall(region.SetFont, region, path, pixels, "")
         -- On Forever a successful SetFont can have no return value. Check the applied face.
         if ok and result ~= false then
@@ -169,6 +171,15 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     skin:SetAllPoints()
     if b.referenceSkin then
         edge:SetAlpha(0)
+        if paper and not b.arrowTextureName then
+            -- A soft shadow under the parchment buttons, as on the reference pages (owner 23/11).
+            local shadow = b:CreateTexture(nil, "BACKGROUND", nil, -8)
+            shadow:SetTexture(media .. "JournalButtonShadow")
+            shadow:SetPoint("TOPLEFT", -6, 5)
+            shadow:SetPoint("BOTTOMRIGHT", 10, -11)
+            shadow:SetAlpha(0.85)
+            b.shadow = shadow
+        end
     else
         skin:SetTexture(media .. "JournalButtons")
         skin:SetTexCoord(36 / 1254, 1218 / 1254, (paper and 880 or 150) / 1254, (paper and 1130 or 402) / 1254)
