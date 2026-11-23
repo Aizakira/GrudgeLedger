@@ -598,7 +598,9 @@ local function bookNavigation(f, selected)
         if entry[1] == "bounties" then bountyTabs[#bountyTabs + 1] = b end
     end
     GL.PaintBountyReminder()
-    f.settingsButton = UI.iconButton(f, "JournalSettings", L("Réglages et aide"), 869, -45, 32, showSettings)
+    -- On the close button's line, just left of it (owner 23/11): same centre height (-35), and 30 instead of 32
+    -- because the gear's frame fills more of its texture than the cross does; both then look the same size.
+    f.settingsButton = UI.iconButton(f, "JournalSettings", L("Réglages et aide"), 880, -20, 30, showSettings)
     if selected == "settings" then f.settingsButton:LockHighlight() end
 end
 
