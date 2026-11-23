@@ -2,6 +2,7 @@
 from pathlib import Path
 from hashlib import sha256
 import sys
+import subprocess
 
 work = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(work / "test-runtime"))
@@ -64,6 +65,12 @@ for name, expected_width, expected_height, transparent in (
         assert all(a == 255 for a in alpha), "opaque artwork must remain opaque"
     assert any(alpha), "artwork must not be empty"
 print("PASS artwork: uncompressed RGBA TGAs, correct dimensions, cutout alpha and opaque artwork", flush=True)
+# The Journal's PNG masters stay on the owner's machine (generated work files, not published): their
+# check runs where they are; the shipped TGAs are checked above everywhere.
+if (work / "art" / "reference-journal" / "manifest.json").exists():
+    subprocess.run([sys.executable, str(work / "tools" / "import_reference_journal.py"), "--check"], check=True)
+else:
+    print("SKIP reference journal masters: not in this checkout", flush=True)
 mask = (addon / "Media" / "RadarBlank.tga").read_bytes()
 assert mask[:3] == bytes((0, 0, 2)) and mask[12:18] == bytes((8, 0, 8, 0, 32, 8))
 assert len(mask) == 18 + 8 * 8 * 4 and not any(mask[18:]), "radar mask must be fully transparent"

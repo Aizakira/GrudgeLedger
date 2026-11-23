@@ -43,6 +43,8 @@ function methods:SetWidth(w) self.width = w end
 function methods:SetHeight(h) self.height = h end
 function methods:GetWidth() return self.width or 100 end
 function methods:GetHeight() return self.height or 100 end
+function methods:GetFrameLevel() return self.level or 1 end
+function methods:SetFrameLevel(value) self.level = value end
 function methods:SetScript(event, fn) self.scripts[event] = fn end
 function methods:GetScript(event) return self.scripts[event] end
 function methods:SetText(text)
@@ -64,6 +66,7 @@ function methods:Hide() self.shown = false if self.scripts.OnHide then self.scri
 function methods:IsShown() return self.shown end
 function methods:SetShown(shown) if shown then self:Show() else self:Hide() end end
 function methods:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
+function methods:GetParent() return self.parent end
 function methods:SetEnabled(v)
     local changed = self.enabled ~= v
     self.enabled = v

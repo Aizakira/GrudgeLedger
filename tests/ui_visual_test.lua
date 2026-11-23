@@ -153,8 +153,17 @@ for _, slot in ipairs({ledger, ledger.rows[1]}) do
 end
 assert(ledger.rows[1].name.wordWrap == false and ledger.rows[1].name.maxLines == 1)
 assert(ledger.rows[1].selection:IsShown() and ledger.reactions.friend.selection:IsShown())
-assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] > 0.9)
-assert(ledger.bookSurface.texture:find("JournalBookSurface", 1, true) and ledger.bookSurface.allPoints == ledger)
+assert(ledger.openSheet.skin.texture:match("JournalReferenceButton$") and not ledger.openSheet.active
+    and ledger.detailScroll.next.skin.texture:match("JournalReferenceArrowRight$"),
+    "red means chosen: the sheet button rests on parchment and page arrows use their complete artwork")
+assert(ledger.actions[1].enabled and ledger.actions[1].caption.color[1] == 1 and ledger.actions[2].caption.color[1] == 0,
+    "the chosen opinion is red with white text, the others rest black on parchment")
+assert(ledger.bookSurface.texture:match("JournalReferenceBook$") and ledger.bookSurface.anchor[1] == "TOPLEFT")
+assert(ledger:GetWidth() == 960 and ledger:GetHeight() == 700, "the Journal has the window of the other pages")
+assert(ledger.bookSurface:GetWidth() == 960 and ledger.bookSurface:GetHeight() == 720, "keep the complete reference book's 4:3 canvas")
+for _, region in ipairs(ledger.children) do
+    assert(not region.texture or not region.texture:find("JournalReferenceDrape", 1, true), "the V3 cloth is painted in the book itself")
+end
 local previousTab
 assert(not ledger.navigation.guilds, "guild rankings belong inside Rankings")
 for _, key in ipairs({"ledger", "players", "guild", "bounties"}) do
@@ -171,25 +180,29 @@ for _, key in ipairs({"ledger", "players", "guild", "bounties"}) do
     assert(control.selection:IsShown() == control.active)
     assert(contrast(control.caption.color, control.normalSurface.color) >= 4.5,
         "navigation labels remain readable in active and inactive states")
-    assert(control.pushedTexture.alpha > 0 and control.highlightTexture, "navigation keeps interaction feedback")
+    assert(control.scripts.OnMouseDown and control.scripts.OnMouseUp and control.scripts.OnEnter,
+        "navigation keeps explicit press and hover feedback")
 end
-assert(ledger.navigation.ledger.anchor[2] == ledger:GetWidth() - previousTab.anchor[2] - previousTab:GetWidth(),
-    "balance the tabs between the covers")
+assert(ledger.navigation.ledger.anchor[2] == 72 and previousTab.anchor[2] + previousTab:GetWidth() <= 900,
+    "tabs sit where the other pages put them, inside the brass corners")
 local activeTab = ledger.detailTabs.summary
 assert(activeTab.active and activeTab.selection:IsShown())
 assert(activeTab.normalTexture.drawLayer == "BACKGROUND" and activeTab.disabledTexture.drawLayer == "BACKGROUND")
 assert(activeTab.skin.drawLayer == "ARTWORK" and activeTab.selection.drawLayer == "ARTWORK" and activeTab.selection.sublevel == 1,
-    "an active tab's illustrated brass border draws above the native button fill")
+    "the selection indicator draws above the native button fill")
 activeTab:SetEnabled(false)
 assert(activeTab.selection.alpha < 1, "disabled active tab visibly dims its selection")
 activeTab:SetEnabled(true)
-assert(activeTab.active and activeTab.selection:IsShown() and activeTab.selection.alpha == 1)
+assert(activeTab.active and activeTab.selection:IsShown() and activeTab.selection.alpha == 1 and activeTab.selection.color[4] == 0)
 assert(contrast(activeTab.caption.color, activeTab.normalSurface.color) >= 4.5,
-    "reenabling an active parchment tab restores light text on its dark selection")
-assert(ledger.seal.texture:match("JournalMedallion$") and ledger.title:GetText() == "Grudge Ledger")
+    "reenabling a selected control restores white text on its red face")
+assert(ledger.seal.texture == GL.icon and ledger.title:GetText() == "Grudge Ledger",
+    "keep the approved book medallion unchanged")
 assert(ledger.wordmark.texture:match("JournalWordmark$") and ledger.wordmark:IsShown() and not ledger.title:IsShown(),
     "the independent gold wordmark replaces the visible title exactly once")
-assert(ledger.closeButton.normalTexture.texture:match("JournalClose$") and ledger.settingsButton.normalTexture.texture:match("JournalSettings$"))
+-- The Journal keeps the close and settings buttons of the other pages (owner, 23/11).
+assert(ledger.closeButton.normalTexture.texture:match("JournalClose$")
+    and ledger.settingsButton.normalTexture.texture:match("JournalSettings$"))
 ledger.bookSurface:Hide()
 click(ledger.closeButton)
 assert(not ledger:IsShown(), "the close action must work independently of the illustrated background")
@@ -203,8 +216,9 @@ for _, relation in ipairs({ "friend", "warning", "enemy", "neutral" }) do
     for key, control in pairs(ledger.reactions) do assert(control.selection:IsShown() == (key == relation)) end
     local row = ledger.rows[1]
     local names = { friend = "Ami", warning = "Méfiance", enemy = "Ennemi", neutral = "Neutre" }
-    local icons = { friend = "RelationFriend", warning = "RelationWarning", enemy = "RelationEnemy", neutral = "RelationNeutral" }
-    assert(row.relation:GetText() == names[relation] and row.relation.wordWrap == false and row.relation.maxLines == 1)
+    local icons = { friend = "RelationFriend", warning = "JournalReferenceEye", enemy = "RelationEnemy", neutral = "RelationNeutral" }
+    -- The heart says the relation; only a title (Nemesis, Companion) is written in the row.
+    assert(row.relation:GetText() == "" and ledger.detailStatus:GetText() == names[relation] and row.relation.wordWrap == false and row.relation.maxLines == 1)
     assert(row.name:GetText() == GL.Get(identity.key).fullName, "no cryptic prefix in the player's name")
     assert(row.relationIcon:IsShown() and row.relationIcon.texture:find(icons[relation], 1, true))
     assert(ledger.detailIcon.texture:find(icons[relation], 1, true))
@@ -240,7 +254,8 @@ assert(not ledger.empty:IsShown())
 GL.ShowLedger(identity.key)
 UIParent:SetSize(800, 600) ledger:Hide() ledger:Show()
 local bookScale = ledger:GetEffectiveScale() / UIParent:GetEffectiveScale()
-assert(ledger:GetWidth() * bookScale <= 776 and ledger:GetHeight() * bookScale <= 576)
+assert(ledger:GetWidth() * bookScale <= 776 + 1e-6 and ledger:GetHeight() * bookScale <= 576 + 1e-6,
+    "fit within the screen margin, allowing floating-point scale roundoff")
 UIParent:SetSize(1920, 1080)
 GL.EditNote(identity)
 assert(GrudgeLedgerNote.edit.justifyV == "TOP" and ledger.search.justifyV == "MIDDLE")
@@ -283,10 +298,11 @@ function modernMethods:CreateTexture(name, layer, template, sublevel)
     return texture
 end
 function modernMethods:SetAllPoints(region) self.allPoints = region or self.parent end
--- Reproduce a session where the new parchment is unavailable but the book loads.
+-- Reproduce unavailable artwork: both book versions retain readable backing colors.
 function modernMethods:SetTexture(value)
     self.texture, self.requestedTexture, self.color = value, value, nil
-    if type(value) == "string" and (value:find("JournalPaper", 1, true) or value:find("JournalBookSurface", 1, true)) then self.texture = nil end
+    if type(value) == "string" and (value:find("JournalPaper", 1, true) or value:find("JournalBookSurface", 1, true)
+        or value:find("JournalReferenceBook", 1, true)) then self.texture = nil end
 end
 function modernMethods:SetPoint(...) self.anchor = { ... } end
 assert(loadfile(TEST_ROOT .. "/Core.lua"))("GrudgeLedger")

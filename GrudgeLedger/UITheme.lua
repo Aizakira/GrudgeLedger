@@ -31,10 +31,12 @@ local function journalFont(region, decorative, size, italic)
     region:SetFontObject(classic and "ChatFontNormal" or (heading and "GameFontNormalLarge" or decorative))
     local nativePath, _, flags = region:GetFont()
     local pixels = size * (settings.readingScale or 1)
+    -- italic may also name a font file of Media\Fonts (the balance figure in Spectral, owner 23/11).
+    local custom = type(italic) == "string" and italic
     local face = italic and "Italic" or heading and "Bold" or "Regular"
     local loaded = false
     if not classic and not nativeScript then
-        local path = fontDir .. face .. ".ttf"
+        local path = custom and (media .. "Fonts\\" .. custom .. ".ttf") or fontDir .. face .. ".ttf"
         local ok, result = pcall(region.SetFont, region, path, pixels, "")
         -- On Forever a successful SetFont can have no return value. Check the applied face.
         if ok and result ~= false then
@@ -63,8 +65,67 @@ local function label(parent, text, size, x, y, width)
     return f
 end
 
+local function paintReferenceButton(b, textureName, tint, sliced)
+    b.skin:ClearAllPoints()
+    if sliced then
+        -- ponytail: 12px caps suit the Journal's 26–34px controls; rescale the caps if their height range changes.
+        local cap = math.min(12, (b:GetWidth() - 1) / 2)
+        b.skin:SetPoint("TOPLEFT", cap, 0)
+        b.skin:SetPoint("BOTTOMRIGHT", -cap, 0)
+        b.skin:SetTexCoord(0.125, 0.875, 0, 1)
+        if not b.skinCaps then
+            b.skinCaps = { b:CreateTexture(nil, "ARTWORK"), b:CreateTexture(nil, "ARTWORK") }
+            b.skinCaps[1]:SetPoint("TOPLEFT")
+            b.skinCaps[1]:SetPoint("BOTTOMLEFT")
+            b.skinCaps[1]:SetTexCoord(0, 0.125, 0, 1)
+            b.skinCaps[2]:SetPoint("TOPRIGHT")
+            b.skinCaps[2]:SetPoint("BOTTOMRIGHT")
+            b.skinCaps[2]:SetTexCoord(0.875, 1, 0, 1)
+        end
+        for _, piece in ipairs(b.skinCaps) do
+            piece:SetWidth(cap)
+            piece:SetTexture(media .. textureName)
+            piece:SetVertexColor(tint, tint, tint)
+            piece:Show()
+        end
+    else
+        b.skin:SetAllPoints()
+        b.skin:SetTexCoord(0, 1, 0, 1)
+        for _, piece in ipairs(b.skinCaps or {}) do piece:Hide() end
+    end
+    b.skin:SetTexture(media .. textureName)
+    b.skin:SetVertexColor(tint, tint, tint)
+end
+
 local function updateButtonState(b)
     local enabled = b:IsEnabled()
+    if b.referenceSkin then
+        local navigation = b.selectionTexture == "JournalReferenceTabActive"
+        local hot = enabled and b.hovered
+        -- The chosen opinion and the primary action are filled red, like the selected tab.
+        local red = hot or (b.active and enabled)
+        local textureName = red and (navigation and "JournalReferenceTabActive" or "JournalReferenceButtonRed")
+            or b.arrowTextureName or (navigation and "JournalReferenceTab" or b.paper and "JournalReferenceButton" or "JournalReferenceDarkButton")
+        local tint = not enabled and not b.arrowTextureName and 0.82 or hot and b.pressed and 0.78 or 1
+        paintReferenceButton(b, textureName, tint, not b.arrowTextureName or red)
+        b.caption:SetTextColor(unpack(red and { 1, 1, 1 } or b.paper and (enabled and { 0, 0, 0 } or theme.disabledInk)
+            or (enabled and theme.paper or theme.disabledGold)))
+        b.caption:SetShown(not b.arrowTextureName or hot)
+        -- A page arrow keeps its look when there is no page that way; it only fades.
+        local fade = b.arrowTextureName and not enabled and 0.4 or 1
+        b.skin:SetAlpha(fade)
+        for _, piece in ipairs(b.skinCaps or {}) do piece:SetAlpha(fade) end
+        b.normalSurface:SetColorTexture(unpack(red and theme.red or b.paper and theme.paper or theme.panel))
+        b.normalSurface:SetAlpha(0.15)
+        b.pressArtwork:SetAlpha(0)
+        if b.selection then
+            b.selection:SetAlpha(enabled and 1 or 0.6)
+            if navigation then b.selection:SetVertexColor(tint, tint, tint)
+            -- The red face already says "chosen": the old underline stays logical but transparent.
+            else b.selection:SetColorTexture(0, 0, 0, 0) end
+        end
+        return
+    end
     local tint = enabled and 1 or (b.paper and 0.88 or 0.76)
     b.skin:SetVertexColor(tint, tint, tint)
     if b.selection then b.selection:SetAlpha(enabled and 1 or 0.86) end
@@ -74,9 +135,27 @@ local function updateButtonState(b)
     b.edge:SetColorTexture(unpack(enabled and theme.gold or theme.disabledInk))
 end
 
+-- A book whose whole tree wears the Journal skin (Relations and Guilde, owner 23/11): its pages and their
+-- sub-frames inherit it, not only the controls placed straight on the window.
+local function inReferenceTree(frame)
+    for _ = 1, 16 do
+        if not frame then return false end
+        if frame.referenceTree then return true end
+        frame = frame.GetParent and frame:GetParent()
+    end
+    return false
+end
 local function button(parent, text, x, y, width, callback, selectable, paper)
     local b = CreateFrame("Button", nil, parent)
+    -- In the Relations and Guilde book, a control on a page (not on the window's leather) is a parchment one.
+    if paper == nil and not parent.referenceTree and inReferenceTree(parent) then paper = true end
     b.paper = paper
+    b.referenceSkin = parent.referenceSkin or inReferenceTree(parent)
+    if b.referenceSkin and (text == "‹" or text == "›") and (width <= 40 or inReferenceTree(parent)) then
+        b.arrowTextureName = "JournalReference" .. (paper and "" or "Dark") .. (text == "‹" and "ArrowLeft" or "ArrowRight")
+        -- The painted arrow keeps its shape: a wider slot gets the 32-unit arrow at its centre.
+        if width > 32 then x, width = x + math.floor((width - 32) / 2), 32 end
+    end
     b:SetPoint("TOPLEFT", x, y)
     b:SetSize(width, 26)
     local edge = surface(b, theme.gold, 0, -1)
@@ -92,6 +171,7 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     b:SetNormalTexture(normal)
     normal:SetDrawLayer("BACKGROUND", 0)
     local pushed = surface(b, paper and theme.selection or theme.brass, 1)
+    b.pressArtwork = pushed
     pushed:SetAlpha(paper and 0.24 or 0.18)
     b:SetPushedTexture(pushed)
     pushed:SetDrawLayer("ARTWORK", 2)
@@ -103,19 +183,33 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     -- normal/disabled fills; only the translucent press feedback goes over it.
     local skin = b:CreateTexture(nil, "ARTWORK")
     skin:SetAllPoints()
-    skin:SetTexture(media .. "JournalButtons")
-    skin:SetTexCoord(36 / 1254, 1218 / 1254, (paper and 880 or 150) / 1254, (paper and 1130 or 402) / 1254)
+    if b.referenceSkin then
+        edge:SetAlpha(0)
+        if paper and not b.arrowTextureName then
+            -- A soft shadow under the parchment buttons, as on the reference pages (owner 23/11).
+            local shadow = b:CreateTexture(nil, "BACKGROUND", nil, -8)
+            shadow:SetTexture(media .. "JournalButtonShadow")
+            shadow:SetPoint("TOPLEFT", -3, 1)
+            shadow:SetPoint("BOTTOMRIGHT", 4, -5)
+            shadow:SetAlpha(0.45)
+            b.shadow = shadow
+        end
+    else
+        skin:SetTexture(media .. "JournalButtons")
+        skin:SetTexCoord(36 / 1254, 1218 / 1254, (paper and 880 or 150) / 1254, (paper and 1130 or 402) / 1254)
+    end
     b.skin = skin
     local highlight = b:CreateTexture(nil, "HIGHLIGHT")
     highlight:SetPoint("TOPLEFT", 1, -1)
     highlight:SetPoint("BOTTOMRIGHT", -1, 1)
     highlight:SetColorTexture(0.57, 0.39, 0.18, 0.22)
+    if b.referenceSkin then highlight:SetAlpha(0) end
     b:SetHighlightTexture(highlight)
     local caption = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     b.caption = caption
     b:SetFontString(caption)
     b:SetText(text)
-    journalFont(caption, "GameFontHighlightSmall", 12)
+    journalFont(caption, "GameFontHighlightSmall", b.arrowTextureName and 18 or b.referenceSkin and 14 or 12)
     caption:ClearAllPoints()
     caption:SetPoint("CENTER")
     caption:SetSize(width - 14, 22)
@@ -127,15 +221,57 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     b:SetScript("OnDisable", updateButtonState)
     updateButtonState(b)
     b:SetScript("OnClick", callback)
+    if b.referenceSkin then
+        local function leave(self)
+            self.hovered, self.pressed = nil, nil
+            if self.tooltipActive and GameTooltip then GameTooltip:Hide() end
+            self.tooltipActive = nil
+            updateButtonState(self)
+        end
+        -- Large reading can ellipsize a fixed-width caption; its full translated label stays available.
+        b:SetScript("OnEnter", function(self)
+            self.hovered = self:IsEnabled()
+            updateButtonState(self)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(self.arrowTextureName and GL.L(text == "‹" and "Précédent" or "Suivant") or self.caption:GetText())
+                GameTooltip:Show()
+                self.tooltipActive = true
+            end
+        end)
+        b:SetScript("OnLeave", leave)
+        b:SetScript("OnHide", leave)
+        b:SetScript("OnDisable", leave)
+        b:SetScript("OnMouseDown", function(self, mouseButton)
+            self.pressed = mouseButton == "LeftButton" and self:IsEnabled() and self.hovered
+            updateButtonState(self)
+        end)
+        b:SetScript("OnMouseUp", function(self)
+            self.pressed = nil
+            updateButtonState(self)
+        end)
+        b:HookScript("OnSizeChanged", updateButtonState)
+    end
     return b
 end
 
 local function selectButton(control, active)
     if not control.selection then
         control.selection = control:CreateTexture(nil, "ARTWORK", nil, 1)
-        control.selection:SetAllPoints()
-        control.selection:SetTexture(media .. "JournalButtons")
-        control.selection:SetTexCoord(36 / 1254, 1218 / 1254, 514 / 1254, 768 / 1254)
+        if control.referenceSkin then
+            if control.selectionTexture == "JournalReferenceTabActive" then
+                control.selection:SetAllPoints()
+                control.selection:SetTexture(media .. control.selectionTexture)
+            else
+                control.selection:SetPoint("BOTTOMLEFT", 6, 3)
+                control.selection:SetPoint("BOTTOMRIGHT", -6, 3)
+                control.selection:SetHeight(2)
+            end
+        else
+            control.selection:SetAllPoints()
+            control.selection:SetTexture(media .. "JournalButtons")
+            control.selection:SetTexCoord(36 / 1254, 1218 / 1254, 514 / 1254, 768 / 1254)
+        end
     end
     control.active = active
     control.normalSurface:SetColorTexture(unpack(active and theme.red or (control.paper and theme.paper or theme.panel)))
@@ -147,6 +283,11 @@ end
 local function styleInput(edit, multiline, paper)
     local edge = surface(edit, theme.gold, 0, -1)
     local fill = surface(edit, paper and theme.paper or theme.background, 1)
+    if edit.referenceSkin and not paper then
+        local skin = edit:CreateTexture(nil, "BACKGROUND", nil, 1)
+        skin:SetAllPoints()
+        skin:SetTexture(media .. "JournalReferenceField")
+    end
     if paper then
         local texture = edit:CreateTexture(nil, "BACKGROUND", nil, 1)
         texture:SetAllPoints(fill)
@@ -195,8 +336,8 @@ end
 local bookAnchor = _G.GrudgeLedgerBookAnchor
 if not bookAnchor then
     bookAnchor = CreateFrame("Frame", "GrudgeLedgerBookAnchor", UIParent)
-    bookAnchor:SetSize(960, 700)
-    bookAnchor:SetPoint("CENTER")
+    bookAnchor:SetSize(960, 720)
+    bookAnchor:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     bookAnchor:SetMovable(true)
     bookAnchor:SetClampedToScreen(true)
     bookAnchor:EnableMouse(false)
@@ -205,6 +346,7 @@ end
 
 local function window(name, title, width, height, isBook)
     local f = CreateFrame("Frame", name, isBook and bookAnchor or UIParent)
+    f.referenceSkin = isBook and name == "GrudgeLedgerWindow"
     f:SetSize(width, height)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
@@ -253,7 +395,7 @@ local function window(name, title, width, height, isBook)
         fitToScreen(mover)
         if isBook then
             self:ClearAllPoints()
-            self:SetPoint("CENTER", bookAnchor, "CENTER")
+            self:SetPoint("CENTER", bookAnchor, "CENTER", 0, 0)
         end
     end)
     if UISpecialFrames then table.insert(UISpecialFrames, name) end
@@ -261,9 +403,65 @@ local function window(name, title, width, height, isBook)
     return f
 end
 
+-- Stains on the parchment (owner 23/11): two or three discreet marks per sheet, drawn under the text and
+-- the controls, only in the zones a book declares as quiet parchment. The draw comes from a seed (the
+-- contact or the page), so a sheet keeps its stains when it is opened again, like a real book.
+-- JournalStains.tga: cells 0-5 diffuse blood, 6-11 sharp drops, 12-15 free for ink later.
+local function setupStains(frame, zones)
+    frame.stainZones, frame.stains = zones, {}
+    for i = 1, 3 do
+        local stain = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
+        stain:SetTexture(media .. "JournalStains")
+        stain:Hide()
+        frame.stains[i] = stain
+    end
+end
+local function paintStains(frame, seed)
+    if not frame.stains then return end
+    local h = 7
+    seed = tostring(seed or "")
+    for i = 1, #seed do h = (h * 31 + seed:byte(i)) % 2147483647 end
+    if h == 0 then h = 1 end
+    local function draw() h = (h * 48271) % 2147483647 return h / 2147483647 end
+    local free = {}
+    for i = 1, #frame.stainZones do free[i] = i end
+    local count = math.min(#free, 2 + (draw() < 0.5 and 1 or 0))
+    for i, stain in ipairs(frame.stains) do
+        if i > count then stain:Hide() else
+            local zone = frame.stainZones[table.remove(free, 1 + math.floor(draw() * #free))]
+            local diffuse = i == 1 or draw() < 0.6
+            local cell = (diffuse and 0 or 6) + math.floor(draw() * 6)
+            local size = diffuse and (34 + draw() * 26) or (16 + draw() * 16)
+            local l, t = (cell % 4) / 4, math.floor(cell / 4) / 4
+            local r, b = l + 0.25, t + 0.25
+            -- A quarter turn and a mirror out of eight, with the corner form every client knows.
+            local corners = { { l, t }, { r, t }, { r, b }, { l, b } }
+            local k = math.floor(draw() * 4)
+            local ul, ur, lr, ll = corners[k % 4 + 1], corners[(k + 1) % 4 + 1], corners[(k + 2) % 4 + 1], corners[(k + 3) % 4 + 1]
+            if draw() < 0.5 then ul, ur, ll, lr = ur, ul, lr, ll end
+            stain:SetTexCoord(ul[1], ul[2], ll[1], ll[2], ur[1], ur[2], lr[1], lr[2])
+            stain:SetSize(size, size)
+            stain:ClearAllPoints()
+            stain:SetPoint("CENTER", frame, "TOPLEFT", zone[1] + draw() * (zone[3] - zone[1]), -(zone[2] + draw() * (zone[4] - zone[2])))
+            stain:SetAlpha(diffuse and (0.55 + draw() * 0.35) or (0.45 + draw() * 0.3))
+            stain:Show()
+        end
+    end
+end
+-- Quiet parchment where a stain may fall, as centre ranges {x0, y0, x1, y1} in window units. Every
+-- centre keeps the largest stain (60) on the top sheet: paper 358 (226 narrow) to 925, 147 to 641.
+local stainZones = {
+    journal = { { 765, 305, 885, 345 }, { 700, 480, 880, 528 }, { 390, 500, 560, 528 }, { 850, 215, 895, 235 } },
+    narrow = { { 420, 590, 760, 608 }, { 870, 260, 895, 520 }, { 860, 180, 895, 195 }, { 256, 300, 262, 560 } },
+}
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
-    local f = window(name, title, bookAnchor:GetWidth(), bookAnchor:GetHeight(), true)
+    local reference = name == "GrudgeLedgerWindow"
+    local tree = name == "GrudgeLedgerRelations" or name == "GrudgeLedgerGuild" or name == "GrudgeLedgerBounties"
+        or name == "GrudgeLedgerPlayerDossier"
+    local f = window(name, title, 960, 700, true)
+    f.referenceSkin = reference or tree
+    f.referenceTree = tree
     f.closeButton:ClearAllPoints()
     f.closeButton:SetPoint("TOPLEFT", 912, -19)
     f.closeButton:SetSize(32, 32)
@@ -296,6 +494,39 @@ local function bookWindow(name, title, narrow)
     f.bookSurface = f:CreateTexture(nil, "BACKGROUND", nil, 0)
     f.bookSurface:SetAllPoints()
     f.bookSurface:SetTexture(media .. (narrow and "JournalBookSurfaceSheet" or "JournalBookSurface"))
+    if reference then
+        -- The same window, title and buttons as the other pages: the book must not jump between tabs
+        -- (owner, 23/11). The painting keeps its 960 x 720 canvas, 10 units above and below the window,
+        -- and its frame is painted on the frame of the other pages.
+        f.bookSurface:ClearAllPoints()
+        f.bookSurface:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 10)
+        f.bookSurface:SetSize(960, 720)
+        f.bookSurface:SetTexture(media .. "JournalReferenceBook")
+        f.lining:Hide()
+        f.indexPaper:ClearAllPoints()
+        f.indexPaper:SetPoint("TOPLEFT", 74, -149)
+        f.indexPaper:SetSize(272, 476)
+        f.paper:ClearAllPoints()
+        f.paper:SetPoint("TOPLEFT", 356, -153)
+        f.paper:SetSize(541, 473)
+    elseif tree then
+        -- The Journal's book in its narrow form: same frame, drapes and parchment, divider at 220.
+        f.bookSurface:ClearAllPoints()
+        f.bookSurface:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 10)
+        f.bookSurface:SetSize(960, 720)
+        f.bookSurface:SetTexture(media .. "JournalReferenceSheetBook")
+        f.lining:Hide()
+    end
+    if reference or tree then setupStains(f, reference and stainZones.journal or stainZones.narrow) end
+    if reference or tree then
+        -- Each book keeps the other painting loaded, invisible: going from the Journal to another tab
+        -- no longer blanks the window while the game reads the big texture (owner 23/11).
+        f.bookPreload = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+        f.bookPreload:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        f.bookPreload:SetSize(1, 1)
+        f.bookPreload:SetTexture(media .. (reference and "JournalReferenceSheetBook" or "JournalReferenceBook"))
+        f.bookPreload:SetAlpha(0)
+    end
     return f
 end
 
@@ -303,6 +534,7 @@ end
 -- the line that would overflow it. The arrows at the bottom right and the wheel turn the pages.
 local function textPages(parent, width, height)
     local view = CreateFrame("Frame", nil, parent)
+    view.referenceSkin = parent.referenceSkin or inReferenceTree(parent)
     view:SetSize(width, height)
     view.body = label(view, "", nil, 0, 0, width - 4)
     view.body:SetTextColor(unpack(theme.ink))
@@ -366,7 +598,9 @@ local function wheelScroll(scroll)
     end)
 end
 
+
 GL.UITheme = {
+    setupStains = setupStains, paintStains = paintStains,
     textPages = textPages, wheelScroll = wheelScroll,
     theme = theme, journalFonts = journalFonts,
     surface = surface, plain = plain, label = label, button = button,

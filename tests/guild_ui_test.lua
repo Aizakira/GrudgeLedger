@@ -110,7 +110,9 @@ local gros = GL.Remember(GL.Identity("target"))
 GL.ShowLedger(gros.key)
 assert(GL.Relation(gros) == "enemy" and GL.RelationSource(gros) == "guild")
 assert(GrudgeLedgerWindow.detailSource:GetText():find("Avis hérité de la guilde", 1, true))
-assert(GrudgeLedgerWindow.reactions.enemy.selection:IsShown(), "guild inheritance selects the effective reaction")
+-- An inherited opinion is computed, not chosen: Automatique is lit, Ennemi only outlined (owner 23/11).
+assert(GrudgeLedgerWindow.reactions.neutral.active and not GrudgeLedgerWindow.reactions.enemy.active
+    and GrudgeLedgerWindow.reactions.enemy.outline[1]:IsShown(), "guild inheritance outlines the effective reaction")
 assert(GrudgeLedgerWindow.detailGuild:GetText() == "Guilde : Les Voyageurs Test")
 assert(GrudgeLedgerWindow.detailScroll.fullText:find("||cff00ff00", 1, true), "guild note is rendered literally")
 click(GrudgeLedgerWindow.tools) click(GrudgeLedgerWindow.guildButton)

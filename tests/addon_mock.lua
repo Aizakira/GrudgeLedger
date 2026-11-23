@@ -1,8 +1,6 @@
 -- Load the real TOC with simulated WoW APIs for integration tests and benchmarks.
 local mock = assert(loadfile(TEST_WORK .. "/tests/wow_mock.lua"))()
 local methods = getmetatable(UIParent).__index
-function methods:GetFrameLevel() return self.level or 1 end
-function methods:SetFrameLevel(value) self.level = value end
 function methods:SetIgnoreParentAlpha(value) self.ignoreAlpha = value end
 function methods:SetIgnoreParentScale(value) self.ignoreScale = value end
 function methods:SetVertexColor(...) self.vertex = { ... } end

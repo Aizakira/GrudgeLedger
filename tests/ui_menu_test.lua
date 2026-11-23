@@ -128,7 +128,8 @@ do
     GL.ShowLedger(aqua.key)
     assert(not stars:IsShown(), "no stars on a debt")
 end
-assert(GrudgeLedgerWindow.reactions.warning.selection:IsShown() and not GrudgeLedgerWindow.reactions.neutral.selection:IsShown(), "automatic selects the effective dangerous relation")
+assert(GrudgeLedgerWindow.reactions.neutral.active and not GrudgeLedgerWindow.reactions.warning.active
+    and GrudgeLedgerWindow.reactions.warning.outline[1]:IsShown(), "automatic outlines the effective dangerous relation")
 assert(GrudgeLedgerWindow.detailStatus:GetText():find("Méfiance", 1, true))
 GL.SetReaction(aqua, "friend")
 click(GrudgeLedgerWindow.reactions.neutral)

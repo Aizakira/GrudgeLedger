@@ -198,13 +198,14 @@ do
     assert(GL.ContactMatchup(contact).run == 1, "correcting an event takes effect on the next read")
 end
 click(ledger.detailTabs.summary)
-assert(ledger.balancePanel:IsShown() and ledger.metrics.kills.caption:GetText() == "Vous l’avez vaincu")
-assert(ledger.reactions[GL.Relation(ra)].active and not ledger.reactions.neutral.active,
-    "automatic PvP danger must select the real dangerous relation, not neutral")
+assert(ledger.balancePanel:IsShown() and ledger.metrics.kills.caption:GetText() == "Vous l’avez tué")
+assert(ledger.reactions.neutral.active and not ledger.reactions[GL.Relation(ra)].active
+    and ledger.reactions[GL.Relation(ra)].outline[1]:IsShown(),
+    "automatic PvP danger lights Automatique and outlines the real dangerous relation")
 click(ledger.reactions.friend)
-assert(GL.RelationSource(ra) == "manual" and ledger.reactions.friend.active)
+assert(GL.RelationSource(ra) == "manual" and ledger.reactions.friend.active and not ledger.reactions.neutral.active)
 click(ledger.reactions.neutral)
-assert(GL.RelationSource(ra) == "pvp" and ledger.reactions[GL.Relation(ra)].active,
+assert(GL.RelationSource(ra) == "pvp" and ledger.reactions.neutral.active and ledger.reactions[GL.Relation(ra)].outline[1]:IsShown(),
     "Automatic removes a manual override and restores the outstanding PvP debt")
 local historicalNeutral = GL.Remember(person("HistoricalNeutral"))
 historicalNeutral.reaction, historicalNeutral.reactionSource = "neutral", "manual"
