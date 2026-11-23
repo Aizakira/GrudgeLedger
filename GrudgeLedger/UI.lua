@@ -2233,7 +2233,7 @@ local function renderDetail()
     local width = math.floor((530 - 6 * (#row - 1)) / #row)
     for i, control in ipairs(row) do
         control:SetWidth(width)
-        moveTo(control, 365 + (i - 1) * (width + 6), 586)
+        moveTo(control, 365 + (i - 1) * (width + 6), 599)
     end
     showIf(ledger.counters, summary)
     showIf(ledger.balancePanel, summary)
@@ -2242,7 +2242,8 @@ local function renderDetail()
     ledger.detailScroll:ClearAllPoints()
     local storyTop = 377 + math.ceil(23 * (GL.Settings().readingScale or 1))
     ledger.detailScroll:SetPoint("TOPLEFT", 367, summary and -storyTop or -283)
-    ledger.detailScroll:SetHeight(summary and (522 - storyTop) or 293)
+    -- The story takes the 13 units the actions gave up.
+    ledger.detailScroll:SetHeight(summary and (535 - storyTop) or 293)
     ledger.detailTitle:SetTextColor(unpack(theme.ink))
     local profile = GL.ArmoryProfile(record)
     local public = profile and profile.identity
@@ -2350,7 +2351,7 @@ local function renderDetail()
             -- The seal reaches 6 units below the heading line: the story starts under it.
             local bodyTop = headingTop + math.ceil(23 * (GL.Settings().readingScale or 1)) + (ledger.summarySeal and 6 or 0)
             moveTo(ledger.detailScroll, 367, bodyTop)
-            ledger.detailScroll:SetHeight(522 - bodyTop)
+            ledger.detailScroll:SetHeight(535 - bodyTop)
             local guildRule = GL.GetGuildRule(record)
             lines = {
                 "|cff653c20" .. L("Dernière rencontre") .. "|r",
@@ -2932,8 +2933,9 @@ local function buildLedger()
         row.classIcon:SetPoint("TOPLEFT", 51, -29)
         row.classIcon:SetSize(15, 15)
         row.identity = label(row, "", nil, 70, -29, 164)
-        journalFont(row.identity, "GameFontHighlightSmall", 12)
-        row.identity:SetTextColor(unpack(theme.muted))
+        -- 13 points and a lighter parchment tone: at 12 in the muted tone it read badly on the leather (owner 23/11).
+        journalFont(row.identity, "GameFontHighlightSmall", 13)
+        row.identity:SetTextColor(0.85, 0.77, 0.63)
         row.identity:SetHeight(18)
         GL.Safe(row.identity.SetWordWrap, row.identity, false)
         GL.Safe(row.identity.SetMaxLines, row.identity, 1)
@@ -3029,7 +3031,8 @@ local function buildLedger()
     for _, option in ipairs({ { L("Ami"), "friend", 365, 116 }, { L("Méfiance"), "warning", 487, 136 },
         { L("Ennemi"), "enemy", 629, 128 }, { L("Automatique"), "neutral", 763, 132 } }) do
         local value = option[2]
-        local control = button(f, option[1], option[3], -550, option[4], function()
+        -- Reactions and actions end on the list's last row (628, owner 23/11): 13 lower than before.
+        local control = button(f, option[1], option[3], -563, option[4], function()
             local record = currentRecord()
             if record then GL.SetReaction(record, value) end
         end, true, true)
@@ -3048,7 +3051,7 @@ local function buildLedger()
         end
         f.actions[#f.actions + 1], f.reactions[value] = control, control
     end
-    f.addNote = button(f, L("Ajouter une note"), 763, -586, 132, function()
+    f.addNote = button(f, L("Ajouter une note"), 763, -599, 132, function()
         local record = currentRecord()
         if record then GL.EditNote(record) end
     end, nil, true)
@@ -3058,12 +3061,12 @@ local function buildLedger()
     f.toolsMenu:SetSize(180, 206)
     f.toolsMenu:SetFrameStrata("FULLSCREEN_DIALOG") f.toolsMenu:SetToplevel(true) f.toolsMenu:EnableMouse(true)
     surface(f.toolsMenu, theme.gold) surface(f.toolsMenu, theme.panel, 1)
-    f.tools = button(f, L("Autres actions"), 717, -586, 168, function() toggleMenu(f.toolsMenu) end, nil, true)
+    f.tools = button(f, L("Autres actions"), 717, -599, 168, function() toggleMenu(f.toolsMenu) end, nil, true)
     f.tools:SetHeight(29)
     -- The menu opens above its button, right edges aligned, wherever the row places it.
     f.toolsMenu:SetPoint("BOTTOMRIGHT", f.tools, "TOPRIGHT", 0, 6)
     -- The full sheet is one visible click away, not hidden behind the name.
-    f.openSheet = button(f, L("Ouvrir la fiche"), 365, -586, 172, function()
+    f.openSheet = button(f, L("Ouvrir la fiche"), 365, -599, 172, function()
         local r = currentRecord()
         if r and GL.OpenPlayerDossier then
             GL.OpenPlayerDossier(r.guid or r.key, function() GL.ShowLedger() end, r.fullName or r.name)
@@ -3115,7 +3118,7 @@ local function buildLedger()
         if record then StaticPopup_Show(deleteDialog, plain(record.fullName or record.key), nil, record) end
     end)
     f.toolsMenu:Hide()
-    f.contactBounty = button(f, L("Créer une prime"), 543, -586, 166, function()
+    f.contactBounty = button(f, L("Créer une prime"), 543, -599, 166, function()
         local r = currentRecord()
         if r then GL.OpenContactBounty(r.guid) end
     end, nil, true)
