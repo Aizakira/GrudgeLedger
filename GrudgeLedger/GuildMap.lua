@@ -132,11 +132,13 @@ local function answer(s, me, full)
     return T.SendBatch(s, relayed, { key = "map:relay", delay = 4 + math.random(0, 16) }) == true or sent
 end
 -- Your latest fights from your own journal, so that ticking the box shows something at once.
+-- The journal is the account's: only the fights of the character playing are its own (owner
+-- report 24/11, an alt announced the main's fights as hers).
 local function seed(s, me)
     local found = {}
     for _, record in pairs(GL.db and GL.db.players or {}) do
         for _, e in ipairs(type(record) == "table" and type(record.history) == "table" and record.history or {}) do
-            if type(e) == "table" and not e.voided and (e.kind == "kill" or e.kind == "death") and type(e.time) == "number"
+            if type(e) == "table" and e.actorGUID == me and not e.voided and (e.kind == "kill" or e.kind == "death") and type(e.time) == "number"
                 and type(e.mapID) == "number" and type(e.mapX) == "number" and type(e.mapY) == "number" and e.time >= GL.Now() - KEEP then
                 found[#found + 1] = { event = e, record = record }
             end
@@ -149,6 +151,42 @@ local function seed(s, me)
         keep(s, me, line(e.time, e.mapID, math.floor(e.mapX * 1000 + 0.5), math.floor(e.mapY * 1000 + 0.5), e.kind == "death" and "d" or "k",
             guid(record.guid) and record.guid or "", plainName(name) and name or ""))
     end
+end
+-- Up to 0.61.2 a character seeded the map with every fight of the account's journal: the alts
+-- carried the fights of the main, and told the guild so. A line kept for one of your characters that
+-- your journal gives to another of them is removed. True when the playing character lost lines: it
+-- then asks the guild to forget its fights and sends its own again.
+local function repair(s, me)
+    if type(s.places) ~= "table" then return false end
+    local characters = { [me] = true }
+    for id in pairs(type(GL.db.characterFactions) == "table" and GL.db.characterFactions or {}) do
+        if guid(id) then characters[id] = true end
+    end
+    local owners = {}
+    for _, record in pairs(GL.db.players or {}) do
+        for _, e in ipairs(type(record) == "table" and type(record.history) == "table" and record.history or {}) do
+            if type(e) == "table" and (e.kind == "kill" or e.kind == "death") and type(e.time) == "number" and characters[e.actorGUID] then
+                local key = e.time .. ";" .. (e.kind == "death" and "d" or "k")
+                owners[key] = owners[key] or {}
+                owners[key][e.actorGUID] = true
+            end
+        end
+    end
+    local mineChanged = false
+    for actor, list in pairs(s.places) do
+        if characters[actor] and type(list) == "table" then
+            for i = #list, 1, -1 do
+                local at, _, _, _, kind = read(list[i])
+                local who = at and owners[at .. ";" .. kind]
+                if who and not who[actor] then
+                    table.remove(list, i)
+                    if actor == me then mineChanged = true end
+                    forgetIndex()
+                end
+            end
+        end
+    end
+    return mineChanged
 end
 -- A guild catch-up brings hundreds of fights in a few seconds: the open pages are drawn again
 -- once every fifth of a second at most, not once per fight.
@@ -176,9 +214,19 @@ function M.Join()
         GL.Print(GL.L("Grudge Ledger partage avec votre guilde vos victoires, vos morts (avec l’endroit), vos repérages et vos avis. "
             .. "Pour arrêter : options, pages Relations et Alertes, et la case « Vision de guilde » de la carte."))
     end
-    if not on(s, me) or ready[s] then return false end
+    if ready[s] then return false end
     ready[s] = true
-    seed(s, me)
+    local wrong = repair(s, me)
+    if not on(s, me) then return false end
+    if wrong then
+        -- The guild heard fights that were not this character's: it forgets them, then hears its own.
+        GL.Transport.Send(s, "MX")
+        seed(s, me)
+        answer(s, me, true)
+    else
+        seed(s, me)
+    end
+    refresh()
     return true
 end
 -- Whether the box is ticked for this character, and whether there is a guild at all.
