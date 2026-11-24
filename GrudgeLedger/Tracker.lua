@@ -193,8 +193,23 @@ local function combatReport(f, guid, recap)
     return report
 end
 
+-- A player of your own faction is not a PvP opponent: a mind-controlled ally (Lucifron's adds, a
+-- priest's Mind Control) carries the hostile flag in the combat log (audit 24/11). Free-for-all
+-- zones (the Gurubashi arena) are the exception: there, your own side fights you.
+local sideOfRace = { Human = "Alliance", Dwarf = "Alliance", NightElf = "Alliance", Gnome = "Alliance",
+    Orc = "Horde", Scourge = "Horde", Tauren = "Horde", Troll = "Horde" }
+local function sameSide(guid)
+    if type(GetPlayerInfoByGUID) ~= "function" then return false end
+    local ok, _, _, _, race = pcall(GetPlayerInfoByGUID, guid)
+    local side = ok and sideOfRace[GL.Clean(race, "string") or ""]
+    local mine = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
+    if not side or side ~= mine then return false end
+    local zone = GL.Clean(GL.Safe(GetZonePVPInfo), "string")
+    return zone ~= "arena" and zone ~= "combat"
+end
 local function identityForGUID(guid, name, encounter)
     if not guid or #guid > 128 or not guid:match("^Player%-%w") or guid == playerGUID() then return nil end
+    if sameSide(guid) then return nil end
     local token = GL.Clean(GL.Safe(UnitTokenFromGUID, guid), "string")
     local visible = token and GL.Identity(token)
     if visible and visible.guid == guid then return visible end
@@ -378,9 +393,10 @@ local function killingBlow(src, dst, name, evidence, native)
         if src:match("^Player%-%w") then
             local f, previous = combatSession(), recentCredits[dst]
             local enemy = f and f.enemies["guid:" .. dst]
-            -- A groupmate's killing blow on a player you fought is your victory too, even just after your death.
+            -- A groupmate's killing blow on a player of YOUR fight is your victory too, even just after
+            -- your death. A contact two minutes earlier, far away, no longer is (owner, 24/11).
             local mate = groupmate(src)
-            if mate and (enemy or GL.FoughtRecently("guid:" .. dst)) then
+            if mate and enemy then
                 creditKill(identityForGUID(dst, name), "confirmed", "Coup fatal d’un membre de votre groupe.", native, mate)
                 return
             end
@@ -884,9 +900,12 @@ local function resolveDeath(flush)
         participants[lethal.guid or lethal.key] = lethal
         recordAggression(death.fight, lethal, "confirmed", "Dégâts létaux explicitement attribués à ce joueur.", lethalPet)
     end
-    -- ponytail: reuse per-person death counters for participation in one fatal attack.
+    -- The death goes to the killing blow; the other attackers keep their aggression (owner, 24/11).
+    -- Without a known killing blow, every attacker of the last seconds shares it, as before.
     for _, identity in pairs(participants) do
         local confirmed = lethal and (identity.guid or identity.key) == (lethal.guid or lethal.key)
+        if lethal and not confirmed then identity = nil end
+        if identity then
         local pet = death.fight.petAttackers and death.fight.petAttackers[identity.key]
         local evidence = confirmed and (lethalPet and "Le familier de ce joueur vous a porté le coup fatal."
             or "Dégâts létaux explicitement attribués à ce joueur.")
@@ -897,6 +916,7 @@ local function resolveDeath(flush)
         local recorded = GL.RecordPvP(identity, "death", "confirmed", evidence, death.id, combatSnapshot(death.fight, identity, viaPet),
             combatReport(death.fight, identity.guid or identity.key, death.recap), confirmed == true)
         if recorded and confirmed then GL.Emit("BOUNTY_DEATH",identity.guid,identity.fullName) end
+        end
     end
 end
 
@@ -1062,8 +1082,12 @@ function T.OnCombatLog(...)
             if not fight then fight = newFight() end
             f = fight
             observeOpponent(f, identity.guid, identity ~= GL.Get(identity) and identity.level, true)
-            recordAggression(f, identity, "confirmed", viaPet and "Le journal de combat attribue les dégâts au familier de ce joueur."
-                or "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").", viaPet)
+            -- DAMAGE_SHIELD is a player's aura (Thorns, Retribution Aura) answering YOUR blow: it makes
+            -- nobody an aggressor (audit 24/11). A death from it is still a death.
+            if sub ~= "DAMAGE_SHIELD" then
+                recordAggression(f, identity, "confirmed", viaPet and "Le journal de combat attribue les dégâts au familier de ce joueur."
+                    or "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").", viaPet)
+            end
             local enemy = f.enemies[identity.key] or { identity = identity }
             enemy.damageAt = GL.Now()
             f.enemies[identity.key] = enemy

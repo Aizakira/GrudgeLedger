@@ -2,10 +2,27 @@
 -- immutable declarations. A guild peer may replay a cached declaration at login.
 local GL = GrudgeLedger
 local B = {}
+-- One of this account's characters (Core.lua); false where Core is not loaded (unit tests).
+local function ownCharacter(id) return GL.OwnCharacter ~= nil and GL.OwnCharacter(id) end
 GL.Bounties = B
 local ML=GL.L or function(s) return s end
 local DAY, GOLD = 86400, 10000
 local roster,addresses={},{}
+-- Members connected now, from the guild roster: a connected member speaks for itself (audit 24/11).
+local online={}
+-- Messages that make no sense from one member, counted this session: told once past five.
+local oddCount,oddTold={},{}
+local ODD=ML("Grudge Ledger a ignoré plusieurs messages incohérents de %s. Rien n’en a été gardé.")
+local function odd(sender)
+    if type(sender)~="string" then return end
+    oddCount[sender]=(oddCount[sender] or 0)+1
+    if oddCount[sender]>=5 and not oddTold[sender] then
+        oddTold[sender]=true
+        GL.Print(ODD:format(addresses[sender] or sender))
+    end
+end
+B.Odd=odd
+function B.Online(id) return online[id]==true end
 -- What one member may keep in your book over the 38 days of the log, and the guild's fight counts.
 local MAX_MEMBER_EVENTS,MAX_SCORE_TARGETS,MAX_SCORE_ACTORS=600,1500,60
 local function guid(s)
@@ -69,6 +86,8 @@ local function scope()
     local s = GL.db.bountyGuilds[key] or {events={}, seq=0}
     s.guildKey=key
     s.since=s.since or GL.Now()
+    -- From this date, a claim must be heard from its hunter to count (audit 24/11).
+    s.directSince=s.directSince or GL.Now()
     GL.db.bountyGuilds[key] = s
     return s, me
 end
@@ -129,7 +148,8 @@ local function unpackEvent(raw,archiving)
         elseif kind=="X" or kind=="F" then
             if actor~=owner or detail~="" then return end
             if kind=="X" and value~="" or kind=="F" and not value:match("^Player%-%w+%-%w+:%d+$") then return end
-        elseif kind=="Y" then
+        elseif kind=="Y" or kind=="Z" then
+            -- Z (0.62.0): the payer's mail came back unopened; that much is owed again.
             if not guid(detail) or not number(value,1,1000*GOLD) then return end
         elseif kind=="V" then
             local offset,amount=value:match("^(%d+),(%d+)$")
@@ -181,14 +201,21 @@ local function view(s,archiving)
         end
     end
     table.sort(events,earlier)
+    -- A claim counts when it was heard from its own hunter (or is yours), when the issuer chose it,
+    -- or when it predates this check: a relayed claim alone counts for nothing (audit 24/11).
+    local heard=type(s.directClaims)=="table" and s.directClaims or {}
+    local since=tonumber(s.directSince) or math.huge
+    local chosen={}
+    for _,e in ipairs(events) do if e.kind=="F" then chosen[e.value]=true end end
+    local function counts(e) return heard[e.key] or chosen[e.key] or e.time<since end
     -- Only the issuer finalizes a hunter. Claims received in their absence survive reconnects.
     for _,e in ipairs(events) do
         local o=orders[e.order]
         if o and e.time>=o.at and e.time<=o.expires and not o.closed then
             if e.kind=="S" then o.after=e.value
-            elseif (not o.custom and e.kind=="K") or (o.custom and e.kind=="H"
+            elseif counts(e) and ((not o.custom and e.kind=="K") or (o.custom and e.kind=="H"
                 and (o.group=="party" or e.value=="0") and (o.split=="equal" or e.detail=="")
-                and (e.value=="1" or e.detail=="")) and e.time-((o.lastWin or {})[e.actor] or -math.huge)>=60 then
+                and (e.value=="1" or e.detail=="")) and e.time-((o.lastWin or {})[e.actor] or -math.huge)>=60) then
                 o.lastWin=o.lastWin or {}
                 o.lastWin[e.actor]=e.time
                 local wins=(o.progress[e.actor] or 0)+1
@@ -223,6 +250,16 @@ local function view(s,archiving)
                 o.paid[k]=(o.paid[k] or 0)+tonumber(e.value)
                 o.receipts[e.key]=true
             end
+        end
+    end
+    -- A payment mail returned to its payer is owed again (owner, 24/11). Applied after every
+    -- sending, whatever the order the events arrived in.
+    for _,e in ipairs(events) do
+        local o=orders[e.order]
+        if o and e.kind=="Z" and (o.winner or o.priorWinner) and not o.receipts[e.key] then
+            local k=e.actor.."/"..e.detail
+            o.paid[k]=math.max(0,(o.paid[k] or 0)-tonumber(e.value))
+            o.receipts[e.key]=true
         end
     end
     -- A mailbox receipt can reach the guild before the pledge or the sender's
@@ -531,7 +568,21 @@ local function mergeScore(s,actor,target,wins,losses)
         for _ in pairs(s.scores) do scoreTargets.n=scoreTargets.n+1 end
     end
     if not s.scores[target] then
-        if scoreTargets.n>=MAX_SCORE_TARGETS then return end
+        if scoreTargets.n>=MAX_SCORE_TARGETS then
+            -- Full: a target your book does not know, with the fewest fights, makes room. Made-up
+            -- targets could otherwise fill the table for good (audit 24/11).
+            local weakest,least
+            for other,byActor in pairs(s.scores) do
+                if not (GL.Get and GL.Get("guid:"..other)) then
+                    local total=0
+                    for _,pair in pairs(byActor) do total=total+(pair[1] or 0)+(pair[2] or 0) end
+                    if not least or total<least then weakest,least=other,total end
+                end
+            end
+            if not weakest then return end
+            s.scores[weakest]=nil
+            scoreTargets.n=scoreTargets.n-1
+        end
         scoreTargets.n=scoreTargets.n+1
     end
     local scores=s.scores[target] or {}
@@ -578,6 +629,13 @@ function B.GuildFights(target)
     end
     return wins,losses
 end
+-- A claim heard from its own hunter (or yours): only those may win. A relay may carry a claim in a
+-- member's name, backdated before the real one; the issuer's client would have crowned it, and the
+-- payers mailed the relayer (audit 24/11).
+local function direct(s,key)
+    s.directClaims=type(s.directClaims)=="table" and s.directClaims or {}
+    s.directClaims[key]=true
+end
 local function record(s,me,kind,order,value,detail,deferRefresh)
     if not s then return nil,"guild" end
     local seq=math.max(s.seq+1,GL.Now()*1000)
@@ -586,6 +644,7 @@ local function record(s,me,kind,order,value,detail,deferRefresh)
     if not e then return nil,"invalid" end
     openTargets=nil
     s.seq=seq; s.events[e.key]=raw
+    if kind=="K" or kind=="H" then direct(s,e.key) end
     if s==scope() then
         schedule(s,raw)
         if kind~="D" and not deferRefresh then changed(s,me) end
@@ -712,8 +771,16 @@ end
 -- clock everyone trusts, a rule on lateness blocked honest wins made while the issuer was away
 -- (reviews 0.58.6 and 0.58.7). The guild is a circle of trust.
 local function finalize(s,me)
+    local heard=type(s.directClaims)=="table" and s.directClaims or {}
+    for key in pairs(heard) do if not s.events[key] then heard[key]=nil end end
     for id,o in pairs(view(s)) do
-        if o.owner==me and o.state=="claimed" then declare("F",id,o.first.key,"") end
+        if o.owner==me and o.state=="claimed" then
+            local best
+            for key,claim in pairs(o.claims or {}) do
+                if heard[key] and (not best or earlier(claim,best)) then best=claim end
+            end
+            if best then declare("F",id,best.key,"") end
+        end
     end
 end
 function B.Kill(target,combat)
@@ -748,7 +815,9 @@ local function autoOrder(s,me,target,name)
         if e and e.order==target then
             if e.kind=="A" and GL.Now()-e.time<DAY then return end
             if e.kind=="D" then
-                if not victims[e.actor] then victims[e.actor]=true; distinct=distinct+1 end
+                -- The characters of one account are one victim (audit 24/11).
+                local victim=ownCharacter(e.actor) and "account" or e.actor
+                if not victims[victim] then victims[victim]=true; distinct=distinct+1 end
                 if e.actor==me and GL.Now()-e.time<=1800 then mine=mine+1 end
             end
         end
@@ -776,15 +845,18 @@ local memberEvents
 local function countMember(s,actor)
     if not memberEvents or memberEvents.s~=s then
         memberEvents={s=s,n={}}
-        for _,raw in pairs(s.events) do
+        local told=type(s.relayed)=="table" and s.relayed or {}
+        for key in pairs(told) do if not s.events[key] then told[key]=nil end end
+        for key,raw in pairs(s.events) do
             local who=type(raw)=="string" and raw:match("^[^;]+;([^;]+);")
-            if who then memberEvents.n[who]=(memberEvents.n[who] or 0)+1 end
+            -- What others relayed in a member's name does not use up that member's room.
+            if who and not told[key] then memberEvents.n[who]=(memberEvents.n[who] or 0)+1 end
         end
     end
     return memberEvents.n[actor] or 0
 end
 -- Words said in your name that you never said: told once per member who passed them on.
-local forgeryTold,relayCount={}, {}
+local forgeryTold,relayCount,ownAnsweredAt={}, {}, nil
 local DENIED=ML("Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré.")
 local FORGED={O=ML("prime"),N=ML("prime"),A=ML("avis de recherche"),P=ML("contribution"),
     K=ML("victoire"),H=ML("victoire"),D=ML("mort"),Y=ML("paiement")}
@@ -829,7 +901,11 @@ local function receive(msg,sender)
         local key=(first==nil and second~="queued" and "bounty:own") or (second==nil and first~="queued" and "bounty:own:2") or nil
         -- The map relay keeps its room when it is shared and not already waiting.
         local mapRoom=GL.GuildMap and GL.GuildMap.Enabled() and not GL.Transport.State(s,"map:relay") and 120 or 0
+        -- Your own events leave once every thirty seconds at most, whoever asks: two logins close
+        -- together share the same answer (audit 24/11).
+        if ownAnsweredAt and now-ownAnsweredAt<30 then ownBatch={} end
         if #ownBatch>0 and key then
+            ownAnsweredAt=now
             local _,queued=GL.Transport.Pending(s)
             while #ownBatch>math.max(0,508-queued-mapRoom) do ownBatch[#ownBatch]=nil end
             if #ownBatch>0 then GL.Transport.SendBatch(s,ownBatch,{key=key,delay=1+math.random(0,4)}) end
@@ -902,6 +978,7 @@ local function receive(msg,sender)
         -- bounded (0.60.1): a forged relay cannot inflate a total beyond what a player really does.
         local most=relay and 2000 or 100000
         wins,losses=number(wins,0,most),number(losses,0,most)
+        if relay and online[actor] then odd(sender) return end
         if guid(actor) and guid(target) and wins and losses and actor~=me and (relay and addresses[actor] or actor==sender) then
             if relay then GL.Transport.Cancel(s,"bounty:relay") end
             mergeScore(s,actor,target,wins,losses)
@@ -910,13 +987,23 @@ local function receive(msg,sender)
     end
     local e=unpackEvent(raw)
     if e and relay and sender~=me and RELAYABLE[e.kind] then GL.Transport.Cancel(s,"bounty:relay") end
-    if not e or s.events[e.key] then return end
+    if not e then return end
+    if s.events[e.key] then
+        -- The author now says what a relay had told: it becomes theirs (counted, and a claim heard).
+        local told=type(s.relayed)=="table" and s.relayed
+        if not relay and e.actor==sender and told and told[e.key] then
+            told[e.key]=nil
+            if memberEvents and memberEvents.s==s then memberEvents.n[e.actor]=(memberEvents.n[e.actor] or 0)+1 end
+            if e.kind=="K" or e.kind=="H" then direct(s,e.key) end
+        end
+        return
+    end
     -- What a member relays that is new here counts against them: 900 a session at most.
     if relay then
         relayCount[sender]=(relayCount[sender] or 0)+1
-        if relayCount[sender]>900 then return end
+        if relayCount[sender]>900 then odd(sender) return end
     end
-    if not relay and e.actor~=sender then return end
+    if not relay and e.actor~=sender then odd(sender) return end
     -- A relay is a member's word about another member (review 0.58.2). It may tell a bounty, a
     -- pledge, a claim, a death or a payment sent: the member named ignores what others say in its
     -- name, and keeps its own account. It never chooses a winner (payers would mail the wrong
@@ -933,6 +1020,8 @@ local function receive(msg,sender)
         end
         -- A relay speaks only of a member of the guild: never of someone made up or gone.
         if not addresses[e.actor] then return end
+        -- A connected member speaks for itself: a relay in its name is refused (audit 24/11).
+        if online[e.actor] then odd(sender) return end
     end
     -- Relays are guild testimony, never an instruction to send gold or alter personal records.
     if e.actor==me then return end
@@ -950,6 +1039,12 @@ local function receive(msg,sender)
     end
     openTargets=nil
     s.events[e.key]=raw
+    if relay then
+        -- Told by another member: not counted in the author's share of the book (audit 24/11).
+        s.relayed=type(s.relayed)=="table" and s.relayed or {}
+        s.relayed[e.key]=true
+    end
+    if (e.kind=="K" or e.kind=="H") and not relay then direct(s,e.key) end
     if (e.kind=="K" or e.kind=="H") and e.order:match("^([^:]+)")==me then finalize(s,me) end
     if e.kind~="D" then changed(s,me) end
 end
@@ -964,13 +1059,14 @@ local function realmSuffix()
     return realm~="" and realm or nil
 end
 local function refreshRoster()
-    roster,addresses={},{}
+    roster,addresses,online={},{},{}
     if not GetNumGuildMembers or not GetGuildRosterInfo then return end
     for i=1,GetNumGuildMembers() do
-        local name,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,id=GetGuildRosterInfo(i)
+        local name,_,_,_,_,_,_,_,connected,_,_,_,_,_,_,_,id=GetGuildRosterInfo(i)
         name,id=GL.Clean(name,"string"),GL.Clean(id,"string")
         if name and guid(id) then
             roster[name]=id; addresses[id]=name
+            if GL.Clean(connected,"boolean") then online[id]=true end
             local realm=not name:find("-") and realmSuffix()
             if realm then roster[name.."-"..realm]=id end
         end
@@ -1043,8 +1139,31 @@ local function scanInbox()
         local _,_,sender,subject,money,cod,_,_,_,returned=GetInboxHeaderInfo(index)
         sender,subject=GL.Clean(sender,"string"),GL.Clean(subject,"string")
         money,cod=GL.Clean(money,"number"),GL.Clean(cod,"number")
+        local back=GL.Clean(returned,"boolean")
+        -- Your own payment, returned unopened (thirty days, or sent back): owed again (owner, 24/11).
+        local rOwner,rSeq,rStart
+        if back and subject then rOwner,rSeq,rStart=subject:match("^%[GL:(Player%-%w+%-%w+):(%d+)/(%d+)%]") end
+        if back and current and guid(rOwner) and number(rSeq,1,9999999999999) and number(money,1,1000*GOLD) and cod==0 then
+            local id=rOwner..":"..rSeq
+            if not orders then orders=view(current) end
+            local o=orders[id]
+            local w=o and (o.winner or o.priorWinner)
+            local hunter=sender and roster[mailAddress(sender)] or nil
+            if w and not hunter then
+                for h in (w.actor..","..w.detail):gmatch("[^,]+") do
+                    if ((o.paid or {})[me.."/"..h] or 0)>=money then hunter=h break end
+                end
+            end
+            current.mailReturned=type(current.mailReturned)=="table" and current.mailReturned or {}
+            local key=id.."/"..rStart.."/"..money
+            if hunter and not current.mailReturned[key] and ((o.paid or {})[me.."/"..hunter] or 0)>=money then
+                current.mailReturned[key]=GL.Now()
+                declare("Z",id,money,hunter)
+                orders=nil
+            end
+        end
         if sender and plain(sender,100) and subject and cod==0 and number(money,1,1000*GOLD)
-            and not GL.Clean(returned,"boolean") then
+            and not back then
             local owner,seq,start=subject:match("^%[GL:(Player%-%w+%-%w+):(%d+)/(%d+)%]")
             local offset=number(start,0,1000*GOLD-money)
             if guid(owner) and number(seq,1,9999999999999) and offset then

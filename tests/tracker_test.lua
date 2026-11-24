@@ -277,6 +277,19 @@ test("a groupmate's killing blow on a player you fought is your victory", functi
     assert(total("kills") == 1, "a groupmate's kill of a player you never fought is not yours")
     IsInGroup = nil
 end)
+test("a groupmate's kill long after your fight ended is not yours (owner, 24/11)", function()
+    local e = start(opponent("left-fight"))
+    cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
+    unitData.target, e.combat = nil, false
+    T.HandleEvent("PLAYER_REGEN_ENABLED")
+    now = now + 100
+    T.Poll()
+    local mate = { guid = "Player-1-mate", name = "Compagnon", surname = "Groupe", isPlayer = true }
+    groupWith(mate)
+    cle("PARTY_KILL", mate, e)
+    assert(total("kills") == 0, "a touch a hundred seconds ago, out of combat, is not a shared victory")
+    IsInGroup = nil
+end)
 test("a groupmate who avenges your death wins the same fight", function()
     local e = start(opponent("avenged"))
     cle("SPELL_DAMAGE", e, unitData.player, -1, 64)
@@ -1116,9 +1129,13 @@ test("real health damage keeps exact zero-overkill lethal attribution", function
     for _, event in ipairs({ "SWING_DAMAGE", "RANGE_DAMAGE", "SPELL_DAMAGE", "SPELL_PERIODIC_DAMAGE", "DAMAGE_SHIELD", "DAMAGE_SPLIT" }) do
         fixture()
         local e = start()
+        -- A damage shield (Thorns, Retribution Aura) answers your own blow: no aggression, but a
+        -- death from it is still a death (audit 24/11).
+        local shield = event == "DAMAGE_SHIELD" and 0 or 1
         cle(event, e, unitData.player, -1, 64)
-        assert(total("aggressions") == 1 and total("deaths") == 0, event)
+        assert(total("aggressions") == shield and total("deaths") == 0, event)
         cle(event, e, unitData.player, 0, 64)
+        -- A lethal blow is attributed to its source, with its aggression, whatever carried it.
         assert(total("aggressions") == 1 and total("deaths") == 1, event)
     end
 end)
@@ -1254,8 +1271,9 @@ test("public recap identifies three unseen attackers and only the lethal source"
     unitData.player.dead = true T.HandleEvent("PLAYER_DEAD")
     T.HandleEvent("PLAYER_DEAD") T.Poll()
     assert(count() == 3 and total("aggressions") == 3)
-    assert(total("deaths") == 3)
-    assert(GL.Get("guid:" .. c.guid).pvp.deaths == 1)
+    -- Owner, 24/11: the death goes to the killing blow, the other attackers keep their aggression.
+    assert(total("deaths") == 1)
+    assert(GL.Get("guid:" .. c.guid).pvp.deaths == 1 and GL.Get("guid:" .. a.guid).pvp.deaths == 0)
     local batch
     for _, record in pairs(GL.db.players) do
         for _, event in ipairs(record.history) do
@@ -1263,7 +1281,7 @@ test("public recap identifies three unseen attackers and only the lethal source"
         end
     end
     now = now + 3 T.Poll()
-    assert(total("aggressions") == 3 and total("deaths") == 3)
+    assert(total("aggressions") == 3 and total("deaths") == 1)
 end)
 
 test("fractional recap timestamps are valid health-damage evidence", function()
@@ -1516,10 +1534,11 @@ test("explicit CLE fatal source stays primary and recap cannot duplicate aggress
     rows[1], rows[2] = recapRow(a), recapRow(b, 0)
     T.Poll()
     assert(GL.Get("guid:" .. a.guid).pvp.deaths == 1)
-    assert(GL.Get("guid:" .. b.guid).pvp.deaths == 1 and total("deaths") == 2)
+    -- The recap's other attacker keeps an aggression, not a death (owner, 24/11).
+    assert(GL.Get("guid:" .. b.guid).pvp.deaths == 0 and total("deaths") == 1)
     assert(total("aggressions") == 2, "CLE and recap report the same aggression once")
     cle("SPELL_DAMAGE", a, unitData.player, 0, 64) T.HandleEvent("PLAYER_DEAD")
-    assert(total("deaths") == 2 and total("aggressions") == 2)
+    assert(total("deaths") == 1 and total("aggressions") == 2)
 end)
 
 test("world seed observes existing plates when combat starts after login", function()
@@ -1671,14 +1690,15 @@ test("missing protected guild info preserves knowledge without leaking secret da
     assert(#GL.errors == 0)
 end)
 
-test("all PvP event types snapshot guilds and multiple attackers share a death id", function()
+test("all PvP event types snapshot guilds; the killing blow gets the death", function()
     local a, b = opponent("guild-A"), opponent("guild-B") a.guild, b.guild = "One Guild", "One Guild"
     unitData.target, unitData.nameplate1 = a, b
     T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1") T.HandleEvent("PLAYER_TARGET_CHANGED")
     recapAPI({ recapRow(a, 0), recapRow(b) }) T.HandleEvent("PLAYER_DEAD")
     local ra, rb = GL.Get("guid:" .. a.guid), GL.Get("guid:" .. b.guid)
     local da, db = ra.history[#ra.history], rb.history[#rb.history]
-    assert(da.eventId == db.eventId and da.guild == db.guild, "future guild counts can dedupe a shared death")
+    -- The killing blow gets the death; the other attacker its aggression, with the same guild (owner, 24/11).
+    assert(da.kind == "death" and db.kind == "aggression" and da.guild == db.guild, "both facts keep the guild")
     assert(da.guildSource == "observed" and ra.history[1].guild == "One Guild")
     assert(da.confidence == "confirmed" and db.confidence == "confirmed")
     unitData.player.dead = false T.HandleEvent("PLAYER_ALIVE")
@@ -1874,6 +1894,24 @@ test("without a damage stream only successful casts on the identified opponent a
     GetSpellInfo = old
     local rows = outcome(e, "kill").report.live
     assert(#rows == 1 and rows[1].dst == e.guid and rows[1].spell == "Éclair" and not rows[1].amount)
+end)
+
+test("a mind-controlled player of your own faction is not a PvP opponent (audit 24/11)", function()
+    fixture()
+    local ally = opponent("charmed")
+    local saved, savedZone = GetPlayerInfoByGUID, GetZonePVPInfo
+    GetPlayerInfoByGUID = function(guid) if guid == ally.guid then return "Guerrier", "WARRIOR", "Nain", "Dwarf", 2 end end
+    start(ally)
+    cle("SPELL_DAMAGE", ally, unitData.player, -1, 64)
+    cle("SPELL_DAMAGE", ally, unitData.player, 0, 64)
+    assert(total("aggressions") == 0 and total("deaths") == 0, "a charmed ally leaves no PvP fact")
+    -- In a free-for-all zone, your own side does fight you.
+    fixture()
+    GetZonePVPInfo = function() return "arena" end
+    start(ally)
+    cle("SPELL_DAMAGE", ally, unitData.player, -1, 64)
+    assert(total("aggressions") == 1, "the Gurubashi arena keeps same-faction fights")
+    GetPlayerInfoByGUID, GetZonePVPInfo = saved, savedZone
 end)
 
 print("PASS: " .. passed .. " tracker scenarios (actual Core.lua + Tracker.lua).")

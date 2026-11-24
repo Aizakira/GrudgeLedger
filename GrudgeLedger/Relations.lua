@@ -2191,13 +2191,22 @@ end
 local TALLY_LINES = 6
 local BOOKS = {
     relations = { frame = "GrudgeLedgerRelations", nav = "players",
-        entries = { { "recap", "Bilan" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "lands", "Carte" }, { "rankings", "Classements" } } },
+        entries = { { "recap", "Bilan" }, { "honor", "Tableaux détaillés" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "lands", "Carte" },
+            { "rankings", "Classements" } } },
     guild = { frame = "GrudgeLedgerGuild", nav = "guild",
         entries = { { "guildlog", "Journal de guilde" }, { "enemies", "Ennemis de la guilde" }, { "guilds", "Guildes" } } },
 }
-local builders = { recap = function(host) return GL.Recap.BuildPage(host) end, debts = buildDebts, rivals = buildRivals, lands = buildLands,
+-- The detailed tables live in UI.lua, next to the statistics they read; their figures go to the key
+-- figures of the left column, repainted whenever a filter of the page changes.
+local function buildHonor(host)
+    local page = GL.BuildHonorPage(host)
+    page.paintTally = function() if R.PaintTally then R.PaintTally(host:GetParent()) end end
+    return page
+end
+local builders = { recap = function(host) return GL.Recap.BuildPage(host) end, honor = buildHonor, debts = buildDebts, rivals = buildRivals, lands = buildLands,
     rankings = buildRankings, guildlog = buildGuildJournal, enemies = buildEnemies, guilds = buildGuilds }
-local painters = { recap = function(page) GL.Recap.PaintPage(page) end, debts = paintDebts, rivals = paintRivals, lands = paintLands,
+local painters = { recap = function(page) GL.Recap.PaintPage(page) end, honor = function() GL.PaintHonorPage() end,
+    debts = paintDebts, rivals = paintRivals, lands = paintLands,
     rankings = paintRankings, guildlog = paintGuildJournal, enemies = paintEnemies, guilds = paintGuilds }
 local pageBook = {}
 for key, spec in pairs(BOOKS) do
@@ -2252,9 +2261,12 @@ local function book(key)
         GL.Safe(cell.label.SetWordWrap, cell.label, false)
         UI.journalFont(cell.label, "GameFontHighlight", 11)
         cell.label:SetTextColor(unpack(UI.theme.brass))
-        cell.value = UI.label(cell, "", nil, 122, -1, 44)
+        cell.value = UI.label(cell, "", nil, 122, 0, 44)
         UI.journalFont(cell.value, "GameFontNormalLarge", 13)
         cell.value:SetJustifyH("RIGHT")
+        -- Large print grows the figure: its box takes the whole line.
+        cell.value:SetHeight(20)
+        GL.Safe(cell.value.SetJustifyV, cell.value, "MIDDLE")
         local rule = cell:CreateTexture(nil, "BACKGROUND")
         rule:SetPoint("BOTTOMLEFT")
         rule:SetSize(166, 1)
@@ -2263,7 +2275,7 @@ local function book(key)
         hover:SetAllPoints()
         hover:SetColorTexture(0.91, 0.77, 0.48, 0.10)
         cell:SetScript("OnClick", function(self)
-            if self.page then R.Open(self.page) end
+            if type(self.page) == "function" then self.page() elseif self.page then R.Open(self.page) end
         end)
         f.tally[i] = cell
     end
@@ -2314,7 +2326,8 @@ function R.Tally(key)
         { L("Réglées ce mois-ci"), #settled, "debts" }, { L("Rivalités"), #R.Rivals(), "rivals" } }
 end
 local function paintTally(f)
-    local lines = R.Tally(f.bookKey)
+    local honor = f.page == "honor"
+    local lines = honor and GL.HonorTally() or R.Tally(f.bookKey)
     f.keyHeading:SetText(#lines > 0 and L("Chiffres clés") or "")
     for i, cell in ipairs(f.tally) do
         local line = lines[i]
@@ -2322,7 +2335,7 @@ local function paintTally(f)
             cell.label:SetText(line[1])
             cell.value:SetText(tostring(line[2]))
             -- What is owed reads in red, like the ledger's total.
-            local owed = f.bookKey == "relations" and i == 1 and line[2] > 0
+            local owed = f.bookKey == "relations" and not honor and i == 1 and line[2] > 0
             if owed then cell.value:SetTextColor(0.85, 0.30, 0.25) else cell.value:SetTextColor(unpack(UI.theme.paper)) end
             cell.page = line[3]
             cell:Show()
@@ -2331,6 +2344,7 @@ local function paintTally(f)
         end
     end
 end
+R.PaintTally = paintTally
 -- Opens a page in its book: Relations by default, Guilde for the guild's pages.
 function R.Open(key)
     local bookKey = pageBook[key] or "relations"

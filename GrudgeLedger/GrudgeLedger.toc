@@ -7,7 +7,7 @@
 ## Notes-deDE: Persönliches Journal für Freunde, Groll, Begegnungen und PvP-Verlauf.
 ## Notes-ptBR: Diário pessoal de amizades, rancores, encontros e histórico JxJ.
 ## Author: Grudge Ledger contributors
-## Version: 0.61.2
+## Version: 0.62.0
 ## OptionalDeps: GrudgeLedgerPortraits
 ## SavedVariables: GrudgeLedgerDB
 ## IconTexture: Interface\AddOns\GrudgeLedger\Media\LedgerBook
@@ -18,6 +18,7 @@ Locales.lua
 Locales_deDE.lua
 Locales_ptBR.lua
 Core.lua
+EngravingData.lua
 Tags.lua
 ZoneTime.lua
 Tracker.lua

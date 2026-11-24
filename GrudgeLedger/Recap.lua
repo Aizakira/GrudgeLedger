@@ -531,7 +531,9 @@ function R.BuildPage(host)
         page.copyField:SetFocus()
         page.copyField:HighlightText()
     end)
-    page.details = UI.button(page, L("Tableaux détaillés"), 498, -14, 140, function() GL.ShowJournal("summary") end)
+    page.details = UI.button(page, L("Tableaux détaillés"), 498, -14, 140, function()
+        GL.ShowJournal("summary", { period = page.period, scope = page.scope })
+    end)
     page.cards = {}
     for i, entry in ipairs(cards) do
         local card = CreateFrame("Frame", nil, page)

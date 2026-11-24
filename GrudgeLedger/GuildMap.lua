@@ -9,6 +9,8 @@
 -- the box is unticked. Unticking asks the guild to forget your fights.
 local GL = GrudgeLedger
 local M = {}
+-- One of this account's characters (Core.lua); false where Core is not loaded (unit tests).
+local function ownCharacter(id) return GL.OwnCharacter ~= nil and GL.OwnCharacter(id) end
 GL.GuildMap = M
 local DAY = 86400
 local KEEP = 38 * DAY -- like the other guild events
@@ -53,7 +55,7 @@ local function read(text)
     return at, map, x, y, kind, target, name
 end
 -- Who killed members of the guild, worked out once and again only when the fights change.
-local index, indexed
+local index, indexed, indexedBucket
 -- The guild's fights change only when one is kept or forgotten: until then the sorted list is
 -- given again as it is (a guild of a hundred holds up to 6 000 lines).
 local version, sorted = 0, {}
@@ -105,14 +107,20 @@ end
 -- relay. A login (0.58.0): only the relay, so that a guild of a hundred does not answer a hundred
 -- times. The relay holds the latest fights of everyone, yours included; it leaves after a random
 -- delay and is dropped when another member started one first. Sent behind the urgent messages.
+local ownSentAt
 local function answer(s, me, full)
     local T = GL.Transport
     local own = {}
+    -- Your own fights leave once every thirty seconds at most, whoever asks (audit 24/11).
+    if full and ownSentAt and GL.Now() - ownSentAt < 30 then full = false end
     for _, text in ipairs(full and type(s.places) == "table" and type(s.places[me]) == "table" and s.places[me] or {}) do
         if read(text) then own[#own + 1] = message(me, text) end
     end
     local sent = false
-    if #own > 0 and not T.State(s, "map:own") then sent = T.SendBatch(s, own, { key = "map:own", delay = 2 + math.random(0, 8) }) == true end
+    if #own > 0 and not T.State(s, "map:own") then
+        sent = T.SendBatch(s, own, { key = "map:own", delay = 2 + math.random(0, 8) }) == true
+        if sent then ownSentAt = GL.Now() end
+    end
     local others = {}
     for actor, list in pairs(type(s.places) == "table" and s.places or {}) do
         if (actor ~= me or not full) and guid(actor) and type(list) == "table" then
@@ -132,11 +140,13 @@ local function answer(s, me, full)
     return T.SendBatch(s, relayed, { key = "map:relay", delay = 4 + math.random(0, 16) }) == true or sent
 end
 -- Your latest fights from your own journal, so that ticking the box shows something at once.
+-- The journal is the account's: only the fights of the character playing are its own (owner
+-- report 24/11, an alt announced the main's fights as hers).
 local function seed(s, me)
     local found = {}
     for _, record in pairs(GL.db and GL.db.players or {}) do
         for _, e in ipairs(type(record) == "table" and type(record.history) == "table" and record.history or {}) do
-            if type(e) == "table" and not e.voided and (e.kind == "kill" or e.kind == "death") and type(e.time) == "number"
+            if type(e) == "table" and e.actorGUID == me and not e.voided and (e.kind == "kill" or e.kind == "death") and type(e.time) == "number"
                 and type(e.mapID) == "number" and type(e.mapX) == "number" and type(e.mapY) == "number" and e.time >= GL.Now() - KEEP then
                 found[#found + 1] = { event = e, record = record }
             end
@@ -149,6 +159,42 @@ local function seed(s, me)
         keep(s, me, line(e.time, e.mapID, math.floor(e.mapX * 1000 + 0.5), math.floor(e.mapY * 1000 + 0.5), e.kind == "death" and "d" or "k",
             guid(record.guid) and record.guid or "", plainName(name) and name or ""))
     end
+end
+-- Up to 0.61.2 a character seeded the map with every fight of the account's journal: the alts
+-- carried the fights of the main, and told the guild so. A line kept for one of your characters that
+-- your journal gives to another of them is removed. True when the playing character lost lines: it
+-- then asks the guild to forget its fights and sends its own again.
+local function repair(s, me)
+    if type(s.places) ~= "table" then return false end
+    local characters = { [me] = true }
+    for id in pairs(type(GL.db.characterFactions) == "table" and GL.db.characterFactions or {}) do
+        if guid(id) then characters[id] = true end
+    end
+    local owners = {}
+    for _, record in pairs(GL.db.players or {}) do
+        for _, e in ipairs(type(record) == "table" and type(record.history) == "table" and record.history or {}) do
+            if type(e) == "table" and (e.kind == "kill" or e.kind == "death") and type(e.time) == "number" and characters[e.actorGUID] then
+                local key = e.time .. ";" .. (e.kind == "death" and "d" or "k")
+                owners[key] = owners[key] or {}
+                owners[key][e.actorGUID] = true
+            end
+        end
+    end
+    local mineChanged = false
+    for actor, list in pairs(s.places) do
+        if characters[actor] and type(list) == "table" then
+            for i = #list, 1, -1 do
+                local at, _, _, _, kind = read(list[i])
+                local who = at and owners[at .. ";" .. kind]
+                if who and not who[actor] then
+                    table.remove(list, i)
+                    if actor == me then mineChanged = true end
+                    forgetIndex()
+                end
+            end
+        end
+    end
+    return mineChanged
 end
 -- A guild catch-up brings hundreds of fights in a few seconds: the open pages are drawn again
 -- once every fifth of a second at most, not once per fight.
@@ -176,9 +222,19 @@ function M.Join()
         GL.Print(GL.L("Grudge Ledger partage avec votre guilde vos victoires, vos morts (avec l’endroit), vos repérages et vos avis. "
             .. "Pour arrêter : options, pages Relations et Alertes, et la case « Vision de guilde » de la carte."))
     end
-    if not on(s, me) or ready[s] then return false end
+    if ready[s] then return false end
     ready[s] = true
-    seed(s, me)
+    local wrong = repair(s, me)
+    if not on(s, me) then return false end
+    if wrong then
+        -- The guild heard fights that were not this character's: it forgets them, then hears its own.
+        GL.Transport.Send(s, "MX")
+        seed(s, me)
+        answer(s, me, true)
+    else
+        seed(s, me)
+    end
+    refresh()
     return true
 end
 -- Whether the box is ticked for this character, and whether there is a guild at all.
@@ -197,7 +253,9 @@ function M.Enable(enabled)
         answer(s, me, true)
         GL.Transport.Send(s, "MQ")
     else
-        -- Nothing is kept while the box is unticked, and the guild is asked to forget yours.
+        -- Nothing is kept while the box is unticked, and the guild is asked to forget yours. The space
+        -- is the account's: another character still sharing gets the guild's fights back at its next
+        -- login (owner's choice: unticking keeps nothing).
         s.places = nil
         GL.Transport.Cancel(s, "map:own")
         GL.Transport.Cancel(s, "map:relay")
@@ -258,6 +316,11 @@ function M.Receive(s, me, sender, raw, relay)
         -- another member is passing the guild's fights on, and ours would only repeat them.
         local at = read(rest)
         if not at or (forgot and at <= forgot) or not (GL.Bounties and GL.Bounties.IsMember and GL.Bounties.IsMember(actor)) then return false end
+        -- A connected member speaks for itself: a relay of its fights is refused (audit 24/11).
+        if GL.Bounties.Online and GL.Bounties.Online(actor) then
+            if GL.Bounties.Odd then GL.Bounties.Odd(sender) end
+            return false
+        end
         GL.Transport.Cancel(s, "map:relay")
     elseif actor ~= sender then
         return false
@@ -402,7 +465,9 @@ function M.Points(withMine)
     local key = tostring(s) .. (withMine and ":all:" or ":others:") .. version .. ":" .. math.floor(GL.Now() / 900)
     if sorted[withMine and 1 or 2] and sorted[withMine and 1 or 2].key == key then return sorted[withMine and 1 or 2].points end
     for actor, list in pairs(s.places) do
-        if (withMine or actor ~= me) and guid(actor) and type(list) == "table" then
+        -- Without withMine, the fights of every character of the account are left out: the map reads
+        -- them in the account's journal (audit 24/11, they were counted twice).
+        if (withMine or not ownCharacter(actor)) and guid(actor) and type(list) == "table" then
             for i = 1, math.min(PER_MEMBER, #list) do
                 local at, map, x, y, kind, target, name = read(list[i])
                 if at then
@@ -424,10 +489,12 @@ end
 function M.Killer(target)
     local s, me = scope()
     if not guid(target) or not on(s, me) or type(s.places) ~= "table" then return nil end
-    if indexed ~= s or not index then
-        index, indexed = {}, s
+    -- Rebuilt every quarter of an hour too: fights past 38 days leave it (audit 24/11).
+    local bucket = math.floor(GL.Now() / 900)
+    if indexed ~= s or not index or indexedBucket ~= bucket then
+        index, indexed, indexedBucket = {}, s, bucket
         for actor, list in pairs(s.places) do
-            if actor ~= me and guid(actor) and type(list) == "table" then
+            if not ownCharacter(actor) and guid(actor) and type(list) == "table" then
                 for _, text in ipairs(list) do
                     local at, map, _, _, kind, victim, name = read(text)
                     if at and kind == "d" and victim ~= "" then

@@ -14,32 +14,36 @@ end
 local function contains(control, text)
     assert(control:GetText():find(text, 1, true), control:GetText())
 end
+-- The detailed tables (23/11): the honour is a key figure of the left column, its detail in the lead.
 GL.ShowJournal("summary")
 local book = GrudgeLedgerJournal
-contains(book.honor, "Aucun gain d’honneur enregistré")
-assert(not book.honor:IsEnabled())
+local function tally(caption)
+    for _, line in ipairs(GL.HonorTally()) do if line[1] == caption then return line end end
+end
+assert(tally("Honneur reçu")[2] == 0)
 local id = GL.IdentityFromName("Alpha", "Example", "Player-1-alpha")
 local actor = mock.units.player.guid
 mock.units.player.guid = "Player-1-alt"
 assert(GL.RecordHonor(id, 100))
 mock.units.player.guid = actor
 local zero = assert(GL.RecordHonor(id, 0))
-contains(book.honor, "Honneur reçu : 0")
-assert(book.honor:IsEnabled())
+GL.ShowJournal("summary")
+assert(tally("Honneur reçu")[2] == 0)
 local receipt = assert(GL.RecordHonor(id, 31))
 local unknown = assert(GL.RecordHonor(nil, 12))
 GL.ShowJournal("summary")
-contains(book.honor, "Honneur reçu : 43")
-contains(book.help, "3 gains · Gain maximal : 31 · Sans adversaire identifié : 12")
-assert(book.metrics.kills.value:GetText() == "0")
+assert(tally("Honneur reçu")[2] == 43)
+contains(book.lead, "3 gains · Gain maximal : 31 · Sans adversaire identifié : 12")
+assert(tally("Victoires")[2] == 0)
 click(book.scopeButton)
-contains(book.honor, "Honneur reçu : 143")
+assert(tally("Honneur reçu")[2] == 143)
 click(book.scopeButton)
-contains(book.honor, "Aucun gain d’honneur enregistré")
+assert(tally("Honneur reçu")[2] == 0)
 click(book.scopeButton)
-click(book.periodButtons.week)
-click(book.honor)
-assert(book.kind == "honor" and book.period == "week" and book.scope == "character")
+click(book.periodButton)
+assert(book.period == "week")
+tally("Honneur reçu")[3]()
+assert(book.mode == "history" and book.kind == "honor" and book.period == "week" and book.scope == "character")
 local seen = {}
 for _, row in ipairs(book.rows) do
     if row:IsShown() then
@@ -59,7 +63,7 @@ for _, row in ipairs(book.rows) do
 end
 assert(seen[receipt] and seen[zero] and seen[unknown] and not book.rows[4]:IsShown())
 click(book.tabs.year)
-contains(book.annual.honor, "Honneur reçu : 43")
+assert(book.annual.metrics.honor:GetText() == "43")
 contains(book.annual.coverage, "0 fait de combat")
 click(book.copyAnnual)
 assert(book.annualText:find("Honneur reçu : 43", 1, true) and not book.annualText:find("Alpha", 1, true))

@@ -81,12 +81,17 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `places` | Combats partagés, par membre : lignes `date;carte;x;y;genre;adversaire;nom` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée. Sert à la carte et à l'alerte « Tueur de guilde » | 150 membres, 40 lignes par membre, 38 jours |
 | `mapForgot` | Date du dernier `MX` de chaque membre : un relais plus ancien de ses combats est refusé. Effacée dès qu'il partage à nouveau | Un par membre |
 | `mailUncertain` | Envoi de courrier dont l'accusé n'a pas été reçu | Un par personnage |
+| `mailReturned` | Courriers de paiement revenus déjà déclarés (`Z`), pour ne pas les déclarer deux fois (0.62.0) | Un par courrier |
 | `journal` | Fiches de guilde. Détail ci-dessous | — |
 | `dossiers` | Relevés publics, par cible : `fields` (une entrée par champ, avec `data`, `at`, `source`, `by`, `via` et, pour l'équipement, l'identité et les caractéristiques, `dates`), `received`, `sender`, `senderName`. Une inspection d'une cible sans fiche personnelle y est aussi gardée | 256 cibles, la plus ancienne est évincée |
 | `dossierSeq` | Dernier numéro de transfert de relevé émis | — |
 | `bountyRecords` | Dossier de primes par cible, gardé après l'effacement des événements : `name`, `at` (dernière prime) et `orders` par `auteur:numéro` (`at`, `owner`, `pot` total promis en cuivre, `state`, `endedAt`, `expires`, `quota`, `hunter`, `helpers`, `killedAt`). Chaque membre garde la copie de ce qu'il a vu ; rien n'est transmis | 30 primes par cible, 400 cibles, les plus anciennes sont évincées |
 | `socialReports` (lecture) | Depuis la 0.25.0, la somme des témoignages reçus et les mauvaises étiquettes des fiches de guilde donnent l'avis de la guilde sur un joueur (calculé à l'usage, non sauvegardé) : −10 ou moins ennemi, négatif ou mauvaise étiquette méfiance, +10 ou plus ami. Il ne s'applique que sans relation personnelle | — |
 | `socialWithdrawn` | Pour chaque membre, numéro de son dernier retrait de tous ses témoignages (message `W`) ; un témoignage plus ancien est refusé | Un par membre |
+| `socialPublisher` | Le personnage du compte qui donne l'avis du compte dans cette guilde (0.62.0). Les autres personnages du compte retirent leurs témoignages, pour que la guilde ne compte pas le même avis une fois par personnage | Un |
+| `directClaims` | Clés des victoires de prime entendues de leur propre chasseur ou déclarées par vous (0.62.0). Seules elles peuvent désigner le gagnant : une victoire relayée par un autre membre ne le peut pas. Nettoyée avec les événements | Une par victoire |
+| `directSince` | Date à partir de laquelle une victoire de prime doit avoir été entendue de son chasseur, ou retenue par l'auteur de la prime, pour compter (0.62.0). Les victoires plus anciennes comptent comme avant | Une |
+| `relayed` | Clés des événements de prime reçus par relais, c'est-à-dire transmis par un autre membre (0.62.0). Ils ne comptent pas dans le quota de 600 messages du membre nommé. Si l'auteur les redit lui-même, ils redeviennent les siens. Nettoyé avec les événements. Depuis la 0.62.0, un relais au nom d'un membre connecté est refusé, pour les primes comme pour la carte | Un par événement relayé |
 | `socialReports` | Témoignages reçus, par `auteur:cible` : solde, relation, 32 faits au plus, ou marque de retrait | 256 témoignages |
 
 Le champ `journal` contient lui-même : `cards` (fiches publiées, avec leurs avis), `hidden` (cibles masquées localement), `withdrawn` (fiches retirées et leur secret), `secrets` (secrets des fiches publiées par ce compte), `seq`, `auto` (publication automatique), `retired` (cibles à ne pas republier) et `byTarget` (index reconstruit à l'usage).
@@ -161,6 +166,7 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `X` | Retrait de la prime | Le commanditaire |
 | `F` | Désignation de la revendication gagnante | Le commanditaire |
 | `Y` | Paiement déclaré envoyé par un contributeur | Le payeur |
+| `Z` | Paiement revenu au payeur sans avoir été ouvert (0.62.0) : la somme est due à nouveau. Les versions plus anciennes l'ignorent | Le payeur |
 | `V` | Courrier constaté reçu | Le bénéficiaire |
 
 ### Relevés `S2`

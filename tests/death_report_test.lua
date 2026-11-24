@@ -75,10 +75,11 @@ assert(GL.OpenPlayerDossier("Player-9-00EE",nil,"Nobody","combat"))
 for _,r in ipairs(f.rows) do
     assert(not (r:IsVisible() and r.amount:GetText()=="Exporter"),"no export without deaths")
 end
-GL.ShowJournal("summary")
-assert(GrudgeLedgerJournal.exportDeaths:IsShown())
+-- The export is text: it sits with the Récit of the detailed tables (23/11).
+GL.ShowJournal("story")
+assert(GrudgeLedgerJournal.exportDeaths:IsVisible())
 GL.ShowJournal("history")
-assert(not GrudgeLedgerJournal.exportDeaths:IsShown())
+assert(not GrudgeLedgerJournal.exportDeaths:IsVisible())
 assert(#GL.errors==0,(GL.errors[1] or {}).text)
 print("PASS death report: damage by source and spell, killing blow, duration, our specialization (both signatures), "
     .."export without player names, detail window, sheet and Bilan buttons")

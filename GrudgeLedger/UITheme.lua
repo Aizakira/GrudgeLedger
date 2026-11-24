@@ -150,8 +150,9 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
     -- In the Relations and Guilde book, a control on a page (not on the window's leather) is a parchment one.
     if paper == nil and not parent.referenceTree and inReferenceTree(parent) then paper = true end
     b.paper = paper
-    b.referenceSkin = parent.referenceSkin or inReferenceTree(parent)
-    if b.referenceSkin and (text == "‹" or text == "›") and (width <= 40 or inReferenceTree(parent)) then
+    -- One button family for the whole addon (owner, 23/11): the books and the small dialogs alike.
+    b.referenceSkin = true
+    if (text == "‹" or text == "›") and (width <= 40 or inReferenceTree(parent)) then
         b.arrowTextureName = "JournalReference" .. (paper and "" or "Dark") .. (text == "‹" and "ArrowLeft" or "ArrowRight")
         -- The painted arrow keeps its shape: a wider slot gets the 32-unit arrow at its centre.
         if width > 32 then x, width = x + math.floor((width - 32) / 2), 32 end
@@ -194,9 +195,6 @@ local function button(parent, text, x, y, width, callback, selectable, paper)
             shadow:SetAlpha(0.45)
             b.shadow = shadow
         end
-    else
-        skin:SetTexture(media .. "JournalButtons")
-        skin:SetTexCoord(36 / 1254, 1218 / 1254, (paper and 880 or 150) / 1254, (paper and 1130 or 402) / 1254)
     end
     b.skin = skin
     local highlight = b:CreateTexture(nil, "HIGHLIGHT")
@@ -267,10 +265,6 @@ local function selectButton(control, active)
                 control.selection:SetPoint("BOTTOMRIGHT", -6, 3)
                 control.selection:SetHeight(2)
             end
-        else
-            control.selection:SetAllPoints()
-            control.selection:SetTexture(media .. "JournalButtons")
-            control.selection:SetTexCoord(36 / 1254, 1218 / 1254, 514 / 1254, 768 / 1254)
         end
     end
     control.active = active
@@ -283,7 +277,7 @@ end
 local function styleInput(edit, multiline, paper)
     local edge = surface(edit, theme.gold, 0, -1)
     local fill = surface(edit, paper and theme.paper or theme.background, 1)
-    if edit.referenceSkin and not paper then
+    if not paper then
         local skin = edit:CreateTexture(nil, "BACKGROUND", nil, 1)
         skin:SetAllPoints()
         skin:SetTexture(media .. "JournalReferenceField")
@@ -432,6 +426,7 @@ local function paintStains(frame, seed)
             local diffuse = i == 1 or draw() < 0.6
             local cell = (diffuse and 0 or 6) + math.floor(draw() * 6)
             local size = diffuse and (34 + draw() * 26) or (16 + draw() * 16)
+            if zone[5] then size = math.min(size, zone[5]) end
             local l, t = (cell % 4) / 4, math.floor(cell / 4) / 4
             local r, b = l + 0.25, t + 0.25
             -- A quarter turn and a mirror out of eight, with the corner form every client knows.
@@ -448,17 +443,19 @@ local function paintStains(frame, seed)
         end
     end
 end
--- Quiet parchment where a stain may fall, as centre ranges {x0, y0, x1, y1} in window units. Every
--- centre keeps the largest stain (60) on the top sheet: paper 358 (226 narrow) to 925, 147 to 641.
+-- Quiet parchment where a stain may fall, as centre ranges {x0, y0, x1, y1} in window units, with an
+-- optional largest size. Journal: every centre keeps the largest stain (60) on the top sheet (paper 358
+-- to 925, 147 to 641). Narrow books fill their sheet from edge to edge (owner 23/11: no stain on a
+-- figure): small stains only, in the right margin and on the edges of the stacked sheets.
 local stainZones = {
     journal = { { 765, 305, 885, 345 }, { 700, 480, 880, 528 }, { 390, 500, 560, 528 }, { 850, 215, 895, 235 } },
-    narrow = { { 420, 590, 760, 608 }, { 870, 260, 895, 520 }, { 860, 180, 895, 195 }, { 256, 300, 262, 560 } },
+    narrow = { { 913, 230, 916, 600, 28 }, { 300, 650, 560, 654, 30 }, { 600, 650, 860, 654, 30 } },
 }
 -- narrow: the player sheet's variant, its left column about 20 % of the window.
 local function bookWindow(name, title, narrow)
     local reference = name == "GrudgeLedgerWindow"
-    local tree = name == "GrudgeLedgerRelations" or name == "GrudgeLedgerGuild" or name == "GrudgeLedgerBounties"
-        or name == "GrudgeLedgerPlayerDossier"
+    -- Every narrow book is the Journal's book in its narrow form (owner, 23/11: no page keeps the old look).
+    local tree = narrow and true or false
     local f = window(name, title, 960, 700, true)
     f.referenceSkin = reference or tree
     f.referenceTree = tree

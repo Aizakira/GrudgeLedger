@@ -54,9 +54,10 @@ drag(primes, -40, 32)
 -- The third tab is the guild's book (0.55.0); without Relations.lua it falls back to the rankings.
 click(primes.navigation.guild)
 at(stats, -40, 32)
+-- Without Relations.lua the detailed tables are carried by a narrow book of their own.
 GL.ShowJournal("summary")
-at(GrudgeLedgerJournal, -40, 32)
-click(GrudgeLedgerJournal.navigation.ledger)
+at(GrudgeLedgerJournalBook, -40, 32)
+click(GrudgeLedgerJournalBook.navigation.ledger)
 at(ledger, -40, 32)
 GL.ShowGuide()
 drag(GrudgeLedgerGuide, 60, 20)

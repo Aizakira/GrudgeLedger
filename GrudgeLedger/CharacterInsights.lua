@@ -317,7 +317,8 @@ local function habits(presence, out)
             window[#window + 1] = s
         end
         if s.at >= cutoff then
-            days[math.floor(s.at / DAY)] = true
+            -- The player's local day, like the hour grid (audit 24/11).
+            days[I.DayKey(s.at) or math.floor(s.at / DAY)] = true
         end
     end
     local text = L("Surtout vu entre %d h et %d h (%d sur %d apparitions)"):format(best, (best + 3) % 24, most, presence.total)

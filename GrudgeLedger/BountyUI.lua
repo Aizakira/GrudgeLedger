@@ -427,7 +427,7 @@ local function makeDetail(host)
     face.raceIcon:SetPoint("BOTTOMRIGHT",-3,3)
     local rim=face:CreateTexture(nil,"OVERLAY")
     rim:SetAllPoints(face)
-    rim:SetTexture(media.."PortraitBezel")
+    rim:SetTexture(media.."JournalReferencePortrait")
     -- The 3D head is drawn in a child frame. Named like the Journal's, the frame and the level
     -- medallion are kept above it by the shared portrait overlay (owner report, 0.56.0).
     face.portraitRim=rim

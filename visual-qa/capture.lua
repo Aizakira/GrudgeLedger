@@ -623,11 +623,11 @@ function QA.capture(name)
         local mode = name:find("%-annual") and "year" or name:find("%-story") and "story" or name:find("^honor") and "summary" or "history"
         GL.ShowJournal(mode)
         local f = GrudgeLedgerJournal
-        if name == "honor-podium" then f.dimensionButtons.opponents:Click() end
-        if name:find("^honor%-initiative") then f.dimensionButtons.initiative:Click() end
-        if name == "honor-races" then f.dimensionButtons.race:Click() end
-        if name == "honor-classes" then f.dimensionButtons.class:Click() end
-        if name == "honor-zones" or name == "honor-subzones" then f.dimensionButtons.zone:Click() end
+        if name == "honor-podium" then f.chips.opponents:Click() end
+        if name:find("^honor%-initiative") then f.chips.initiative:Click() end
+        if name == "honor-races" then f.chips.race:Click() end
+        if name == "honor-classes" then f.chips.class:Click() end
+        if name == "honor-zones" or name == "honor-subzones" then f.chips.zone:Click() end
         f.period, f.scope, f.kind, f.offset = "all", "character", "all", 0
         f.search:SetText("")
         if name:find("%-empty") then f.scope = "legacy" end
@@ -640,7 +640,8 @@ function QA.capture(name)
             assert(f.zoneKey == "Vallée de Strangleronce" and f.breakdownRows[3]:IsShown())
         end
         if name == "honor-annual-copy" then f.copyAnnual:Click() end
-        return f
+        -- The tables are a page of the Relations book.
+        return GrudgeLedgerRelations or GrudgeLedgerJournalBook
     elseif name == "journal-horde-friends" then
         GL.ShowLedger(records[1].key)
         GrudgeLedgerWindow.filters.friend.scripts.OnClick()

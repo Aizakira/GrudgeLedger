@@ -1,6 +1,8 @@
 -- Public character data plus separately opted-in, author-attributed social snapshots.
 -- Notes, free-text reasons and combat logs never enter the wire payload.
 local GL, B = GrudgeLedger, GrudgeLedger.Bounties
+-- One of this account's characters (Core.lua); false where Core is not loaded (unit tests).
+local function ownCharacter(id) return GL.OwnCharacter ~= nil and GL.OwnCharacter(id) end
 local S = {}
 GL.SharedDossiers = S
 local slots = {"head","neck","shoulder","shirt","chest","waist","leg","foot","wrist","hand","leftfinger","rightfinger","lefttrinket","righttrinket","back","weapon","offhand","ranged","tabard"}
@@ -87,6 +89,16 @@ local function ownSocial(target)
     end
     if not r then return end
     local me=GL.Author()
+    -- The opinion is the account's: one character of the account gives it in a guild, the others
+    -- withdraw theirs, or members would count it once per character (audit 24/11).
+    local s=B.GuildScope()
+    if s then
+        local publisher=s.socialPublisher
+        if type(publisher)~="string" or not ownCharacter(publisher) or not B.Shared(s.shareSocial,publisher) then
+            publisher=me; s.socialPublisher=me
+        end
+        if publisher~=me then return {removed=1,at=GL.Now()} end
+    end
     local events={}
     -- ponytail: share the latest 32 structured facts, not entire private journals.
     -- A paged history protocol is the upgrade path if guild use needs older facts.
@@ -160,7 +172,8 @@ function S.RefreshOpinions()
         return map[guid]
     end
     for _,report in pairs(s.socialReports or {}) do
-        if not report.removed and report.actor~=me and not hidden[report.target] and type(report.score)=="number" then
+        -- Another character of this account is not another member: its opinion is the account's own (audit 24/11).
+        if not report.removed and not ownCharacter(report.actor) and not hidden[report.target] and type(report.score)=="number" then
             local e=entry(report.target)
             e.score,e.count=e.score+report.score,e.count+1
         end
@@ -188,7 +201,7 @@ function S.GuildSighting(target)
     local me=GL.Safe(UnitGUID,"player")
     local best
     local function consider(at,actor)
-        if type(at)=="number" and actor and actor~=me and (not best or at>best.at) then
+        if type(at)=="number" and actor and actor~=me and not ownCharacter(actor) and (not best or at>best.at) then
             best={at=at,actor=actor}
         end
     end
@@ -217,6 +230,7 @@ function S.SocialReports(target)
 end
 -- Fields observed piece by piece: each part keeps the date it was seen.
 local partial = {gear=true, identity=true, stats=true}
+local PARTS_KEPT = 48 -- parts of one partial field: 19 gear slots, a dozen stats, the identity
 local function observer(by)
     if type(by) == "string" and #by <= 32 and by:match("^Player%-%w+%-%w+$") then
         return by
@@ -261,6 +275,22 @@ local function merge(fields,key,data,at,source,by,via,dates)
                 old.data[k] = v
                 old.dates[k] = parts[k]
             end
+        end
+    end
+    -- Partial fields gather the parts of several observations: a member sending new stat names at
+    -- every transfer made one dossier grow without end (audit 24/11). The oldest parts go first.
+    local kept=fields[key]
+    if parts and kept and type(kept.data)=="table" then
+        local names={}
+        for k in pairs(kept.data) do names[#names+1]=k end
+        if #names>PARTS_KEPT then
+            local dated=kept.dates or {}
+            table.sort(names,function(a,b)
+                local x,y=dated[a] or 0,dated[b] or 0
+                if x~=y then return x>y end
+                return tostring(a)<tostring(b)
+            end)
+            for i=PARTS_KEPT+1,#names do kept.data[names[i]],dated[names[i]]=nil,nil end
         end
     end
 end
@@ -582,8 +612,25 @@ GL.On("CALL_FOR_HELP",function(identity,_,_,result)
 end)
 local helpFrom = {}
 -- Text from the network is shown in an alert: no formatting code may survive.
+-- A name or a zone shown in a toast: control bytes (newlines, NUL) sent escaped on the wire are
+-- refused once decoded (audit 24/11), and the cut never splits a UTF-8 character.
 local function shown(text)
-    return (unescape(text):sub(1,48):gsub("|","||"))
+    local value=unescape(text)
+    if type(value)~="string" or value:find("%c") then return "" end
+    value=value:sub(1,48)
+    -- The last character, when the 48-byte cut fell inside it, is dropped.
+    local last=#value
+    while last>0 do
+        local c=value:byte(last)
+        if c<128 then break end
+        if c>=192 then
+            local need=c>=240 and 4 or c>=224 and 3 or 2
+            if #value-last+1<need then value=value:sub(1,last-1) end
+            break
+        end
+        last=last-1
+    end
+    return (value:gsub("|","||"))
 end
 local function receiveSighting(s,sender,target,map,code,name,zone)
     local now,count,oldest=GL.Now(),0,nil
