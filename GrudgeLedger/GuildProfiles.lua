@@ -156,11 +156,24 @@ function G.HideTarget(target,restore)
     return true
 end
 
+-- Bounds against a member who would fill every book of the guild (audit 24/11): far above what an
+-- honest member ever reaches, and counted per member so that nobody pushes the others' cards out.
+local CARDS_PER_MEMBER,CARDS_KEPT,OPINIONS_PER_ACTOR=300,3000,40
+local function owned(map,owner)
+    local mine,all=0,0
+    for key in pairs(map) do
+        all=all+1
+        if key:sub(1,#owner+1)==owner..":" then mine=mine+1 end
+    end
+    return mine,all
+end
 local function publish(s,owner,target,digest,at,account,name,authorName)
     local j=flags(s)
     local key=cardKey(owner,target,digest)
     if j.withdrawn[key] then return end
     if j.cards[key] then return end
+    local mine,all=owned(j.cards,owner)
+    if mine>=CARDS_PER_MEMBER or all>=CARDS_KEPT then return end
     local c=takePending(s,key) or {key=key,owner=owner,target=target,digest=digest,opinions={}}
     c.name,c.time,c.account,c.authorName=name,at,account,authorName
     j.cards[key]=c
@@ -207,6 +220,11 @@ end
 local function withdraw(s,owner,target,key,token)
     local j=flags(s)
     if j.withdrawn[key] then return end
+    -- A withdrawal of a card this book holds always passes; random tokens for unknown cards are bounded.
+    if not j.cards[key] then
+        local mine,all=owned(j.withdrawn,owner)
+        if mine>=CARDS_PER_MEMBER or all>=CARDS_KEPT then return end
+    end
     j.withdrawn[key]=token
     takePending(s,key)
     if j.cards[key] and j.cards[key].name then
@@ -234,6 +252,14 @@ end
 local function put(c,actor,name,seq,at,account,tag,on)
     local key=actor..":"..seq
     if c.opinions[key] then return end
+    -- A person's votes on one card: the latest forty are kept (audit 24/11).
+    local theirs={}
+    for k,e in pairs(c.opinions) do if e.actor==actor then theirs[#theirs+1]={k=k,seq=e.seq} end end
+    if #theirs>=OPINIONS_PER_ACTOR then
+        table.sort(theirs,function(a,b) return a.seq<b.seq end)
+        if seq<theirs[1].seq then return end
+        c.opinions[theirs[1].k]=nil
+    end
     c.opinions[key]={actor=actor,authorName=name,seq=seq,time=at,account=account,tag=tag,on=on}
     return true
 end
@@ -249,15 +275,18 @@ function G.View(c)
         if a.actor~=b.actor then return a.actor<b.actor end
         return a.seq>b.seq
     end)
-    local counted={}
+    -- One vote per account: the latest of its characters decides (owner, 24/11). A tag removed
+    -- from a second character used to stay counted because the first one still said yes.
+    local byAccount={}
     for _,e in pairs(latest) do
         local vote=e.account..":"..e.tag
-        if e.on and not counted[vote] then
-            counts[e.tag]=(counts[e.tag] or 0)+1
-            counted[vote]=true
-        end
+        local kept=byAccount[vote]
+        if not kept or e.time>kept.time or e.time==kept.time and e.seq>kept.seq then byAccount[vote]=e end
     end
-    return history,counts,latest
+    for _,e in pairs(byAccount) do
+        if e.on then counts[e.tag]=(counts[e.tag] or 0)+1 end
+    end
+    return history,counts,latest,byAccount
 end
 function G.SetTag(c,tag,on)
     local s,me=current(c)
@@ -265,8 +294,9 @@ function G.SetTag(c,tag,on)
     local actor,name,account=GL.Author()
     account=guildAccount(s,account)
     if actor~=me or not hex(account,16) then return end
-    local _,_,latest=G.View(c)
-    local old=latest[me..":"..tag]
+    local _,_,latest,byAccount=G.View(c)
+    -- What this account last said, whichever of its characters said it.
+    local old=byAccount[account..":"..tag] or latest[me..":"..tag]
     if (old and old.on or false)==on then return end
     local j=state(s)
     j.seq=math.max(j.seq,old and old.seq or 0)+1

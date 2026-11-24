@@ -68,5 +68,15 @@ assert(GL.db.aliases["name:same name"] == false)
 assert(GL.DeleteProfile(second))
 assert(GL.db.aliases["name:same name"] == first.key, "the remaining namesake owns its name again")
 
+-- 6. A note, an opinion or a tag written from the book is not a sighting (owner, 24/11).
+local seen = GL.Remember(GL.IdentityFromName("Absent", "Player", "Player-1-absent"))
+local seenAt = seen.lastSeen
+now = now + 3600
+GL.AddNote(seen, "Une note écrite plus tard.")
+GL.SetReaction(seen, "warning")
+assert(seen.lastSeen == seenAt, "editing the sheet does not date a new sighting")
+GL.Remember(GL.IdentityFromName("Absent", "Player", "Player-1-absent"))
+assert(seen.lastSeen == now, "a real observation does")
+
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS account characters: alts' opinions, map fights, guild killers and deaths count as the account's; merged duels and assists; namesake alias released")

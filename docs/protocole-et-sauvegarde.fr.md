@@ -81,6 +81,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `places` | Combats partagés, par membre : lignes `date;carte;x;y;genre;adversaire;nom` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée. Sert à la carte et à l'alerte « Tueur de guilde » | 150 membres, 40 lignes par membre, 38 jours |
 | `mapForgot` | Date du dernier `MX` de chaque membre : un relais plus ancien de ses combats est refusé. Effacée dès qu'il partage à nouveau | Un par membre |
 | `mailUncertain` | Envoi de courrier dont l'accusé n'a pas été reçu | Un par personnage |
+| `mailReturned` | Courriers de paiement revenus déjà déclarés (`Z`), pour ne pas les déclarer deux fois (0.61.3) | Un par courrier |
 | `journal` | Fiches de guilde. Détail ci-dessous | — |
 | `dossiers` | Relevés publics, par cible : `fields` (une entrée par champ, avec `data`, `at`, `source`, `by`, `via` et, pour l'équipement, l'identité et les caractéristiques, `dates`), `received`, `sender`, `senderName`. Une inspection d'une cible sans fiche personnelle y est aussi gardée | 256 cibles, la plus ancienne est évincée |
 | `dossierSeq` | Dernier numéro de transfert de relevé émis | — |
@@ -164,6 +165,7 @@ Tous les messages passent par le canal addon de la guilde, avec le préfixe `GLB
 | `X` | Retrait de la prime | Le commanditaire |
 | `F` | Désignation de la revendication gagnante | Le commanditaire |
 | `Y` | Paiement déclaré envoyé par un contributeur | Le payeur |
+| `Z` | Paiement revenu au payeur sans avoir été ouvert (0.61.3) : la somme est due à nouveau. Les versions plus anciennes l'ignorent | Le payeur |
 | `V` | Courrier constaté reçu | Le bénéficiaire |
 
 ### Relevés `S2`

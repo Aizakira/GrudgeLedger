@@ -55,7 +55,7 @@ local function read(text)
     return at, map, x, y, kind, target, name
 end
 -- Who killed members of the guild, worked out once and again only when the fights change.
-local index, indexed
+local index, indexed, indexedBucket
 -- The guild's fights change only when one is kept or forgotten: until then the sorted list is
 -- given again as it is (a guild of a hundred holds up to 6 000 lines).
 local version, sorted = 0, {}
@@ -478,8 +478,10 @@ end
 function M.Killer(target)
     local s, me = scope()
     if not guid(target) or not on(s, me) or type(s.places) ~= "table" then return nil end
-    if indexed ~= s or not index then
-        index, indexed = {}, s
+    -- Rebuilt every quarter of an hour too: fights past 38 days leave it (audit 24/11).
+    local bucket = math.floor(GL.Now() / 900)
+    if indexed ~= s or not index or indexedBucket ~= bucket then
+        index, indexed, indexedBucket = {}, s, bucket
         for actor, list in pairs(s.places) do
             if not ownCharacter(actor) and guid(actor) and type(list) == "table" then
                 for _, text in ipairs(list) do

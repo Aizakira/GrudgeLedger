@@ -133,7 +133,8 @@ local function unpackEvent(raw,archiving)
         elseif kind=="X" or kind=="F" then
             if actor~=owner or detail~="" then return end
             if kind=="X" and value~="" or kind=="F" and not value:match("^Player%-%w+%-%w+:%d+$") then return end
-        elseif kind=="Y" then
+        elseif kind=="Y" or kind=="Z" then
+            -- Z (0.61.3): the payer's mail came back unopened; that much is owed again.
             if not guid(detail) or not number(value,1,1000*GOLD) then return end
         elseif kind=="V" then
             local offset,amount=value:match("^(%d+),(%d+)$")
@@ -234,6 +235,16 @@ local function view(s,archiving)
                 o.paid[k]=(o.paid[k] or 0)+tonumber(e.value)
                 o.receipts[e.key]=true
             end
+        end
+    end
+    -- A payment mail returned to its payer is owed again (owner, 24/11). Applied after every
+    -- sending, whatever the order the events arrived in.
+    for _,e in ipairs(events) do
+        local o=orders[e.order]
+        if o and e.kind=="Z" and (o.winner or o.priorWinner) and not o.receipts[e.key] then
+            local k=e.actor.."/"..e.detail
+            o.paid[k]=math.max(0,(o.paid[k] or 0)-tonumber(e.value))
+            o.receipts[e.key]=true
         end
     end
     -- A mailbox receipt can reach the guild before the pledge or the sender's
@@ -542,7 +553,21 @@ local function mergeScore(s,actor,target,wins,losses)
         for _ in pairs(s.scores) do scoreTargets.n=scoreTargets.n+1 end
     end
     if not s.scores[target] then
-        if scoreTargets.n>=MAX_SCORE_TARGETS then return end
+        if scoreTargets.n>=MAX_SCORE_TARGETS then
+            -- Full: a target your book does not know, with the fewest fights, makes room. Made-up
+            -- targets could otherwise fill the table for good (audit 24/11).
+            local weakest,least
+            for other,byActor in pairs(s.scores) do
+                if not (GL.Get and GL.Get("guid:"..other)) then
+                    local total=0
+                    for _,pair in pairs(byActor) do total=total+(pair[1] or 0)+(pair[2] or 0) end
+                    if not least or total<least then weakest,least=other,total end
+                end
+            end
+            if not weakest then return end
+            s.scores[weakest]=nil
+            scoreTargets.n=scoreTargets.n-1
+        end
         scoreTargets.n=scoreTargets.n+1
     end
     local scores=s.scores[target] or {}
@@ -1073,8 +1098,31 @@ local function scanInbox()
         local _,_,sender,subject,money,cod,_,_,_,returned=GetInboxHeaderInfo(index)
         sender,subject=GL.Clean(sender,"string"),GL.Clean(subject,"string")
         money,cod=GL.Clean(money,"number"),GL.Clean(cod,"number")
+        local back=GL.Clean(returned,"boolean")
+        -- Your own payment, returned unopened (thirty days, or sent back): owed again (owner, 24/11).
+        local rOwner,rSeq,rStart
+        if back and subject then rOwner,rSeq,rStart=subject:match("^%[GL:(Player%-%w+%-%w+):(%d+)/(%d+)%]") end
+        if back and current and guid(rOwner) and number(rSeq,1,9999999999999) and number(money,1,1000*GOLD) and cod==0 then
+            local id=rOwner..":"..rSeq
+            if not orders then orders=view(current) end
+            local o=orders[id]
+            local w=o and (o.winner or o.priorWinner)
+            local hunter=sender and roster[mailAddress(sender)] or nil
+            if w and not hunter then
+                for h in (w.actor..","..w.detail):gmatch("[^,]+") do
+                    if ((o.paid or {})[me.."/"..h] or 0)>=money then hunter=h break end
+                end
+            end
+            current.mailReturned=type(current.mailReturned)=="table" and current.mailReturned or {}
+            local key=id.."/"..rStart.."/"..money
+            if hunter and not current.mailReturned[key] and ((o.paid or {})[me.."/"..hunter] or 0)>=money then
+                current.mailReturned[key]=GL.Now()
+                declare("Z",id,money,hunter)
+                orders=nil
+            end
+        end
         if sender and plain(sender,100) and subject and cod==0 and number(money,1,1000*GOLD)
-            and not GL.Clean(returned,"boolean") then
+            and not back then
             local owner,seq,start=subject:match("^%[GL:(Player%-%w+%-%w+):(%d+)/(%d+)%]")
             local offset=number(start,0,1000*GOLD-money)
             if guid(owner) and number(seq,1,9999999999999) and offset then

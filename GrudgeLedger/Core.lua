@@ -674,7 +674,11 @@ function GL.Remember(identity, inspect)
         if record.guid then guildSightings[record.guid] = nil end
     end
     if record.guild ~= previousGuild or record.realm ~= previousRealm then guildStatistics = nil end
-    record.lastSeen, record.lastZone = GL.Now(), GL.Where()
+    -- A note, an opinion or a tag written from the book passes the sheet itself: it is not a sighting.
+    -- It used to date the old level "seen now" and roll back a newer one (owner, 24/11).
+    if identity ~= record or not record.lastSeen then
+        record.lastSeen, record.lastZone = GL.Now(), GL.Where()
+    end
     indexAlias(clean.alias, record.key)
     if GrudgeLedgerArmory and (newIdentity or inspect) then GL.ArmoryProfile(record, true) end
     if newIdentity and clean.guid and GL.GuildProfiles then GL.GuildProfiles.Observe(record) end
