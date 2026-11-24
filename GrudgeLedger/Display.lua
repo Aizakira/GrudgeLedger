@@ -444,12 +444,93 @@ local function makeToast(preview)
             elseif key and GL.ShowLedger then GL.ShowLedger(key) end
         end
     end)
-    -- ponytail: clicking opens the captured record, avoiding protected targeting
-    -- and recycled unit-token hazards. A future targeting control needs secure UI.
+    -- Clicking the alert targets the player (owner, 24/11): a secure button of its own does it, out
+    -- of combat. In combat the game locks it, and a click opens the player's sheet as before.
+    frame:HookScript("OnHide", function() if GL.DisarmAlertTarget then GL.DisarmAlertTarget() end end)
     frame:Hide()
     if preview then previewToast = frame else toast = frame end
     return frame
 end
+
+-- The secure targeting button: invisible, laid over the alert's upper part (the hint row and its
+-- action button stay the alert's own). It targets by exact name; a known enemy then gets a skull.
+local targeter
+local CLICK_HINT = L("Clic : cibler  •  Maj-clic : fiche  •  clic droit : fermer")
+local function canMark()
+    if not GL.Safe(IsInGroup) then return true end
+    return GL.Safe(UnitIsGroupLeader, "player") == true or GL.Safe(UnitIsGroupAssistant, "player") == true
+end
+local function targetButton(over)
+    if targeter then return targeter end
+    local ok, b = pcall(CreateFrame, "Button", "GrudgeLedgerAlertTarget", UIParent, "SecureActionButtonTemplate")
+    if not ok or not b or type(b.SetAttribute) ~= "function" then return nil end
+    targeter = b
+    b:SetFrameStrata("DIALOG")
+    GL.Safe(b.SetFrameLevel, b, (GL.Safe(over.GetFrameLevel, over) or 1) + 20)
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:SetAttribute("type1", "macro")
+    -- Shift-click opens the sheet: no secure action then.
+    b:SetAttribute("shift-type1", "")
+    b:SetScript("OnEnter", function() if b.over then b.over.border:SetColorTexture(0.68, 0.51, 0.28, 1) end end)
+    b:SetScript("OnLeave", function()
+        local f = b.over
+        if f then f.border:SetColorTexture(f.accent[1], f.accent[2], f.accent[3], 1) end
+    end)
+    b:SetScript("PostClick", function(self, button)
+        local f = self.over
+        if not f then return end
+        if button == "RightButton" then f:Hide() return end
+        if GL.Safe(IsShiftKeyDown) then
+            local open = f:GetScript("OnClick")
+            if open then open(f, "LeftButton") end
+            return
+        end
+        -- Targeted: a skull over a threat's head shows where it is among the others.
+        local guid = f.targetGUID
+        if guid and f.relation ~= "friend" and GL.Safe(UnitGUID, "target") == guid and canMark() then
+            GL.Safe(SetRaidTarget, "target", 8)
+        end
+        f:Hide()
+    end)
+    b:Hide()
+    return b
+end
+function GL.DisarmAlertTarget()
+    if targeter and not GL.Safe(InCombatLockdown) then
+        targeter:Hide()
+        targeter.over = nil
+    end
+end
+-- Called once an alert about a player is on screen.
+local function armTarget(frame)
+    local name = type(frame.targetName) == "string" and frame.targetName or nil
+    if not name or name == "" or name:find("[\r\n;|]") or GL.Safe(InCombatLockdown) then return end
+    local b = targetButton(frame)
+    if not b then return end
+    b.over = frame
+    b:ClearAllPoints()
+    b:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    b:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 24)
+    b:SetAttribute("macrotext1", "/targetexact " .. name)
+    frame.plainHint = frame.hint:GetText()
+    frame.hint:SetText(CLICK_HINT)
+    b:Show()
+end
+-- The game locks secure buttons in combat: the alert goes back to its plain click just before.
+local lockWatch = CreateFrame("Frame")
+lockWatch:RegisterEvent("PLAYER_REGEN_DISABLED")
+lockWatch:RegisterEvent("PLAYER_REGEN_ENABLED")
+lockWatch:SetScript("OnEvent", function(_, event)
+    if not targeter then return end
+    if event == "PLAYER_REGEN_DISABLED" then
+        local f = targeter.over
+        if f and f.plainHint then f.hint:SetText(f.plainHint) end
+        targeter:Hide()
+        targeter.over = nil
+    elseif not (targeter.over and targeter.over:IsShown()) then
+        targeter:Hide()
+    end
+end)
 
 -- The two special alerts: their frame, stripe and title in their own colour (the art will come later).
 local accents = { wanted = { 0.88, 0.66, 0.20 }, killer = { 0.85, 0.40, 0.10 } }
@@ -550,7 +631,9 @@ alert = function(identity, unit)
     frame.hint:SetText(L(bounty and "Clic : prime  •  clic droit : fermer" or "Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, style, bounty and "wanted" or nil)
     refreshToastText(frame, record)
+    frame.targetName, frame.targetGUID = record.fullName or identity.fullName, record.guid or identity.guid
     frame:Show()
+    armTarget(frame)
     GL.Trace("shown", identity, unit)
     if settings.sounds then
         -- A wanted player sounds like coins: the bounty, not the usual warning.
@@ -609,7 +692,9 @@ local function indirectSignal(guid, source)
     frame.stripe:SetColorTexture(0.74, 0.57, 0.32, 1)
     frame.title:SetTextColor(0.94, 0.80, 0.57)
     refreshToastText(frame, record)
+    frame.targetName, frame.targetGUID = record.fullName, record.guid
     frame:Show()
+    armTarget(frame)
     GL.Trace("indirect", record, source)
     local sounds = SOUNDKIT or {}
     local sound = sounds.MAP_PING or sounds.IG_MAINMENU_OPTION_CHECKBOX_ON or sounds.IG_QUEST_LOG_OPEN
@@ -639,6 +724,7 @@ local function banner(key, relation, title, name, note, hint, onClick, accent, a
     frame.guildKey, frame.guildBurst, frame.signal, frame.signalAt, frame.sighting = nil, nil, nil, nil, nil
     frame.bounty, frame.bountyIdentity = nil, nil
     frame.banner = { title = title, name = name, note = note, onClick = onClick, action = action }
+    frame.targetName, frame.targetGUID = nil, nil
     frame.hint:SetText(hint or L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[relation], accent)
     if action and frame.action then
@@ -703,6 +789,10 @@ guildKiller = function(identity, record)
         if GL.OpenPlayerDossier then GL.OpenPlayerDossier(identity.guid, nil, who) end
     end, "killer", action)
     if not frame then return true end
+    if frame.key == identity.key then
+        frame.targetName, frame.targetGUID = who, identity.guid
+        armTarget(frame)
+    end
     -- The horn of a battleground that opens: not the sound of any other alert.
     local sounds = SOUNDKIT or {}
     local sound = sounds.PVP_THROUGH_QUEUE or sounds.RAID_BOSS_EMOTE_WARNING or sounds.ALARM_CLOCK_WARNING_3 or sounds.RAID_WARNING
@@ -735,7 +825,10 @@ local function guildSighting(target, sight, sameZone)
         frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
         styleToast(frame, styles.enemy)
         refreshToastText(frame, GL.Get(frame.key))
+        local known = GL.Get(frame.key)
+        frame.targetName, frame.targetGUID = known and known.fullName or sight.name, target
         frame:Show()
+        armTarget(frame)
         local sound = alertSound("enemy")
         if sound and settings.sounds then GL.Safe(PlaySound, sound, "Master") end
         return
@@ -766,7 +859,9 @@ local function guildSighting(target, sight, sameZone)
     frame.hint:SetText(L("Clic : fiche  •  clic droit : fermer"))
     styleToast(frame, styles[frame.relation])
     refreshToastText(frame, record)
+    frame.targetName, frame.targetGUID = record and record.fullName or sight.name, target
     frame:Show()
+    armTarget(frame)
     GL.Trace("watch", identity, "guild")
     local sound = alertSound(frame.relation)
     if sound and settings.sounds then GL.Safe(PlaySound, sound, "Master") end
