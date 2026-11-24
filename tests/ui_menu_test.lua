@@ -124,7 +124,7 @@ do
     -- 0.61.2, then 24/11: the figure is gold, with a breathing halo and a gold star on each side; a debt
     -- turns them red, with ruby stars; an even balance has no light.
     local light = GrudgeLedgerWindow.balanceLight
-    assert(light:IsShown() and #light.stars == 4 and light.kind == "gold")
+    assert(light:IsShown() and #light.stars == 3 and light.kind == "gold")
     for _ = 1, 40 do light:GetScript("OnUpdate")(light, 0.1) end
     light:GetScript("OnUpdate")(light, 0.1)
     GL.ShowLedger(aqua.key)

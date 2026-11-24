@@ -3317,27 +3317,39 @@ local function buildLedger()
     end
     -- Sparks (owner, 24/11): each star starts invisible near the figure, appears while drifting away
     -- from it, and fades out, as if the figure gave them off; then it starts again elsewhere. Small,
-    -- each with a soft blur of its own; four of them, out of step.
+    -- each with a soft blur of its own; three of them, out of step, never born next to one another
+    -- (owner, 24/11: 20 % larger, 35 % slower, fewer, more random).
     light.stars = {}
-    for i = 1, 4 do
+    for i = 1, 3 do
         local blur = light:CreateTexture(nil, "OVERLAY", nil, 1)
         blur:SetTexture(media .. "BalanceGlow")
         local star = light:CreateTexture(nil, "OVERLAY", nil, 2)
-        star.blur, star.age, star.life = blur, -(i - 1) * 0.55, 1.9
+        star.blur, star.age, star.life = blur, -(i - 1) * 1.1 - math.random() * 0.6, 2.9
         star:SetAlpha(0) blur:SetAlpha(0)
         light.stars[i] = star
     end
     local function launch(star)
-        -- Out of the figure's sides or top, away from its centre.
+        -- Out of the figure's sides or top, away from its centre, and away from the other sparks
+        -- still shown: up to six tries for a spot at least 16 units from each of them.
         local width = light.width or 40
-        local side = math.random(1, 3)
-        local x = side == 1 and -4 or side == 2 and width + 4 or math.random(0, math.floor(width))
-        local y = side == 3 and 12 or math.random(-6, 8)
+        local x, y, side
+        for _ = 1, 6 do
+            side = math.random(1, 3)
+            x = side == 1 and -4 or side == 2 and width + 4 or math.random(0, math.floor(width))
+            y = side == 3 and 12 or math.random(-6, 8)
+            local free = true
+            for _, other in ipairs(light.stars) do
+                if other ~= star and other.x and other.age >= 0 and other.age < other.life
+                    and (other.x - x) ^ 2 + (other.y - y) ^ 2 < 256 then free = false end
+            end
+            if free then break end
+        end
         local dx = side == 1 and -1 or side == 2 and 1 or (math.random() - 0.5)
         local dy = side == 3 and 1 or (math.random() - 0.3)
         local norm = math.sqrt(dx * dx + dy * dy)
         star.x, star.y, star.dx, star.dy = x, y, dx / norm, dy / norm
-        star.age, star.life = 0, 1.6 + math.random() * 0.8
+        -- A pause of its own before it shows, so that they never keep the same rhythm.
+        star.age, star.life = -math.random() * 1.2, 2.5 + math.random() * 1.2
     end
     light.clock = 0
     light:SetScript("OnUpdate", function(self, elapsed)
@@ -3354,7 +3366,7 @@ local function buildLedger()
                 local t = star.age / star.life
                 local shown = math.sin(math.pi * t)
                 local travel = 3 + 13 * t
-                local size = 8 + 5 * shown
+                local size = 9.6 + 6 * shown
                 star:ClearAllPoints()
                 star:SetPoint("CENTER", f.balance, "LEFT", star.x + star.dx * travel, 4 + star.y + star.dy * travel)
                 star:SetSize(size, size)
