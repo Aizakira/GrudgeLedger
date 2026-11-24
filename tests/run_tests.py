@@ -49,6 +49,7 @@ for name, expected_width, expected_height, transparent in (
     ("GestureKiss.tga", 128, 128, False),
     ("MapFeather.tga", 64, 64, True),
     ("PreyReticle.tga", 64, 64, True),
+    ("BalanceGlow.tga", 256, 128, True), ("BalanceStarRuby.tga", 64, 64, True), ("BalanceStarGold.tga", 64, 64, True),
 ):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")

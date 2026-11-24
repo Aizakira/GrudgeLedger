@@ -2406,16 +2406,16 @@ local function renderDetail()
             -- giving 3. When you are ahead, the figure says so ("+3"); the relation does not change,
             -- because a victory does not make a friend.
             local ahead = gestures == 0 and raw > 0 and score == 0
-            ledger.balance:SetText(ahead and ("+" .. raw) or tostring(score))
-            ledger.balance:SetTextColor(unpack(score < 0 and inkColors.enemy or score > 0 and inkColors.friend or theme.ink))
-            if ahead then
-                -- A deep gold that stays readable on the parchment, and the stars sized to the figure.
-                ledger.balance:SetTextColor(0.72, 0.50, 0.06)
-                local width = GL.Clean(GL.Safe(ledger.balance.GetStringWidth, ledger.balance), "number") or 40
-                ledger.balanceStars:SetWidth(math.max(40, width) + 28)
-                ledger.balanceStars:Show()
+            -- Against you: red, with ruby stars. For you (or ahead, 0.61.2): a deep gold that stays
+            -- readable on the parchment, with gold stars. Even: plain ink, no light.
+            local text = ahead and ("+" .. raw) or (score > 0 and ("+" .. score) or tostring(score))
+            if score < 0 then
+                local c = inkColors.enemy
+                ledger.paintBalance(text, c[1], c[2], c[3], "ruby")
+            elseif ahead or score > 0 then
+                ledger.paintBalance(text, 0.72, 0.50, 0.06, "gold")
             else
-                ledger.balanceStars:Hide()
+                ledger.paintBalance(text, theme.ink[1], theme.ink[2], theme.ink[3], nil)
             end
             local deaths = (pvp.deaths or 0)
             local wins = (pvp.kills or 0)
@@ -3291,37 +3291,74 @@ local function buildLedger()
         f.metrics[entry[1]] = card
     end
     f.balancePanel = CreateFrame("Frame", nil, f.counters) f.balancePanel:SetAllPoints()
-    local balanceCaption = label(f.balancePanel, L("Solde automatique"), nil, 32, -70, 238)
+    local balanceCaption = label(f.balancePanel, L("Solde automatique"), nil, 32, -70, 226)
     journalFont(balanceCaption, "GameFontNormalLarge", 20) balanceCaption:SetTextColor(unpack(theme.ink)) balanceCaption:SetJustifyH("RIGHT")
     f.balance = label(f.balancePanel, "", nil, 286, -62, 160)
     -- The figure in Spectral SemiBold Italic, the face of the first reference pages (owner 23/11).
     journalFont(f.balance, "GameFontNormalLarge", 34, "Spectral-SemiBoldItalic") f.balance:SetTextColor(unpack(inkColors.enemy)) f.balance:SetHeight(44)
-    -- When you are ahead (0.61.2): the figure turns gold and a few small stars twinkle around it, a
-    -- quiet reward for good numbers. The stars live in their own frame, which only runs while shown.
-    f.balanceStars = CreateFrame("Frame", nil, f.balancePanel)
-    f.balanceStars:SetPoint("TOPLEFT", 272, -55)
-    f.balanceStars:SetSize(70, 58)
-    f.balanceStars.stars = {}
-    for i, spot in ipairs({ { "TOPLEFT", 3, -14, 10 }, { "TOPRIGHT", -3, -8, 9 }, { "TOPRIGHT", 3, -42, 11 },
-        { "TOPLEFT", -1, -46, 8 }, { "TOP", 0, -2, 7 } }) do
-        local star = f.balanceStars:CreateTexture(nil, "OVERLAY")
-        star:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_1")
-        star:SetSize(spot[4], spot[4])
-        star:SetPoint("CENTER", f.balanceStars, spot[1], spot[2], spot[3])
-        star.phase, star.base = i * 1.3, spot[4]
-        f.balanceStars.stars[i] = star
+    -- The figure's light (owner, 24/11): a soft halo made here (no picture generated, a gaussian
+    -- ellipse tinted to the balance), eight faint copies of the figure one pixel around it to soften
+    -- its edge like a blur, and a star on each side, ruby when the balance is against you, gold when it
+    -- is for you. The halo breathes and the stars twinkle in turn, only while the page is shown.
+    f.balanceLight = CreateFrame("Frame", nil, f.balancePanel)
+    f.balanceLight:SetAllPoints(f.balancePanel)
+    local light = f.balanceLight
+    light.glow = light:CreateTexture(nil, "BACKGROUND", nil, 3)
+    light.glow:SetTexture(media .. "BalanceGlow")
+    light.glow:SetSize(150, 62)
+    light.halo = {}
+    for i, offset in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 } }) do
+        local copy = f.balancePanel:CreateFontString(nil, "ARTWORK")
+        journalFont(copy, "GameFontNormalLarge", 34, "Spectral-SemiBoldItalic")
+        copy:SetPoint("TOPLEFT", f.balance, "TOPLEFT", offset[1], offset[2])
+        copy:SetSize(160, 44)
+        copy:SetJustifyH("LEFT")
+        light.halo[i] = copy
     end
-    f.balanceStars.clock = 0
-    f.balanceStars:SetScript("OnUpdate", function(self, elapsed)
+    light.stars = {}
+    for i = 1, 2 do
+        local star = light:CreateTexture(nil, "OVERLAY")
+        star:SetSize(22, 22)
+        star.phase = (i - 1) * math.pi
+        light.stars[i] = star
+    end
+    light.clock = 0
+    light:SetScript("OnUpdate", function(self, elapsed)
         self.clock = self.clock + (tonumber(elapsed) or 0)
+        local breath = 0.5 + 0.5 * math.sin(self.clock * 1.6)
+        self.glow:SetAlpha((self.glowAlpha or 0.3) * (0.75 + 0.25 * breath))
         for _, star in ipairs(self.stars) do
-            local glow = 0.5 + 0.5 * math.sin(self.clock * 2.2 + star.phase)
-            local side = star.base * (0.75 + 0.35 * glow)
-            star:SetAlpha(0.25 + 0.75 * glow)
+            local twinkle = 0.5 + 0.5 * math.sin(self.clock * 2.4 + star.phase)
+            local side = 18 + 6 * twinkle
             star:SetSize(side, side)
+            star:SetAlpha(0.55 + 0.45 * twinkle)
         end
     end)
-    f.balanceStars:Hide()
+    light:Hide()
+    -- Paints the figure, its halo copies, the glow and the stars, in one colour.
+    function f.paintBalance(text, r, g, b, kind)
+        f.balance:SetText(text)
+        f.balance:SetTextColor(r, g, b)
+        for _, copy in ipairs(light.halo) do
+            copy:SetText(text)
+            copy:SetTextColor(r, g, b, kind and 0.07 or 0)
+        end
+        if not kind then light:Hide() return end
+        local width = GL.Clean(GL.Safe(f.balance.GetStringWidth, f.balance), "number") or 40
+        width = math.max(20, math.min(150, width))
+        light.glow:ClearAllPoints()
+        light.glow:SetPoint("CENTER", f.balance, "LEFT", width / 2, 4)
+        light.glow:SetSize(width + 64, 46)
+        light.glow:SetVertexColor(r, g, b)
+        light.kind, light.glowAlpha = kind, kind == "ruby" and 0.16 or 0.22
+        local art = media .. (kind == "ruby" and "BalanceStarRuby" or "BalanceStarGold")
+        for i, star in ipairs(light.stars) do
+            star:SetTexture(art)
+            star:ClearAllPoints()
+            star:SetPoint("CENTER", f.balance, "LEFT", i == 1 and -13 or width + 13, 3)
+        end
+        light:Show()
+    end
     f.formula = label(f.balancePanel, "", nil, 6, -96, 520)
     f.formula:SetTextColor(unpack(theme.ink)) f.formula:SetJustifyH("CENTER") f.formula:SetHeight(22)
     f.scoreContext = label(f.balancePanel, "", nil, 6, -114, 520)

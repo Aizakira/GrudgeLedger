@@ -121,12 +121,13 @@ do
     assert(GrudgeLedgerWindow.balance:GetText() == "+" .. raw, GrudgeLedgerWindow.balance:GetText())
     assert(GrudgeLedgerWindow.scoreContext:GetText():find("Vous menez de " .. raw, 1, true), GrudgeLedgerWindow.scoreContext:GetText())
     assert(GL.Relation(GL.Get(probe)) ~= "friend")
-    -- 0.61.2: the figure is gold and small stars twinkle around it; they stop when the page shows a debt.
-    local stars = GrudgeLedgerWindow.balanceStars
-    assert(stars:IsShown() and #stars.stars == 5)
-    stars:GetScript("OnUpdate")(stars, 0.1)
+    -- 0.61.2, then 24/11: the figure is gold, with a breathing halo and a gold star on each side; a debt
+    -- turns them red, with ruby stars; an even balance has no light.
+    local light = GrudgeLedgerWindow.balanceLight
+    assert(light:IsShown() and #light.stars == 2 and light.kind == "gold")
+    light:GetScript("OnUpdate")(light, 0.1)
     GL.ShowLedger(aqua.key)
-    assert(not stars:IsShown(), "no stars on a debt")
+    assert(light:IsShown() and light.kind == "ruby", "a debt has ruby stars")
 end
 assert(GrudgeLedgerWindow.reactions.neutral.active and not GrudgeLedgerWindow.reactions.warning.active
     and GrudgeLedgerWindow.reactions.warning.outline[1]:IsShown(), "automatic outlines the effective dangerous relation")
