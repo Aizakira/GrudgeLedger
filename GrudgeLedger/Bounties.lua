@@ -8,6 +8,21 @@ GL.Bounties = B
 local ML=GL.L or function(s) return s end
 local DAY, GOLD = 86400, 10000
 local roster,addresses={},{}
+-- Members connected now, from the guild roster: a connected member speaks for itself (audit 24/11).
+local online={}
+-- Messages that make no sense from one member, counted this session: told once past five.
+local oddCount,oddTold={},{}
+local ODD=ML("Grudge Ledger a ignoré plusieurs messages incohérents de %s. Rien n’en a été gardé.")
+local function odd(sender)
+    if type(sender)~="string" then return end
+    oddCount[sender]=(oddCount[sender] or 0)+1
+    if oddCount[sender]>=5 and not oddTold[sender] then
+        oddTold[sender]=true
+        GL.Print(ODD:format(addresses[sender] or sender))
+    end
+end
+B.Odd=odd
+function B.Online(id) return online[id]==true end
 -- What one member may keep in your book over the 38 days of the log, and the guild's fight counts.
 local MAX_MEMBER_EVENTS,MAX_SCORE_TARGETS,MAX_SCORE_ACTORS=600,1500,60
 local function guid(s)
@@ -830,15 +845,18 @@ local memberEvents
 local function countMember(s,actor)
     if not memberEvents or memberEvents.s~=s then
         memberEvents={s=s,n={}}
-        for _,raw in pairs(s.events) do
+        local told=type(s.relayed)=="table" and s.relayed or {}
+        for key in pairs(told) do if not s.events[key] then told[key]=nil end end
+        for key,raw in pairs(s.events) do
             local who=type(raw)=="string" and raw:match("^[^;]+;([^;]+);")
-            if who then memberEvents.n[who]=(memberEvents.n[who] or 0)+1 end
+            -- What others relayed in a member's name does not use up that member's room.
+            if who and not told[key] then memberEvents.n[who]=(memberEvents.n[who] or 0)+1 end
         end
     end
     return memberEvents.n[actor] or 0
 end
 -- Words said in your name that you never said: told once per member who passed them on.
-local forgeryTold,relayCount={}, {}
+local forgeryTold,relayCount,ownAnsweredAt={}, {}, nil
 local DENIED=ML("Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré.")
 local FORGED={O=ML("prime"),N=ML("prime"),A=ML("avis de recherche"),P=ML("contribution"),
     K=ML("victoire"),H=ML("victoire"),D=ML("mort"),Y=ML("paiement")}
@@ -883,7 +901,11 @@ local function receive(msg,sender)
         local key=(first==nil and second~="queued" and "bounty:own") or (second==nil and first~="queued" and "bounty:own:2") or nil
         -- The map relay keeps its room when it is shared and not already waiting.
         local mapRoom=GL.GuildMap and GL.GuildMap.Enabled() and not GL.Transport.State(s,"map:relay") and 120 or 0
+        -- Your own events leave once every thirty seconds at most, whoever asks: two logins close
+        -- together share the same answer (audit 24/11).
+        if ownAnsweredAt and now-ownAnsweredAt<30 then ownBatch={} end
         if #ownBatch>0 and key then
+            ownAnsweredAt=now
             local _,queued=GL.Transport.Pending(s)
             while #ownBatch>math.max(0,508-queued-mapRoom) do ownBatch[#ownBatch]=nil end
             if #ownBatch>0 then GL.Transport.SendBatch(s,ownBatch,{key=key,delay=1+math.random(0,4)}) end
@@ -956,6 +978,7 @@ local function receive(msg,sender)
         -- bounded (0.60.1): a forged relay cannot inflate a total beyond what a player really does.
         local most=relay and 2000 or 100000
         wins,losses=number(wins,0,most),number(losses,0,most)
+        if relay and online[actor] then odd(sender) return end
         if guid(actor) and guid(target) and wins and losses and actor~=me and (relay and addresses[actor] or actor==sender) then
             if relay then GL.Transport.Cancel(s,"bounty:relay") end
             mergeScore(s,actor,target,wins,losses)
@@ -964,13 +987,23 @@ local function receive(msg,sender)
     end
     local e=unpackEvent(raw)
     if e and relay and sender~=me and RELAYABLE[e.kind] then GL.Transport.Cancel(s,"bounty:relay") end
-    if not e or s.events[e.key] then return end
+    if not e then return end
+    if s.events[e.key] then
+        -- The author now says what a relay had told: it becomes theirs (counted, and a claim heard).
+        local told=type(s.relayed)=="table" and s.relayed
+        if not relay and e.actor==sender and told and told[e.key] then
+            told[e.key]=nil
+            if memberEvents and memberEvents.s==s then memberEvents.n[e.actor]=(memberEvents.n[e.actor] or 0)+1 end
+            if e.kind=="K" or e.kind=="H" then direct(s,e.key) end
+        end
+        return
+    end
     -- What a member relays that is new here counts against them: 900 a session at most.
     if relay then
         relayCount[sender]=(relayCount[sender] or 0)+1
-        if relayCount[sender]>900 then return end
+        if relayCount[sender]>900 then odd(sender) return end
     end
-    if not relay and e.actor~=sender then return end
+    if not relay and e.actor~=sender then odd(sender) return end
     -- A relay is a member's word about another member (review 0.58.2). It may tell a bounty, a
     -- pledge, a claim, a death or a payment sent: the member named ignores what others say in its
     -- name, and keeps its own account. It never chooses a winner (payers would mail the wrong
@@ -987,6 +1020,8 @@ local function receive(msg,sender)
         end
         -- A relay speaks only of a member of the guild: never of someone made up or gone.
         if not addresses[e.actor] then return end
+        -- A connected member speaks for itself: a relay in its name is refused (audit 24/11).
+        if online[e.actor] then odd(sender) return end
     end
     -- Relays are guild testimony, never an instruction to send gold or alter personal records.
     if e.actor==me then return end
@@ -1004,6 +1039,11 @@ local function receive(msg,sender)
     end
     openTargets=nil
     s.events[e.key]=raw
+    if relay then
+        -- Told by another member: not counted in the author's share of the book (audit 24/11).
+        s.relayed=type(s.relayed)=="table" and s.relayed or {}
+        s.relayed[e.key]=true
+    end
     if (e.kind=="K" or e.kind=="H") and not relay then direct(s,e.key) end
     if (e.kind=="K" or e.kind=="H") and e.order:match("^([^:]+)")==me then finalize(s,me) end
     if e.kind~="D" then changed(s,me) end
@@ -1019,13 +1059,14 @@ local function realmSuffix()
     return realm~="" and realm or nil
 end
 local function refreshRoster()
-    roster,addresses={},{}
+    roster,addresses,online={},{},{}
     if not GetNumGuildMembers or not GetGuildRosterInfo then return end
     for i=1,GetNumGuildMembers() do
-        local name,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,id=GetGuildRosterInfo(i)
+        local name,_,_,_,_,_,_,_,connected,_,_,_,_,_,_,_,id=GetGuildRosterInfo(i)
         name,id=GL.Clean(name,"string"),GL.Clean(id,"string")
         if name and guid(id) then
             roster[name]=id; addresses[id]=name
+            if GL.Clean(connected,"boolean") then online[id]=true end
             local realm=not name:find("-") and realmSuffix()
             if realm then roster[name.."-"..realm]=id end
         end

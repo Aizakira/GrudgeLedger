@@ -2228,6 +2228,7 @@ T["Vos ennemis vous remercient pour l’honneur : %s pour %s."] = "Seus inimigos
 T["Vos gestes à portée de main"] = "Atalhos de emotes"
 T["Vos morts"] = "Suas mortes"
 T["Il vous a tué"] = "Matou você"
+T["Grudge Ledger a ignoré plusieurs messages incohérents de %s. Rien n’en a été gardé."] = "O Grudge Ledger ignorou várias mensagens incoerentes de %s. Nada delas foi guardado."
 T["Vos morts et vos victoires, adversaire par adversaire. Cliquez sur un nom pour ouvrir sa fiche."] = "Suas mortes e vitórias, adversário por adversário. Clique em um nome para abrir a ficha."
 T["Ouvrez les détails d’un événement. Validez la recherche avec Entrée."] = "Abra os detalhes de um evento. Confirme a busca com Enter."
 T["Adversaire"] = "Adversário"

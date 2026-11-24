@@ -107,14 +107,20 @@ end
 -- relay. A login (0.58.0): only the relay, so that a guild of a hundred does not answer a hundred
 -- times. The relay holds the latest fights of everyone, yours included; it leaves after a random
 -- delay and is dropped when another member started one first. Sent behind the urgent messages.
+local ownSentAt
 local function answer(s, me, full)
     local T = GL.Transport
     local own = {}
+    -- Your own fights leave once every thirty seconds at most, whoever asks (audit 24/11).
+    if full and ownSentAt and GL.Now() - ownSentAt < 30 then full = false end
     for _, text in ipairs(full and type(s.places) == "table" and type(s.places[me]) == "table" and s.places[me] or {}) do
         if read(text) then own[#own + 1] = message(me, text) end
     end
     local sent = false
-    if #own > 0 and not T.State(s, "map:own") then sent = T.SendBatch(s, own, { key = "map:own", delay = 2 + math.random(0, 8) }) == true end
+    if #own > 0 and not T.State(s, "map:own") then
+        sent = T.SendBatch(s, own, { key = "map:own", delay = 2 + math.random(0, 8) }) == true
+        if sent then ownSentAt = GL.Now() end
+    end
     local others = {}
     for actor, list in pairs(type(s.places) == "table" and s.places or {}) do
         if (actor ~= me or not full) and guid(actor) and type(list) == "table" then
@@ -310,6 +316,11 @@ function M.Receive(s, me, sender, raw, relay)
         -- another member is passing the guild's fights on, and ours would only repeat them.
         local at = read(rest)
         if not at or (forgot and at <= forgot) or not (GL.Bounties and GL.Bounties.IsMember and GL.Bounties.IsMember(actor)) then return false end
+        -- A connected member speaks for itself: a relay of its fights is refused (audit 24/11).
+        if GL.Bounties.Online and GL.Bounties.Online(actor) then
+            if GL.Bounties.Odd then GL.Bounties.Odd(sender) end
+            return false
+        end
         GL.Transport.Cancel(s, "map:relay")
     elseif actor ~= sender then
         return false
