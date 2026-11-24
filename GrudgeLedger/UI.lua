@@ -3315,23 +3315,55 @@ local function buildLedger()
         copy:SetJustifyH("LEFT")
         light.halo[i] = copy
     end
+    -- Sparks (owner, 24/11): each star starts invisible near the figure, appears while drifting away
+    -- from it, and fades out, as if the figure gave them off; then it starts again elsewhere. Small,
+    -- each with a soft blur of its own; four of them, out of step.
     light.stars = {}
-    for i = 1, 2 do
-        local star = light:CreateTexture(nil, "OVERLAY")
-        star:SetSize(22, 22)
-        star.phase = (i - 1) * math.pi
+    for i = 1, 4 do
+        local blur = light:CreateTexture(nil, "OVERLAY", nil, 1)
+        blur:SetTexture(media .. "BalanceGlow")
+        local star = light:CreateTexture(nil, "OVERLAY", nil, 2)
+        star.blur, star.age, star.life = blur, -(i - 1) * 0.55, 1.9
+        star:SetAlpha(0) blur:SetAlpha(0)
         light.stars[i] = star
+    end
+    local function launch(star)
+        -- Out of the figure's sides or top, away from its centre.
+        local width = light.width or 40
+        local side = math.random(1, 3)
+        local x = side == 1 and -4 or side == 2 and width + 4 or math.random(0, math.floor(width))
+        local y = side == 3 and 12 or math.random(-6, 8)
+        local dx = side == 1 and -1 or side == 2 and 1 or (math.random() - 0.5)
+        local dy = side == 3 and 1 or (math.random() - 0.3)
+        local norm = math.sqrt(dx * dx + dy * dy)
+        star.x, star.y, star.dx, star.dy = x, y, dx / norm, dy / norm
+        star.age, star.life = 0, 1.6 + math.random() * 0.8
     end
     light.clock = 0
     light:SetScript("OnUpdate", function(self, elapsed)
-        self.clock = self.clock + (tonumber(elapsed) or 0)
+        elapsed = tonumber(elapsed) or 0
+        self.clock = self.clock + elapsed
         local breath = 0.5 + 0.5 * math.sin(self.clock * 1.6)
-        self.glow:SetAlpha((self.glowAlpha or 0.3) * (0.75 + 0.25 * breath))
+        self.glow:SetAlpha((self.glowAlpha or 0.2) * (0.75 + 0.25 * breath))
         for _, star in ipairs(self.stars) do
-            local twinkle = 0.5 + 0.5 * math.sin(self.clock * 2.4 + star.phase)
-            local side = 18 + 6 * twinkle
-            star:SetSize(side, side)
-            star:SetAlpha(0.55 + 0.45 * twinkle)
+            star.age = star.age + elapsed
+            if star.age >= star.life then launch(star) end
+            if star.age < 0 or not star.x then
+                star:SetAlpha(0) star.blur:SetAlpha(0)
+            else
+                local t = star.age / star.life
+                local shown = math.sin(math.pi * t)
+                local travel = 3 + 13 * t
+                local size = 8 + 5 * shown
+                star:ClearAllPoints()
+                star:SetPoint("CENTER", f.balance, "LEFT", star.x + star.dx * travel, 4 + star.y + star.dy * travel)
+                star:SetSize(size, size)
+                star:SetAlpha(shown * shown)
+                star.blur:ClearAllPoints()
+                star.blur:SetPoint("CENTER", star, "CENTER", 0, 0)
+                star.blur:SetSize(size * 3, size * 3)
+                star.blur:SetAlpha(0.35 * shown)
+            end
         end
     end)
     light:Hide()
@@ -3352,10 +3384,10 @@ local function buildLedger()
         light.glow:SetVertexColor(r, g, b)
         light.kind, light.glowAlpha = kind, kind == "ruby" and 0.16 or 0.22
         local art = media .. (kind == "ruby" and "BalanceStarRuby" or "BalanceStarGold")
-        for i, star in ipairs(light.stars) do
+        light.width = width
+        for _, star in ipairs(light.stars) do
             star:SetTexture(art)
-            star:ClearAllPoints()
-            star:SetPoint("CENTER", f.balance, "LEFT", i == 1 and -13 or width + 13, 3)
+            star.blur:SetVertexColor(r, g, b)
         end
         light:Show()
     end
