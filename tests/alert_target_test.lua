@@ -1,5 +1,5 @@
 -- Owner, 24/11: clicking an alert targets the player, through a secure button, out of combat. A known
--- enemy then gets a skull. In combat the game locks the button: the alert opens the sheet as before.
+-- enemy then gets our reticle over its name (never a raid mark). In combat the game locks the button: the alert opens the sheet as before.
 local mock = assert(loadfile(TEST_WORK .. "/tests/wow_mock.lua"))()
 local methods = getmetatable(UIParent).__index
 function methods:SetAttribute(key, value) self.attributes = self.attributes or {} self.attributes[key] = value end
@@ -26,9 +26,13 @@ assert(alert:IsShown() and button:IsShown(), "out of combat the alert can target
 assert(button.attributes.type1 == "macro" and button.attributes.macrotext1 == "/targetexact " .. enemy.fullName,
     tostring(button.attributes.macrotext1))
 assert(alert.hint:GetText():find("cibler", 1, true), "the hint says a click targets")
--- The click targets (the secure action is the game's), then the skull and the alert closes.
+-- The click targets (the secure action is the game's), then the prey's reticle and the alert closes.
+local prey
+local mark = GL.Display.MarkPrey
+GL.Display.MarkPrey = function(guid) prey = guid end
 button.scripts.PostClick(button, "LeftButton")
-assert(marked and marked[1] == "target" and marked[2] == 8, "a known enemy gets a skull")
+GL.Display.MarkPrey = mark
+assert(prey == enemy.guid and not marked, "a known enemy gets our reticle, never a raid mark")
 assert(not alert:IsShown() and not button:IsShown(), "the alert and its button close")
 
 -- A second enemy, then combat starts: the button goes away before the lock, the plain hint comes back.
@@ -43,4 +47,4 @@ lockdown = true
 assert(not button:IsShown(), "no secure button stays armed in combat")
 assert(not alert.hint:GetText():find("cibler", 1, true), "in combat the alert says its plain click")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
-print("PASS alert target: a click targets the player out of combat, skull on an enemy, plain click in combat")
+print("PASS alert target: a click targets the player out of combat, reticle on an enemy, plain click in combat")

@@ -456,10 +456,40 @@ end
 -- action button stay the alert's own). It targets by exact name; a known enemy then gets a skull.
 local targeter
 local CLICK_HINT = L("Clic : cibler  •  Maj-clic : fiche  •  clic droit : fermer")
-local function canMark()
-    if not GL.Safe(IsInGroup) then return true end
-    return GL.Safe(UnitIsGroupLeader, "player") == true or GL.Safe(UnitIsGroupAssistant, "player") == true
+-- The prey (owner, 24/11): a reticle of ours over the hunted player's name, seen by you alone, never
+-- a raid mark (a skull would say "boss"). It follows the player from plate to plate, for three minutes
+-- or until the player dies.
+local prey, reticle = {}, nil
+local function placeReticle()
+    if not reticle then
+        reticle = CreateFrame("Frame", nil, UIParent)
+        reticle:SetSize(34, 34)
+        reticle:SetFrameStrata("HIGH")
+        local art = reticle:CreateTexture(nil, "OVERLAY")
+        art:SetAllPoints()
+        art:SetTexture("Interface\\AddOns\\GrudgeLedger\\Media\\PreyReticle")
+        reticle:Hide()
+    end
+    if not prey.guid or GL.Now() > (prey.untilAt or 0) then prey.guid = nil reticle:Hide() return end
+    local plates = C_NamePlate and C_NamePlate.GetNamePlates and GL.Safe(C_NamePlate.GetNamePlates) or {}
+    for _, plate in ipairs(type(plates) == "table" and plates or {}) do
+        local unit = GL.Clean(plate.namePlateUnitToken, "string")
+        if unit and GL.Safe(UnitGUID, unit) == prey.guid then
+            if GL.Safe(UnitIsDeadOrGhost, unit) == true then prey.guid = nil reticle:Hide() return end
+            reticle:ClearAllPoints()
+            reticle:SetPoint("BOTTOM", plate, "TOP", 0, 4)
+            reticle:Show()
+            return
+        end
+    end
+    reticle:Hide()
 end
+function D.MarkPrey(guid)
+    prey.guid, prey.untilAt = GL.Clean(guid, "string"), GL.Now() + 180
+    placeReticle()
+    if C_Timer and C_Timer.After then C_Timer.After(181, placeReticle) end
+end
+D.PlaceReticle = placeReticle
 local function targetButton(over)
     if targeter then return targeter end
     local ok, b = pcall(CreateFrame, "Button", "GrudgeLedgerAlertTarget", UIParent, "SecureActionButtonTemplate")
@@ -485,11 +515,9 @@ local function targetButton(over)
             if open then open(f, "LeftButton") end
             return
         end
-        -- Targeted: a skull over a threat's head shows where it is among the others.
+        -- Targeted: a reticle over the prey's name shows where it is among the others.
         local guid = f.targetGUID
-        if guid and f.relation ~= "friend" and GL.Safe(UnitGUID, "target") == guid and canMark() then
-            GL.Safe(SetRaidTarget, "target", 8)
-        end
+        if guid and f.relation ~= "friend" then D.MarkPrey(guid) end
         f:Hide()
     end)
     b:Hide()
@@ -1012,10 +1040,12 @@ function D.OnEvent(_, event, unit, ...)
                 else GL.Safe(GameTooltip.SetUnit, GameTooltip, token) end
             end
         end
-    elseif event == "NAME_PLATE_UNIT_ADDED" then addUnit(unit)
+    elseif event == "NAME_PLATE_UNIT_ADDED" then addUnit(unit) placeReticle()
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         unit = GL.Clean(unit, "string")
         if unit then removeUnit(unit) end
+        -- The plate leaves after this event: look again once it is gone.
+        if C_Timer and C_Timer.After then C_Timer.After(0, placeReticle) end
     elseif event == "PLAYER_TARGET_CHANGED" then observe("target", true)
     elseif event == "UPDATE_MOUSEOVER_UNIT" then observe("mouseover", true)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
