@@ -1,6 +1,6 @@
 # Grudge Ledger
 
-**0.61.2.** A Guild tab (guild journal, guild enemies, guild killer alert), the Summary as cards inside Relations, redesigned bounties with free wanted notices and payment reminders, checks against forged guild messages, one book per faction. Release notes (French): [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
+**0.62.0.** A livelier Journal (glowing balance, region engravings), target a player from the alert, one style on every page, fixes for accounts with several characters and new guild protections. Before: **0.61.2.** A Guild tab (guild journal, guild enemies, guild killer alert), the Summary as cards inside Relations, redesigned bounties with free wanted notices and payment reminders, checks against forged guild messages, one book per faction. Release notes (French): [docs/notes-de-version-0.58.0.fr.md](docs/notes-de-version-0.58.0.fr.md).
 
 
 <img src="docs/red-book.png" alt="Grudge Ledger's red book" width="96" align="right">

@@ -465,6 +465,35 @@ for _, event in ipairs({ "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "PORTRAIT
     GL.Safe(portraitFrames.RegisterEvent, portraitFrames, event)
 end
 local function subdued(text) return "|cff5c4029" .. text .. "|r" end
+
+-- The region's engraving (owner, 24/11; ChatGPT's atlas, EngravingData.lua): found by the map of the
+-- latest fight or meeting, any client language, or else by its zone name in French or English, folded
+-- like the tool folds it (no accents, case, apostrophes or hyphens).
+local folds = { ["à"]="a", ["â"]="a", ["ä"]="a", ["á"]="a", ["é"]="e", ["è"]="e", ["ê"]="e", ["ë"]="e",
+    ["î"]="i", ["ï"]="i", ["í"]="i", ["ô"]="o", ["ö"]="o", ["ó"]="o", ["û"]="u", ["ù"]="u", ["ü"]="u",
+    ["ú"]="u", ["ç"]="c", ["ñ"]="n", ["À"]="a", ["Â"]="a", ["É"]="e", ["È"]="e", ["Ê"]="e", ["Î"]="i",
+    ["Ô"]="o", ["Û"]="u", ["Ç"]="c", ["’"]=" ", ["œ"]="oe", ["Œ"]="oe" }
+local function foldName(text)
+    if type(text) ~= "string" then return nil end
+    for from, to in pairs(folds) do text = text:gsub(from, to) end
+    text = text:lower():gsub("[%'%-%(%),%.`]", " "):gsub("%s+", " ")
+    return (text:gsub("^ ", ""):gsub(" $", ""))
+end
+function GL.EngravingFor(record)
+    local data = GL.EngravingData
+    if not data or type(record) ~= "table" then return nil end
+    local history = type(record.history) == "table" and record.history or {}
+    for i = #history, 1, -1 do
+        local e = history[i]
+        if type(e) == "table" then
+            local byMap = type(e.mapID) == "number" and data.maps[e.mapID]
+            if byMap then return byMap end
+            local byName = data.names[foldName(e.zone) or ""]
+            if byName then return byName end
+        end
+    end
+    return data.names[foldName(record.lastZone) or ""] or data.names[foldName(record.lastEncounterZone) or ""]
+end
 GL.PaintBookPortrait = identityIcons
 GL.VisiblePortraitUnit = portraitUnit
 local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
@@ -2350,6 +2379,18 @@ local function renderDetail()
     ledger.detailScroll:SetPoint("TOPLEFT", 367, summary and -storyTop or -283)
     -- The story takes the 13 units the actions gave up.
     ledger.detailScroll:SetHeight(summary and (535 - storyTop) or 293)
+    -- The region's engraving beside the story; the text narrows so that it stays clear.
+    local engraving = summary and record and GL.EngravingFor(record)
+    if engraving then
+        ledger.engraving:SetTexture(media .. "Engravings\\" .. engraving)
+        ledger.engraving:ClearAllPoints()
+        ledger.engraving:SetPoint("TOPLEFT", 707, -(storyTop + 14))
+        ledger.engraving:Show()
+        ledger.detailScroll.body:SetWidth(338)
+    else
+        ledger.engraving:Hide()
+        ledger.detailScroll.body:SetWidth(524)
+    end
     ledger.detailTitle:SetTextColor(unpack(theme.ink))
     local profile = GL.ArmoryProfile(record)
     local public = profile and profile.identity
@@ -3422,6 +3463,11 @@ local function buildLedger()
     -- Pages instead of a scroll bar.
     f.detailScroll = UI.textPages(f, 528, 110)
     f.detailScroll:SetPoint("TOPLEFT", 367, -412)
+    f.engraving = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.engraving:SetSize(190, 95)
+    f.engraving:SetAlpha(0.9)
+    f.engraving:Hide()
+    f.engraving.region = "engraving"
     f.storyHeading = bookText(f, 367, 377, 380, 28, 19, L("Votre histoire"))
     f.encounterHeading = bookText(f, 367, 500, 360, 28, 19, L("Dernière rencontre"))
     f.encounterRule = f:CreateTexture(nil, "ARTWORK")

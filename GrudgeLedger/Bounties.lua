@@ -149,7 +149,7 @@ local function unpackEvent(raw,archiving)
             if actor~=owner or detail~="" then return end
             if kind=="X" and value~="" or kind=="F" and not value:match("^Player%-%w+%-%w+:%d+$") then return end
         elseif kind=="Y" or kind=="Z" then
-            -- Z (0.61.3): the payer's mail came back unopened; that much is owed again.
+            -- Z (0.62.0): the payer's mail came back unopened; that much is owed again.
             if not guid(detail) or not number(value,1,1000*GOLD) then return end
         elseif kind=="V" then
             local offset,amount=value:match("^(%d+),(%d+)$")

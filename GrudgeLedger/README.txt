@@ -1,4 +1,18 @@
-GRUDGE LEDGER — 0.61.2
+GRUDGE LEDGER · 0.62.0
+
+Le Journal s’embellit. Le solde d’un adversaire s’allume : un halo doux qui respire, et de petites étincelles qui naissent du chiffre et s’envolent, rubis quand le solde est contre vous, or quand il est pour vous. À côté de votre histoire avec un joueur, une gravure de la région de votre dernier combat ou de votre dernière rencontre : 55 régions, capitales et champs de bataille, de Tanaris au mont Rochenoire.
+
+Cibler depuis l’alerte. Hors combat, un clic sur l’alerte d’un joueur proche le sélectionne, et une cible rouge apparaît au-dessus de son nom (vous seul la voyez). Maj-clic ouvre sa fiche, clic droit ferme l’alerte. En combat, le jeu interdit à un addon de cibler : l’alerte ouvre alors la fiche, comme avant.
+
+Toutes les pages au même style. Les Tableaux détaillés deviennent une page de Relations, avec des filtres en haut, une seule liste et les chiffres de la sélection dans la colonne de gauche. Les Réglages, le Guide et les petites fenêtres prennent les boutons et les cadres du Journal. Un seul cadre de portrait partout, avec le fond de votre faction.
+
+Plusieurs personnages sur un même compte. Un personnage n’annonce plus à la guilde les combats d’un autre personnage du compte (un second personnage pouvait apparaître « tué » dans une zone où il n’était jamais allé ; il se répare à sa prochaine connexion). L’avis de votre compte sur un joueur ne compte plus une fois par personnage dans la guilde. Une étiquette retirée depuis n’importe lequel de vos personnages retire le vote du compte.
+
+Règles plus justes. Une mort va au joueur qui a porté le coup fatal ; les autres attaquants gardent leur agression. La victoire d’un membre du groupe ne compte que si vous étiez en combat avec ce joueur. Une note ou un avis ne compte plus comme une rencontre. Un allié sous contrôle mental n’est plus enregistré comme un tueur, et les dégâts d’une aura (Épines, Aura de vindicte) ne font pas de votre victime un agresseur. Un courrier de paiement revenu sans avoir été ouvert rend la somme due à nouveau. L’export des morts pour une IA compte une mort par combat.
+
+Protections de guilde. Une victoire relayée par un autre membre ne peut plus désigner le gagnant d’une prime. Un membre connecté parle pour lui-même : un message à son nom transmis par quelqu’un d’autre est refusé. Les messages transmis au nom d’un membre ne peuvent plus le faire taire. Les fiches de guilde, les votes et les retraits d’un même membre sont bornés. Quand plusieurs membres se connectent, vous ne renvoyez vos primes qu’une fois toutes les trente secondes. Si un membre envoie plusieurs messages incohérents, la discussion vous le dit une fois.
+
+Redémarrez le jeu après l’installation (nouveaux fichiers).
 
 Quand vous menez contre un adversaire, le solde s’affiche en doré, entouré de petites étoiles qui scintillent.
 
