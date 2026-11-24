@@ -193,13 +193,23 @@ local function gearLine(build)
 end
 
 -- Our recent deaths, most recent first; only those of the character playing now.
+-- One death against three attackers is written on three sheets with the same eventId: it is one
+-- death here, told with the player who landed the killing blow (audit 24/11).
 function D.Deaths(guid)
-    local me, list = GL.Safe(UnitGUID, "player"), {}
+    local me, list, byId = GL.Safe(UnitGUID, "player"), {}, {}
     for _, item in ipairs(GL.JournalEvents()) do
         local e = item.event
         if e.kind == "death" and not e.voided and e.voidReason ~= "battleground" and e.actorGUID == me
             and item.record and (not guid or item.record.guid == guid) then
-            list[#list + 1] = {record = item.record, event = e}
+            local id = type(e.eventId) == "string" and e.eventId
+            local known = id and byId[id]
+            if not known then
+                known = {record = item.record, event = e}
+                list[#list + 1] = known
+                if id then byId[id] = known end
+            elseif e.killingBlow and not known.event.killingBlow then
+                known.record, known.event = item.record, e
+            end
         end
     end
     table.sort(list, function(a, b) return (a.event.time or 0) > (b.event.time or 0) end)

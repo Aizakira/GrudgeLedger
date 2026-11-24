@@ -193,8 +193,23 @@ local function combatReport(f, guid, recap)
     return report
 end
 
+-- A player of your own faction is not a PvP opponent: a mind-controlled ally (Lucifron's adds, a
+-- priest's Mind Control) carries the hostile flag in the combat log (audit 24/11). Free-for-all
+-- zones (the Gurubashi arena) are the exception: there, your own side fights you.
+local sideOfRace = { Human = "Alliance", Dwarf = "Alliance", NightElf = "Alliance", Gnome = "Alliance",
+    Orc = "Horde", Scourge = "Horde", Tauren = "Horde", Troll = "Horde" }
+local function sameSide(guid)
+    if type(GetPlayerInfoByGUID) ~= "function" then return false end
+    local ok, _, _, _, race = pcall(GetPlayerInfoByGUID, guid)
+    local side = ok and sideOfRace[GL.Clean(race, "string") or ""]
+    local mine = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
+    if not side or side ~= mine then return false end
+    local zone = GL.Clean(GL.Safe(GetZonePVPInfo), "string")
+    return zone ~= "arena" and zone ~= "combat"
+end
 local function identityForGUID(guid, name, encounter)
     if not guid or #guid > 128 or not guid:match("^Player%-%w") or guid == playerGUID() then return nil end
+    if sameSide(guid) then return nil end
     local token = GL.Clean(GL.Safe(UnitTokenFromGUID, guid), "string")
     local visible = token and GL.Identity(token)
     if visible and visible.guid == guid then return visible end
@@ -1062,8 +1077,12 @@ function T.OnCombatLog(...)
             if not fight then fight = newFight() end
             f = fight
             observeOpponent(f, identity.guid, identity ~= GL.Get(identity) and identity.level, true)
-            recordAggression(f, identity, "confirmed", viaPet and "Le journal de combat attribue les dégâts au familier de ce joueur."
-                or "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").", viaPet)
+            -- DAMAGE_SHIELD is a player's aura (Thorns, Retribution Aura) answering YOUR blow: it makes
+            -- nobody an aggressor (audit 24/11). A death from it is still a death.
+            if sub ~= "DAMAGE_SHIELD" then
+                recordAggression(f, identity, "confirmed", viaPet and "Le journal de combat attribue les dégâts au familier de ce joueur."
+                    or "Journal de combat : dégâts reçus de ce joueur hostile (" .. sub .. ").", viaPet)
+            end
             local enemy = f.enemies[identity.key] or { identity = identity }
             enemy.damageAt = GL.Now()
             f.enemies[identity.key] = enemy

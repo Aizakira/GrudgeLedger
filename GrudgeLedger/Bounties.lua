@@ -2,6 +2,8 @@
 -- immutable declarations. A guild peer may replay a cached declaration at login.
 local GL = GrudgeLedger
 local B = {}
+-- One of this account's characters (Core.lua); false where Core is not loaded (unit tests).
+local function ownCharacter(id) return GL.OwnCharacter ~= nil and GL.OwnCharacter(id) end
 GL.Bounties = B
 local ML=GL.L or function(s) return s end
 local DAY, GOLD = 86400, 10000
@@ -69,6 +71,8 @@ local function scope()
     local s = GL.db.bountyGuilds[key] or {events={}, seq=0}
     s.guildKey=key
     s.since=s.since or GL.Now()
+    -- From this date, a claim must be heard from its hunter to count (audit 24/11).
+    s.directSince=s.directSince or GL.Now()
     GL.db.bountyGuilds[key] = s
     return s, me
 end
@@ -181,14 +185,21 @@ local function view(s,archiving)
         end
     end
     table.sort(events,earlier)
+    -- A claim counts when it was heard from its own hunter (or is yours), when the issuer chose it,
+    -- or when it predates this check: a relayed claim alone counts for nothing (audit 24/11).
+    local heard=type(s.directClaims)=="table" and s.directClaims or {}
+    local since=tonumber(s.directSince) or math.huge
+    local chosen={}
+    for _,e in ipairs(events) do if e.kind=="F" then chosen[e.value]=true end end
+    local function counts(e) return heard[e.key] or chosen[e.key] or e.time<since end
     -- Only the issuer finalizes a hunter. Claims received in their absence survive reconnects.
     for _,e in ipairs(events) do
         local o=orders[e.order]
         if o and e.time>=o.at and e.time<=o.expires and not o.closed then
             if e.kind=="S" then o.after=e.value
-            elseif (not o.custom and e.kind=="K") or (o.custom and e.kind=="H"
+            elseif counts(e) and ((not o.custom and e.kind=="K") or (o.custom and e.kind=="H"
                 and (o.group=="party" or e.value=="0") and (o.split=="equal" or e.detail=="")
-                and (e.value=="1" or e.detail=="")) and e.time-((o.lastWin or {})[e.actor] or -math.huge)>=60 then
+                and (e.value=="1" or e.detail=="")) and e.time-((o.lastWin or {})[e.actor] or -math.huge)>=60) then
                 o.lastWin=o.lastWin or {}
                 o.lastWin[e.actor]=e.time
                 local wins=(o.progress[e.actor] or 0)+1
@@ -578,6 +589,13 @@ function B.GuildFights(target)
     end
     return wins,losses
 end
+-- A claim heard from its own hunter (or yours): only those may win. A relay may carry a claim in a
+-- member's name, backdated before the real one; the issuer's client would have crowned it, and the
+-- payers mailed the relayer (audit 24/11).
+local function direct(s,key)
+    s.directClaims=type(s.directClaims)=="table" and s.directClaims or {}
+    s.directClaims[key]=true
+end
 local function record(s,me,kind,order,value,detail,deferRefresh)
     if not s then return nil,"guild" end
     local seq=math.max(s.seq+1,GL.Now()*1000)
@@ -586,6 +604,7 @@ local function record(s,me,kind,order,value,detail,deferRefresh)
     if not e then return nil,"invalid" end
     openTargets=nil
     s.seq=seq; s.events[e.key]=raw
+    if kind=="K" or kind=="H" then direct(s,e.key) end
     if s==scope() then
         schedule(s,raw)
         if kind~="D" and not deferRefresh then changed(s,me) end
@@ -712,8 +731,16 @@ end
 -- clock everyone trusts, a rule on lateness blocked honest wins made while the issuer was away
 -- (reviews 0.58.6 and 0.58.7). The guild is a circle of trust.
 local function finalize(s,me)
+    local heard=type(s.directClaims)=="table" and s.directClaims or {}
+    for key in pairs(heard) do if not s.events[key] then heard[key]=nil end end
     for id,o in pairs(view(s)) do
-        if o.owner==me and o.state=="claimed" then declare("F",id,o.first.key,"") end
+        if o.owner==me and o.state=="claimed" then
+            local best
+            for key,claim in pairs(o.claims or {}) do
+                if heard[key] and (not best or earlier(claim,best)) then best=claim end
+            end
+            if best then declare("F",id,best.key,"") end
+        end
     end
 end
 function B.Kill(target,combat)
@@ -748,7 +775,9 @@ local function autoOrder(s,me,target,name)
         if e and e.order==target then
             if e.kind=="A" and GL.Now()-e.time<DAY then return end
             if e.kind=="D" then
-                if not victims[e.actor] then victims[e.actor]=true; distinct=distinct+1 end
+                -- The characters of one account are one victim (audit 24/11).
+                local victim=ownCharacter(e.actor) and "account" or e.actor
+                if not victims[victim] then victims[victim]=true; distinct=distinct+1 end
                 if e.actor==me and GL.Now()-e.time<=1800 then mine=mine+1 end
             end
         end
@@ -950,6 +979,7 @@ local function receive(msg,sender)
     end
     openTargets=nil
     s.events[e.key]=raw
+    if (e.kind=="K" or e.kind=="H") and not relay then direct(s,e.key) end
     if (e.kind=="K" or e.kind=="H") and e.order:match("^([^:]+)")==me then finalize(s,me) end
     if e.kind~="D" then changed(s,me) end
 end

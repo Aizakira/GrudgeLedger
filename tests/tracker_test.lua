@@ -1116,9 +1116,13 @@ test("real health damage keeps exact zero-overkill lethal attribution", function
     for _, event in ipairs({ "SWING_DAMAGE", "RANGE_DAMAGE", "SPELL_DAMAGE", "SPELL_PERIODIC_DAMAGE", "DAMAGE_SHIELD", "DAMAGE_SPLIT" }) do
         fixture()
         local e = start()
+        -- A damage shield (Thorns, Retribution Aura) answers your own blow: no aggression, but a
+        -- death from it is still a death (audit 24/11).
+        local shield = event == "DAMAGE_SHIELD" and 0 or 1
         cle(event, e, unitData.player, -1, 64)
-        assert(total("aggressions") == 1 and total("deaths") == 0, event)
+        assert(total("aggressions") == shield and total("deaths") == 0, event)
         cle(event, e, unitData.player, 0, 64)
+        -- A lethal blow is attributed to its source, with its aggression, whatever carried it.
         assert(total("aggressions") == 1 and total("deaths") == 1, event)
     end
 end)
@@ -1874,6 +1878,24 @@ test("without a damage stream only successful casts on the identified opponent a
     GetSpellInfo = old
     local rows = outcome(e, "kill").report.live
     assert(#rows == 1 and rows[1].dst == e.guid and rows[1].spell == "Éclair" and not rows[1].amount)
+end)
+
+test("a mind-controlled player of your own faction is not a PvP opponent (audit 24/11)", function()
+    fixture()
+    local ally = opponent("charmed")
+    local saved, savedZone = GetPlayerInfoByGUID, GetZonePVPInfo
+    GetPlayerInfoByGUID = function(guid) if guid == ally.guid then return "Guerrier", "WARRIOR", "Nain", "Dwarf", 2 end end
+    start(ally)
+    cle("SPELL_DAMAGE", ally, unitData.player, -1, 64)
+    cle("SPELL_DAMAGE", ally, unitData.player, 0, 64)
+    assert(total("aggressions") == 0 and total("deaths") == 0, "a charmed ally leaves no PvP fact")
+    -- In a free-for-all zone, your own side does fight you.
+    fixture()
+    GetZonePVPInfo = function() return "arena" end
+    start(ally)
+    cle("SPELL_DAMAGE", ally, unitData.player, -1, 64)
+    assert(total("aggressions") == 1, "the Gurubashi arena keeps same-faction fights")
+    GetPlayerInfoByGUID, GetZonePVPInfo = saved, savedZone
 end)
 
 print("PASS: " .. passed .. " tracker scenarios (actual Core.lua + Tracker.lua).")

@@ -9,6 +9,8 @@
 -- the box is unticked. Unticking asks the guild to forget your fights.
 local GL = GrudgeLedger
 local M = {}
+-- One of this account's characters (Core.lua); false where Core is not loaded (unit tests).
+local function ownCharacter(id) return GL.OwnCharacter ~= nil and GL.OwnCharacter(id) end
 GL.GuildMap = M
 local DAY = 86400
 local KEEP = 38 * DAY -- like the other guild events
@@ -245,7 +247,9 @@ function M.Enable(enabled)
         answer(s, me, true)
         GL.Transport.Send(s, "MQ")
     else
-        -- Nothing is kept while the box is unticked, and the guild is asked to forget yours.
+        -- Nothing is kept while the box is unticked, and the guild is asked to forget yours. The space
+        -- is the account's: another character still sharing gets the guild's fights back at its next
+        -- login (owner's choice: unticking keeps nothing).
         s.places = nil
         GL.Transport.Cancel(s, "map:own")
         GL.Transport.Cancel(s, "map:relay")
@@ -450,7 +454,9 @@ function M.Points(withMine)
     local key = tostring(s) .. (withMine and ":all:" or ":others:") .. version .. ":" .. math.floor(GL.Now() / 900)
     if sorted[withMine and 1 or 2] and sorted[withMine and 1 or 2].key == key then return sorted[withMine and 1 or 2].points end
     for actor, list in pairs(s.places) do
-        if (withMine or actor ~= me) and guid(actor) and type(list) == "table" then
+        -- Without withMine, the fights of every character of the account are left out: the map reads
+        -- them in the account's journal (audit 24/11, they were counted twice).
+        if (withMine or not ownCharacter(actor)) and guid(actor) and type(list) == "table" then
             for i = 1, math.min(PER_MEMBER, #list) do
                 local at, map, x, y, kind, target, name = read(list[i])
                 if at then
@@ -475,7 +481,7 @@ function M.Killer(target)
     if indexed ~= s or not index then
         index, indexed = {}, s
         for actor, list in pairs(s.places) do
-            if actor ~= me and guid(actor) and type(list) == "table" then
+            if not ownCharacter(actor) and guid(actor) and type(list) == "table" then
                 for _, text in ipairs(list) do
                     local at, map, _, _, kind, victim, name = read(text)
                     if at and kind == "d" and victim ~= "" then

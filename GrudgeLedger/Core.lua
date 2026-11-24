@@ -32,6 +32,8 @@ local listSorts = { recent = true, name = true, reputation = true, kills = true,
 local listDetails = { seen = true, identity = true, guild = true, pvp = true, notes = true }
 local function invalidateJournal()
     journalIndex, journalSorted, personalStatistics, breakdownStatistics = nil, nil, nil, {}
+    -- The guild rankings read the same relations (weights, guildmates' opinions, assists): audit 24/11.
+    guildStatistics = nil
 end
 
 function GL.Clean(value, kind)
@@ -540,12 +542,22 @@ local function merge(provisional, record)
     end
     record.reputation = record.reputation or provisional.reputation
     record.groupCount = record.groupCount + (provisional.groupCount or 0)
+    -- Duels and assists are counted on the sheet as well as told in its history (audit 24/11).
+    if type(provisional.duels) == "table" then
+        record.duels = type(record.duels) == "table" and record.duels or { wins = 0, losses = 0 }
+        for _, field in ipairs({ "wins", "losses" }) do
+            record.duels[field] = (tonumber(record.duels[field]) or 0) + math.max(0, tonumber(provisional.duels[field]) or 0)
+        end
+    end
+    local assists = (tonumber(record.assists) or 0) + math.max(0, tonumber(provisional.assists) or 0)
+    record.assists = assists > 0 and assists or record.assists
     if (provisional.firstSeen or math.huge) <= (record.firstSeen or math.huge) then
         record.creatorGUID, record.creatorName, record.creatorAccount = provisional.creatorGUID, provisional.creatorName, provisional.creatorAccount
     end
     record.firstSeen = math.min(record.firstSeen or GL.Now(), provisional.firstSeen or GL.Now())
-    table.sort(record.notes, function(a, b) return (a.time or 0) < (b.time or 0) end)
-    table.sort(record.history, function(a, b) return (a.time or 0) < (b.time or 0) end)
+    -- A damaged saved time (a string) must not stop the merge halfway (audit 24/11).
+    table.sort(record.notes, function(a, b) return (tonumber(a.time) or 0) < (tonumber(b.time) or 0) end)
+    table.sort(record.history, function(a, b) return (tonumber(a.time) or 0) < (tonumber(b.time) or 0) end)
     refreshReputation(record)
 end
 
@@ -560,6 +572,14 @@ function GL.Author()
     local name, surname = GL.Safe(UnitName, "player")
     local actor = GL.IdentityFromName(name, surname, guid)
     return guid, actor and actor.fullName or guid, GL.db.authorAccount
+end
+
+-- Whether a character is one of this account's (the book is the account's): the one playing, or any
+-- character that opened this book (Core keeps their faction). Audit 24/11, the alts' family of bugs.
+function GL.OwnCharacter(guid)
+    if type(guid) ~= "string" or not GL.db then return false end
+    if guid == GL.Safe(UnitGUID, "player") then return true end
+    return type(GL.db.characterFactions) == "table" and GL.db.characterFactions[guid] ~= nil
 end
 
 local function indexAlias(alias, key)
@@ -1071,6 +1091,20 @@ function GL.DeleteProfile(record)
     if rule and rule.reaction ~= "neutral" then deletedGuildSightings[key] = GL.Now() end
     for alias, owner in pairs(GL.db.aliases) do
         if owner == key then GL.db.aliases[alias] = nil end
+    end
+    -- Two namesakes blocked their shared name; once one is deleted, the other takes it back
+    -- (audit 24/11), otherwise its name-only sightings stay refused for good.
+    local alias = record.fullName and ("name:" .. record.fullName:lower())
+    if alias and GL.db.aliases[alias] == false then
+        local left
+        for otherKey, other in pairs(GL.db.players) do
+            if type(other) == "table" and type(other.fullName) == "string" and other.fullName:lower() == record.fullName:lower() then
+                if left then left = false break end
+                left = otherKey
+            end
+        end
+        GL.db.aliases[alias] = left or nil
+        if left == false then GL.db.aliases[alias] = false end
     end
     local log = GL.db.detectionLog
     if type(log) == "table" then
@@ -2173,7 +2207,13 @@ end
 -- deleted. Returns how many sheets moved or were cut.
 local function splitBook(current)
     local factions, other = actorFactions(), OTHER_SIDE[current]
-    local away = { players = {}, aliases = {}, guilds = deepCopy(GL.db.guilds), unassignedHonor = {} }
+    -- A split cut short (an error, a crash) left part of the sheets in the other book: they are kept
+    -- and this pass adds to them (audit 24/11).
+    local away = type(GL.db.books[other]) == "table" and GL.db.books[other]
+        or { players = {}, aliases = {}, guilds = deepCopy(GL.db.guilds), unassignedHonor = {} }
+    for _, field in ipairs({ "players", "aliases", "unassignedHonor" }) do
+        if type(away[field]) ~= "table" then away[field] = {} end
+    end
     GL.db.books[other] = away
     -- Facts without a known author (older versions) go by the opponent's faction: you fight the
     -- other side and group with your own. Unknown both ways: they stay in the current book.

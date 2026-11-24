@@ -1,5 +1,7 @@
 -- Character dossiers are read-only views over the personal journal and private Armory archive.
 local GL, UI = GrudgeLedger, GrudgeLedger.UITheme
+-- One of this account's characters (Core.lua); false where Core is not loaded (unit tests).
+local function ownCharacter(id) return GL.OwnCharacter ~= nil and GL.OwnCharacter(id) end
 local L = GL.L
 local locale = GetLocale and GetLocale() or "frFR"
 local decimalComma = locale == "frFR" or locale == "esES"
@@ -663,7 +665,8 @@ local function memberRows(f,row,record)
     for id,fights in pairs(scope and scope.scores and scope.scores[f.guid] or {}) do
         member(id).fights=fights
     end
-    members[me]=nil
+    -- The account's other characters are "Vous" as well, not other members (audit 24/11).
+    for id in pairs(members) do if id==me or ownCharacter(id) then members[id]=nil end end
     if record then
         local p=GL.ContactMatchup(record)
         local relation=GL.RelationSource(record)=="guildmates" and "neutral" or GL.Relation(record)
