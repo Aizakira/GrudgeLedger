@@ -83,5 +83,16 @@ now = now + 30
 local extra = away .. ":" .. (now * 1000 + 9)
 hear("R;" .. table.concat({ "D", away, now * 1000 + 9, now, "Player-1-extra01", "", "Victime" }, ";"), "Relayer-Realm")
 assert(not s.events[extra], "a relayer past its bound adds nothing")
+-- 25/11: a relayed death names a guild killer only once two members told it.
+C_Map = C_Map or { GetBestMapForUnit = function() return 1446 end }
+GL.GuildMap.Enable(true)
+roster[4][3] = false roster[3][3] = false mock.Fire("GUILD_ROSTER_UPDATE")
+now = now + 60
+local line = table.concat({ "M", "1", away, now - 10, 1446, 500, 500, "d", "Player-1-killer01", "Tueur" }, ";")
+hear("R;" .. line, "Relayer-Realm")
+assert(GL.GuildMap.Killer("Player-1-killer01") == nil, "one relayer alone makes no guild killer")
+hear("R;" .. line, "Connected-Realm")
+local killer = GL.GuildMap.Killer("Player-1-killer01")
+assert(killer and killer.deaths == 1, "two members telling the same death do")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS guild relay rules: connected members speak for themselves, relays outside their room, one answer, odd sender told once")

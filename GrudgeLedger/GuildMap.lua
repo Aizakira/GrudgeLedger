@@ -327,6 +327,22 @@ function M.Receive(s, me, sender, raw, relay)
     elseif forgot then
         s.mapForgot[actor] = nil
     end
+    -- Who told each fight (25/11): heard from its author (true), or the members who relayed it. A
+    -- relayed death names a guild killer only once two members told it, or its author did.
+    local at = read(rest)
+    s.mapWitnesses = type(s.mapWitnesses) == "table" and s.mapWitnesses or {}
+    local key = actor .. "/" .. tostring(at)
+    local told = s.mapWitnesses[key]
+    if not relay then
+        if told ~= true then s.mapWitnesses[key] = true forgetIndex() end
+    elseif told ~= true then
+        told = type(told) == "table" and told or {}
+        if not told[sender] then
+            told[sender] = true
+            s.mapWitnesses[key] = told
+            forgetIndex()
+        end
+    end
     if not keep(s, actor, rest) then return false end
     refresh()
     return true
@@ -493,11 +509,20 @@ function M.Killer(target)
     local bucket = math.floor(GL.Now() / 900)
     if indexed ~= s or not index or indexedBucket ~= bucket then
         index, indexed, indexedBucket = {}, s, bucket
+        local witnesses = type(s.mapWitnesses) == "table" and s.mapWitnesses or {}
+        local alive = {}
         for actor, list in pairs(s.places) do
             if not ownCharacter(actor) and guid(actor) and type(list) == "table" then
                 for _, text in ipairs(list) do
                     local at, map, _, _, kind, victim, name = read(text)
-                    if at and kind == "d" and victim ~= "" then
+                    local key = actor .. "/" .. tostring(at)
+                    alive[key] = true
+                    local told = witnesses[key]
+                    local relays = 0
+                    if type(told) == "table" then for _ in pairs(told) do relays = relays + 1 end end
+                    -- Heard from its author, from before this check (nil), or told by two members.
+                    local trusted = told == nil or told == true or relays >= 2
+                    if at and kind == "d" and victim ~= "" and trusted then
                         local entry = index[victim] or { deaths = 0, time = 0 }
                         index[victim] = entry
                         entry.deaths = entry.deaths + 1
@@ -508,6 +533,7 @@ function M.Killer(target)
                 end
             end
         end
+        for key in pairs(witnesses) do if not alive[key] then witnesses[key] = nil end end
     end
     return index[target]
 end
