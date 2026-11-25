@@ -495,6 +495,8 @@ function GL.EngravingFor(record)
     return data.names[foldName(record.lastZone) or ""] or data.names[foldName(record.lastEncounterZone) or ""]
 end
 GL.PaintBookPortrait = identityIcons
+-- The same folding for every search of names (the Rivalités search, 25/11).
+GL.FoldName = foldName
 GL.VisiblePortraitUnit = portraitUnit
 local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
 local frenchNumbers = not GetLocale or GetLocale() == "frFR"

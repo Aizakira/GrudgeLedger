@@ -50,6 +50,7 @@ CharacterInsights.lua
 DeathReport.lua
 DossierPanels.lua
 PlayerDossier.lua
+RivalryRules.lua
 Relations.lua
 Recap.lua
 BountyUI.lua

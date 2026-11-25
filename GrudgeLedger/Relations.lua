@@ -242,8 +242,7 @@ local function paintDebts(page)
         countForm(#settled, "%d réglée", "%d réglées")))
 end
 
--- Rivalries: the players you fought most, one at a time, with the score and the dated thread.
-local RIVAL_STEPS = 5 -- fights shown on the thread, the latest ones
+-- Rivalries: the players you fought twice or more (two finished fights).
 function R.Rivals()
     local list = {}
     for _, record in pairs(players()) do
@@ -258,145 +257,450 @@ function R.Rivals()
     end)
     return list
 end
-local function openingShare(record)
-    local total, his = 0, 0
-    for _, e in ipairs(record.history or {}) do
-        if type(e) == "table" and e.kind == "opening" and not e.voided then
-            total = total + 1
-            his = his + (e.opener == "opponent" and 1 or 0)
+-- Rivalries (owner's brief of 25/11): five strips of parchment a page, each with the rival, what
+-- stands out between you (GL.RivalryRules), your victories and deaths, and where it last happened.
+-- A click unfolds the strip in place: you facing the rival, the score, a sentence of what turned,
+-- the debt, the last five fights from oldest to newest, the sheet and the bounty. A second click,
+-- or another strip, folds it. A search reads every name and guild before the pages.
+local RIVAL_PAGE = 5
+local RIVAL_STEPS = 5 -- fights shown when unfolded, the latest ones, oldest on the left
+local RIVAL_TOP, RIVAL_H, RIVAL_GAP = -60, 72, 6
+-- Unfolded: the five strips get narrow and the sheet opens under its own (page 510 high: the
+-- strips, the sheet and the gaps end at 464, above the worn bottom of the page).
+local RIVAL_SMALL, RIVAL_SMALL_GAP, RIVAL_SHEET = 42, 4, 170
+local RIVAL_SKULL = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
+local RIVAL_SWORD = "Interface\\CURSOR\\Attack"
+local GREEN, RED = { 0.18, 0.37, 0.20 }, { 0.55, 0.12, 0.12 }
+-- Plain score when the rules cannot read a sheet (damaged data): the page keeps going.
+local function plainAnalysis(record)
+    local kills, deaths = count(record, "kills"), count(record, "deaths")
+    return { key = record.key, kills = kills, deaths = deaths, volume = kills + deaths, debt = GL.Debt(record), eligible = true,
+        timeline = {}, chronology = {}, motifs = {}, narrative = { id = "aucune_issue_datee", params = {} }, categoryRank = 5 }
+end
+-- The analyses, kept until a sheet changes, or for ten minutes (a recent fact leaves its week).
+local rivalCache, rivalCacheAt = {}, 0
+local function analyse(record, now)
+    local signature = table.concat({ #(record.history or {}), count(record, "kills"), count(record, "deaths"),
+        count(record, "aggressions"), tostring(record.assists), GL.Debt(record) }, ":")
+    local kept = rivalCache[record.key]
+    if kept and kept.signature == signature then return kept.analysis end
+    local Rules = GL.RivalryRules
+    local ok, analysis = pcall(function() return Rules.FromRecord(record, GL, now) end)
+    if not ok or type(analysis) ~= "table" then analysis = plainAnalysis(record) end
+    analysis.record = record
+    rivalCache[record.key] = { signature = signature, analysis = analysis }
+    return analysis
+end
+-- Every rival, ranked by what stands out, then filtered by the search (names and guilds, any case
+-- or accents), the order kept.
+function R.RivalStories(query)
+    local now = GL.Now()
+    if now - rivalCacheAt > 600 then rivalCache, rivalCacheAt = {}, now end
+    local analyses = {}
+    for _, item in ipairs(R.Rivals()) do analyses[#analyses + 1] = analyse(item.record, now) end
+    local ok, ranked = pcall(GL.RivalryRules.Rank, analyses)
+    if not ok then ranked = analyses end
+    local folded = GL.FoldName and GL.FoldName(query or "") or ""
+    if folded == "" then return ranked end
+    local found = {}
+    for _, a in ipairs(ranked) do
+        local record = a.record
+        for _, text in ipairs({ record.fullName, record.name, record.guild }) do
+            local value = type(text) == "string" and GL.FoldName(text)
+            if value and value:find(folded, 1, true) then
+                found[#found + 1] = a
+                break
+            end
         end
     end
-    return his, total
+    return found
+end
+-- The short title of a strip, and the sentence of the unfolded sheet.
+local function motifTitle(a)
+    local n = a.narrative or {}
+    local p = n.params or {}
+    if n.id == "issue_mixte" then return L("Combat mixte") end
+    if n.id == "serie_victoires_interrompue" then
+        return p.egaliteAvantDernier and L("Égalité rompue au dernier combat") or L("Série de victoires interrompue")
+    end
+    if n.id == "serie_morts_interrompue" then return L("Série noire interrompue") end
+    if n.id == "serie_victoires" then return L("Série de victoires") end
+    if n.id == "serie_morts" then return L("Série noire") end
+    if n.id == "duel_dispute" then return L("Duel disputé") end
+    if n.id == "rencontres_jours_distincts" then return L("Rencontres répétées") end
+    if n.id == "victoire_apres_mort" then return L("Revanche prise") end
+    if n.id == "premiere_victoire_a_prendre" then return L("Première victoire à prendre") end
+    return L("Bilan")
+end
+function R.RivalSentence(a)
+    local n = a.narrative or {}
+    local p = n.params or {}
+    if n.id == "issue_mixte" then
+        return p.kind == "mort_assistance" and L("Une mort et un coup de main dans le même combat.")
+            or L("Une mort et une victoire dans le même combat.")
+    end
+    if n.id == "serie_victoires_interrompue" then
+        if p.egaliteAvantDernier then
+            return L("%d victoires vous avaient ramenés à égalité. Au dernier combat, votre rival a repris l’avantage."):format(p.count)
+        end
+        return L("%d victoires de suite, puis une mort au dernier combat."):format(p.count)
+    end
+    if n.id == "serie_morts_interrompue" then return L("%d morts de suite, puis une victoire au dernier combat."):format(p.count) end
+    if n.id == "serie_victoires" then return L("Vos %d derniers combats se sont terminés par des victoires."):format(p.count) end
+    if n.id == "serie_morts" then return L("Vos %d derniers combats se sont terminés par des morts."):format(p.count) end
+    if n.id == "duel_dispute" then return L("Le bilan reste partagé : %d victoires et %d morts."):format(p.kills, p.deaths) end
+    if n.id == "rencontres_jours_distincts" then return L("Des combats sur %d jours différents ces sept derniers jours."):format(p.days) end
+    if n.id == "victoire_apres_mort" then return L("Votre dernière victoire suit un combat perdu.") end
+    if n.id == "premiere_victoire_a_prendre" then return L("Aucune victoire face à ce rival pour l’instant : %d morts au bilan."):format(p.deaths) end
+    if n.id == "historique_incomplet" then return L("Le journal ne garde pas le détail de tous vos combats contre ce rival.") end
+    if n.id == "historique_simple" then
+        return L("Votre journal garde %s et %s face à ce rival."):format(countForm(a.kills, "%d victoire", "%d victoires"),
+            countForm(a.deaths, "%d mort", "%d morts"))
+    end
+    return L("Aucun combat détaillé dans le journal.")
+end
+local function whenWhere(a)
+    if not a.lastOutcomeAt then return "" end
+    return a.lastOutcomeZone and (day(a.lastOutcomeAt) .. " · " .. UI.plain(a.lastOutcomeZone)) or day(a.lastOutcomeAt)
+end
+-- A score in two texts, each in its own colour, around a dot: centred on x.
+local function scorePair(parent, size)
+    local pair = { kills = Panels.Text(parent, 0, 0, 90, size, true), dot = Panels.Text(parent, 0, 0, 20, size, true, UI.theme.inkMuted),
+        deaths = Panels.Text(parent, 0, 0, 90, size, true) }
+    pair.kills:SetJustifyH("RIGHT")
+    pair.dot:SetJustifyH("CENTER")
+    pair.deaths:SetJustifyH("LEFT")
+    return pair
+end
+local function placePair(pair, parent, x, y, kills, deaths, light)
+    pair.dot:ClearAllPoints()
+    pair.dot:SetPoint("TOP", parent, "TOPLEFT", x, y)
+    pair.dot:SetText("·")
+    pair.kills:ClearAllPoints()
+    pair.kills:SetPoint("TOPRIGHT", pair.dot, "TOPLEFT", -2, 0)
+    pair.kills:SetText(kills)
+    pair.deaths:ClearAllPoints()
+    pair.deaths:SetPoint("TOPLEFT", pair.dot, "TOPRIGHT", 2, 0)
+    pair.deaths:SetText(deaths)
+    if light then
+        pair.kills:SetTextColor(0.56, 0.85, 0.6)
+        pair.deaths:SetTextColor(0.94, 0.48, 0.42)
+    else
+        pair.kills:SetTextColor(unpack(GREEN))
+        pair.deaths:SetTextColor(unpack(RED))
+    end
+end
+-- One step of the thread: what happened, in a word and a mark, then how.
+local function stepLook(entry)
+    local cause = entry.deathCause
+    local how = cause == "killing_blow" and L("Coup fatal") or cause == "pet_killing_blow" and L("Coup fatal de son familier")
+        or cause == "contributed" and L("Avec d’autres joueurs") or ""
+    if entry.outcome == "mort" then
+        if how == "" and entry.aggressions > 0 then how = L("Agression") end
+        return L("Mort"), RED, RIVAL_SKULL, { 1, 0.35, 0.3 }, how
+    elseif entry.outcome == "victoire" then
+        return L("Victoire"), GREEN, RIVAL_SWORD, { 0.4, 0.85, 0.45 }, ""
+    elseif entry.outcome == "mixte" then
+        return L("Combat mixte"), UI.theme.brass, RIVAL_SKULL, { 0.85, 0.65, 0.25 }, how
+    elseif entry.outcome == "assistance" then
+        return L("Coup de main"), UI.theme.brass, RIVAL_SWORD, { 0.85, 0.65, 0.25 }, ""
+    end
+    return L("Agression"), UI.theme.inkMuted, RIVAL_SWORD, { 0.55, 0.45, 0.35 }, ""
+end
+-- The chevron: the Journal's arrow, turned down (folded) or up (unfolded).
+local function chevron(texture, open)
+    if open then
+        GL.Safe(texture.SetTexCoord, texture, 1, 0, 0, 0, 1, 1, 0, 1)
+    else
+        GL.Safe(texture.SetTexCoord, texture, 0, 1, 1, 1, 0, 0, 1, 0)
+    end
 end
 local function buildRivals(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
-    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
-    local card = CreateFrame("Frame", nil, page)
-    page.card = card
-    card:SetPoint("TOPLEFT", X(26), -76)
-    card:SetSize(S(540), 150)
-    UI.surface(card, { 0.79, 0.66, 0.42 })
-    UI.surface(card, { 0.96, 0.91, 0.78 }, 1, 1)
-    page.you = Panels.Text(card, S(14), -18, S(150), 17, true)
-    page.yours = Panels.Text(card, S(14), -42, S(150), 12, false, UI.theme.inkMuted)
-    page.score = Panels.Text(card, S(170), -10, S(200), 30, true)
-    page.score:SetJustifyH("CENTER")
-    page.scoreCaption = Panels.Text(card, S(170), -50, S(200), 11, false, UI.theme.inkMuted)
-    page.scoreCaption:SetJustifyH("CENTER")
-    page.face = face(card, 56)
-    page.face:SetPoint("TOPRIGHT", card, "TOPRIGHT", -14, -12)
-    page.name = Panels.Text(card, S(300), -14, S(166), 15, true)
-    page.name:SetJustifyH("RIGHT")
-    GL.Safe(page.name.SetWordWrap, page.name, false)
-    page.nick = Panels.Text(card, S(300), -34, S(166), 11, false, UI.theme.red)
-    page.nick:SetJustifyH("RIGHT")
-    GL.Safe(page.nick.SetWordWrap, page.nick, false)
-    page.identity = Panels.Text(card, S(300), -50, S(166), 11, false, UI.theme.inkMuted)
-    page.identity:SetJustifyH("RIGHT")
-    GL.Safe(page.identity.SetWordWrap, page.identity, false)
-    page.bar = Panels.Bar(card, S(512))
-    page.bar:SetPoint("TOPLEFT", S(14), -84)
-    page.bar:SetHeight(10)
-    page.facts = {}
-    for i = 1, 3 do
-        local fact = Panels.Text(card, S(14) + (i - 1) * S(172), -108, S(168), 12)
-        fact:SetJustifyH(i == 1 and "LEFT" or i == 2 and "CENTER" or "RIGHT")
-        GL.Safe(fact.SetWordWrap, fact, false)
-        page.facts[i] = fact
+    page.title = Panels.Text(page, X(26), -18, S(150), 21, true)
+    -- The search, like the guild journal's.
+    page.search = CreateFrame("EditBox", nil, page)
+    page.search:SetPoint("TOPLEFT", X(170), -20)
+    page.search:SetSize(S(176), 24)
+    page.search:SetAutoFocus(false)
+    page.search:SetMaxLetters(40)
+    -- A parchment field, as in the owner's mockup.
+    UI.styleInput(page.search, false, true)
+    page.search:SetTextInsets(8, 6, 3, 3)
+    page.searchHint = UI.label(page.search, L("Rechercher un rival…"), nil, 8, -5, S(160))
+    page.searchHint:SetTextColor(unpack(UI.theme.muted))
+    local function apply()
+        page.query = page.search:GetText():match("^%s*(.-)%s*$")
+        page.number, page.open = 1, nil
+        R.Refresh()
     end
-    page.threadTitle = Panels.Text(page, X(26), -244, S(400), 16, true, UI.theme.red)
-    local line = page:CreateTexture(nil, "BORDER")
-    line:SetPoint("TOPLEFT", X(60), -283)
-    line:SetSize(S(472), 2)
-    line:SetColorTexture(0.52, 0.38, 0.20, 0.6)
-    page.steps = {}
-    for i = 1, RIVAL_STEPS do
-        local step = CreateFrame("Frame", nil, page)
-        step:SetPoint("TOPLEFT", X(26) + (i - 1) * S(108), -274)
-        step:SetSize(S(104), 120)
-        step.dot = step:CreateTexture(nil, "ARTWORK")
-        step.dot:SetSize(18, 18)
-        step.dot:SetPoint("TOP", step, "TOP", 0, 0)
-        step.date = centered(step, -24, S(104), 12, true)
-        step.story = centered(step, -42, S(104), 11, false, UI.theme.inkMuted)
-        step.story:SetHeight(64)
-        GL.Safe(step.story.SetWordWrap, step.story, true)
-        GL.Safe(step.story.SetJustifyV, step.story, "TOP")
-        page.steps[i] = step
-    end
-    page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
-    page.index = 1
-    page.bounty = UI.button(page, L("Poser une prime"), X(26), -464, S(150), function()
-        if page.record and page.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(page.record.guid) end
-    end, nil, true)
-    page.sheet = UI.button(page, L("Ouvrir sa fiche"), X(182), -464, S(140), function() openSheet(page.record) end, nil, true)
-    page.previous = UI.button(page, "‹", X(440), -464, S(40), function()
-        page.index = page.index - 1
+    page.search:SetScript("OnEnterPressed", function(self)
+        apply()
+        self:ClearFocus()
+    end)
+    page.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    page.search:SetScript("OnTextChanged", function(self)
+        if self:GetText():find("%S") then page.searchHint:Hide() else page.searchHint:Show() end
+        apply()
+    end)
+    page.previous = UI.button(page, "‹", X(402), -18, S(40), function()
+        page.number, page.open = page.number - 1, nil
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", X(526), -464, S(40), function()
-        page.index = page.index + 1
-        R.Refresh()
-    end, nil, true)
-    page.count = Panels.Text(page, X(480), -470, S(46), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(444), -24, S(80), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
+    page.next = UI.button(page, "›", X(526), -18, S(40), function()
+        page.number, page.open = page.number + 1, nil
+        R.Refresh()
+    end, nil, true)
+    page.number = 1
+    page.strips = {}
+    for i = 1, RIVAL_PAGE do
+        local strip = CreateFrame("Button", nil, page)
+        strip:SetSize(S(548), RIVAL_H)
+        strip.paper = strip:CreateTexture(nil, "BACKGROUND")
+        strip.paper:SetAllPoints()
+        strip.paper:SetTexture(media .. "Rivalites\\bande-rivalite")
+        strip.face = face(strip, 44)
+        strip.name = Panels.Text(strip, 0, 0, S(300), 17, true)
+        GL.Safe(strip.name.SetWordWrap, strip.name, false)
+        strip.motif = Panels.Text(strip, 0, 0, S(300), 12, false, UI.theme.inkMuted)
+        GL.Safe(strip.motif.SetWordWrap, strip.motif, false)
+        strip.score = scorePair(strip, 15)
+        strip.when = Panels.Text(strip, 0, 0, S(150), 11, false, UI.theme.inkMuted)
+        strip.when:SetJustifyH("CENTER")
+        GL.Safe(strip.when.SetWordWrap, strip.when, false)
+        strip.rule = strip:CreateTexture(nil, "ARTWORK")
+        strip.rule:SetColorTexture(0.49, 0.32, 0.13, 0.35)
+        strip.rule:SetWidth(1)
+        strip.arrow = strip:CreateTexture(nil, "ARTWORK")
+        strip.arrow:SetTexture(media .. "JournalReferenceArrowRight")
+        strip.arrow:SetSize(22, 22)
+        local hover = strip:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetPoint("TOPLEFT", 8, -8)
+        hover:SetPoint("BOTTOMRIGHT", -8, 8)
+        hover:SetColorTexture(0.91, 0.77, 0.48, 0.12)
+        strip:SetScript("OnClick", function(self)
+            page.open = page.open ~= self.key and self.key or nil
+            R.Refresh()
+        end)
+        page.strips[i] = strip
+    end
+    -- The unfolded sheet, one for the page.
+    local sheet = CreateFrame("Frame", nil, page)
+    page.sheet = sheet
+    sheet:SetSize(S(528), RIVAL_SHEET)
+    UI.surface(sheet, { 0.79, 0.66, 0.42 })
+    UI.surface(sheet, { 0.96, 0.91, 0.78 }, 1, 1)
+    local band = sheet:CreateTexture(nil, "ARTWORK")
+    band:SetPoint("TOPLEFT", 6, -6)
+    band:SetPoint("TOPRIGHT", -6, -6)
+    band:SetHeight(50)
+    band:SetColorTexture(0.09, 0.13, 0.12, 0.97)
+    for _, y in ipairs({ -6, -56 }) do
+        local edge = sheet:CreateTexture(nil, "OVERLAY")
+        edge:SetPoint("TOPLEFT", 6, y)
+        edge:SetPoint("TOPRIGHT", -6, y)
+        edge:SetHeight(1)
+        edge:SetColorTexture(0.78, 0.6, 0.3, 0.8)
+    end
+    sheet.you = face(sheet, 34)
+    sheet.you:SetPoint("TOPLEFT", 14, -14)
+    sheet.youName = Panels.Text(sheet, 56, -14, S(130), 15, true, UI.theme.paper)
+    sheet.youClass = Panels.Text(sheet, 56, -33, S(130), 11, false, { 0.8, 0.72, 0.58 })
+    GL.Safe(sheet.youClass.SetWordWrap, sheet.youClass, false)
+    sheet.caption = Panels.Text(sheet, S(170), -12, S(188), 11, false, UI.theme.brass)
+    sheet.caption:SetJustifyH("CENTER")
+    sheet.score = scorePair(sheet, 15)
+    sheet.rival = face(sheet, 34)
+    sheet.rival:SetPoint("TOPRIGHT", -14, -14)
+    sheet.rivalName = Panels.Text(sheet, S(528) - 56 - S(150), -14, S(150), 15, true, UI.theme.paper)
+    sheet.rivalName:SetJustifyH("RIGHT")
+    GL.Safe(sheet.rivalName.SetWordWrap, sheet.rivalName, false)
+    sheet.rivalClass = Panels.Text(sheet, S(528) - 56 - S(150), -33, S(150), 11, false, { 0.8, 0.72, 0.58 })
+    sheet.rivalClass:SetJustifyH("RIGHT")
+    GL.Safe(sheet.rivalClass.SetWordWrap, sheet.rivalClass, false)
+    sheet.story = Panels.Text(sheet, 14, -62, S(360), 12, false, UI.theme.ink)
+    sheet.story:SetHeight(30)
+    GL.Safe(sheet.story.SetWordWrap, sheet.story, true)
+    GL.Safe(sheet.story.SetJustifyV, sheet.story, "TOP")
+    sheet.debt = Panels.Text(sheet, S(528) - 14 - S(140), -64, S(140), 13, true)
+    sheet.debt:SetJustifyH("RIGHT")
+    sheet.threadTitle = Panels.Text(sheet, 14, -100, S(120), 13, true)
+    sheet.threadWhen = Panels.Text(sheet, 14 + S(118), -101, S(120), 11, false, UI.theme.inkMuted)
+    GL.Safe(sheet.threadWhen.SetWordWrap, sheet.threadWhen, false)
+    sheet.open = UI.button(sheet, L("Ouvrir sa fiche"), S(528) - 14 - S(232), -94, S(112), function() openSheet(sheet.record) end, nil, true)
+    sheet.bounty = UI.button(sheet, L("Poser une prime"), S(528) - 14 - S(114), -94, S(114), function()
+        if sheet.record and sheet.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(sheet.record.guid) end
+    end, nil, true)
+    sheet.empty = Panels.Text(sheet, 14, -132, S(500), 12, false, UI.theme.inkMuted)
+    sheet.line = sheet:CreateTexture(nil, "BORDER")
+    sheet.line:SetPoint("TOPLEFT", S(60), -134)
+    sheet.line:SetSize(S(408), 1)
+    sheet.line:SetColorTexture(0.52, 0.38, 0.20, 0.6)
+    sheet.steps = {}
+    for i = 1, RIVAL_STEPS do
+        local step = CreateFrame("Frame", nil, sheet)
+        step:SetPoint("TOPLEFT", 14 + (i - 1) * S(100), -124)
+        step:SetSize(S(100), 44)
+        step.mark = step:CreateTexture(nil, "ARTWORK")
+        step.mark:SetSize(20, 20)
+        step.mark:SetPoint("TOP", 0, 0)
+        step.word = centered(step, -21, S(100), 12, true)
+        step.how = centered(step, -35, S(100), 10, false, UI.theme.inkMuted)
+        GL.Safe(step.EnableMouse, step, true)
+        -- The game's own words for the fight, on hover.
+        step:SetScript("OnEnter", function(self)
+            if not (self.tip and GameTooltip) then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(self.tip[1])
+            GameTooltip:AddLine(self.tip[2], 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        step:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        sheet.steps[i] = step
+    end
+    sheet:Hide()
+    page.empty = Panels.Text(page, X(26), -72, S(540), 13, false, UI.theme.inkMuted)
+    page.clear = UI.button(page, L("Effacer la recherche"), X(26), -100, S(150), function()
+        page.search:SetText("")
+        page.query, page.number, page.open = nil, 1, nil
+        R.Refresh()
+    end, nil, true)
     return page
 end
-local function paintRivals(page)
-    page.title:SetText(L("Rivalités"))
-    local rivals = R.Rivals()
-    page.index = math.max(1, math.min(page.index, #rivals))
-    local rival = rivals[page.index]
-    local record = rival and rival.record
-    page.record = record
-    for _, region in ipairs({ page.card, page.threadTitle, page.bounty, page.sheet, page.previous, page.next, page.count }) do
-        if record then region:Show() else region:Hide() end
-    end
-    page.empty:SetText(record and "" or L("Aucune rivalité pour l’instant. Il en faut deux combats terminés contre le même joueur."))
-    page.lead:SetText(record and L("Vos adversaires les plus tenaces, un par un.") or "")
-    for _, step in ipairs(page.steps) do step:Hide() end
-    if not record then return end
-    local kills, deaths = count(record, "kills"), count(record, "deaths")
-    page.you:SetText(L("Vous"))
-    local mine = GL.Safe(UnitClass, "player")
-    page.yours:SetText(type(mine) == "string" and UI.plain(mine) or "")
-    page.score:SetText(("|cff2e5e33%d|r – |cff8b1e1e%d|r"):format(kills, deaths))
-    page.scoreCaption:SetText(L("victoires · morts"))
-    GL.PaintBookPortrait(page.face, record)
-    Panels.Fit(page.name, name(record), S(166), 15, 10, true)
-    Panels.Fit(page.nick, nickname(record), S(166), 11, 8)
+local function paintStrip(strip, a, small, open)
+    local record = a.record
+    strip.key = record.key
+    strip:SetHeight(small and RIVAL_SMALL or RIVAL_H)
+    local portrait = small and 30 or 44
+    strip.face:SetSize(portrait, portrait)
+    strip.face:ClearAllPoints()
+    strip.face:SetPoint("LEFT", 18, 0)
+    GL.PaintBookPortrait(strip.face, record)
+    local left = 18 + portrait + 12
+    strip.name:ClearAllPoints()
+    strip.name:SetPoint("TOPLEFT", left, small and -6 or -14)
+    Panels.Fit(strip.name, name(record), S(300), small and 15 or 17, 11, true)
+    strip.motif:ClearAllPoints()
+    strip.motif:SetPoint("TOPLEFT", left, small and -23 or -38)
+    Panels.Fit(strip.motif, motifTitle(a), S(300), small and 11 or 12, 9)
+    local right = S(548) - 44 - S(150)
+    placePair(strip.score, strip, right + S(75), small and -6 or -16, L("%d V"):format(a.kills), L("%d M"):format(a.deaths))
+    strip.when:ClearAllPoints()
+    strip.when:SetPoint("TOPLEFT", right, small and -24 or -38)
+    Panels.Fit(strip.when, whenWhere(a), S(150), 11, 8)
+    strip.rule:ClearAllPoints()
+    strip.rule:SetPoint("TOPLEFT", right - 6, small and -8 or -14)
+    strip.rule:SetHeight(small and 26 or 42)
+    strip.arrow:ClearAllPoints()
+    strip.arrow:SetPoint("RIGHT", -18, 0)
+    chevron(strip.arrow, open)
+    strip:Show()
+end
+local function paintSheet(sheet, a)
+    local record = a.record
+    sheet.record = record
+    sheet.youName:SetText(L("Vous"))
+    local me = GL.Safe(UnitName, "player")
+    local class = GL.Safe(UnitClass, "player")
+    Panels.Fit(sheet.youClass, UI.plain(type(me) == "string" and me or (type(class) == "string" and class or "")), S(130), 11, 8)
+    GL.Safe(SetPortraitTexture, sheet.you.raceIcon, "player")
+    sheet.caption:SetText(L("Votre bilan"))
+    placePair(sheet.score, sheet, S(264), -28, countForm(a.kills, "%d victoire", "%d victoires"),
+        countForm(a.deaths, "%d mort", "%d morts"), true)
+    GL.PaintBookPortrait(sheet.rival, record)
+    Panels.Fit(sheet.rivalName, name(record), S(150), 15, 10, true)
     local identity = {}
     if record.className then identity[#identity + 1] = UI.plain(record.className) end
     if record.guild then identity[#identity + 1] = UI.plain(record.guild) end
-    Panels.Fit(page.identity, table.concat(identity, " · "), S(166), 11, 8)
-    page.bar:Set(kills, deaths)
-    local his, openings = openingShare(record)
-    page.facts[1]:SetText(openings >= 2 and L("Il ouvre le combat %d fois sur %d"):format(his, openings) or "")
-    local debt = GL.Debt(record)
-    page.facts[2]:SetText(debt > 0 and L("Il vous doit encore %d"):format(debt) or L("Comptes réglés"))
-    local fights = GL.Fights(record)
-    page.facts[3]:SetText(fights[1] and L("Dernier combat le %s"):format(day(fights[1].last or fights[1].at)) or "")
-    page.threadTitle:SetText(L("Le fil de la rivalité"))
-    local shown = math.min(RIVAL_STEPS, #fights)
-    for i = 1, shown do
-        local fight, step = fights[shown - i + 1], page.steps[i]
-        if fight.deaths > 0 then
-            step.dot:SetColorTexture(0.55, 0.12, 0.12)
-        elseif fight.kills > 0 then
-            step.dot:SetColorTexture(0.18, 0.37, 0.20)
-        else
-            step.dot:SetColorTexture(0.42, 0.29, 0.08)
-        end
-        step.date:SetText(day(fight.at))
-        local zone = fight.main and type(fight.main.zone) == "string" and fight.main.zone ~= "?" and fight.main.zone
-        step.story:SetText(GL.FightTitle(fight) .. (zone and ("\n" .. UI.plain(zone)) or ""))
-        step:Show()
+    Panels.Fit(sheet.rivalClass, table.concat(identity, " · "), S(150), 11, 8)
+    sheet.story:SetText(R.RivalSentence(a))
+    local debt = a.debt or 0
+    local short = UI.plain(record.name or record.fullName or "?")
+    if debt > 0 then
+        Panels.Fit(sheet.debt, (debt == 1 and L("%s vous doit %d point") or L("%s vous doit %d points")):format(short, debt), S(140), 13, 9, true)
+        sheet.debt:SetTextColor(unpack(RED))
+    else
+        sheet.debt:SetText(L("Comptes réglés"))
+        sheet.debt:SetTextColor(unpack(GREEN))
     end
-    page.previous:SetEnabled(page.index > 1)
-    page.next:SetEnabled(page.index < #rivals)
-    page.count:SetText(("%d / %d"):format(page.index, #rivals))
+    sheet.threadTitle:SetText(L("Derniers combats"))
+    local timeline = a.timeline or {}
+    local latest = timeline[1]
+    sheet.threadWhen:SetText(latest and (latest.zone and (day(latest.last) .. " · " .. UI.plain(latest.zone)) or day(latest.last)) or "")
+    if GL.ContactBountyMode and GL.ContactBountyMode(record) then sheet.bounty:Show() else sheet.bounty:Hide() end
+    local shown = math.min(RIVAL_STEPS, #timeline)
+    sheet.empty:SetText(shown == 0 and L("Aucun combat détaillé dans le journal.") or "")
+    if shown > 1 then sheet.line:Show() else sheet.line:Hide() end
+    -- Oldest on the left: the latest five, turned around.
+    local width = shown > 0 and math.floor(S(500) / math.max(shown, 1)) or 0
+    for i, step in ipairs(sheet.steps) do
+        local entry = i <= shown and timeline[shown - i + 1]
+        if entry then
+            local word, color, mark, tint, how = stepLook(entry)
+            step:ClearAllPoints()
+            step:SetPoint("TOPLEFT", 14 + (i - 1) * width, -124)
+            step:SetWidth(width)
+            step.mark:SetTexture(mark)
+            step.mark:SetVertexColor(unpack(tint))
+            step.word:SetText(word)
+            step.word:SetTextColor(unpack(color))
+            Panels.Fit(step.how, how, width - 8, 10, 8)
+            local where = entry.zone and (" · " .. UI.plain(entry.zone)) or ""
+            step.tip = { day(entry.at) .. where, entry.title }
+            step:Show()
+        else
+            step:Hide()
+        end
+    end
+    sheet:Show()
+end
+local function paintRivals(page)
+    page.title:SetText(L("Rivalités"))
+    local all = R.RivalStories(page.query)
+    local pages = math.max(1, math.ceil(#all / RIVAL_PAGE))
+    page.number = math.max(1, math.min(page.number or 1, pages))
+    -- The strip that was open stays open while it is on this page.
+    local first = (page.number - 1) * RIVAL_PAGE
+    local openAt
+    for i = 1, RIVAL_PAGE do
+        local a = all[first + i]
+        if a and a.record.key == page.open then openAt = i end
+    end
+    if not openAt then page.open = nil end
+    local y = RIVAL_TOP
+    for i, strip in ipairs(page.strips) do
+        local a = all[first + i]
+        if a then
+            strip:ClearAllPoints()
+            strip:SetPoint("TOPLEFT", X(22), y)
+            paintStrip(strip, a, openAt ~= nil, i == openAt)
+            y = y - (openAt and RIVAL_SMALL + RIVAL_SMALL_GAP or RIVAL_H + RIVAL_GAP)
+            if i == openAt then
+                page.sheet:ClearAllPoints()
+                page.sheet:SetPoint("TOPLEFT", X(32), y + RIVAL_SMALL_GAP - 2)
+                paintSheet(page.sheet, a)
+                y = y - RIVAL_SHEET - RIVAL_SMALL_GAP
+            end
+        else
+            strip:Hide()
+        end
+    end
+    if not openAt then page.sheet:Hide() end
+    page.bottom = y
+    local searching = page.query and page.query ~= ""
+    if #all == 0 then
+        page.empty:SetText(searching and L("Aucun rival ne correspond à « %s ».")
+            :format(UI.plain(page.query)) or L("Aucune rivalité pour l’instant. Il en faut deux combats terminés contre le même joueur."))
+    else
+        page.empty:SetText("")
+    end
+    if #all == 0 and searching then page.clear:Show() else page.clear:Hide() end
+    page.previous:SetEnabled(page.number > 1)
+    page.next:SetEnabled(page.number < pages)
+    page.count:SetText(#all > 0 and L("Page %d sur %d"):format(page.number, pages) or "")
 end
 
 -- Guild crests: the guilds that weigh in your book, hostile or friendly, six at most.

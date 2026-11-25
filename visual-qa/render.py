@@ -472,7 +472,7 @@ def main():
     # The addon alone: no Armory archive, no studio photo. The state every user starts from.
     views += ["dossier-fresh", "dossier-fresh-gear", "dossier-read", "dossier-read-gear", "dossier-read-talents"]
     views += ["relations-overview", "relations-debts", "relations-overview-empty", "relations-debts-empty",
-              "relations-rivals", "relations-guilds", "relations-lands", "relations-rankings", "relations-guildlog", "relations-guildlog-filters", "recap-1", "recap-2", "recap-3", "recap-4", "recap-5", "recap-6", "recap-7", "recap-8", "recap-9", "recap-1-copy", "relations-enemies", "relations-members"]
+              "relations-rivals", "relations-rivals-open", "relations-guilds", "relations-lands", "relations-rankings", "relations-guildlog", "relations-guildlog-filters", "recap-1", "recap-2", "recap-3", "recap-4", "recap-5", "recap-6", "recap-7", "recap-8", "recap-9", "recap-1-copy", "relations-enemies", "relations-members"]
     views += ["journal-filters", "journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small", "guild-profiles"]
     views += ["journal-reference", "journal-reference-transparent"]
     views += ["journal-reference-hover-open", "journal-reference-hover-enemy", "journal-reference-hover-filter",

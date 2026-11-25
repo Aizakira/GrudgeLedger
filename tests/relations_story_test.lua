@@ -71,17 +71,42 @@ assert(second.record == GL.Get(avenged) and second.strike:IsShown() and second.s
 assert(second.detail:GetText():find("^Vengé le "), second.detail:GetText())
 assert(not ledger.rows[3]:IsShown() and not ledger.previous:IsEnabled() and not ledger.next:IsEnabled())
 
--- Rivalries: the most fought first, the score, the debt and the dated thread, oldest to newest.
+-- Rivalries (owner's brief, 25/11): strips ranked by what stands out, a click unfolds the sheet.
+-- Siro: a death, then six victories; the prey: three victories; Noni: three deaths. All this week.
 click(f.tabs.rivals)
 local rivals = f.host.pages.rivals
-assert(R.page == "rivals" and rivals:IsShown() and #R.Rivals() == 3 and R.Rivals()[1].record == GL.Get(avenged))
-assert(rivals.record == GL.Get(avenged) and rivals.count:GetText() == "1 / 3" and not rivals.previous:IsEnabled())
-assert(rivals.score:GetText():find("6", 1, true) and rivals.facts[2]:GetText() == "Comptes réglés", rivals.score:GetText())
-assert(rivals.steps[1]:IsShown() and rivals.steps[1].story:GetText():find("Tanaris", 1, true), rivals.steps[1].story:GetText())
-click(rivals.next)
-assert(rivals.record == nemesis and rivals.facts[2]:GetText() == "Il vous doit encore " .. GL.Debt(nemesis) and rivals.count:GetText() == "2 / 3")
-click(rivals.next)
-assert(rivals.record == GL.Get(prey) and rivals.nick:GetText() == "« " .. I.Nickname(GL.Get(prey)) .. " »" and not rivals.next:IsEnabled())
+assert(R.page == "rivals" and rivals:IsShown() and #R.Rivals() == 3)
+local strips = rivals.strips
+assert(strips[1].key == GL.Get(avenged).key and strips[2].key == GL.Get(prey).key and strips[3].key == nemesis.key and not strips[4]:IsShown())
+assert(strips[1].motif:GetText() == "Série de victoires" and strips[3].motif:GetText() == "Série noire", strips[1].motif:GetText())
+assert(strips[1].score.kills:GetText() == "6 V" and strips[1].score.deaths:GetText() == "1 M" and strips[1].when:GetText():find("Tanaris", 1, true), strips[1].when:GetText())
+assert(rivals.count:GetText() == "Page 1 sur 1" and not rivals.previous:IsEnabled() and not rivals.next:IsEnabled() and not rivals.sheet:IsShown())
+-- Unfolded: you and the rival, the sentence, the debt, the latest five fights from oldest to newest.
+click(strips[1])
+local sheet = rivals.sheet
+assert(rivals.open == GL.Get(avenged).key and sheet:IsShown() and sheet.debt:GetText() == "Comptes réglés")
+assert(sheet.story:GetText() == "Vos 6 derniers combats se sont terminés par des victoires.", sheet.story:GetText())
+assert(sheet.steps[5]:IsShown() and sheet.steps[5].word:GetText() == "Victoire" and sheet.threadWhen:GetText():find("Tanaris", 1, true))
+assert(sheet.youName:GetText() == "Vous" and sheet.rivalName:GetText() == "Siro Siro" and strips[2]:GetHeight() == 42)
+-- The strips and the sheet stay above the worn bottom of the page (the last 32 of its 510 units).
+assert(rivals.bottom >= -478, "the unfolded page ends at " .. rivals.bottom)
+click(strips[3])
+assert(rivals.open == nemesis.key and sheet.debt:GetText() == ("Noni vous doit %d points"):format(GL.Debt(nemesis)), sheet.debt:GetText())
+assert(sheet.story:GetText() == "Vos 3 derniers combats se sont terminés par des morts." and sheet.steps[1].word:GetText() == "Mort")
+assert(sheet.steps[3]:IsShown() and not sheet.steps[4]:IsShown(), "three fights, three steps")
+click(strips[3])
+assert(not rivals.open and not sheet:IsShown() and strips[1]:GetHeight() == 72, "a second click folds it")
+-- The search reads every name and guild, any case or accents; nothing found offers to clear it.
+local function search(text)
+    rivals.search:SetText(text)
+    rivals.search.scripts.OnTextChanged(rivals.search)
+end
+search("NONI")
+assert(strips[1].key == nemesis.key and not strips[2]:IsShown())
+search("zzz")
+assert(not strips[1]:IsShown() and rivals.empty:GetText():find("zzz", 1, true) and rivals.clear:IsShown())
+click(rivals.clear)
+assert(strips[3]:IsShown() and not rivals.clear:IsShown() and rivals.search:GetText() == "")
 
 -- Dangerous lands: one line per zone, deaths first, with who killed you there.
 click(f.tabs.lands)

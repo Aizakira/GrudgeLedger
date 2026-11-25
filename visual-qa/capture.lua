@@ -699,7 +699,37 @@ function QA.capture(name)
                 }
             end
         end
+        if page == "rivals" then
+            -- Six example rivals (invented names), fought this week, as the journal writes them.
+            local at = GL.Now()
+            local KB = "Dégâts létaux explicitement attribués à ce joueur."
+            local WITH = "Participation à l’attaque ayant causé votre mort."
+            local function rival(id, first, last, class, guild, facts, zone)
+                local record = GL.Remember(GL.IdentityFromName(first, last, "Player-1-QARIV" .. id))
+                record.className, record.guild, record.history = class, guild, {}
+                record.pvp.kills, record.pvp.deaths, record.pvp.aggressions = 0, 0, 0
+                for i, f in ipairs(facts) do
+                    local e = { kind = f[1], time = at - f[2], confidence = "confirmed", eventId = "qa-rival-" .. id .. "-" .. i, zone = zone }
+                    if f[1] == "death" then e.evidence, e.killingBlow = f[3] or KB, (f[3] or KB) == KB end
+                    record.history[#record.history + 1] = e
+                    local field = ({ kill = "kills", death = "deaths", aggression = "aggressions" })[f[1]]
+                    record.pvp[field] = record.pvp[field] + 1
+                end
+            end
+            rival("01", "Nhaya", "Forever", "Chasseresse", "Savages Forever", { { "aggression", 9000 }, { "death", 8990, WITH },
+                { "aggression", 7000 }, { "death", 6990 }, { "kill", 5000 }, { "kill", 3000 }, { "aggression", 1000 }, { "death", 990 } }, "Azshara")
+            rival("02", "Keral", "Brumepin", "Mage", "Les Trois Lunes", { { "kill", 90000 }, { "death", 89960 } }, "Les Hinterlands")
+            rival("03", "Orvek", "le Gris", "Guerrier", "Lames d’Automne", { { "kill", 160000 }, { "death", 150000 }, { "kill", 140000 },
+                { "death", 130000 }, { "kill", 120000 }, { "death", 110000 } }, "Tanaris")
+            rival("04", "Rokhan", "Silex", "Chaman", nil, { { "kill", 3 * 86400 }, { "death", 2 * 86400 }, { "kill", 100000 } }, "Féralas")
+            rival("05", "Vela", "Sombrelame", "Voleuse", "Braise et Bruyère", { { "death", 120000 }, { "death", 115000 } }, "Azshara")
+            rival("06", "Maëlys", "Cendrelac", "Prêtresse", nil, { { "kill", 40 * 86400 }, { "death", 39 * 86400 } }, "Gangrebois")
+        end
         GL.ShowRelations(page)
+        if name == "relations-rivals-open" then
+            local rivals = GrudgeLedgerRelations.host.pages.rivals
+            rivals.strips[1].scripts.OnClick(rivals.strips[1], "LeftButton")
+        end
         if name == "relations-guildlog-filters" then
             local log = GrudgeLedgerGuild.host.pages.guildlog
             log.openFilters.scripts.OnClick(log.openFilters, "LeftButton")
