@@ -346,6 +346,7 @@ function B.Progress(o,hunter)
     hunter=hunter or GL.Safe(UnitGUID,"player")
     return o and not o.supersededBy and o.progress and o.progress[hunter] or 0
 end
+local HISTORY_KEPT=500
 local function remember(orders,me)
     if not guid(me) then return end
     local all=GL.db.bountyHistory or {}
@@ -384,6 +385,30 @@ local function remember(orders,me)
                 elseif w.actor==me then GL.Print(ML("Prime accomplie : %s."):format(o.name)) end
             end
         elseif history[id] and history[id].state=="superseded" then history[id]=nil end
+    end
+    -- A bounded history (25/11): a member could name you a helper on any number of made-up bounties.
+    -- A bounty with gold still to send or to receive always stays; a settled one (paid, withdrawn,
+    -- expired, replaced) leaves after six months, and past 500 the oldest settled leave first.
+    local settled={}
+    local count=0
+    for id,item in pairs(history) do
+        count=count+1
+        -- "Paid" counts as settled only once the hunter's receipt arrived: before, an old debt may
+        -- still be read from here when the guild's log has rotated.
+        local done=(item.state=="paid" and item.arrivals~=nil) or item.state=="withdrawn" or item.state=="expired"
+            or item.state=="superseded"
+        if done then
+            if (tonumber(item.at) or 0)<GL.Now()-180*DAY then
+                history[id]=nil
+                count=count-1
+            else
+                settled[#settled+1]={id=id,at=tonumber(item.at) or 0}
+            end
+        end
+    end
+    if count>HISTORY_KEPT then
+        table.sort(settled,function(a,b) return a.at<b.at or a.at==b.at and a.id<b.id end)
+        for i=1,math.min(#settled,count-HISTORY_KEPT) do history[settled[i].id]=nil end
     end
     return history
 end

@@ -46,5 +46,21 @@ s.journal.withdrawn[key] = ("%032x"):format(10)
 for i = 1, 40 do now = now + 5 G.Receive(s, me, member, "V;" .. key) end
 GL.Bounties.SendJournal = send
 assert(told == 1, "withdrawal told " .. told .. " times in 200 seconds")
+-- The bounty history: settled bounties leave after six months; a debt never leaves.
+GL.db.bountyHistory = { [me] = {} }
+local h = GL.db.bountyHistory[me]
+for i = 1, 700 do
+    h["Player-1-member:" .. i] = { id = "Player-1-member:" .. i, state = "withdrawn", at = now - i * 3600, guildKey = s.guildKey, pot = {}, paid = {} }
+end
+h["Player-1-member:old"] = { id = "Player-1-member:old", state = "expired", at = now - 400 * 86400, guildKey = s.guildKey, pot = {}, paid = {} }
+h["Player-1-member:debt"] = { id = "Player-1-member:debt", state = "fulfilled", at = now - 400 * 86400, guildKey = s.guildKey,
+    pot = { [me] = 10000 }, paid = {}, winner = { actor = member, detail = "" } }
+GL.Bounties.History()
+mock.Fire("GUILD_ROSTER_UPDATE")
+local n = 0
+for _ in pairs(GL.db.bountyHistory[me]) do n = n + 1 end
+assert(n <= 500, "history kept: " .. n)
+assert(not GL.db.bountyHistory[me]["Player-1-member:old"], "a settled bounty older than six months leaves")
+assert(GL.db.bountyHistory[me]["Player-1-member:debt"], "a bounty still owed never leaves")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS guild bounds: cards bounded per member, a full score table makes room for a known target, withdrawals told once every five minutes")
