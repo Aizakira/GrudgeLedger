@@ -90,7 +90,11 @@ assert(rivals.open == GL.Get(avenged).key and sheet:IsShown() and sheet.debt:Get
 local told = sheet.story:GetText()
 assert(told:find("Siro", 1, true) and told:find("Tanaris", 1, true) and told:find("sixième", 1, true) and #told > 60 and not told:find("{", 1, true), told)
 assert(sheet.steps[5]:IsShown() and sheet.steps[5].word:GetText() == "Victoire" and sheet.threadWhen:GetText():find("Tanaris", 1, true))
-assert(sheet.youName:GetText() == "Vous" and sheet.rivalName:GetText() == "Siro Siro" and strips[2]:GetHeight() == 40)
+assert(sheet.youName:GetText() == "Vous" and sheet.rivalName:GetText() == "Siro Siro" and strips[2]:GetHeight() == 36)
+-- The sheet takes the strip's place: the strip itself steps aside (owner, 25/11).
+assert(not strips[1]:IsShown() and strips[2]:IsShown(), "no strip shown twice")
+-- A click on the rival opens their sheet; the bounty sits under the debt.
+assert(sheet.rivalHit and sheet.rivalHit.scripts.OnClick and sheet.fold and not sheet.open, "the name opens the sheet")
 -- You wear the same frame as your rival, with your own live head when the game shows it (owner, 25/11).
 assert(sheet.self and sheet.self.guid == UnitGUID("player") and sheet.you.portraitRim and sheet.rival.portraitRim, "the same frame for both")
 -- Edge to edge: the sheet as wide as the strips, on the same left edge.
@@ -113,8 +117,8 @@ assert(rivals.open == nemesis.key and sheet.debt:GetText() == ("Noni vous doit %
 assert(sheet.story:GetText():find("20 minutes", 1, true) and sheet.steps[1].word:GetText() == "Mort", sheet.story:GetText())
 assert(sheet.steps[1].mark.texture == GL.Art.DeathSeal, "the seal of the kit, from the one list of pictures")
 assert(sheet.steps[3]:IsShown() and not sheet.steps[4]:IsShown(), "three fights, three steps")
-click(strips[3])
-assert(not rivals.open and not sheet:IsShown() and strips[1]:GetHeight() == 72, "a second click folds it")
+click(sheet.fold)
+assert(not rivals.open and not sheet:IsShown() and strips[1]:GetHeight() == 62 and strips[3]:IsShown(), "the arrow folds it")
 -- The search reads every name and guild, any case or accents; nothing found offers to clear it.
 local function search(text)
     rivals.search:SetText(text)

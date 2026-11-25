@@ -262,12 +262,13 @@ end
 -- A click unfolds the strip in place: you facing the rival, the score, a sentence of what turned,
 -- the debt, the last five fights from oldest to newest, the sheet and the bounty. A second click,
 -- or another strip, folds it. A search reads every name and guild before the pages.
-local RIVAL_PAGE = 5
+-- Six a page, closer together (owner, 25/11: the gaps were too wide).
+local RIVAL_PAGE = 6
 local RIVAL_STEPS = 5 -- fights shown when unfolded, the latest ones, oldest on the left
-local RIVAL_TOP, RIVAL_H, RIVAL_GAP = -60, 72, 6
+local RIVAL_TOP, RIVAL_H, RIVAL_GAP = -60, 62, 4
 -- Unfolded: the five strips get narrow and the sheet opens under its own (page 510 high: the
 -- strips, the sheet and the gaps end at 464, above the worn bottom of the page).
-local RIVAL_SMALL, RIVAL_SMALL_GAP, RIVAL_SHEET = 40, 4, 194
+local RIVAL_SMALL, RIVAL_SMALL_GAP, RIVAL_SHEET = 36, 3, 210
 local GREEN, RED = { 0.18, 0.37, 0.20 }, { 0.55, 0.12, 0.12 }
 -- Plain score when the rules cannot read a sheet (damaged data): the page keeps going.
 local function plainAnalysis(record)
@@ -415,6 +416,27 @@ local function stepLook(entry)
     end
     return L("Agression"), UI.theme.inkMuted, GL.Art.Swords, ""
 end
+-- The Journal's paper arrow, turned down to unfold (folded) or up to fold (unfolded).
+local function chevron(texture, open)
+    if open then
+        GL.Safe(texture.SetTexCoord, texture, 1, 0, 0, 0, 1, 1, 0, 1)
+    else
+        GL.Safe(texture.SetTexCoord, texture, 0, 1, 1, 1, 0, 0, 1, 0)
+    end
+end
+local function arrowButton(parent, onClick)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(26, 26)
+    b.art = b:CreateTexture(nil, "ARTWORK")
+    b.art:SetAllPoints()
+    b.art:SetTexture(media .. "JournalReferenceArrowRight")
+    chevron(b.art, false)
+    local hover = b:CreateTexture(nil, "HIGHLIGHT")
+    hover:SetAllPoints()
+    hover:SetColorTexture(0.91, 0.77, 0.48, 0.18)
+    b:SetScript("OnClick", onClick)
+    return b
+end
 local function buildRivals(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
@@ -485,9 +507,8 @@ local function buildRivals(host)
             R.Refresh()
         end
         strip:SetScript("OnClick", toggle)
-        strip.fold = UI.button(strip, L("Détails"), 0, 0, 79, toggle, nil, true)
-        strip.fold:ClearAllPoints()
-        strip.fold:SetPoint("RIGHT", strip, "RIGHT", -14, 0)
+        strip.fold = arrowButton(strip, toggle)
+        strip.fold:SetPoint("RIGHT", strip, "RIGHT", -16, 0)
         page.strips[i] = strip
     end
     -- The unfolded sheet, one for the page: a sheet of parchment, and the band where you face your
@@ -501,45 +522,66 @@ local function buildRivals(host)
     sheet.band = sheet:CreateTexture(nil, "ARTWORK")
     sheet.band:SetPoint("TOPLEFT", 12, -10)
     sheet.band:SetPoint("TOPRIGHT", -12, -10)
-    sheet.band:SetHeight(54)
+    sheet.band:SetHeight(66)
     sheet.band:SetTexture(GL.Art.RivalDuel)
     local light, pale = { 0.95, 0.9, 0.78 }, { 0.8, 0.72, 0.58 }
-    sheet.you = face(sheet, 38)
-    sheet.you:SetPoint("TOPLEFT", 26, -18)
-    sheet.youName = Panels.Text(sheet, 72, -19, S(130), 15, true, light)
-    sheet.youClass = Panels.Text(sheet, 72, -38, S(130), 11, false, pale)
+    sheet.you = face(sheet, 52)
+    sheet.you:SetPoint("TOPLEFT", 24, -17)
+    sheet.youName = Panels.Text(sheet, 86, -22, S(130), 16, true, light)
+    sheet.youClass = Panels.Text(sheet, 86, -43, S(130), 11, false, pale)
     GL.Safe(sheet.youClass.SetWordWrap, sheet.youClass, false)
-    sheet.caption = Panels.Text(sheet, S(170), -17, S(188), 11, false, UI.theme.brass)
+    sheet.caption = Panels.Text(sheet, S(180), -20, S(188), 11, false, UI.theme.brass)
     sheet.caption:SetJustifyH("CENTER")
     sheet.score = scorePair(sheet, 18)
-    sheet.rival = face(sheet, 38)
-    sheet.rival:SetPoint("TOPRIGHT", -26, -18)
-    sheet.rivalName = Panels.Text(sheet, S(548) - 72 - S(150), -19, S(150), 15, true, light)
+    sheet.rival = face(sheet, 52)
+    sheet.rival:SetPoint("TOPRIGHT", -24, -17)
+    sheet.rivalName = Panels.Text(sheet, S(548) - 86 - S(150), -22, S(150), 16, true, light)
     sheet.rivalName:SetJustifyH("RIGHT")
     GL.Safe(sheet.rivalName.SetWordWrap, sheet.rivalName, false)
-    sheet.rivalClass = Panels.Text(sheet, S(548) - 72 - S(150), -38, S(150), 11, false, pale)
+    sheet.rivalClass = Panels.Text(sheet, S(548) - 86 - S(150), -43, S(150), 11, false, pale)
     sheet.rivalClass:SetJustifyH("RIGHT")
     GL.Safe(sheet.rivalClass.SetWordWrap, sheet.rivalClass, false)
+    -- A click on the rival (name or face) opens their sheet.
+    sheet.rivalHit = CreateFrame("Button", nil, sheet)
+    sheet.rivalHit:SetPoint("TOPRIGHT", -14, -12)
+    sheet.rivalHit:SetSize(S(150) + 76, 62)
+    local glow = sheet.rivalHit:CreateTexture(nil, "HIGHLIGHT")
+    glow:SetAllPoints()
+    glow:SetColorTexture(0.91, 0.77, 0.48, 0.10)
+    sheet.rivalHit:SetScript("OnClick", function() openSheet(sheet.record) end)
+    sheet.rivalHit:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(L("Ouvrir sa fiche"))
+        GameTooltip:Show()
+    end)
+    sheet.rivalHit:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     -- What happened, then a line that pushes you; the debt on the right.
-    sheet.story = Panels.Text(sheet, 20, -70, S(340), 12, false, UI.theme.ink)
+    sheet.story = Panels.Text(sheet, 20, -84, S(330), 12, false, UI.theme.ink)
     sheet.story:SetHeight(44)
     GL.Safe(sheet.story.SetWordWrap, sheet.story, true)
     GL.Safe(sheet.story.SetJustifyV, sheet.story, "TOP")
-    sheet.debt = Panels.Text(sheet, S(548) - 20 - S(132), -74, S(132), 13, true)
+    sheet.debt = Panels.Text(sheet, S(548) - 20 - S(140), -86, S(140), 13, true)
     sheet.debt:SetJustifyH("RIGHT")
     local rule = sheet:CreateTexture(nil, "ARTWORK")
-    rule:SetPoint("TOPLEFT", 20, -117)
-    rule:SetPoint("TOPRIGHT", -20, -117)
+    rule:SetPoint("TOPLEFT", 20, -134)
+    rule:SetPoint("TOPRIGHT", -20, -134)
     rule:SetHeight(1)
     rule:SetColorTexture(0.55, 0.40, 0.20, 0.35)
-    sheet.threadTitle = Panels.Text(sheet, 20, -125, S(116), 13, true)
-    sheet.threadWhen = Panels.Text(sheet, 20 + S(112), -126, S(150), 11, false, UI.theme.inkMuted)
+    sheet.threadTitle = Panels.Text(sheet, 20, -141, S(116), 13, true)
+    sheet.threadWhen = Panels.Text(sheet, 20 + S(112), -142, S(150), 11, false, UI.theme.inkMuted)
     GL.Safe(sheet.threadWhen.SetWordWrap, sheet.threadWhen, false)
-    sheet.open = UI.button(sheet, L("Ouvrir sa fiche"), S(548) - 20 - S(230), -120, S(112), function() openSheet(sheet.record) end, nil, true)
-    sheet.bounty = UI.button(sheet, L("Poser une prime"), S(548) - 20 - S(114), -120, S(114), function()
+    sheet.fold = arrowButton(sheet, function()
+        page.open = nil
+        R.Refresh()
+    end)
+    sheet.fold:SetPoint("TOPRIGHT", -16, -137)
+    chevron(sheet.fold.art, true)
+    -- The bounty under the debt (owner, 25/11): no button left in the way of the thread.
+    sheet.bounty = UI.button(sheet, L("Poser une prime"), S(548) - 20 - S(120), -106, S(120), function()
         if sheet.record and sheet.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(sheet.record.guid) end
     end, nil, true)
-    sheet.empty = Panels.Text(sheet, 20, -158, S(480), 12, false, UI.theme.inkMuted)
+    sheet.empty = Panels.Text(sheet, 20, -172, S(480), 12, false, UI.theme.inkMuted)
     sheet.line = sheet:CreateTexture(nil, "BORDER")
     sheet.line:SetHeight(1)
     sheet.line:SetColorTexture(0.52, 0.38, 0.20, 0.55)
@@ -577,30 +619,30 @@ local function paintStrip(strip, a, small, open)
     local record = a.record
     strip.key = record.key
     strip:SetHeight(small and RIVAL_SMALL or RIVAL_H)
-    local portrait = small and 30 or 44
+    local portrait = small and 30 or 50
     strip.face:SetSize(portrait, portrait)
     strip.face:ClearAllPoints()
     strip.face:SetPoint("LEFT", 18, 0)
     GL.PaintBookPortrait(strip.face, record)
     local left = 18 + portrait + 12
     -- The score and its date sit before the button; the name and the line take the rest.
-    local right = S(548) - 14 - 79 - 10 - S(150)
+    local right = S(548) - 16 - 26 - 12 - S(150)
     strip.name:ClearAllPoints()
-    strip.name:SetPoint("TOPLEFT", left, small and -6 or -12)
-    Panels.Fit(strip.name, name(record), right - left - 12, small and 15 or 19, 11, true)
+    strip.name:SetPoint("TOPLEFT", left, small and -4 or -9)
+    Panels.Fit(strip.name, name(record), right - left - 12, small and 14 or 19, 11, true)
     strip.motif:ClearAllPoints()
-    strip.motif:SetPoint("TOPLEFT", left, small and -23 or -38)
+    strip.motif:SetPoint("TOPLEFT", left, small and -20 or -33)
     local tell = a.tell or {}
-    Panels.Fit(strip.motif, tell.headline or motifTitle(a), right - left - 12, small and 11 or 13, 9)
-    placePair(strip.score, strip, right + S(75), small and -6 or -16, L("%d V"):format(a.kills), L("%d M"):format(a.deaths))
+    Panels.Fit(strip.motif, tell.headline or motifTitle(a), right - left - 12, small and 10 or 13, 9)
+    placePair(strip.score, strip, right + S(75), small and -4 or -12, L("%d V"):format(a.kills), L("%d M"):format(a.deaths))
     strip.when:ClearAllPoints()
-    strip.when:SetPoint("TOPLEFT", right, small and -24 or -38)
+    strip.when:SetPoint("TOPLEFT", right, small and -20 or -34)
     Panels.Fit(strip.when, whenWhere(a), S(150), 11, 8)
     strip.rule:ClearAllPoints()
-    strip.rule:SetPoint("TOPLEFT", right - 6, small and -8 or -14)
-    strip.rule:SetHeight(small and 26 or 42)
-    strip.fold:SetText(open and L("Masquer") or L("Détails"))
-    UI.selectButton(strip.fold, open)
+    strip.rule:SetPoint("TOPLEFT", right - 6, small and -6 or -10)
+    strip.rule:SetHeight(small and 24 or 42)
+    strip.fold:SetSize(small and 22 or 26, small and 22 or 26)
+    chevron(strip.fold.art, open)
     strip:Show()
 end
 local function paintSheet(sheet, a)
@@ -620,7 +662,7 @@ local function paintSheet(sheet, a)
     self.faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
     GL.PaintBookPortrait(sheet.you, self)
     sheet.caption:SetText(L("Votre bilan"))
-    placePair(sheet.score, sheet, S(264), -33, countForm(a.kills, "%d victoire", "%d victoires"),
+    placePair(sheet.score, sheet, S(274), -38, countForm(a.kills, "%d victoire", "%d victoires"),
         countForm(a.deaths, "%d mort", "%d morts"), true)
     GL.PaintBookPortrait(sheet.rival, record)
     Panels.Fit(sheet.rivalName, name(record), S(150), 15, 10, true)
@@ -653,7 +695,7 @@ local function paintSheet(sheet, a)
     local span = S(548) - 40
     local width = shown > 0 and math.floor(span / shown) or 0
     sheet.line:ClearAllPoints()
-    sheet.line:SetPoint("TOPLEFT", 20 + width / 2, -152)
+    sheet.line:SetPoint("TOPLEFT", 20 + width / 2, -165)
     sheet.line:SetWidth(math.max(1, width * (shown - 1)))
     if shown > 1 then sheet.line:Show() else sheet.line:Hide() end
     for i, step in ipairs(sheet.steps) do
@@ -661,7 +703,7 @@ local function paintSheet(sheet, a)
         if entry then
             local word, color, mark, how = stepLook(entry)
             step:ClearAllPoints()
-            step:SetPoint("TOPLEFT", 20 + (i - 1) * width, -141)
+            step:SetPoint("TOPLEFT", 20 + (i - 1) * width, -154)
             step:SetWidth(width)
             step.mark:SetTexture(mark)
             -- The seals are coloured already: shown as they are.
@@ -695,15 +737,18 @@ local function paintRivals(page)
     for i, strip in ipairs(page.strips) do
         local a = all[first + i]
         if a then
-            strip:ClearAllPoints()
-            strip:SetPoint("TOPLEFT", X(22), y)
-            paintStrip(strip, a, openAt ~= nil, i == openAt)
-            y = y - (openAt and RIVAL_SMALL + RIVAL_SMALL_GAP or RIVAL_H + RIVAL_GAP)
             if i == openAt then
+                strip.key = a.record.key
+                strip:Hide()
                 page.sheet:ClearAllPoints()
-                page.sheet:SetPoint("TOPLEFT", X(22), y + RIVAL_SMALL_GAP - 2)
+                page.sheet:SetPoint("TOPLEFT", X(22), y)
                 paintSheet(page.sheet, a)
                 y = y - RIVAL_SHEET - RIVAL_SMALL_GAP
+            else
+                strip:ClearAllPoints()
+                strip:SetPoint("TOPLEFT", X(22), y)
+                paintStrip(strip, a, openAt ~= nil, false)
+                y = y - (openAt and RIVAL_SMALL + RIVAL_SMALL_GAP or RIVAL_H + RIVAL_GAP)
             end
         else
             strip:Hide()
