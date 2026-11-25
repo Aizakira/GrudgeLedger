@@ -36,5 +36,15 @@ assert(s.scores[real.guid] and s.scores[real.guid][member][1] == 2, "a known tar
 local n = 0
 for _ in pairs(s.scores) do n = n + 1 end
 assert(n == 1500, "the table stays bounded: " .. n)
+-- A flood of questions about a withdrawn card: this member tells the withdrawal once every five
+-- minutes, not once per question.
+local told = 0
+local send = GL.Bounties.SendJournal
+GL.Bounties.SendJournal = function(scope, text) if text:find("^D;") then told = told + 1 end return send(scope, text) end
+local key = "Player-1-member:Player-1-flood01:" .. ("%032x"):format(9)
+s.journal.withdrawn[key] = ("%032x"):format(10)
+for i = 1, 40 do now = now + 5 G.Receive(s, me, member, "V;" .. key) end
+GL.Bounties.SendJournal = send
+assert(told == 1, "withdrawal told " .. told .. " times in 200 seconds")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
-print("PASS guild bounds: cards bounded per member, a full score table makes room for a known target")
+print("PASS guild bounds: cards bounded per member, a full score table makes room for a known target, withdrawals told once every five minutes")

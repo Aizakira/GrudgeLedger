@@ -79,6 +79,7 @@ end
 local function sendTag(s,c,e)
     emit(s,table.concat({"T",c.owner,c.target,c.digest,e.seq,e.time,e.account,e.tag,e.on and "1" or "0"},";"))
 end
+local withdrawalTold={}
 local function sendDelete(s,owner,target,secret)
     emit(s,table.concat({"D",owner,target,secret},";"))
 end
@@ -351,7 +352,16 @@ function G.Receive(s,me,sender,raw)
         local owner,target,digest=f[2]:match("^([^:]+):([^:]+):([^:]+)$")
         if not (guid(owner) and guid(target) and hex(digest,32)) then return end
         local token=j.withdrawn[f[2]]
-        if token then sendDelete(s,owner,target,token); return end
+        if token then
+            -- A member tells a withdrawal again once every five minutes at most: a flood of questions
+            -- no longer makes every member answer each one (25/11). Hearing another member tell it is
+            -- no reason to keep quiet: a member who was away did not hear it.
+            local told=withdrawalTold[f[2]]
+            if owner~=me and told and GL.Now()-told<300 then return end
+            withdrawalTold[f[2]]=GL.Now()
+            sendDelete(s,owner,target,token)
+            return
+        end
         local c=j.cards[f[2]]
         if c then
             if c.owner==me and c.name and j.secrets[c.key] then sendCreate(s,c) end
