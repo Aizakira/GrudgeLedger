@@ -24,6 +24,8 @@ local function odd(sender)
 end
 B.Odd=odd
 function B.Online(id) return online[id]==true end
+-- Whether the guild roster has been read this session (a member list may be judged against it).
+function B.RosterKnown() return next(addresses)~=nil end
 -- What one member may keep in your book over the 38 days of the log, and the guild's fight counts.
 local MAX_MEMBER_EVENTS,MAX_SCORE_TARGETS,MAX_SCORE_ACTORS=600,1500,60
 local function guid(s)

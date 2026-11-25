@@ -499,6 +499,102 @@ local function paintGuilds(page)
     page.all:SetText(#guilds > 0 and L("Tous les classements de guildes") or "")
 end
 
+-- The guild's active members (owner 25/11): who uses the addon, which version, connected or when
+-- last heard, whether they share their fights. You first, then those connected, then the others.
+local MEMBER_ROWS = 8
+local function heardSince(at)
+    local delta = math.max(0, GL.Now() - (tonumber(at) or 0))
+    if delta < 3600 then return L("il y a %d min"):format(math.max(1, math.floor(delta / 60))) end
+    if delta < 86400 then return L("il y a %d h"):format(math.floor(delta / 3600)) end
+    return L("il y a %d j"):format(math.floor(delta / 86400))
+end
+local function buildMembers(host)
+    local page = CreateFrame("Frame", nil, host)
+    page:SetAllPoints()
+    page.offset = 0
+    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
+    page.lead:SetHeight(30)
+    local band = page:CreateTexture(nil, "BORDER")
+    band:SetPoint("TOPLEFT", X(26), -84)
+    band:SetSize(S(540), 22)
+    band:SetColorTexture(0.44, 0.28, 0.13, 0.18)
+    page.columnName = Panels.Text(page, X(30), -88, S(300), 12, false, UI.theme.inkMuted)
+    page.columnSeen = Panels.Text(page, X(416), -88, S(146), 12, false, UI.theme.inkMuted)
+    page.columnSeen:SetJustifyH("RIGHT")
+    page.rows = {}
+    for i = 1, MEMBER_ROWS do
+        local row = CreateFrame("Frame", nil, page)
+        row:SetPoint("TOPLEFT", X(26), -108 - (i - 1) * 44)
+        row:SetSize(S(540), 42)
+        local rule = row:CreateTexture(nil, "BORDER")
+        rule:SetPoint("BOTTOMLEFT")
+        rule:SetPoint("BOTTOMRIGHT")
+        rule:SetHeight(1)
+        rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+        row.name = Panels.Text(row, S(6), -4, S(330), 14, true)
+        GL.Safe(row.name.SetWordWrap, row.name, false)
+        row.meta = Panels.Text(row, S(6), -23, S(390), 11, false, UI.theme.inkMuted)
+        GL.Safe(row.meta.SetWordWrap, row.meta, false)
+        row.seen = Panels.Text(row, S(396), -12, S(142), 14, true)
+        row.seen:SetJustifyH("RIGHT")
+        page.rows[i] = row
+    end
+    page.empty = Panels.Text(page, X(26), -116, S(540), 13, false, UI.theme.inkMuted)
+    page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
+        page.offset = math.max(0, page.offset - MEMBER_ROWS)
+        R.Refresh()
+    end, nil, true)
+    page.next = UI.button(page, "›", X(526), -464, S(40), function()
+        page.offset = page.offset + MEMBER_ROWS
+        R.Refresh()
+    end, nil, true)
+    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
+    page.count:SetJustifyH("CENTER")
+    return page
+end
+local function paintMembers(page)
+    page.title:SetText(L("Membres actifs"))
+    local list = GL.GuildMap and GL.GuildMap.Members and GL.GuildMap.Members() or {}
+    local current = 0
+    for _, m in ipairs(list) do if m.current then current = current + 1 end end
+    page.lead:SetText(#list > 0 and L("Les membres dont l’addon a parlé ces 60 derniers jours : %d à jour sur %d."):format(current, #list) or "")
+    page.columnName:SetText(L("Membre"))
+    page.columnSeen:SetText(L("Vu"))
+    -- The first name heard for each player mark: alts say whose they are.
+    local firstOfMark = {}
+    for _, m in ipairs(list) do
+        if m.mark and not firstOfMark[m.mark] then firstOfMark[m.mark] = m end
+    end
+    page.offset = math.min(page.offset, math.max(0, math.floor((#list - 1) / MEMBER_ROWS) * MEMBER_ROWS))
+    for i, row in ipairs(page.rows) do
+        local m = list[page.offset + i]
+        if m then
+            Panels.Fit(row.name, UI.plain(m.you and (m.name .. " · " .. L("Vous")) or m.name), S(330), 14, 10, true)
+            local parts = {}
+            if m.version then
+                parts[#parts + 1] = (m.current and L("Version %s · à jour") or L("Version %s · ancienne version")):format(m.version)
+            else
+                parts[#parts + 1] = L("Version inconnue (avant la 0.58)")
+            end
+            if m.shares then parts[#parts + 1] = L("partage ses combats") end
+            local main = m.mark and firstOfMark[m.mark]
+            if main and main ~= m then parts[#parts + 1] = L("même joueur que %s"):format(UI.plain(main.name)) end
+            Panels.Fit(row.meta, table.concat(parts, " · "), S(390), 11, 8)
+            row.meta:SetTextColor(unpack(m.version and not m.current and UI.theme.red or UI.theme.inkMuted))
+            row.seen:SetText(m.online and L("En ligne") or heardSince(m.at))
+            row.seen:SetTextColor(unpack(m.online and { 0.18, 0.42, 0.20 } or UI.theme.ink))
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    page.empty:SetText(#list <= 1 and L("Aucun autre membre n’a encore été entendu. Ils apparaissent dès que leur addon parle.") or "")
+    page.previous:SetEnabled(page.offset > 0)
+    page.next:SetEnabled(page.offset + MEMBER_ROWS < #list)
+    page.count:SetText(#list > 0 and L("%d à %d sur %d"):format(page.offset + 1, math.min(page.offset + MEMBER_ROWS, #list), #list) or "")
+end
+
 -- Dangerous lands: where you die, zone by zone, and to whom. A list today, the world map later.
 local LAND_ROWS = 8
 function R.Lands()
@@ -2194,7 +2290,8 @@ local BOOKS = {
         entries = { { "recap", "Bilan" }, { "honor", "Tableaux détaillés" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "lands", "Carte" },
             { "rankings", "Classements" } } },
     guild = { frame = "GrudgeLedgerGuild", nav = "guild",
-        entries = { { "guildlog", "Journal de guilde" }, { "enemies", "Ennemis de la guilde" }, { "guilds", "Guildes" } } },
+        entries = { { "guildlog", "Journal de guilde" }, { "enemies", "Ennemis de la guilde" }, { "guilds", "Guildes" },
+            { "members", "Membres actifs" } } },
 }
 -- The detailed tables live in UI.lua, next to the statistics they read; their figures go to the key
 -- figures of the left column, repainted whenever a filter of the page changes.
@@ -2204,10 +2301,10 @@ local function buildHonor(host)
     return page
 end
 local builders = { recap = function(host) return GL.Recap.BuildPage(host) end, honor = buildHonor, debts = buildDebts, rivals = buildRivals, lands = buildLands,
-    rankings = buildRankings, guildlog = buildGuildJournal, enemies = buildEnemies, guilds = buildGuilds }
+    rankings = buildRankings, guildlog = buildGuildJournal, enemies = buildEnemies, guilds = buildGuilds, members = buildMembers }
 local painters = { recap = function(page) GL.Recap.PaintPage(page) end, honor = function() GL.PaintHonorPage() end,
     debts = paintDebts, rivals = paintRivals, lands = paintLands,
-    rankings = paintRankings, guildlog = paintGuildJournal, enemies = paintEnemies, guilds = paintGuilds }
+    rankings = paintRankings, guildlog = paintGuildJournal, enemies = paintEnemies, guilds = paintGuilds, members = paintMembers }
 local pageBook = {}
 for key, spec in pairs(BOOKS) do
     for _, entry in ipairs(spec.entries) do pageBook[entry[1]] = key end
@@ -2235,9 +2332,9 @@ local function book(key)
     local figuresTop = -424
     if key == "guild" then
         f.vision = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-        f.vision:SetPoint("TOPLEFT", 36, -272)
+        f.vision:SetPoint("TOPLEFT", 36, -308)
         f.vision:SetSize(24, 24)
-        f.visionLabel = Panels.Text(f, 64, -278, 142, 12, true, UI.theme.paper)
+        f.visionLabel = Panels.Text(f, 64, -314, 142, 12, true, UI.theme.paper)
         f.vision:SetScript("OnClick", function(self)
             if GL.GuildMap then GL.GuildMap.Enable(self:GetChecked() and true or false) end
             R.Refresh()
@@ -2247,7 +2344,7 @@ local function book(key)
                 .. "les vôtres (la zone et l’endroit). Décochée : rien n’est envoyé, rien n’est gardé, et la guilde oublie vos combats."))
         end)
         f.vision:SetScript("OnLeave", hideTip)
-        figuresTop = -330
+        figuresTop = -366
     end
     -- The key figures, drawn like those of the player sheet's left column: a caption, then one
     -- line each, the name on the left and the number on the right. Each line opens its page.
@@ -2292,7 +2389,7 @@ local function versionLine()
     local current, total = 0, 0
     if GL.GuildMap and GL.GuildMap.Versions then current, total = GL.GuildMap.Versions() end
     if total == 0 then return nil end
-    return { L("Versions à jour"), current .. "/" .. total, "guildlog" }
+    return { L("Versions à jour"), current .. "/" .. total, "members" }
 end
 -- How many players of the guild were heard with the addon this session, you included (0.61.0):
 -- three characters of the same player count once.
@@ -2300,7 +2397,7 @@ local function playersLine()
     if not (GL.GuildMap and GL.GuildMap.Players) then return nil end
     local count, characters = GL.GuildMap.Players()
     if characters <= 1 then return nil end
-    return { L("Joueurs avec l’addon"), count, "guildlog" }
+    return { L("Joueurs avec l’addon"), count, "members" }
 end
 -- The key figures of a book's left column, each with the page it opens. Relations: what is owed,
 -- the debts and the rivalries. Guilde: the guild's week, when it shares its fights.

@@ -103,5 +103,14 @@ now = now + 30
 local extra = away .. ":" .. (now * 1000 + 9)
 hear("R;" .. table.concat({ "D", away, now * 1000 + 9, now, "Player-1-extra01", "", "Victime" }, ";"), "Relayer-Realm")
 assert(not s.events[extra], "a relayer past its bound adds nothing")
+-- 25/11, "Membres actifs": a member whose addon speaks is listed by name with its version, kept in
+-- the guild's space so that it is still listed after a reload.
+GL.version = "0.62.1" -- the harness has no addon metadata
+hear("GLV;0.58.11", "Relayer-Realm")
+local listed
+for _, m in ipairs(GL.GuildMap.Members()) do if m.id == relayer then listed = m end end
+assert(listed and listed.version == "0.58.11" and not listed.current and listed.name == "Relayer-Realm", "the member is listed with an old version")
+assert(GL.Bounties.GuildScope().addonMembers[relayer].v == "0.58.11", "kept in the guild's space")
+assert(GL.GuildMap.Members()[1].you, "you come first")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS guild relay rules: connected members speak for themselves, relays outside their room, one answer, odd sender told once")

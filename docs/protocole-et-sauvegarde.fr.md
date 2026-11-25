@@ -80,6 +80,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `shareMap` | « Vision de guilde » (0.49.0), par personnage. Active depuis la 0.51.0 tant que la valeur n'est pas `false` : cochée, le personnage envoie l'endroit de ses victoires et de ses morts et garde ceux des autres | — |
 | `places` | Combats partagés, par membre : lignes `date;carte;x;y;genre;adversaire;nom` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée. Sert à la carte et à l'alerte « Tueur de guilde » | 150 membres, 40 lignes par membre, 38 jours |
 | `mapForgot` | Date du dernier `MX` de chaque membre : un relais plus ancien de ses combats est refusé. Effacée dès qu'il partage à nouveau | Un par membre |
+| `addonMembers` | Les membres dont l'addon a parlé (0.62.1) : date du dernier message, version, marque anonyme du joueur. Sert la page « Membres actifs ». Un membre parti de la guilde ou silencieux depuis 60 jours en sort ; 1000 au plus | Un par membre |
 | `mailUncertain` | Envoi de courrier dont l'accusé n'a pas été reçu | Un par personnage |
 | `mailReturned` | Courriers de paiement revenus déjà déclarés (`Z`), pour ne pas les déclarer deux fois (0.62.0) | Un par courrier |
 | `journal` | Fiches de guilde. Détail ci-dessous | — |

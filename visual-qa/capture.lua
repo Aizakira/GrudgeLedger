@@ -686,12 +686,25 @@ function QA.capture(name)
                 }
             end
         end
+        if page == "members" and GL.GuildMap then
+            -- Synthetic members (example names): you, two up to date (one an alt), one old, one unknown.
+            local at = GL.Now()
+            GL.GuildMap.Members = function()
+                return {
+                    { id = "Player-1-QA000000", name = "Testeur Exemple", version = "0.62.1", current = true, online = true, at = at, shares = true, mark = "a1", you = true },
+                    { id = "Player-1-QA000001", name = "Célestine Longuebrise", version = "0.62.1", current = true, online = true, at = at, shares = true, mark = "b2" },
+                    { id = "Player-1-QA000002", name = "Aubin Clairval", version = "0.62.1", current = true, online = false, at = at - 7200, shares = false, mark = "b2" },
+                    { id = "Player-1-QA000003", name = "Isabeau Clairfeuille", version = "0.58.11", current = false, online = false, at = at - 3 * 86400, shares = true, mark = "c3" },
+                    { id = "Player-1-QA000004", name = "Gaspard Rougelune", online = false, at = at - 12 * 86400, shares = false },
+                }
+            end
+        end
         GL.ShowRelations(page)
         if name == "relations-guildlog-filters" then
             local log = GrudgeLedgerGuild.host.pages.guildlog
             log.openFilters.scripts.OnClick(log.openFilters, "LeftButton")
         end
-        if page == "guildlog" or page == "enemies" or page == "guilds" then return GrudgeLedgerGuild end
+        if page == "guildlog" or page == "enemies" or page == "guilds" or page == "members" then return GrudgeLedgerGuild end
         return GrudgeLedgerRelations
     elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end

@@ -36,6 +36,7 @@ local function scope()
     if not GL.Bounties or not GL.Bounties.GuildScope then return nil end
     return GL.Bounties.GuildScope()
 end
+local rememberMember -- below, with the active members (owner 25/11)
 -- On unless the member unticked the box (0.51.0).
 local function on(s, me)
     return type(s) == "table" and not (type(s.shareMap) == "table" and s.shareMap[me] == false)
@@ -377,7 +378,10 @@ function M.Announce(s, reply)
     return true
 end
 function M.Player(sender, value)
-    if guid(sender) and type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") then players[sender] = value end
+    if guid(sender) and type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") then
+        players[sender] = value
+        rememberMember(sender, nil, value)
+    end
 end
 -- How many players, and how many characters, were heard with the addon this session, you included.
 -- A member on a version without the mark counts as one player.
@@ -399,7 +403,27 @@ function M.Players()
 end
 -- Any guild message of the addon: its sender runs Grudge Ledger. Without a version a minute later,
 -- it runs one older than 0.58.0, and the player is told once.
+-- The members whose addon spoke (owner 25/11): kept in the guild's space, so that the "Membres
+-- actifs" page lists those away too. Seen, version, the anonymous mark of their player. Members gone
+-- from the guild or silent for sixty days leave.
+local MEMBERS_KEPT, MEMBER_DAYS = 1000, 60
+rememberMember = function(sender, version, mark)
+    local s = scope()
+    if type(s) ~= "table" or not guid(sender) then return end
+    s.addonMembers = type(s.addonMembers) == "table" and s.addonMembers or {}
+    local entry = type(s.addonMembers[sender]) == "table" and s.addonMembers[sender] or {}
+    entry.at = GL.Now()
+    if version then entry.v = version end
+    if mark then entry.mark = mark end
+    if not s.addonMembers[sender] then
+        local n = 0
+        for _ in pairs(s.addonMembers) do n = n + 1 end
+        if n >= MEMBERS_KEPT then return end
+    end
+    s.addonMembers[sender] = entry
+end
 function M.Heard(sender)
+    if guid(sender) then rememberMember(sender) end
     if not guid(sender) or heard[sender] then return end
     heard[sender] = GL.Now()
     if C_Timer and type(C_Timer.After) == "function" then
@@ -417,6 +441,7 @@ function M.Version(s, me, sender, value, relay, reply)
     end
     heard[sender] = heard[sender] or GL.Now()
     versions[sender] = value
+    rememberMember(sender, value)
     -- A member arriving learns the versions of the others: each answers it once every ten seconds at most.
     -- An answer is never answered, so the guild does not echo.
     if not reply and GL.Now() - (answered[sender] or 0) >= 10 then
@@ -442,6 +467,36 @@ function M.Version(s, me, sender, value, relay, reply)
     end
     refresh()
     return true
+end
+-- The members using the addon, you first: name, version and whether it is up to date, connected or
+-- when last heard, whether they share their fights, and their player mark (alts share it).
+function M.Members()
+    local s, me = scope()
+    local list = {}
+    if type(s) ~= "table" then return list end
+    local known = type(s.addonMembers) == "table" and s.addonMembers or {}
+    local B = GL.Bounties
+    local now = GL.Now()
+    for id, entry in pairs(known) do
+        if type(entry) ~= "table" or now - (tonumber(entry.at) or 0) > MEMBER_DAYS * DAY
+            or (B and B.IsMember and B.RosterKnown and B.RosterKnown() and not B.IsMember(id)) then
+            known[id] = nil
+        elseif id ~= me then
+            local version = versions[id] or entry.v
+            list[#list + 1] = { id = id, name = B and B.MemberName and B.MemberName(id) or id, version = version,
+                current = version ~= nil and not older(version, GL.version), online = B and B.Online and B.Online(id) or false,
+                at = heard[id] or entry.at, shares = type(s.places) == "table" and s.places[id] ~= nil, mark = players[id] or entry.mark }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.online ~= b.online then return a.online end
+        if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
+        return tostring(a.name) < tostring(b.name)
+    end)
+    local mine = { id = me, name = B and B.MemberName and B.MemberName(me) or me, version = GL.version, current = true,
+        online = true, at = now, shares = on(s, me), mark = playerMark(s), you = true }
+    table.insert(list, 1, mine)
+    return list
 end
 -- The members heard this session: how many run your version or a newer one, out of how many.
 function M.Versions()
