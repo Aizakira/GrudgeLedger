@@ -337,8 +337,10 @@ function M.Receive(s, me, sender, raw, relay)
         -- another member is passing the guild's fights on, and ours would only repeat them.
         local at = read(rest)
         if not at or (forgot and at <= forgot) or not (GL.Bounties and GL.Bounties.IsMember and GL.Bounties.IsMember(actor)) then return false end
-        -- A connected member speaks for itself: a relay of its fights is refused (audit 24/11).
-        if GL.Bounties.Online and GL.Bounties.Online(actor) then return false end
+        -- The fights of a connected member are kept too (owner report 25/11). The audit of 24/11
+        -- refused them, but a member answers a login with the relay only and sends its own fights
+        -- only when a box is ticked: with the guild online, the map stayed empty. A false fight
+        -- costs a mark on the map; the guild trusts its members (owner's rule).
         GL.Transport.Cancel(s, "map:relay")
     elseif actor ~= sender then
         return false

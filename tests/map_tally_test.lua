@@ -71,7 +71,7 @@ x, y = 0.4, 0.4
 local helped = GL.Remember(person("Coup", "Main", "0300"))
 GL.RecordAssist(helped)
 tallies, tallyOf, own = tally()
-assert(tallyOf[1448].deaths == 4 and tallyOf[1448].kills == 3, tallyOf[1448].deaths)
+assert(tallyOf[1448].deaths == 4 and tallyOf[1448].kills == 3 and tallyOf[1448].unplaced == 1, tallyOf[1448].deaths)
 assert(marks(own, 1448, "death") == 3 and marks(own, 1448, "kill") == 3 and marks(own, 1448, "assist") == 0, marks(own, 1448))
 for _, mark in ipairs(own) do assert(mark.event.kind ~= "assist") end
 -- Every mark is counted: a zone never draws more than it counts.

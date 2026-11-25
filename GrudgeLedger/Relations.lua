@@ -1113,7 +1113,7 @@ function R.MapTally(id, zones, guild)
     local function count(zone, kind)
         local tally = tallyOf[zone.mapID]
         if not tally then
-            tally = { zone = zone, deaths = 0, kills = 0 }
+            tally = { zone = zone, deaths = 0, kills = 0, unplaced = 0 }
             tallyOf[zone.mapID] = tally
             tallies[#tallies + 1] = tally
         end
@@ -1130,6 +1130,8 @@ function R.MapTally(id, zones, guild)
         local placed = type(e.mapX) == "number" and type(e.mapY) == "number" and type(e.time) == "number"
         local zone = byMap[e.mapID] or (type(e.zone) == "string" and byName[e.zone]) or nil
         if zone then count(zone, e.kind) end
+        -- Counted without a mark: said in the zone's tooltip (owner report 25/11, Rive-Claire).
+        if zone and not (placed and byMap[e.mapID]) then tallyOf[zone.mapID].unplaced = tallyOf[zone.mapID].unplaced + 1 end
         if placed and where[e.mapID] ~= nil then
             place(own, e.mapID, where[e.mapID], e.mapX, e.mapY, { record = fight.record, event = e })
         end
@@ -1362,7 +1364,12 @@ local function paintMap(view, byName)
         label.count:SetText(tostring(entry.deaths > 0 and entry.deaths or entry.kills))
         label.zone = entry.zone.mapID
         label:SetScript("OnEnter", function(self)
-            tip(self, UI.plain(entry.zone.name), L("%d morts · %d victoires"):format(entry.deaths, entry.kills))
+            local line = L("%d morts · %d victoires"):format(entry.deaths, entry.kills)
+            if (entry.unplaced or 0) > 0 then
+                local hidden = L("Dont %d sans position : un combat d’avant la carte (0.45.0), ou dont le jeu cachait l’endroit.")
+                line = line .. "\n" .. hidden:format(entry.unplaced)
+            end
+            tip(self, UI.plain(entry.zone.name), line)
         end)
         label:SetScript("OnClick", function(self) R.MapFocus(self.zone) end)
     end

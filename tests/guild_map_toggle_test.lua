@@ -47,5 +47,19 @@ end
 -- Ticking twice changes nothing.
 M.Enable(true)
 assert(#M.Points() == 2)
+
+-- At login a member answers with the guild's latest fights, as a relay (owner report 25/11: no
+-- guild fight at all on the map). The fights of the members connected right now are in it, the
+-- relayer's own included: they are kept, since those members only send their own when a box is ticked.
+now = now + 100
+hear("Mate-Realm", "R;" .. fight("Player-1-mate0001", now - 5, "k"))
+hear("Mate-Realm", "R;" .. fight("Player-1-mate0002", now - 4, "k"))
+assert(#M.Points() == 4, #M.Points())
+-- A member who asked to be forgotten stays forgotten: its older fights are not brought back.
+hear("Mate-Realm", "R;" .. fight("Player-1-mate0002", now - 200, "d"))
+assert(#M.Points() == 4, #M.Points())
+-- Someone outside the guild is never relayed in.
+hear("Mate-Realm", "R;" .. fight("Player-1-stranger", now - 3, "k"))
+assert(#M.Points() == 4)
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS guild map toggle: unticking then ticking keeps the guild's fights in memory, nothing heard meanwhile, forgetting honoured")
