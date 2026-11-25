@@ -90,7 +90,11 @@ assert(rivals.open == GL.Get(avenged).key and sheet:IsShown() and sheet.debt:Get
 local told = sheet.story:GetText()
 assert(told:find("Siro", 1, true) and told:find("Tanaris", 1, true) and told:find("sixième", 1, true) and #told > 60 and not told:find("{", 1, true), told)
 assert(sheet.steps[5]:IsShown() and sheet.steps[5].word:GetText() == "Victoire" and sheet.threadWhen:GetText():find("Tanaris", 1, true))
-assert(sheet.youName:GetText() == "Vous" and sheet.rivalName:GetText() == "Siro Siro" and strips[2]:GetHeight() == 42)
+assert(sheet.youName:GetText() == "Vous" and sheet.rivalName:GetText() == "Siro Siro" and strips[2]:GetHeight() == 40)
+-- You wear the same frame as your rival, with your own live head when the game shows it (owner, 25/11).
+assert(sheet.self and sheet.self.guid == UnitGUID("player") and sheet.you.portraitRim and sheet.rival.portraitRim, "the same frame for both")
+-- Edge to edge: the sheet as wide as the strips, on the same left edge.
+assert(sheet:GetWidth() == strips[1]:GetWidth(), "the sheet as wide as the strips")
 -- The band where you face your rival: Alliance blue on your side, Horde red on theirs, whatever
 -- your faction (owner, 25/11), and never turned around.
 do

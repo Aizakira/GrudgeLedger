@@ -267,7 +267,7 @@ local RIVAL_STEPS = 5 -- fights shown when unfolded, the latest ones, oldest on 
 local RIVAL_TOP, RIVAL_H, RIVAL_GAP = -60, 72, 6
 -- Unfolded: the five strips get narrow and the sheet opens under its own (page 510 high: the
 -- strips, the sheet and the gaps end at 464, above the worn bottom of the page).
-local RIVAL_SMALL, RIVAL_SMALL_GAP, RIVAL_SHEET = 42, 4, 176
+local RIVAL_SMALL, RIVAL_SMALL_GAP, RIVAL_SHEET = 40, 4, 194
 local GREEN, RED = { 0.18, 0.37, 0.20 }, { 0.55, 0.12, 0.12 }
 -- Plain score when the rules cannot read a sheet (damaged data): the page keeps going.
 local function plainAnalysis(record)
@@ -370,7 +370,9 @@ local function whenWhere(a)
 end
 -- A score in two texts, each in its own colour, around a dot: centred on x.
 local function scorePair(parent, size)
-    local pair = { kills = Panels.Text(parent, 0, 0, 90, size, true), deaths = Panels.Text(parent, 0, 0, 90, size, true), size = size }
+    local pair = { kills = Panels.Text(parent, 0, 0, 140, size, true), deaths = Panels.Text(parent, 0, 0, 140, size, true), size = size }
+    GL.Safe(pair.kills.SetWordWrap, pair.kills, false)
+    GL.Safe(pair.deaths.SetWordWrap, pair.deaths, false)
     pair.kills:SetJustifyH("RIGHT")
     pair.deaths:SetJustifyH("LEFT")
     -- A small drawn dot between the figures: the font's "·" sat at their top.
@@ -492,7 +494,7 @@ local function buildRivals(host)
     -- rival, Alliance blue on your side, Horde red on theirs (owner, 25/11).
     local sheet = CreateFrame("Frame", nil, page)
     page.sheet = sheet
-    sheet:SetSize(S(528), RIVAL_SHEET)
+    sheet:SetSize(S(548), RIVAL_SHEET)
     sheet.paper = sheet:CreateTexture(nil, "BACKGROUND")
     sheet.paper:SetAllPoints()
     sheet.paper:SetTexture(GL.Art.RivalSheet)
@@ -512,32 +514,32 @@ local function buildRivals(host)
     sheet.score = scorePair(sheet, 18)
     sheet.rival = face(sheet, 38)
     sheet.rival:SetPoint("TOPRIGHT", -26, -18)
-    sheet.rivalName = Panels.Text(sheet, S(528) - 72 - S(150), -19, S(150), 15, true, light)
+    sheet.rivalName = Panels.Text(sheet, S(548) - 72 - S(150), -19, S(150), 15, true, light)
     sheet.rivalName:SetJustifyH("RIGHT")
     GL.Safe(sheet.rivalName.SetWordWrap, sheet.rivalName, false)
-    sheet.rivalClass = Panels.Text(sheet, S(528) - 72 - S(150), -38, S(150), 11, false, pale)
+    sheet.rivalClass = Panels.Text(sheet, S(548) - 72 - S(150), -38, S(150), 11, false, pale)
     sheet.rivalClass:SetJustifyH("RIGHT")
     GL.Safe(sheet.rivalClass.SetWordWrap, sheet.rivalClass, false)
     -- What happened, then a line that pushes you; the debt on the right.
-    sheet.story = Panels.Text(sheet, 20, -72, S(368), 12, false, UI.theme.ink)
-    sheet.story:SetHeight(32)
+    sheet.story = Panels.Text(sheet, 20, -70, S(340), 12, false, UI.theme.ink)
+    sheet.story:SetHeight(44)
     GL.Safe(sheet.story.SetWordWrap, sheet.story, true)
     GL.Safe(sheet.story.SetJustifyV, sheet.story, "TOP")
-    sheet.debt = Panels.Text(sheet, S(528) - 20 - S(132), -74, S(132), 13, true)
+    sheet.debt = Panels.Text(sheet, S(548) - 20 - S(132), -74, S(132), 13, true)
     sheet.debt:SetJustifyH("RIGHT")
     local rule = sheet:CreateTexture(nil, "ARTWORK")
-    rule:SetPoint("TOPLEFT", 20, -104)
-    rule:SetPoint("TOPRIGHT", -20, -104)
+    rule:SetPoint("TOPLEFT", 20, -117)
+    rule:SetPoint("TOPRIGHT", -20, -117)
     rule:SetHeight(1)
     rule:SetColorTexture(0.55, 0.40, 0.20, 0.35)
-    sheet.threadTitle = Panels.Text(sheet, 20, -112, S(116), 13, true)
-    sheet.threadWhen = Panels.Text(sheet, 20 + S(112), -113, S(150), 11, false, UI.theme.inkMuted)
+    sheet.threadTitle = Panels.Text(sheet, 20, -125, S(116), 13, true)
+    sheet.threadWhen = Panels.Text(sheet, 20 + S(112), -126, S(150), 11, false, UI.theme.inkMuted)
     GL.Safe(sheet.threadWhen.SetWordWrap, sheet.threadWhen, false)
-    sheet.open = UI.button(sheet, L("Ouvrir sa fiche"), S(528) - 20 - S(230), -106, S(112), function() openSheet(sheet.record) end, nil, true)
-    sheet.bounty = UI.button(sheet, L("Poser une prime"), S(528) - 20 - S(114), -106, S(114), function()
+    sheet.open = UI.button(sheet, L("Ouvrir sa fiche"), S(548) - 20 - S(230), -120, S(112), function() openSheet(sheet.record) end, nil, true)
+    sheet.bounty = UI.button(sheet, L("Poser une prime"), S(548) - 20 - S(114), -120, S(114), function()
         if sheet.record and sheet.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(sheet.record.guid) end
     end, nil, true)
-    sheet.empty = Panels.Text(sheet, 20, -146, S(480), 12, false, UI.theme.inkMuted)
+    sheet.empty = Panels.Text(sheet, 20, -158, S(480), 12, false, UI.theme.inkMuted)
     sheet.line = sheet:CreateTexture(nil, "BORDER")
     sheet.line:SetHeight(1)
     sheet.line:SetColorTexture(0.52, 0.38, 0.20, 0.55)
@@ -608,7 +610,15 @@ local function paintSheet(sheet, a)
     local me = GL.Safe(UnitName, "player")
     local class = GL.Safe(UnitClass, "player")
     Panels.Fit(sheet.youClass, UI.plain(type(me) == "string" and me or (type(class) == "string" and class or "")), S(130), 11, 8)
-    GL.Safe(SetPortraitTexture, sheet.you.raceIcon, "player")
+    local guid = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    local race, raceFile = GL.Safe(UnitRace, "player")
+    local className, classFile = GL.Safe(UnitClass, "player")
+    sheet.self = sheet.self or {}
+    local self = sheet.self
+    self.key, self.guid, self.name, self.fullName = "player", guid, me, me
+    self.race, self.raceName, self.class, self.className = raceFile, race, classFile, className
+    self.faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
+    GL.PaintBookPortrait(sheet.you, self)
     sheet.caption:SetText(L("Votre bilan"))
     placePair(sheet.score, sheet, S(264), -33, countForm(a.kills, "%d victoire", "%d victoires"),
         countForm(a.deaths, "%d mort", "%d morts"), true)
@@ -640,10 +650,10 @@ local function paintSheet(sheet, a)
     local shown = math.min(RIVAL_STEPS, #timeline)
     sheet.empty:SetText(shown == 0 and L("Aucun combat détaillé dans le journal.") or "")
     -- Oldest on the left: the latest five, turned around, spread over the sheet.
-    local span = S(528) - 40
+    local span = S(548) - 40
     local width = shown > 0 and math.floor(span / shown) or 0
     sheet.line:ClearAllPoints()
-    sheet.line:SetPoint("TOPLEFT", 20 + width / 2, -142)
+    sheet.line:SetPoint("TOPLEFT", 20 + width / 2, -152)
     sheet.line:SetWidth(math.max(1, width * (shown - 1)))
     if shown > 1 then sheet.line:Show() else sheet.line:Hide() end
     for i, step in ipairs(sheet.steps) do
@@ -651,7 +661,7 @@ local function paintSheet(sheet, a)
         if entry then
             local word, color, mark, how = stepLook(entry)
             step:ClearAllPoints()
-            step:SetPoint("TOPLEFT", 20 + (i - 1) * width, -131)
+            step:SetPoint("TOPLEFT", 20 + (i - 1) * width, -141)
             step:SetWidth(width)
             step.mark:SetTexture(mark)
             -- The seals are coloured already: shown as they are.
@@ -691,7 +701,7 @@ local function paintRivals(page)
             y = y - (openAt and RIVAL_SMALL + RIVAL_SMALL_GAP or RIVAL_H + RIVAL_GAP)
             if i == openAt then
                 page.sheet:ClearAllPoints()
-                page.sheet:SetPoint("TOPLEFT", X(32), y + RIVAL_SMALL_GAP - 2)
+                page.sheet:SetPoint("TOPLEFT", X(22), y + RIVAL_SMALL_GAP - 2)
                 paintSheet(page.sheet, a)
                 y = y - RIVAL_SHEET - RIVAL_SMALL_GAP
             end
