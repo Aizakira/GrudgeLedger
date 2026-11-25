@@ -1,4 +1,6 @@
-GRUDGE LEDGER · 0.62.0
+GRUDGE LEDGER · 0.62.1
+
+Sécurité de guilde. Un membre malveillant ne peut plus remplir votre sauvegarde avec des messages transmis au nom d'autres membres : ils ont leur propre limite, gardée d'une séance à l'autre. Une prime à laquelle d'autres membres ont mis de l'or garde sa cible face à une prime antidatée. Une fiche de guilde qui donne un faux nom à un joueur que vous connaissez est refusée, et la fiche la plus soutenue passe avant la plus ancienne. Une mort transmise par un seul membre ne déclenche plus l'alerte « Tueur de guilde » : il en faut deux, ou la parole du membre tué. Un retrait de fiche n'est redit qu'une fois toutes les cinq minutes par membre. L'historique des primes est borné, sans jamais perdre une prime encore à payer ou à recevoir.
 
 Le Journal s’embellit. Le solde d’un adversaire s’allume : un halo doux qui respire, et de petites étincelles qui naissent du chiffre et s’envolent, rubis quand le solde est contre vous, or quand il est pour vous. À côté de votre histoire avec un joueur, une gravure de la région de votre dernier combat ou de votre dernière rencontre : 55 régions, capitales et champs de bataille, de Tanaris au mont Rochenoire.
 
