@@ -61,6 +61,116 @@ local function rules(opts)
         or group=="solo" and split~="winner" or not plain(opts.note or "",100) then return end
     return quota,groups[group]..shares[split]..souvenirs[media]
 end
+-- A guild space read back from a damaged saved file (random test 25/11: one wrong field stopped
+-- the addon at every login). Once a session, every part the modules read is given back its shape:
+-- what has another shape is set aside in GL.db.quarantine.guild (the latest 50) and removed.
+local repaired = setmetatable({}, { __mode = "k" })
+local QUARANTINED = 50
+local function setAside(key, field, value)
+    GL.db.quarantine = type(GL.db.quarantine) == "table" and GL.db.quarantine or {}
+    local list = type(GL.db.quarantine.guild) == "table" and GL.db.quarantine.guild or {}
+    GL.db.quarantine.guild = list
+    list[#list + 1] = { space = key, field = field, value = type(value) == "table" and "table" or tostring(value):sub(1, 80), at = GL.Now() }
+    while #list > QUARANTINED do table.remove(list, 1) end
+end
+local function isTable(v) return type(v) == "table" end
+local function isString(v) return type(v) == "string" end
+local function isNumber(v) return type(v) == "number" and v == v and v > -math.huge and v < math.huge end
+local function isFlag(v) return type(v) == "boolean" end
+-- A field of t that must be a table, each entry passing check (when given): the others leave.
+local function shape(key, t, field, check)
+    local v = t[field]
+    if v == nil then return nil end
+    if type(v) ~= "table" then
+        setAside(key, field, v)
+        t[field] = nil
+        return nil
+    end
+    if check then
+        for k, item in pairs(v) do
+            if not check(item, k) then
+                setAside(key, field .. "." .. tostring(k), item)
+                v[k] = nil
+            end
+        end
+    end
+    return v
+end
+local function numberField(key, t, field, default)
+    if t[field] ~= nil and not isNumber(t[field]) then
+        setAside(key, field, t[field])
+        t[field] = default
+    end
+end
+local function repairSpace(key, s)
+    for _, field in ipairs({ "seq", "since", "directSince", "dossierSeq", "noticed" }) do numberField(key, s, field, nil) end
+    shape(key, s, "events", isString)
+    shape(key, s, "relayed", function(v) return v == true or isString(v) end)
+    shape(key, s, "directClaims")
+    shape(key, s, "scores", function(byActor)
+        if not isTable(byActor) then return false end
+        for actor, n in pairs(byActor) do
+            if not (isTable(n) and isNumber(n[1]) and isNumber(n[2])) then byActor[actor] = nil end
+        end
+        return true
+    end)
+    for _, field in ipairs({ "shareMap", "shareDeaths", "shareFights", "shareSightings", "shareSocial" }) do shape(key, s, field, isFlag) end
+    shape(key, s, "mapForgot", isNumber)
+    shape(key, s, "socialWithdrawn", isNumber)
+    shape(key, s, "places", function(list)
+        if not isTable(list) then return false end
+        -- A list keeps its strings, in order, without holes.
+        local kept = {}
+        for _, text in ipairs(list) do if isString(text) then kept[#kept + 1] = text end end
+        for i = #list, 1, -1 do list[i] = nil end
+        for k in pairs(list) do list[k] = nil end
+        for i, text in ipairs(kept) do list[i] = text end
+        return true
+    end)
+    shape(key, s, "addonMembers", function(m)
+        if not (isTable(m) and isNumber(m.at)) then return false end
+        if m.v ~= nil and not isString(m.v) then m.v = nil end
+        if m.mark ~= nil and not isString(m.mark) then m.mark = nil end
+        return true
+    end)
+    shape(key, s, "mailUncertain", isTable)
+    shape(key, s, "dossiers", function(d) return isTable(d) and isNumber(d.received) end)
+    shape(key, s, "socialReports", isTable)
+    if s.socialPublisher ~= nil and not isString(s.socialPublisher) then
+        setAside(key, "socialPublisher", s.socialPublisher)
+        s.socialPublisher = nil
+    end
+    shape(key, s, "bountyRecords", function(r)
+        if not isTable(r) then return false end
+        if not isTable(r.orders) then r.orders = {} end
+        for id, o in pairs(r.orders) do if not (isTable(o) and isNumber(o.at)) then r.orders[id] = nil end end
+        if not isNumber(r.at) then r.at = 0 end
+        if r.name ~= nil and not isString(r.name) then r.name = nil end
+        return true
+    end)
+    local j = shape(key, s, "journal")
+    if j then
+        shape(key, j, "cards", function(c, k)
+            if not (isTable(c) and isString(c.owner) and isString(c.target) and isNumber(c.time) and isString(c.key) and c.key == k) then return false end
+            if not isTable(c.opinions) then c.opinions = {} end
+            for k, o in pairs(c.opinions) do if not isTable(o) then c.opinions[k] = nil end end
+            if c.name ~= nil and not isString(c.name) then c.name = nil end
+            return true
+        end)
+        -- Their keys are card keys or player identifiers: text, never a number.
+        for _, field in ipairs({ "hidden", "secrets", "retired", "pending" }) do
+            shape(key, j, field, function(_, k) return isString(k) end)
+        end
+        -- A withdrawn card: its key "owner:target:digest", and the secret that proves it.
+        shape(key, j, "withdrawn", function(v, k) return isString(k) and k:match("^[^:]+:[^:]+:") ~= nil and isString(v) end)
+        j.cards, j.hidden, j.withdrawn, j.secrets = j.cards or {}, j.hidden or {}, j.withdrawn or {}, j.secrets or {}
+        numberField(key, j, "seq", 0)
+        j.seq = j.seq or 0
+        -- The index by target is rebuilt from the cards.
+        j.byTarget = nil
+    end
+    s.events = s.events or {}
+end
 local function scope()
     if not GL.db or not GetGuildInfo then return end
     local name, _, _, realm = GL.Safe(GetGuildInfo,"player")
@@ -96,9 +206,21 @@ local function scope()
         return nil,"guild"
     end
     if not plain(realm,80) or realm == "" then return nil,"realm" end
-    GL.db.bountyGuilds = GL.db.bountyGuilds or {}
+    if type(GL.db.bountyGuilds) ~= "table" then
+        if GL.db.bountyGuilds ~= nil then setAside("*", "bountyGuilds", GL.db.bountyGuilds) end
+        GL.db.bountyGuilds = {}
+    end
     local key = realm.."/"..name
-    local s = GL.db.bountyGuilds[key] or {events={}, seq=0}
+    local s = GL.db.bountyGuilds[key]
+    if s ~= nil and type(s) ~= "table" then
+        setAside(key, "*", s)
+        s = nil
+    end
+    s = s or {events={}, seq=0}
+    if not repaired[s] then
+        repaired[s] = true
+        repairSpace(key, s)
+    end
     s.guildKey=key
     s.since=s.since or GL.Now()
     -- From this date, a claim must be heard from its hunter to count (audit 24/11).

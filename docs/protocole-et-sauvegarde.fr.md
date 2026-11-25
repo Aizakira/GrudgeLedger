@@ -24,7 +24,7 @@ Depuis la 0.54.0, le carnet est tenu **par faction** : `players`, `aliases`, `gu
 | `guilds` | Avis personnel sur une guilde entière, par `royaume:nom` | `Core.lua` | Note de 2 000 octets au plus |
 | `settings` | Réglages du joueur | `Core.lua` | Valeurs validées au chargement |
 | `unassignedHonor` | Gains d'honneur sans adversaire identifié | `Core.lua` | — |
-| `quarantine` | Entrées illisibles mises de côté au lieu d'être effacées | `Core.lua` | — |
+| `quarantine` | Entrées illisibles mises de côté au lieu d'être effacées. `quarantine.guild` (0.62.1) : les 50 dernières parties d'un espace de guilde qui n'avaient plus la bonne forme, réparé une fois par session (l'espace, le champ, un aperçu de la valeur, la date) | `Core.lua`, `Bounties.lua` | — |
 | `armoryRequests` | Demandes d'import destinées au compagnon | `Core.lua` | Purgées après 7 jours |
 | `detectionLog` | Dernières décisions de détection et d'alerte | `Core.lua` | 200 entrées |
 | `battlegroundArchive` | Fiches retirées par le nettoyage des champs de bataille | `Core.lua` | — |
