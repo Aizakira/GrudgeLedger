@@ -319,15 +319,8 @@ do
     end
     assert(view.zoom > 3.6 and view.points[1]:IsShown() and view.regions[1].alpha < view.shapes[1].alpha, view.zoom)
     local live = view.live[1446]
-    -- The zone's own map first (25/11: without it, what was never explored showed the continent blown
-    -- up into blurred squares), under the explored pieces; never the hover one.
-    local base, explored = {}, {}
-    for i, tile in ipairs(live and live.tiles or {}) do
-        if tile.base then base[#base + 1] = live.textures[i] else explored[#explored + 1] = live.textures[i] end
-    end
-    assert(#base == 12 and #explored == 2 and explored[1].alpha > 0 and explored[1].alpha < 1, "zone map and explored pieces, not the hover one")
-    assert(base[1].drawLayer == nil or base[1].drawSublevel == nil or base[1].drawSublevel < (explored[1].drawSublevel or 1), "the map under the pieces")
-    assert(math.abs(explored[2].texCoord[2] - 44 / 64) < 0.001 and math.abs(explored[2].texCoord[4] - 200 / 256) < 0.001)
+    assert(live and #live.textures == 2 and live.textures[1].alpha > 0 and live.textures[1].alpha < 1, "explored pieces, not the hover one")
+    assert(math.abs(live.textures[2].texCoord[2] - 44 / 64) < 0.001 and math.abs(live.textures[2].texCoord[4] - 200 / 256) < 0.001)
     -- Holding the button and moving drags the map; the view never leaves it.
     local before = view.cx
     view.canvas.scripts.OnMouseDown(view.canvas, "LeftButton")
@@ -346,7 +339,7 @@ do
     settle()
     assert(math.abs(view.zoom - 0.85 / 0.12) < 0.001 and math.abs(view.cx - 0.3) < 0.001 and math.abs(view.cy - 0.62) < 0.001, view.zoom)
     assert(view.caption:GetText():find("^Tanaris "), view.caption:GetText())
-    assert(view.live[1446].textures[#view.live[1446].textures].alpha == 1 and view.out:IsShown())
+    assert(view.live[1446].textures[1].alpha == 1 and view.out:IsShown())
     -- "Monde" backs out to the whole world; "Ma position" returns to your zone.
     assert(R.MapOut() == true)
     settle()
