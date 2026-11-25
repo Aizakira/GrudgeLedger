@@ -684,6 +684,8 @@ local ZONES_KEPT = 8 -- zones whose detail stays loaded at once
 local SKULL, SWORD = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", "Interface\\CURSOR\\Attack"
 local ARROW = "Interface\\Minimap\\MinimapArrow"
 local FEATHER = "Interface\\AddOns\\GrudgeLedger\\Media\\MapFeather"
+-- The owner's kit for the map page (25/11): the frame around the map, the icons of the entries.
+local KIT = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationsCarte\\"
 local function mapInfo(id)
     local info = id and C_Map and GL.Safe(C_Map.GetMapInfo, id)
     return type(info) == "table" and info or nil
@@ -1009,6 +1011,9 @@ local function locate(view)
 end
 -- What the view is looking at: the zone under its centre once zones are readable, else the
 -- continent, else the world. Counts follow.
+local function bars(text)
+    return (tostring(text or ""):gsub(" · ", "   |cff9c7a45||r   "))
+end
 local function describe(view)
     local world, best, distance = view.world, nil, nil
     for _, zone in ipairs(world.zones) do
@@ -1087,12 +1092,22 @@ local function buildMap(page)
             R.MapLayout()
         end
     end)
-    view.out = UI.button(view, L("Monde"), 0, -408, 84, function() R.MapOut() end, nil, true)
-    view.mine = UI.button(view, L("Ma position"), 90, -408, 118, function() R.MapHere() end, nil, true)
-    view.caption = Panels.Text(view, 218, -406, S(540) - 218, 12, true)
-    view.caption:SetJustifyH("RIGHT")
-    view.hint = Panels.Text(view, 218, -423, S(540) - 218, 11, false, UI.theme.inkMuted)
+    -- A brass frame over the edge of the map (the owner's kit, 25/11): it stays put while the map
+    -- moves under it, and takes no click.
+    view.frame = CreateFrame("Frame", nil, view)
+    view.frame:SetAllPoints(view.canvas)
+    GL.Safe(view.frame.SetFrameLevel, view.frame, (GL.Safe(view.canvas.GetFrameLevel, view.canvas) or 1) + 10)
+    view.frame.art = view.frame:CreateTexture(nil, "OVERLAY")
+    view.frame.art:SetAllPoints()
+    view.frame.art:SetTexture(KIT .. "cadre-carte")
+    view.out = UI.button(view, L("Monde"), 0, -410, 84, function() R.MapOut() end, nil, true)
+    view.mine = UI.button(view, L("Ma position"), 90, -410, 118, function() R.MapHere() end, nil, true)
+    -- Where you look and its counts, under the page's title, as in the owner's mockup (25/11).
+    view.caption = Panels.Text(view, 0, 20, S(540), 13, true)
+    GL.Safe(view.caption.SetWordWrap, view.caption, false)
+    view.hint = Panels.Text(view, 218, -416, S(540) - 218, 12, false, UI.theme.inkMuted)
     view.hint:SetJustifyH("RIGHT")
+    GL.Safe(view.hint.SetWordWrap, view.hint, false)
     return view
 end
 -- The fights that kept their position, placed on this map: its own, or those of the zones it
@@ -1253,7 +1268,7 @@ function R.MapLayout()
     end
     if zoom > 1.02 then view.out:Show() else view.out:Hide() end
     local title, deaths, kills = describe(view)
-    view.caption:SetText(UI.plain(title) .. " · " .. L("%d morts · %d victoires"):format(deaths, kills))
+    view.caption:SetText(bars(UI.plain(title) .. " · " .. L("%d morts · %d victoires"):format(deaths, kills)))
 end
 local function paintMap(view, byName)
     local mine = playerPlace()
@@ -1415,7 +1430,7 @@ local function paintMap(view, byName)
     view.tallies, view.shapes, view.placed = tallies, shapes, points
     local hint = L("Molette : zoomer · glisser : se déplacer · %d combats placés"):format(own)
     if view.guildOn then hint = hint .. " · " .. L("guilde : %d"):format(#guildPlaced) end
-    view.hint:SetText(hint)
+    view.hint:SetText(bars(hint))
     R.MapLayout()
     return true
 end
@@ -1481,7 +1496,12 @@ local function buildLands(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
     page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
-    page.lead = Panels.Text(page, X(26), -47, S(400), 13, false, UI.theme.inkMuted)
+    page.lead = Panels.Text(page, X(26), -54, S(400), 13, false, UI.theme.inkMuted)
+    -- Under the title, the Journal's rule, until the owner's own separator comes (25/11).
+    page.rule = page:CreateTexture(nil, "ARTWORK")
+    page.rule:SetTexture("Interface\\AddOns\\GrudgeLedger\\Media\\JournalReferenceRule")
+    page.rule:SetPoint("TOPLEFT", X(22), -42)
+    page.rule:SetSize(S(250), 8)
     page.mode = "map"
     page.map = buildMap(page)
     page.toggle = UI.button(page, "", X(446), -22, S(120), function()
@@ -1550,6 +1570,8 @@ local function paintLands(page)
         mapped = paintMap(page.map, byName)
     end
     if mapped then page.map:Show() else page.map:Hide() end
+    -- With the map, its place and counts take the lead's line.
+    if mapped then page.lead:Hide() else page.lead:Show() end
     if mapped and inGuild then
         page.guild:Show()
         page.guildLabel:Show()
@@ -2339,8 +2361,8 @@ end
 local TALLY_LINES = 6
 local BOOKS = {
     relations = { frame = "GrudgeLedgerRelations", nav = "players",
-        entries = { { "recap", "Bilan" }, { "honor", "Tableaux détaillés" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "lands", "Carte" },
-            { "rankings", "Classements" } } },
+        entries = { { "recap", "Bilan", "bilan" }, { "honor", "Tableaux détaillés", "tableaux-detailles" }, { "debts", "Dettes", "dettes" },
+            { "rivals", "Rivalités", "rivalites" }, { "lands", "Carte", "carte" }, { "rankings", "Classements", "classements" } } },
     guild = { frame = "GrudgeLedgerGuild", nav = "guild",
         entries = { { "guildlog", "Journal de guilde" }, { "enemies", "Ennemis de la guilde" }, { "guilds", "Guildes" },
             { "members", "Membres actifs" } } },
@@ -2377,6 +2399,19 @@ local function book(key)
             R.Open(page)
         end, true)
         tab:SetHeight(30)
+        -- Each entry of Relations carries its icon (the owner's kit, 25/11): 18 units near the left
+        -- edge; the label moves right just enough to clear it.
+        if entry[3] then
+            tab.icon = tab:CreateTexture(nil, "OVERLAY")
+            tab.icon:SetTexture(KIT .. entry[3])
+            tab.icon:SetSize(18, 18)
+            tab.icon:SetPoint("LEFT", 8, 0)
+            if tab.caption then
+                tab.caption:ClearAllPoints()
+                tab.caption:SetPoint("CENTER", 10, 0)
+                tab.caption:SetSize(168 - 48, 22)
+            end
+        end
         f.tabs[page] = tab
     end
     -- The guild's book carries the guild vision's box under its entries: sharing your fights is what
@@ -2428,6 +2463,42 @@ local function book(key)
         end)
         f.tally[i] = cell
     end
+    -- The map's legend, under the key figures while the map shows (owner's mockup, 25/11): what the
+    -- colours of the zones and the marks of the guild mean.
+    if key == "relations" then
+        f.legend = CreateFrame("Frame", nil, f)
+        f.legend:SetSize(166, 100)
+        f.legend.heading = Panels.Text(f.legend, 0, 0, 166, 12, true, UI.theme.brass)
+        local rule = f.legend:CreateTexture(nil, "BACKGROUND")
+        rule:SetPoint("TOPLEFT", 0, -18)
+        rule:SetSize(166, 1)
+        rule:SetColorTexture(0.55, 0.40, 0.20, 0.30)
+        f.legend.lines = {}
+        local kinds = { { color = { 1, 0.22, 0.16 } }, { color = { 0.35, 1, 0.4 } },
+            { texture = SKULL, color = { 1, 0.72, 0.25 } }, { texture = SWORD, color = { 0.55, 0.8, 1 } } }
+        for i, kind in ipairs(kinds) do
+            local line = CreateFrame("Frame", nil, f.legend)
+            line:SetPoint("TOPLEFT", 0, -24 - (i - 1) * 18)
+            line:SetSize(166, 16)
+            line.mark = line:CreateTexture(nil, "ARTWORK")
+            if kind.texture then
+                line.mark:SetTexture(kind.texture)
+                line.mark:SetSize(14, 14)
+                line.mark:SetPoint("LEFT", 0, 0)
+            else
+                line.mark:SetColorTexture(1, 1, 1, 1)
+                line.mark:SetSize(8, 8)
+                line.mark:SetPoint("LEFT", 3, 0)
+            end
+            line.mark:SetVertexColor(unpack(kind.color))
+            line.label = UI.label(line, "", nil, 22, -1, 144)
+            UI.journalFont(line.label, "GameFontHighlight", 11)
+            line.label:SetTextColor(unpack(UI.theme.paper))
+            f.legend.lines[i] = line
+        end
+        f.legend:Hide()
+    end
+    f.figuresTop = figuresTop
     local host = CreateFrame("Frame", nil, f)
     host:SetPoint("TOPLEFT", 240, -152)
     host:SetSize(SHEET_W, SHEET_H)
@@ -2493,6 +2564,28 @@ local function paintTally(f)
         end
     end
 end
+local function paintLegend(f)
+    local legend = f.legend
+    if not legend then return end
+    local page = f.host and f.host.pages and f.host.pages.lands
+    local map = page and page.map
+    if f.page ~= "lands" or not map or not map:IsShown() then
+        legend:Hide()
+        return
+    end
+    local shown = 0
+    for _, cell in ipairs(f.tally) do if cell:IsShown() then shown = shown + 1 end end
+    legend:ClearAllPoints()
+    legend:SetPoint("TOPLEFT", 40, f.figuresTop - 20 - shown * 22 - 22)
+    legend.heading:SetText(L("Légende"))
+    local labels = { L("Morts"), L("Victoires sans mort"), L("Morts de la guilde"), L("Victoires de la guilde") }
+    for i, line in ipairs(legend.lines) do
+        line.label:SetText(labels[i])
+        if i <= 2 or map.guildOn then line:Show() else line:Hide() end
+    end
+    legend:Show()
+end
+R.PaintLegend = paintLegend
 R.PaintTally = paintTally
 -- Opens a page in its book: Relations by default, Guilde for the guild's pages.
 function R.Open(key)
@@ -2542,6 +2635,7 @@ function R.Refresh()
             end
             painters[f.page](f.host.pages[f.page])
             paintTally(f)
+            R.PaintLegend(f)
         end
     end
 end

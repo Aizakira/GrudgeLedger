@@ -226,7 +226,12 @@ do
     assert(view.shapes[1].zone.shape.file == 9001 and view.shapes[1].alpha > 0.9 and view.regions[1].blendMode == "ADD")
     assert(view.regions[1].vertex[1] > 0.8 and view.labels[1].count:GetText() == tostring(R.Lands()[1].deaths))
     assert(math.abs(view.tallies[1].zone.rect.left - 0.26) < 0.001 and math.abs(view.shapes[1].zone.shape.width - 0.088) < 0.001)
-    assert(view.caption:GetText():find("^Azeroth · "), view.caption:GetText())
+    assert(view.caption:GetText():find("^Azeroth "), view.caption:GetText())
+    -- The owner's kit (25/11): a brass frame over the map, an icon on each entry, the legend under
+    -- the key figures while the map shows, the counts under the title.
+    assert(view.frame and view.frame.art and f.tabs.lands.icon and f.tabs.recap.icon and f.legend:IsShown(), "map kit")
+    assert(f.legend.heading:GetText() == "Légende" and f.legend.lines[1]:IsShown() and not f.legend.lines[3]:IsShown())
+    assert(not landsPage.lead:IsShown() and view.caption:GetText():find("6 morts", 1, true))
     -- Zoomed out the fights are hidden; they are placed through the zone's rectangle on the world.
     assert(#view.placed == 1 and view.placed[1].event == event and not view.points[1]:IsShown() and not next(view.live))
     assert(math.abs(view.placed[1].x - (0.26 + 0.512 * 0.08)) < 0.001 and math.abs(view.placed[1].y - (0.56 + 0.288 * 0.12)) < 0.001)
@@ -266,7 +271,7 @@ do
     click(view.labels[1])
     settle()
     assert(math.abs(view.zoom - 0.85 / 0.12) < 0.001 and math.abs(view.cx - 0.3) < 0.001 and math.abs(view.cy - 0.62) < 0.001, view.zoom)
-    assert(view.caption:GetText():find("^Tanaris · "), view.caption:GetText())
+    assert(view.caption:GetText():find("^Tanaris "), view.caption:GetText())
     assert(view.live[1446].textures[1].alpha == 1 and view.out:IsShown())
     -- "Monde" backs out to the whole world; "Ma position" returns to your zone.
     assert(R.MapOut() == true)
@@ -275,7 +280,7 @@ do
     assert(not view.live[1446].textures[1]:IsShown() and continent.art.hidden, "detail and continents step back")
     click(view.mine)
     settle()
-    assert(view.zoom > 7 and view.caption:GetText():find("^Tanaris · "))
+    assert(view.zoom > 7 and view.caption:GetText():find("^Tanaris "))
     -- Only finished fights are drawn: an attack without an outcome was a brown square (owner report).
     event.kind = "aggression"
     assert(#R.MapPoints(947, view.world.zones) == 0)
