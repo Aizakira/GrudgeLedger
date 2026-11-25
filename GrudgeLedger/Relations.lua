@@ -1250,6 +1250,20 @@ local function detailOf(view, zone)
     local zw, zh = tonumber(type(layer) == "table" and layer.layerWidth) or 1002, tonumber(type(layer) == "table" and layer.layerHeight) or 668
     local rect = zone.rect
     local rw, rh = rect.right - rect.left, rect.bottom - rect.top
+    -- First the zone's own map, at its resolution, as the game draws it before the explored pieces:
+    -- without it, what you never explored showed the continent's picture blown up into big blurred
+    -- squares (owner report 25/11, Burning Steppes, Ironforge).
+    local base = GL.Safe(C_Map.GetMapArtLayerTextures, zone.mapID, 1)
+    local tile = tonumber(type(layer) == "table" and layer.tileWidth) or 256
+    local columns = math.max(1, math.ceil(zw / tile))
+    for i, file in ipairs(type(base) == "table" and base or {}) do
+        local column, row = (i - 1) % columns, math.floor((i - 1) / columns)
+        local pw, ph = math.min(tile, zw - column * tile), math.min(tile, zh - row * tile)
+        if pw > 0 and ph > 0 and #tiles < 160 then
+            tiles[#tiles + 1] = { file = file, base = true, u = rect.left + column * tile / zw * rw, v = rect.top + row * tile / zh * rh,
+                w = pw / zw * rw, h = ph / zh * rh, tx = pw / tile, ty = ph / tile }
+        end
+    end
     for _, info in ipairs(type(explored) == "table" and explored or {}) do
         local tw, th = tonumber(info.textureWidth), tonumber(info.textureHeight)
         local ox, oy, files = tonumber(info.offsetX), tonumber(info.offsetY), info.fileDataIDs
@@ -1299,6 +1313,8 @@ local function showDetail(view, zone, alpha)
             local texture = table.remove(view.spare) or view.canvas:CreateTexture(nil, "BORDER")
             texture:SetTexture(tile.file)
             texture:SetTexCoord(0, tile.tx, 0, tile.ty)
+            -- The zone's map under its explored pieces, never over them.
+            GL.Safe(texture.SetDrawLayer, texture, "BORDER", tile.base and -1 or 1)
             live.textures[i] = texture
         end
         view.live[zone.mapID] = live
