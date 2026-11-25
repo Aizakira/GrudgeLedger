@@ -55,6 +55,7 @@ for name, expected_width, expected_height, transparent in (
     ("RelationsCarte/cadre-bg.tga", 128, 128, True), ("RelationsCarte/cadre-bd.tga", 128, 128, True),
     ("RelationsCarte/cadre-haut.tga", 512, 32, True), ("RelationsCarte/cadre-bas.tga", 512, 32, True),
     ("RelationsCarte/cadre-gauche.tga", 32, 256, True), ("RelationsCarte/cadre-droite.tga", 32, 256, True),
+    ("RelationsCarte/separateur-carte.tga", 512, 32, True),
     ("RelationsCarte/bilan.tga", 64, 64, True),
     ("RelationsCarte/tableaux-detailles.tga", 64, 64, True), ("RelationsCarte/dettes.tga", 64, 64, True),
     ("RelationsCarte/rivalites.tga", 64, 64, True), ("RelationsCarte/carte.tga", 64, 64, True),

@@ -674,7 +674,10 @@ end
 --   regions              the game's own shape of each zone, lit by your share of deaths there
 --   fights               each one where it happened (kept since 0.45.0), once zones are readable
 -- Everything comes from the game's own pictures: the addon ships one small mask and no map.
-local MAP_W, MAP_H = 600, 400
+-- 555 by 370 (owner report 25/11): at 600 by 400 the line under the map fell on the worn bottom
+-- edge of the page and could not be read. Page 510 high: title and counts 70, map 370, frame 5,
+-- the line 12 + 26; the curl of the sheet starts about 32 units from its bottom.
+local MAP_W, MAP_H = 555, 370
 local MAP_POINTS = 40 -- fights drawn in one zone, the latest ones: more would be noise
 local ZOOM_MAX = 40 -- times the whole world: a zone fills the view well before
 local ZOOM_STEP = 1.3
@@ -685,6 +688,7 @@ local SKULL, SWORD = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", "Inte
 local ARROW = "Interface\\Minimap\\MinimapArrow"
 local FEATHER = "Interface\\AddOns\\GrudgeLedger\\Media\\MapFeather"
 -- The owner's kit for the map page (25/11): the frame around the map, the icons of the entries.
+local fitHint -- below, with the map's caption
 local KIT = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationsCarte\\"
 local function mapInfo(id)
     local info = id and C_Map and GL.Safe(C_Map.GetMapInfo, id)
@@ -1014,6 +1018,23 @@ end
 local function bars(text)
     return (tostring(text or ""):gsub(" · ", "   |cffa07b44|||r   "))
 end
+-- The line under the map: "Ma position" (after "Monde" once you zoomed in), then how to move and
+-- the counts, at a size that reads (owner report 25/11: shrunk to fit, it could not be read).
+-- Without room for all of it, the counts alone.
+fitHint = function(view)
+    if not view.hintFull then return end
+    local out = view.out:IsShown()
+    view.mine:ClearAllPoints()
+    view.mine:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", out and 92 or 0, -12)
+    local room = (view.width or MAP_W) - (out and 222 or 130)
+    view.hint:SetWidth(room)
+    local font = GL.Safe(view.hint.GetFont, view.hint)
+    if font then GL.Safe(view.hint.SetFont, view.hint, font, 12) end
+    view.hint:SetText(view.hintFull)
+    local wide = tonumber(GL.Safe(view.hint.GetStringWidth, view.hint)) or 0
+    if wide > room then view.hint:SetText(view.hintShort) end
+    view.hint:SetTextColor(unpack(UI.theme.ink))
+end
 local function describe(view)
     local world, best, distance = view.world, nil, nil
     for _, zone in ipairs(world.zones) do
@@ -1132,15 +1153,15 @@ local function buildMap(page)
     view.out = UI.button(view, L("Monde"), 0, 0, 84, function() R.MapOut() end, nil, true)
     view.mine = UI.button(view, L("Ma position"), 0, 0, 118, function() R.MapHere() end, nil, true)
     view.out:ClearAllPoints()
-    view.out:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", 0, -16)
+    view.out:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", 0, -12)
     view.mine:ClearAllPoints()
-    view.mine:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", 92, -16)
+    view.mine:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", 0, -12)
     -- Where you look and its counts, under the page's title, as in the owner's mockup (25/11).
     view.caption = Panels.Text(view, 0, 20, S(540), 13, true)
     GL.Safe(view.caption.SetWordWrap, view.caption, false)
     view.hint = Panels.Text(view, 0, 0, MAP_W - 220, 12, true)
     view.hint:ClearAllPoints()
-    view.hint:SetPoint("TOPRIGHT", view.canvas, "BOTTOMRIGHT", 0, -21)
+    view.hint:SetPoint("TOPRIGHT", view.canvas, "BOTTOMRIGHT", 0, -17)
     view.hint:SetJustifyH("RIGHT")
     GL.Safe(view.hint.SetWordWrap, view.hint, false)
     return view
@@ -1309,6 +1330,7 @@ function R.MapLayout()
         view.mine:Hide()
     end
     if zoom > 1.02 then view.out:Show() else view.out:Hide() end
+    fitHint(view)
     local title, deaths, kills = describe(view)
     view.caption:SetText(bars(UI.plain(title) .. " · " .. L("%d morts · %d victoires"):format(deaths, kills)))
 end
@@ -1490,8 +1512,13 @@ local function paintMap(view, byName)
     locate(view)
     view.tallies, view.shapes, view.placed = tallies, shapes, points
     local hint = L("Molette : zoomer · glisser : se déplacer · %d combats placés"):format(own)
-    if view.guildOn then hint = hint .. " · " .. L("guilde : %d"):format(#guildPlaced) end
-    Panels.Fit(view.hint, bars(hint), MAP_W - 220, 12, 9, true)
+    local counts = hint:match("[^·]+$"):gsub("^%s+", "")
+    if view.guildOn then
+        local guild = " · " .. L("guilde : %d"):format(#guildPlaced)
+        hint, counts = hint .. guild, counts .. guild
+    end
+    view.hintFull, view.hintShort = bars(hint), bars(counts)
+    fitHint(view)
     R.MapLayout()
     return true
 end
@@ -1558,11 +1585,11 @@ local function buildLands(host)
     page:SetAllPoints()
     page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
     page.lead = Panels.Text(page, X(26), -54, S(400), 13, false, UI.theme.inkMuted)
-    -- Under the title, the Journal's rule, until the owner's own separator comes (25/11).
+    -- Under the title, the owner's separator (kit of 25/11).
     page.rule = page:CreateTexture(nil, "ARTWORK")
-    page.rule:SetTexture("Interface\\AddOns\\GrudgeLedger\\Media\\JournalReferenceRule")
-    page.rule:SetPoint("TOPLEFT", X(22), -42)
-    page.rule:SetSize(S(250), 8)
+    page.rule:SetTexture(KIT .. "separateur-carte")
+    page.rule:SetPoint("TOPLEFT", X(18), -38)
+    page.rule:SetSize(256, 16)
     page.mode = "map"
     page.map = buildMap(page)
     page.toggle = UI.button(page, "", X(446), -22, S(120), function()

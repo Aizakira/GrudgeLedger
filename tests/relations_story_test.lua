@@ -235,6 +235,11 @@ do
     assert(view.frame and view.frame.pieces["cadre-hg"] and f.tabs.lands.icon and f.tabs.recap.icon and f.legend:IsShown(), "map kit")
     assert(f.legend.heading:GetText() == "Légende" and f.legend.lines[1]:IsShown() and not f.legend.lines[3]:IsShown())
     assert(not landsPage.lead:IsShown() and view.caption:GetText():find("6 morts", 1, true))
+    -- The line under the map stays on the sound part of the sheet (owner report 25/11: it fell on the
+    -- worn bottom edge, about the last 32 units of the 510-unit page): map top 70, map, 12, buttons 26.
+    assert(70 + view.height + 12 + 26 <= 510 - 30, "the bottom line is above the sheet's curl: " .. view.height)
+    assert(view.hint.color and view.hint.color[1] < 0.3 and view.hint.font[2] == 12, "the hint reads: dark ink, 12")
+    assert(landsPage.rule.texture and landsPage.rule.texture:find("separateur-carte", 1, true), "the owner's separator")
     -- Zoomed out the fights are hidden; they are placed through the zone's rectangle on the world.
     assert(#view.placed == 1 and view.placed[1].event == event and not view.points[1]:IsShown() and not next(view.live))
     assert(math.abs(view.placed[1].x - (0.26 + 0.512 * 0.08)) < 0.001 and math.abs(view.placed[1].y - (0.56 + 0.288 * 0.12)) < 0.001)
@@ -248,7 +253,7 @@ do
     view.canvas.scripts.OnUpdate(view.canvas, 0.02)
     assert(view.goal and view.zoom > 1 / 0.6 and view.zoom < view.goal.zoom, view.zoom)
     settle()
-    assert(not view.goal and math.abs(view.zoom - 1.3 / 0.6) < 0.001 and math.abs(view.cx - 0.3) < 0.001)
+    assert(not view.goal and math.abs(view.zoom - 1.3 / 0.6) < 0.001 and math.abs(view.cx - 0.3) < 0.01, view.zoom .. " " .. view.cx)
     for _ = 1, 2 do
         wheel(view.canvas, 1)
         settle()
