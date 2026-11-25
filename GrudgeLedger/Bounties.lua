@@ -165,7 +165,15 @@ local function earlier(a,b)
 end
 local function commitment(o)
     if next(o.paid) or next(o.arrivals) then return 3 end
-    return o.winner and 2 or o.first and 1 or 0
+    if o.winner then return 2 end
+    if o.first then return 1 end
+    -- An open bounty that other members put gold on (25/11): a publication dated a little earlier,
+    -- and backed by nobody, no longer takes its target and its pledges away. Read from the log, the
+    -- same on every client.
+    for payer in pairs(o.pot or {}) do
+        if payer~=o.owner then return 0.5 end
+    end
+    return 0
 end
 local function view(s,archiving)
     local orders,events={},{}
