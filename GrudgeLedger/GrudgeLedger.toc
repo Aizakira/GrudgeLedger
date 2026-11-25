@@ -53,6 +53,7 @@ DossierPanels.lua
 PlayerDossier.lua
 RivalryRules.lua
 RivalryLines.lua
+RivalryLinesLocales.lua
 Relations.lua
 Recap.lua
 BountyUI.lua

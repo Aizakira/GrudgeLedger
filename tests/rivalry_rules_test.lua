@@ -190,7 +190,7 @@ assert(first(sheet("Ordre", { { "kill", 9000 }, { "death", 60, nil, nil, { pve =
 -- Without a zone, no "à {zone}" left in the line.
 local nowhere = sheet("Nulle", { { "kill", 9000, nil, "?" }, { "death", 60, nil, "?", { pve = true } } })
 local tell = Lines.Tell(nowhere, story(nowhere), now)
-assert(tell.headline == "Vous a pris en traître" and not tell.fact:find("{", 1, true), tell.headline)
+assert(tell.headline == "Vous a pris en traître" and not tell.fact:find("{", 1, true), tostring(tell.headline) .. " | " .. tostring(tell.fact))
 -- The two banks have the same parts and the English never asks for a word the French lacks.
 local function strings(t, out)
     out = out or {}
@@ -208,6 +208,39 @@ for _, part in ipairs({ "headline", "verb", "detail", "memory", "push", "when" }
         end
     end
 end
+-- Every language of the addon has its own lines (owner, 25/11: never English for want of a
+-- translation): the same parts as the French, no word in braces the French lacks, and every case
+-- told without a brace left, in Spanish (Spain and Mexico), German and Portuguese.
+for _, locale in ipairs({ "esES", "deDE", "ptBR" }) do
+    local fr, other = Lines.LINES.frFR, Lines.LINES[locale]
+    assert(other, locale .. " has its lines")
+    for _, part in ipairs({ "headline", "verb", "detail", "memory", "push", "when", "units" }) do
+        for id, lines in pairs(fr[part] or {}) do
+            assert(other[part] and other[part][id], locale .. ": " .. part .. " " .. tostring(id))
+            local marks = {}
+            for _, line in ipairs(strings(lines)) do for m in line:gmatch("{%w+}") do marks[m] = true end end
+            for _, line in ipairs(strings(other[part][id])) do
+                for m in line:gmatch("{%w+}") do assert(marks[m] or m == "{n}", locale .. " " .. part .. " " .. tostring(id) .. ": " .. m) end
+            end
+        end
+    end
+end
+local nativeLocale = GetLocale
+for _, locale in ipairs({ "esES", "esMX", "deDE", "ptBR", "enUS", "frFR" }) do
+    GetLocale = function() return locale end
+    for i, case in ipairs(cases) do
+        local record = GL.db.players["guid:Player-9-Ligne" .. i]
+        local told = Lines.Tell(record, story(record), now)
+        for _, part in ipairs({ told.headline, told.fact, told.push }) do
+            assert(type(part) == "string" and #part > 3 and not part:find("[{}]"), locale .. " " .. case[1] .. ": " .. tostring(part))
+        end
+    end
+end
+GetLocale = function() return "esES" end
+assert(Lines.Tell(nowhere, story(nowhere), now).headline == "Te apuñaló por la espalda", "Spanish without a zone")
+GetLocale = function() return "deDE" end
+assert(Lines.Tell(nowhere, story(nowhere), now).headline == "Hat dir in den Rücken gestochen", "German without a zone")
+GetLocale = nativeLocale
 -- In English on an English client.
 local nativeLocale = GetLocale
 GetLocale = function() return "enUS" end

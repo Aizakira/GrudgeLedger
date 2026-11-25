@@ -75,6 +75,8 @@ local LINES = {
         nth = { "première", "deuxième", "troisième", "quatrième", "cinquième", "sixième", "septième", "huitième", "neuvième", "dixième" },
         nthMasc = { "premier", "deuxième", "troisième", "quatrième", "cinquième", "sixième", "septième", "huitième", "neuvième", "dixième" },
         nthMore = "{n}e",
+        units = { seconds = "{n} secondes", minute = "1 minute", minutes = "{n} minutes" },
+        lower = { ["Vous "] = "vous " },
         push = {
             crushed = { "Ça ne peut plus durer.", "{name} vous a pris pour cible. À vous de renverser la vapeur.",
                 "Une prime, peut-être : seul, ça ne passe pas.", "Il est temps d’appeler la guilde.", "Changez de route, ou changez la donne.",
@@ -149,6 +151,8 @@ local LINES = {
         },
         nth = { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth" },
         nthMore = "{n}th",
+        units = { seconds = "{n} seconds", minute = "1 minute", minutes = "{n} minutes" },
+        lower = { ["You "] = "you " },
         push = {
             crushed = { "This cannot go on.", "{name} made you a target. Turn the tables.", "A bounty, maybe: alone, it does not work.",
                 "Time to call the guild.", "Change your road, or change the game.", "{debt} points owed. Time to collect.",
@@ -170,9 +174,12 @@ local LINES = {
         },
     },
 }
+-- The languages of the addon: French, English, Spanish (Spain and Mexico), German, Portuguese
+-- (Brazil). Any other client reads English, as the rest of the addon does.
+local ALIASES = { enGB = "enUS", esMX = "esES", ptPT = "ptBR" }
 local function bank()
     local locale = GetLocale and GetLocale() or "frFR"
-    return LINES[locale] or LINES.enUS
+    return LINES[ALIASES[locale] or locale] or LINES.enUS
 end
 -- A fixed choice for a sheet and a fight: the same sentence until something new happens.
 local function pick(list, key)
@@ -203,10 +210,11 @@ local function wanted(text, params)
     return true
 end
 -- "1 minute", "12 minutes", "40 secondes": the unit goes with the number.
-local function duration(seconds, french)
-    if seconds < MINUTE then return tostring(seconds) .. (french and " secondes" or " seconds") end
+local function duration(seconds, b)
+    local units = b.units
+    if seconds < MINUTE then return fill(units.seconds, { n = seconds }) end
     local m = math.floor(seconds / MINUTE + 0.5)
-    return m == 1 and "1 minute" or tostring(m) .. " minutes"
+    return m == 1 and units.minute or fill(units.minutes, { n = m })
 end
 local function ordinal(b, n, masculine)
     local list = masculine and b.nthMasc or b.nth
@@ -257,7 +265,7 @@ function M.Situations(record, now)
     local facts = read(record, now)
     local found, latest = {}, facts[1]
     if not latest then return {}, {} end
-    local french = not GetLocale or GetLocale() == "frFR"
+    local b = bank()
     local c = type(latest.combat) == "table" and latest.combat or {}
     local mine, theirs = tonumber(c.playerLevel), tonumber(c.opponentLevel)
     local where = zoneOf(latest)
@@ -273,7 +281,7 @@ function M.Situations(record, now)
     if latest.kind == "death" then
         if c.pve then add("pve") end
         local since = tonumber(c.sinceRevive)
-        if since and since <= 120 then add("resCamp", { since = duration(math.max(1, math.floor(since)), french) }) end
+        if since and since <= 120 then add("resCamp", { since = duration(math.max(1, math.floor(since)), b) }) end
         local health = tonumber(c.healthPct)
         if health and health <= 35 then add("lowHealth", { health = math.floor(health + 0.5) }) end
         if mine and theirs and theirs - mine >= 3 then add("gank", { gap = theirs - mine }) end
@@ -294,13 +302,13 @@ function M.Situations(record, now)
             local before = facts[i]
             if latest.time - before.time > 15 * MINUTE then break end
             if before.kind == "death" then
-                add("quickRevenge", { minutes = duration(math.max(MINUTE, latest.time - before.time), french) })
+                add("quickRevenge", { minutes = duration(math.max(MINUTE, latest.time - before.time), b) })
                 break
             end
         end
     end
     if seconds and seconds >= 1 and seconds <= 8 then add("quick", { seconds = math.floor(seconds), hits = hits > 0 and hits or nil }) end
-    if seconds and seconds >= 90 then add("long", { minutes = duration(seconds, french) }) end
+    if seconds and seconds >= 90 then add("long", { minutes = duration(seconds, b) }) end
     -- Three deaths or more in half an hour, the latest among them.
     local deaths, first = 0, nil
     for _, e in ipairs(facts) do
@@ -308,7 +316,7 @@ function M.Situations(record, now)
         if e.kind == "death" then deaths, first = deaths + 1, e.time end
     end
     if latest.kind == "death" and deaths >= 3 then
-        add("camping", { n = deaths, minutes = duration(math.max(MINUTE, latest.time - first), french) })
+        add("camping", { n = deaths, minutes = duration(math.max(MINUTE, latest.time - first), b) })
     end
     if facts[2] and latest.time - facts[2].time >= 14 * DAY then add("returned", { days = math.floor((latest.time - facts[2].time) / DAY) }) end
     local hour = tonumber(GL.Safe(date, "%H", latest.time))
@@ -344,7 +352,7 @@ local function memory(b, record, facts, found, key, name)
     if latest.kind == "death" and zone and not found.camping then
         local n = 0
         for _, e in ipairs(facts) do if e.kind == "death" and zoneOf(e) == zone then n = n + 1 end end
-        if n >= 2 then return fill(pick(b.memory.sameZone, key .. ":zone"), { nth = ordinal(b, n), zone = zone }) end
+        if n >= 2 then return fill(pick(b.memory.sameZone, key .. ":zone"), { nth = ordinal(b, n), n = n, zone = zone }) end
     end
     if latest.kind == "death" and (found.pve or found.firstStrike) then
         local trick = found.pve and "pve" or "opener"
@@ -404,7 +412,8 @@ function M.Tell(record, analysis, now)
         for k, v in pairs(base) do params[k] = v end
         for k, v in pairs(situation.params) do if v ~= "" then params[k] = v end end
         local headline = b.headline[situation.id] or ""
-        if params.zone == "" then headline = headline:gsub(" à {zone}", ""):gsub(" in {zone}", "") end
+        -- Without a zone, its word goes with it ("à", "in", "en", "em").
+        if params.zone == "" then headline = headline:gsub(" [^ ]+ {zone}", "") end
         if wanted(headline, params) then result.headline = fill(headline, params) end
     end
     -- The sentence: when and where, the verb, two details at most, the sharpest first.
@@ -425,7 +434,11 @@ function M.Tell(record, analysis, now)
     end
     -- After "Hier soir à Azshara, " the pronoun loses its capital; a name keeps it.
     local head = whenWhere(b, latest.time, now, zoneOf(latest))
-    local sentence = head ~= "" and (head .. (verb:gsub("^Vous ", "vous "):gsub("^You ", "you "))) or verb
+    local lowered = verb
+    for from, to in pairs(b.lower or {}) do
+        if lowered:sub(1, #from) == from then lowered = to .. lowered:sub(#from + 1) end
+    end
+    local sentence = head ~= "" and (head .. lowered) or verb
     if #clauses > 0 then sentence = sentence .. ", " .. table.concat(clauses, ", ") end
     sentence = sentence .. "."
     local remembered = memory(b, record, facts, found, key, name)
