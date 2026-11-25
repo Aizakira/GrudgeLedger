@@ -39,6 +39,20 @@ for _, case in ipairs({ { "Locales.lua", "esES" }, { "Locales.lua", "enUS" }, { 
         end
     end
 end
+-- The labels of the books' entries and of the Registre's sections go through a variable, out of
+-- reach of the check on L("..."): each one must be in every language (owner, 25/11).
+local source = assert(io.open(TEST_WORK .. "/GrudgeLedger/Relations.lua", "rb")):read("*a")
+local books = source:match("local BOOKS = (%b{})")
+assert(books, "the books of Relations.lua")
+for _, case in ipairs({ { "Locales.lua", "esES" }, { "Locales.lua", "enUS" }, { "Locales_deDE.lua", "deDE" }, { "Locales_ptBR.lua", "ptBR" } }) do
+    local table_ = load(case[1], case[2])
+    local labels = 0
+    for _ in books:gmatch('{ "%w+", "([^"]+)"') do labels = labels + 1 end
+    assert(labels >= 12, "the menu labels were read: " .. labels)
+    for label in books:gmatch('{ "%w+", "([^"]+)"') do
+        if not table_[label] then wrong[#wrong + 1] = case[2] .. ": menu label without translation: " .. label end
+    end
+end
 table.sort(wrong)
 assert(#wrong == 0, #wrong .. " translations with other format codes:\n" .. table.concat(wrong, "\n", 1, math.min(#wrong, 25)))
 assert(checked > 4000, "the four tables were read: " .. checked)

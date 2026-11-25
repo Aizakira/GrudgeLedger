@@ -2082,8 +2082,9 @@ local RANK_ROWS = 6
 local function rankingGroups()
     local choices = GL.RankingChoices
     local groups = {}
-    for _, group in ipairs(choices.players) do
-        groups[#groups + 1] = { name = group.name, entries = group.entries }
+    for i, group in ipairs(choices.players) do
+        -- The third players' group repeats the Adversaires table (owner, 25/11): left out.
+        if i ~= 3 then groups[#groups + 1] = { name = group.name, entries = group.entries } end
     end
     local guilds = { name = L("Guildes"), entries = {}, guild = true }
     for _, group in ipairs(choices.guilds) do
@@ -2127,10 +2128,12 @@ local function buildRankings(host)
             page.group, page.choice, page.offset = i, 1, 0
             R.Refresh()
         end, true, true)
+        -- The Registre's sections choose the group now.
+        page.tabs[i]:Hide()
     end
     page.chips = {}
     for i = 1, 6 do
-        page.chips[i] = UI.button(page, "", X(26) + ((i - 1) % 3) * S(181), -116 - math.floor((i - 1) / 3) * 30, S(178), function()
+        page.chips[i] = UI.button(page, "", X(26) + ((i - 1) % 3) * S(181), -86 - math.floor((i - 1) / 3) * 30, S(178), function()
             page.choice, page.offset = i, 0
             R.Refresh()
         end, true, true)
@@ -2835,10 +2838,14 @@ end
 -- debts, the rivalries, the map, the rankings) and Guilde (the guild's journal, its enemies, the
 -- other guilds), each with its tab at the top.
 local TALLY_LINES = 6
+local paintSections
 local BOOKS = {
     relations = { frame = "GrudgeLedgerRelations", nav = "players",
-        entries = { { "recap", "Bilan", "bilan" }, { "honor", "Tableaux détaillés", "tableaux-detailles" }, { "debts", "Dettes", "dettes" },
-            { "rivals", "Rivalités", "rivalites" }, { "lands", "Carte", "carte" }, { "rankings", "Classements", "classements" } } },
+        entries = { { "recap", "Bilan", "bilan" }, { "rivals", "Rivalités", "rivalites" }, { "lands", "Carte", "carte" },
+            { "registry", "Registre", "tableaux-detailles" } },
+        -- The pages of the Registre, each a section under its entry: { page, label, rankings group }.
+        registry = { { "honor", "Adversaires" }, { "debts", "Dettes" }, { "rankings", "Menaces", 1 },
+            { "rankings", "Amis", 2 }, { "rankings", "Guildes", "guild" } } },
     guild = { frame = "GrudgeLedgerGuild", nav = "guild",
         entries = { { "guildlog", "Journal de guilde" }, { "enemies", "Ennemis de la guilde" }, { "guilds", "Guildes" },
             { "members", "Membres actifs" } } },
@@ -2858,7 +2865,10 @@ local painters = { recap = function(page) GL.Recap.PaintPage(page) end, honor = 
 local pageBook = {}
 for key, spec in pairs(BOOKS) do
     for _, entry in ipairs(spec.entries) do pageBook[entry[1]] = key end
+    for _, section in ipairs(spec.registry or {}) do pageBook[section[1]] = key end
 end
+-- The pages reached through the Registre's sections, never from an entry of their own.
+local inRegistry = { honor = true, debts = true, rankings = true }
 R.books = {}
 local function book(key)
     if R.books[key] then return R.books[key] end
@@ -2872,7 +2882,7 @@ local function book(key)
     for i, entry in ipairs(spec.entries) do
         local page = entry[1]
         local tab = UI.button(f, L(entry[2]), 38, -158 - (i - 1) * 36, 168, function()
-            R.Open(page)
+            if page == "registry" then R.Open(f.registryLast or "honor") else R.Open(page) end
         end, true)
         tab:SetHeight(30)
         -- Each entry of Relations carries its icon (the owner's kit, 25/11): 18 units near the left
@@ -2890,9 +2900,29 @@ local function book(key)
         end
         f.tabs[page] = tab
     end
+    -- The Registre's sections, under its entry, shown while one of them is open.
+    f.sections = {}
+    for j, section in ipairs(spec.registry or {}) do
+        local y = -158 - #spec.entries * 36 - (j - 1) * 27 + 4
+        local button = UI.button(f, L(section[2]), 54, y, 152, function()
+            local target = section[1]
+            if target == "rankings" then
+                local rankings = f.host.pages.rankings
+                rankings.group = section[3] == "guild" and #rankings.groups or section[3]
+                rankings.choice, rankings.offset = 1, 0
+            end
+            R.Open(target)
+        end, true)
+        button:SetHeight(24)
+        button.section = section
+        f.sections[j] = button
+        -- The first section of each page answers for it ("Dettes", "Menaces"): the old entries'
+        -- names still open their page.
+        if not f.tabs[section[1]] then f.tabs[section[1]] = button end
+    end
     -- The guild's book carries the guild vision's box under its entries: sharing your fights is what
     -- fills its pages.
-    local figuresTop = -424
+    local figuresTop = key == "relations" and -444 or -424
     if key == "guild" then
         f.vision = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
         f.vision:SetPoint("TOPLEFT", 36, -308)
@@ -2975,7 +3005,12 @@ local function book(key)
     host:SetPoint("TOPLEFT", 240, -152)
     host:SetSize(SHEET_W, SHEET_H)
     host.pages = {}
-    for _, entry in ipairs(spec.entries) do host.pages[entry[1]] = builders[entry[1]](host) end
+    for _, entry in ipairs(spec.entries) do
+        if builders[entry[1]] then host.pages[entry[1]] = builders[entry[1]](host) end
+    end
+    for _, section in ipairs(spec.registry or {}) do
+        if not host.pages[section[1]] then host.pages[section[1]] = builders[section[1]](host) end
+    end
     f.host = host
     return f
 end
@@ -3016,6 +3051,21 @@ function R.Tally(key)
     local open, settled, total = R.Debts()
     return { { L("Reste dû"), total, "debts" }, { L("Dettes ouvertes"), #open, "debts" },
         { L("Réglées ce mois-ci"), #settled, "debts" }, { L("Rivalités"), #R.Rivals(), "rivals" } }
+end
+-- The Registre's sections: shown while one of its pages is open, the open one lit.
+paintSections = function(f)
+    local open = inRegistry[f.page] == true
+    local rankings = f.host and f.host.pages.rankings
+    for _, button in ipairs(f.sections or {}) do
+        local section = button.section
+        local lit = section[1] == f.page
+        if lit and section[1] == "rankings" and rankings then
+            local group = section[3] == "guild" and #rankings.groups or section[3]
+            lit = rankings.group == group
+        end
+        UI.selectButton(button, lit)
+        if open then button:Show() else button:Hide() end
+    end
 end
 local function paintTally(f)
     local honor = f.page == "honor"
@@ -3073,6 +3123,9 @@ function R.Open(key)
         end
     end
     for tabKey, tab in pairs(f.tabs) do UI.selectButton(tab, tabKey == f.page) end
+    if f.tabs.registry then UI.selectButton(f.tabs.registry, inRegistry[f.page] == true) end
+    if inRegistry[f.page] then f.registryLast = f.page end
+    paintSections(f)
     R.page = f.page
     UI.paintStains(f, f.page)  -- each page keeps its own stains
     GL.ShowBookPage(f)
@@ -3106,6 +3159,7 @@ function R.Refresh()
                 end
             end
             painters[f.page](f.host.pages[f.page])
+            paintSections(f)
             paintTally(f)
             R.PaintLegend(f)
         end

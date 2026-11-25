@@ -168,21 +168,32 @@ GL.SetReaction(person("Valf", "Gank", "0010"), "friend")
 _, companion = GL.Titles()
 assert(companion == GL.Get(person("Valf", "Gank", "0010")).key, "a friend you grouped with is")
 
--- "Classements" is the sixth page of the same book (0.44.0): four tabs, the lists of the tab as
--- chips, the same figures as the old window, a click opens the sheet.
-click(f.tabs.rankings)
+-- The Registre (owner, 25/11): one entry for the detailed tables, the debts and the rankings, its
+-- five sections under it while one is open. Four entries in the menu.
+assert(f.tabs.registry and #f.sections == 5 and not f.tabs.rankings.icon, "the Registre and its five sections")
+click(f.tabs.registry)
+-- It opens on the section left last (here the debts, read above).
+assert(R.page == "debts" and f.tabs.registry.active and f.sections[1]:IsShown() and f.sections[2].active, "the Registre opens where it was left")
+click(f.tabs.rivals)
+assert(not f.sections[1]:IsShown(), "the sections leave with the Registre")
+-- "Menaces": the rankings on their first group; the lists of the group as chips, a click opens the sheet.
+click(f.sections[3])
 local rankings = f.host.pages.rankings
-assert(R.page == "rankings" and rankings:IsShown() and f.tabs.rankings.active and #rankings.groups == 4)
+assert(R.page == "rankings" and rankings:IsShown() and f.tabs.registry.active and f.sections[3].active and #rankings.groups == 3)
 assert(rankings.title:GetText() == "Rancunes les plus fortes" and rankings.tabs[1].active and rankings.chips[4]:IsShown() and not rankings.chips[5]:IsShown())
 assert(rankings.rows[1].item.record == nemesis and rankings.rows[1].value:GetText() == "−" .. GL.Debt(nemesis), rankings.rows[1].value:GetText())
 assert(rankings.rows[1].meta:GetText():find(I.Nickname(nemesis), 1, true), rankings.rows[1].meta:GetText())
-click(rankings.tabs[3])
-click(rankings.chips[2])
-assert(rankings.title:GetText() == "Adversaires les plus vaincus" and rankings.rows[1].item.record == GL.Get(avenged) and rankings.rows[1].value:GetText() == "6")
+-- "Amis": the second group. The old "Combats" group repeated the Adversaires table: it left.
+click(f.sections[4])
+assert(rankings.group == 2 and f.sections[4].active and not f.sections[3].active)
+for _, group in ipairs(rankings.groups) do
+    for _, entry in ipairs(group.entries) do assert(entry[2] ~= "Adversaires les plus vaincus", "no repeat of the Adversaires") end
+end
 -- The crests lead to the guild tab; a guild line shows its initials and your rule.
 click(g.tabs.guilds)
 click(crests.cards[1])
-assert(R.page == "rankings" and rankings.tabs[4].active and rankings.rows[1].item.name == "Ok Bodycount" and rankings.rows[1].initials:GetText() == "OB")
+assert(R.page == "rankings" and rankings.group == 3 and f.sections[5].active and rankings.rows[1].item.name == "Ok Bodycount"
+    and rankings.rows[1].initials:GetText() == "OB")
 click(rankings.chips[6])
 assert(rankings.title:GetText() == "Mes règles de guilde" and rankings.rows[1].value:GetText() == "Ennemi", rankings.rows[1].value:GetText())
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
