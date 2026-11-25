@@ -18,6 +18,7 @@ Locales.lua
 Locales_deDE.lua
 Locales_ptBR.lua
 Core.lua
+Art.lua
 EngravingData.lua
 Tags.lua
 ZoneTime.lua
@@ -51,6 +52,7 @@ DeathReport.lua
 DossierPanels.lua
 PlayerDossier.lua
 RivalryRules.lua
+RivalryLines.lua
 Relations.lua
 Recap.lua
 BountyUI.lua

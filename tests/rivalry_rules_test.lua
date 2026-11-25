@@ -16,7 +16,8 @@ local function sheet(id, facts, zone)
         pvp = { kills = 0, deaths = 0, aggressions = 0 } }
     for _, f in ipairs(facts) do
         serial = serial + 1
-        local e = { kind = f[1], time = now - f[2], confidence = "confirmed", eventId = "r" .. serial, zone = f[4] or zone or "Azshara" }
+        local e = { kind = f[1], time = now - f[2], confidence = "confirmed", eventId = "r" .. serial, zone = f[4] or zone or "Azshara",
+            combat = f[5] }
         if f[1] == "death" then
             e.evidence = f[3] or KB
             e.killingBlow = e.evidence == KB
@@ -131,5 +132,63 @@ for _, record in pairs(GL.db.players) do
 end
 list = R.RivalStories()
 assert(#list == expected and expected > 200, #list .. " on the page for " .. expected)
+assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
+-- 10. The lines (RivalryLines.lua): each situation found from what the journal recorded, the
+-- sharpest first, told without a placeholder left, the same sentence until the next fight.
+local Lines = GL.RivalryLines
+local function first(record) return (Lines.Situations(record, now)[1] or {}).id end
+local cases = {
+    { "pve", { { "kill", 9000 }, { "death", 60, nil, nil, { pve = true, healthPct = 20, opener = "opponent" } } } },
+    { "camping", { { "death", 1500 }, { "death", 900 }, { "death", 60 } } },
+    { "lowHealth", { { "kill", 9000 }, { "death", 60, nil, nil, { healthPct = 30 } } } },
+    { "gank", { { "kill", 9000 }, { "death", 60, nil, nil, { playerLevel = 50, opponentLevel = 58 } } } },
+    { "pack", { { "kill", 9000 }, { "death", 60, WITH, nil, { opponents = 4 } } } },
+    { "pet", { { "kill", 9000 }, { "death", 60, "Le familier de ce joueur vous a porté le coup fatal." } } },
+    { "firstStrike", { { "kill", 9000 }, { "death", 60, nil, nil, { opener = "opponent" } } } },
+    { "quickRevenge", { { "death", 600 }, { "kill", 60 } } },
+    { "underdog", { { "death", 9000 }, { "kill", 60, nil, nil, { playerLevel = 50, opponentLevel = 54 } } } },
+    { "bully", { { "death", 9000 }, { "kill", 60, nil, nil, { playerLevel = 58, opponentLevel = 50 } } } },
+    { "group", { { "death", 9000 }, { "kill", 60, nil, nil, { assist = "Célestine" } } } },
+    { "returned", { { "death", 30 * DAY }, { "kill", 60 } } },
+    { "domination", { { "kill", 5000 }, { "kill", 4000 }, { "kill", 3000 }, { "kill", 2000 }, { "death", 1000 }, { "kill", 60 } } },
+    { "nemesis", { { "death", 5000 }, { "death", 4000 }, { "death", 3000 }, { "kill", 2000 }, { "death", 1000 } } },
+}
+for i, case in ipairs(cases) do
+    local record = sheet("Ligne" .. i, case[2])
+    assert(first(record) == case[1], case[1] .. " found as " .. tostring(first(record)))
+    local tell = Lines.Tell(record, story(record), now)
+    for _, part in ipairs({ tell.headline, tell.fact, tell.push }) do
+        assert(type(part) == "string" and #part > 3 and not part:find("[{}]"), case[1] .. ": " .. tostring(part))
+    end
+    assert(tell.fact:find("Ligne" .. i, 1, true) or not Lines.LINES.frFR.fact[case[1]][1]:find("{name}", 1, true), case[1] .. " names the rival")
+    -- The same sentence on every look, until something new happens.
+    local again = Lines.Tell(record, story(record), now)
+    assert(again.fact == tell.fact and again.push == tell.push, case[1] .. " is stable")
+end
+-- The sharpest wins: treachery before a low health, a low health before a first strike.
+assert(first(sheet("Ordre", { { "kill", 9000 }, { "death", 60, nil, nil, { pve = true, healthPct = 20, opener = "opponent" } } })) == "pve")
+-- Without a zone, no "à {zone}" left in the line.
+local nowhere = sheet("Nulle", { { "kill", 9000, nil, "?" }, { "death", 60, nil, "?", { pve = true } } })
+local tell = Lines.Tell(nowhere, story(nowhere), now)
+assert(tell.headline == "Vous a pris en traître" and not tell.fact:find("{", 1, true), tell.headline)
+-- The two banks have the same situations and the same words in braces.
+for _, part in ipairs({ "headline", "fact" }) do
+    for id, fr in pairs(Lines.LINES.frFR[part]) do
+        local en = Lines.LINES.enUS[part][id]
+        assert(en, part .. " " .. id .. " in English")
+        local function marks(t)
+            local list = {}
+            for _, line in ipairs(type(t) == "table" and t or { t }) do for m in line:gmatch("{%w+}") do list[m] = true end end
+            return list
+        end
+        for m in pairs(marks(en)) do assert(marks(fr)[m], id .. ": " .. m .. " only in English") end
+    end
+end
+-- In English on an English client.
+local nativeLocale = GetLocale
+GetLocale = function() return "enUS" end
+local english = Lines.Tell(nowhere, story(nowhere), now)
+assert(english.headline == "Stabbed you in the back", english.headline)
+GetLocale = nativeLocale
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS rivalry rules: Nhaya's turn, no story from a partial journal, mixed fight, close duel, days, ranking, search, 400 random sheets")

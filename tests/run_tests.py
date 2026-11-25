@@ -56,6 +56,8 @@ for name, expected_width, expected_height, transparent in (
     ("RelationsCarte/cadre-haut.tga", 512, 32, True), ("RelationsCarte/cadre-bas.tga", 512, 32, True),
     ("RelationsCarte/cadre-gauche.tga", 32, 256, True), ("RelationsCarte/cadre-droite.tga", 32, 256, True),
     ("RelationsCarte/separateur-carte.tga", 512, 32, True), ("Rivalites/bande-rivalite.tga", 1024, 128, True),
+    ("Rivalites/RivalSheet.tga", 1024, 256, True), ("Rivalites/RivalDuel.tga", 1024, 128, True),
+    ("Rivalites/RivalDeath.tga", 64, 64, True), ("Rivalites/RivalVictory.tga", 64, 64, True),
     ("RelationsCarte/bilan.tga", 64, 64, True),
     ("RelationsCarte/tableaux-detailles.tga", 64, 64, True), ("RelationsCarte/dettes.tga", 64, 64, True),
     ("RelationsCarte/rivalites.tga", 64, 64, True), ("RelationsCarte/carte.tga", 64, 64, True),

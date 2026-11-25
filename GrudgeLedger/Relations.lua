@@ -267,9 +267,7 @@ local RIVAL_STEPS = 5 -- fights shown when unfolded, the latest ones, oldest on 
 local RIVAL_TOP, RIVAL_H, RIVAL_GAP = -60, 72, 6
 -- Unfolded: the five strips get narrow and the sheet opens under its own (page 510 high: the
 -- strips, the sheet and the gaps end at 464, above the worn bottom of the page).
-local RIVAL_SMALL, RIVAL_SMALL_GAP, RIVAL_SHEET = 42, 4, 170
-local RIVAL_SKULL = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
-local RIVAL_SWORD = "Interface\\CURSOR\\Attack"
+local RIVAL_SMALL, RIVAL_SMALL_GAP, RIVAL_SHEET = 42, 4, 176
 local GREEN, RED = { 0.18, 0.37, 0.20 }, { 0.55, 0.12, 0.12 }
 -- Plain score when the rules cannot read a sheet (damaged data): the page keeps going.
 local function plainAnalysis(record)
@@ -288,6 +286,8 @@ local function analyse(record, now)
     local ok, analysis = pcall(function() return Rules.FromRecord(record, GL, now) end)
     if not ok or type(analysis) ~= "table" then analysis = plainAnalysis(record) end
     analysis.record = record
+    local told, tell = pcall(GL.RivalryLines.Tell, record, analysis, now)
+    analysis.tell = told and type(tell) == "table" and tell or nil
     rivalCache[record.key] = { signature = signature, analysis = analysis }
     return analysis
 end
@@ -359,28 +359,34 @@ function R.RivalSentence(a)
     end
     return L("Aucun combat détaillé dans le journal.")
 end
+-- A day and its hour: "22/11 à 21:40" (owner, 25/11: the day alone did not say when).
+local function stamp(at)
+    local hour = GL.Safe(date, "%H:%M", at)
+    return hour and L("%s à %s"):format(day(at), hour) or day(at)
+end
 local function whenWhere(a)
     if not a.lastOutcomeAt then return "" end
-    return a.lastOutcomeZone and (day(a.lastOutcomeAt) .. " · " .. UI.plain(a.lastOutcomeZone)) or day(a.lastOutcomeAt)
+    return a.lastOutcomeZone and (stamp(a.lastOutcomeAt) .. " · " .. UI.plain(a.lastOutcomeZone)) or stamp(a.lastOutcomeAt)
 end
 -- A score in two texts, each in its own colour, around a dot: centred on x.
 local function scorePair(parent, size)
-    local pair = { kills = Panels.Text(parent, 0, 0, 90, size, true), dot = Panels.Text(parent, 0, 0, 20, size, true, UI.theme.inkMuted),
-        deaths = Panels.Text(parent, 0, 0, 90, size, true) }
+    local pair = { kills = Panels.Text(parent, 0, 0, 90, size, true), deaths = Panels.Text(parent, 0, 0, 90, size, true), size = size }
     pair.kills:SetJustifyH("RIGHT")
-    pair.dot:SetJustifyH("CENTER")
     pair.deaths:SetJustifyH("LEFT")
+    -- A small drawn dot between the figures: the font's "·" sat at their top.
+    pair.dot = parent:CreateTexture(nil, "ARTWORK")
+    pair.dot:SetSize(4, 4)
+    pair.dot:SetColorTexture(0.55, 0.40, 0.20, 0.9)
     return pair
 end
 local function placePair(pair, parent, x, y, kills, deaths, light)
     pair.dot:ClearAllPoints()
-    pair.dot:SetPoint("TOP", parent, "TOPLEFT", x, y)
-    pair.dot:SetText("·")
+    pair.dot:SetPoint("CENTER", parent, "TOPLEFT", x, y - math.floor(pair.size * 0.55 + 0.5))
     pair.kills:ClearAllPoints()
-    pair.kills:SetPoint("TOPRIGHT", pair.dot, "TOPLEFT", -2, 0)
+    pair.kills:SetPoint("TOPRIGHT", parent, "TOPLEFT", x - 9, y)
     pair.kills:SetText(kills)
     pair.deaths:ClearAllPoints()
-    pair.deaths:SetPoint("TOPLEFT", pair.dot, "TOPRIGHT", 2, 0)
+    pair.deaths:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 9, y)
     pair.deaths:SetText(deaths)
     if light then
         pair.kills:SetTextColor(0.56, 0.85, 0.6)
@@ -397,35 +403,26 @@ local function stepLook(entry)
         or cause == "contributed" and L("Avec d’autres joueurs") or ""
     if entry.outcome == "mort" then
         if how == "" and entry.aggressions > 0 then how = L("Agression") end
-        return L("Mort"), RED, RIVAL_SKULL, { 1, 0.35, 0.3 }, how
+        return L("Mort"), RED, GL.Art.DeathSeal, how
     elseif entry.outcome == "victoire" then
-        return L("Victoire"), GREEN, RIVAL_SWORD, { 0.4, 0.85, 0.45 }, ""
+        return L("Victoire"), GREEN, GL.Art.VictorySeal, ""
     elseif entry.outcome == "mixte" then
-        return L("Combat mixte"), UI.theme.brass, RIVAL_SKULL, { 0.85, 0.65, 0.25 }, how
+        return L("Combat mixte"), UI.theme.brass, GL.Art.Swords, how
     elseif entry.outcome == "assistance" then
-        return L("Coup de main"), UI.theme.brass, RIVAL_SWORD, { 0.85, 0.65, 0.25 }, ""
+        return L("Coup de main"), UI.theme.brass, GL.Art.Swords, ""
     end
-    return L("Agression"), UI.theme.inkMuted, RIVAL_SWORD, { 0.55, 0.45, 0.35 }, ""
-end
--- The chevron: the Journal's arrow, turned down (folded) or up (unfolded).
-local function chevron(texture, open)
-    if open then
-        GL.Safe(texture.SetTexCoord, texture, 1, 0, 0, 0, 1, 1, 0, 1)
-    else
-        GL.Safe(texture.SetTexCoord, texture, 0, 1, 1, 1, 0, 0, 1, 0)
-    end
+    return L("Agression"), UI.theme.inkMuted, GL.Art.Swords, ""
 end
 local function buildRivals(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
     page.title = Panels.Text(page, X(26), -18, S(150), 21, true)
-    -- The search, like the guild journal's.
+    -- The search, like the guild journal's, on a parchment field.
     page.search = CreateFrame("EditBox", nil, page)
     page.search:SetPoint("TOPLEFT", X(170), -20)
     page.search:SetSize(S(176), 24)
     page.search:SetAutoFocus(false)
     page.search:SetMaxLetters(40)
-    -- A parchment field, as in the owner's mockup.
     UI.styleInput(page.search, false, true)
     page.search:SetTextInsets(8, 6, 3, 3)
     page.searchHint = UI.label(page.search, L("Rechercher un rival…"), nil, 8, -5, S(160))
@@ -461,96 +458,100 @@ local function buildRivals(host)
         strip:SetSize(S(548), RIVAL_H)
         strip.paper = strip:CreateTexture(nil, "BACKGROUND")
         strip.paper:SetAllPoints()
-        strip.paper:SetTexture(media .. "Rivalites\\bande-rivalite")
+        strip.paper:SetTexture(GL.Art.RivalStrip)
         strip.face = face(strip, 44)
-        strip.name = Panels.Text(strip, 0, 0, S(300), 17, true)
+        strip.name = Panels.Text(strip, 0, 0, S(300), 19, true)
         GL.Safe(strip.name.SetWordWrap, strip.name, false)
-        strip.motif = Panels.Text(strip, 0, 0, S(300), 12, false, UI.theme.inkMuted)
+        -- Why this rival matters, in a line that names what happened (RivalryLines.lua).
+        strip.motif = Panels.Text(strip, 0, 0, S(300), 12, false, UI.theme.red)
         GL.Safe(strip.motif.SetWordWrap, strip.motif, false)
-        strip.score = scorePair(strip, 15)
+        strip.score = scorePair(strip, 17)
         strip.when = Panels.Text(strip, 0, 0, S(150), 11, false, UI.theme.inkMuted)
         strip.when:SetJustifyH("CENTER")
         GL.Safe(strip.when.SetWordWrap, strip.when, false)
         strip.rule = strip:CreateTexture(nil, "ARTWORK")
         strip.rule:SetColorTexture(0.49, 0.32, 0.13, 0.35)
         strip.rule:SetWidth(1)
-        strip.arrow = strip:CreateTexture(nil, "ARTWORK")
-        strip.arrow:SetTexture(media .. "JournalReferenceArrowRight")
-        strip.arrow:SetSize(22, 22)
         local hover = strip:CreateTexture(nil, "HIGHLIGHT")
         hover:SetPoint("TOPLEFT", 8, -8)
         hover:SetPoint("BOTTOMRIGHT", -8, 8)
         hover:SetColorTexture(0.91, 0.77, 0.48, 0.12)
-        strip:SetScript("OnClick", function(self)
-            page.open = page.open ~= self.key and self.key or nil
+        -- The Journal's paper button folds and unfolds, as a click on the strip does (owner's kit).
+        local function toggle()
+            if not strip.key then return end
+            page.open = page.open ~= strip.key and strip.key or nil
             R.Refresh()
-        end)
+        end
+        strip:SetScript("OnClick", toggle)
+        strip.fold = UI.button(strip, L("Détails"), 0, 0, 79, toggle, nil, true)
+        strip.fold:ClearAllPoints()
+        strip.fold:SetPoint("RIGHT", strip, "RIGHT", -14, 0)
         page.strips[i] = strip
     end
-    -- The unfolded sheet, one for the page.
+    -- The unfolded sheet, one for the page: a sheet of parchment, and the band where you face your
+    -- rival, Alliance blue on your side, Horde red on theirs (owner, 25/11).
     local sheet = CreateFrame("Frame", nil, page)
     page.sheet = sheet
     sheet:SetSize(S(528), RIVAL_SHEET)
-    UI.surface(sheet, { 0.79, 0.66, 0.42 })
-    UI.surface(sheet, { 0.96, 0.91, 0.78 }, 1, 1)
-    local band = sheet:CreateTexture(nil, "ARTWORK")
-    band:SetPoint("TOPLEFT", 6, -6)
-    band:SetPoint("TOPRIGHT", -6, -6)
-    band:SetHeight(50)
-    band:SetColorTexture(0.09, 0.13, 0.12, 0.97)
-    for _, y in ipairs({ -6, -56 }) do
-        local edge = sheet:CreateTexture(nil, "OVERLAY")
-        edge:SetPoint("TOPLEFT", 6, y)
-        edge:SetPoint("TOPRIGHT", -6, y)
-        edge:SetHeight(1)
-        edge:SetColorTexture(0.78, 0.6, 0.3, 0.8)
-    end
-    sheet.you = face(sheet, 34)
-    sheet.you:SetPoint("TOPLEFT", 14, -14)
-    sheet.youName = Panels.Text(sheet, 56, -14, S(130), 15, true, UI.theme.paper)
-    sheet.youClass = Panels.Text(sheet, 56, -33, S(130), 11, false, { 0.8, 0.72, 0.58 })
+    sheet.paper = sheet:CreateTexture(nil, "BACKGROUND")
+    sheet.paper:SetAllPoints()
+    sheet.paper:SetTexture(GL.Art.RivalSheet)
+    sheet.band = sheet:CreateTexture(nil, "ARTWORK")
+    sheet.band:SetPoint("TOPLEFT", 12, -10)
+    sheet.band:SetPoint("TOPRIGHT", -12, -10)
+    sheet.band:SetHeight(54)
+    sheet.band:SetTexture(GL.Art.RivalDuel)
+    local light, pale = { 0.95, 0.9, 0.78 }, { 0.8, 0.72, 0.58 }
+    sheet.you = face(sheet, 38)
+    sheet.you:SetPoint("TOPLEFT", 26, -18)
+    sheet.youName = Panels.Text(sheet, 72, -19, S(130), 15, true, light)
+    sheet.youClass = Panels.Text(sheet, 72, -38, S(130), 11, false, pale)
     GL.Safe(sheet.youClass.SetWordWrap, sheet.youClass, false)
-    sheet.caption = Panels.Text(sheet, S(170), -12, S(188), 11, false, UI.theme.brass)
+    sheet.caption = Panels.Text(sheet, S(170), -17, S(188), 11, false, UI.theme.brass)
     sheet.caption:SetJustifyH("CENTER")
-    sheet.score = scorePair(sheet, 15)
-    sheet.rival = face(sheet, 34)
-    sheet.rival:SetPoint("TOPRIGHT", -14, -14)
-    sheet.rivalName = Panels.Text(sheet, S(528) - 56 - S(150), -14, S(150), 15, true, UI.theme.paper)
+    sheet.score = scorePair(sheet, 18)
+    sheet.rival = face(sheet, 38)
+    sheet.rival:SetPoint("TOPRIGHT", -26, -18)
+    sheet.rivalName = Panels.Text(sheet, S(528) - 72 - S(150), -19, S(150), 15, true, light)
     sheet.rivalName:SetJustifyH("RIGHT")
     GL.Safe(sheet.rivalName.SetWordWrap, sheet.rivalName, false)
-    sheet.rivalClass = Panels.Text(sheet, S(528) - 56 - S(150), -33, S(150), 11, false, { 0.8, 0.72, 0.58 })
+    sheet.rivalClass = Panels.Text(sheet, S(528) - 72 - S(150), -38, S(150), 11, false, pale)
     sheet.rivalClass:SetJustifyH("RIGHT")
     GL.Safe(sheet.rivalClass.SetWordWrap, sheet.rivalClass, false)
-    sheet.story = Panels.Text(sheet, 14, -62, S(360), 12, false, UI.theme.ink)
-    sheet.story:SetHeight(30)
+    -- What happened, then a line that pushes you; the debt on the right.
+    sheet.story = Panels.Text(sheet, 20, -72, S(368), 12, false, UI.theme.ink)
+    sheet.story:SetHeight(32)
     GL.Safe(sheet.story.SetWordWrap, sheet.story, true)
     GL.Safe(sheet.story.SetJustifyV, sheet.story, "TOP")
-    sheet.debt = Panels.Text(sheet, S(528) - 14 - S(140), -64, S(140), 13, true)
+    sheet.debt = Panels.Text(sheet, S(528) - 20 - S(132), -74, S(132), 13, true)
     sheet.debt:SetJustifyH("RIGHT")
-    sheet.threadTitle = Panels.Text(sheet, 14, -100, S(120), 13, true)
-    sheet.threadWhen = Panels.Text(sheet, 14 + S(118), -101, S(120), 11, false, UI.theme.inkMuted)
+    local rule = sheet:CreateTexture(nil, "ARTWORK")
+    rule:SetPoint("TOPLEFT", 20, -104)
+    rule:SetPoint("TOPRIGHT", -20, -104)
+    rule:SetHeight(1)
+    rule:SetColorTexture(0.55, 0.40, 0.20, 0.35)
+    sheet.threadTitle = Panels.Text(sheet, 20, -112, S(116), 13, true)
+    sheet.threadWhen = Panels.Text(sheet, 20 + S(112), -113, S(150), 11, false, UI.theme.inkMuted)
     GL.Safe(sheet.threadWhen.SetWordWrap, sheet.threadWhen, false)
-    sheet.open = UI.button(sheet, L("Ouvrir sa fiche"), S(528) - 14 - S(232), -94, S(112), function() openSheet(sheet.record) end, nil, true)
-    sheet.bounty = UI.button(sheet, L("Poser une prime"), S(528) - 14 - S(114), -94, S(114), function()
+    sheet.open = UI.button(sheet, L("Ouvrir sa fiche"), S(528) - 20 - S(230), -106, S(112), function() openSheet(sheet.record) end, nil, true)
+    sheet.bounty = UI.button(sheet, L("Poser une prime"), S(528) - 20 - S(114), -106, S(114), function()
         if sheet.record and sheet.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(sheet.record.guid) end
     end, nil, true)
-    sheet.empty = Panels.Text(sheet, 14, -132, S(500), 12, false, UI.theme.inkMuted)
+    sheet.empty = Panels.Text(sheet, 20, -146, S(480), 12, false, UI.theme.inkMuted)
     sheet.line = sheet:CreateTexture(nil, "BORDER")
-    sheet.line:SetPoint("TOPLEFT", S(60), -134)
-    sheet.line:SetSize(S(408), 1)
-    sheet.line:SetColorTexture(0.52, 0.38, 0.20, 0.6)
+    sheet.line:SetHeight(1)
+    sheet.line:SetColorTexture(0.52, 0.38, 0.20, 0.55)
     sheet.steps = {}
     for i = 1, RIVAL_STEPS do
         local step = CreateFrame("Frame", nil, sheet)
-        step:SetPoint("TOPLEFT", 14 + (i - 1) * S(100), -124)
-        step:SetSize(S(100), 44)
+        step:SetSize(S(100), 42)
         step.mark = step:CreateTexture(nil, "ARTWORK")
-        step.mark:SetSize(20, 20)
+        step.mark:SetSize(22, 22)
         step.mark:SetPoint("TOP", 0, 0)
-        step.word = centered(step, -21, S(100), 12, true)
-        step.how = centered(step, -35, S(100), 10, false, UI.theme.inkMuted)
+        step.word = centered(step, -22, S(100), 12, true)
+        step.how = centered(step, -36, S(100), 10, false, UI.theme.inkMuted)
         GL.Safe(step.EnableMouse, step, true)
-        -- The game's own words for the fight, on hover.
+        -- The game's own words for the fight, on hover, with its day and hour.
         step:SetScript("OnEnter", function(self)
             if not (self.tip and GameTooltip) then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -580,13 +581,15 @@ local function paintStrip(strip, a, small, open)
     strip.face:SetPoint("LEFT", 18, 0)
     GL.PaintBookPortrait(strip.face, record)
     local left = 18 + portrait + 12
+    -- The score and its date sit before the button; the name and the line take the rest.
+    local right = S(548) - 14 - 79 - 10 - S(150)
     strip.name:ClearAllPoints()
-    strip.name:SetPoint("TOPLEFT", left, small and -6 or -14)
-    Panels.Fit(strip.name, name(record), S(300), small and 15 or 17, 11, true)
+    strip.name:SetPoint("TOPLEFT", left, small and -6 or -12)
+    Panels.Fit(strip.name, name(record), right - left - 12, small and 15 or 19, 11, true)
     strip.motif:ClearAllPoints()
     strip.motif:SetPoint("TOPLEFT", left, small and -23 or -38)
-    Panels.Fit(strip.motif, motifTitle(a), S(300), small and 11 or 12, 9)
-    local right = S(548) - 44 - S(150)
+    local tell = a.tell or {}
+    Panels.Fit(strip.motif, tell.headline or motifTitle(a), right - left - 12, small and 11 or 13, 9)
     placePair(strip.score, strip, right + S(75), small and -6 or -16, L("%d V"):format(a.kills), L("%d M"):format(a.deaths))
     strip.when:ClearAllPoints()
     strip.when:SetPoint("TOPLEFT", right, small and -24 or -38)
@@ -594,9 +597,8 @@ local function paintStrip(strip, a, small, open)
     strip.rule:ClearAllPoints()
     strip.rule:SetPoint("TOPLEFT", right - 6, small and -8 or -14)
     strip.rule:SetHeight(small and 26 or 42)
-    strip.arrow:ClearAllPoints()
-    strip.arrow:SetPoint("RIGHT", -18, 0)
-    chevron(strip.arrow, open)
+    strip.fold:SetText(open and L("Masquer") or L("Détails"))
+    UI.selectButton(strip.fold, open)
     strip:Show()
 end
 local function paintSheet(sheet, a)
@@ -608,7 +610,7 @@ local function paintSheet(sheet, a)
     Panels.Fit(sheet.youClass, UI.plain(type(me) == "string" and me or (type(class) == "string" and class or "")), S(130), 11, 8)
     GL.Safe(SetPortraitTexture, sheet.you.raceIcon, "player")
     sheet.caption:SetText(L("Votre bilan"))
-    placePair(sheet.score, sheet, S(264), -28, countForm(a.kills, "%d victoire", "%d victoires"),
+    placePair(sheet.score, sheet, S(264), -33, countForm(a.kills, "%d victoire", "%d victoires"),
         countForm(a.deaths, "%d mort", "%d morts"), true)
     GL.PaintBookPortrait(sheet.rival, record)
     Panels.Fit(sheet.rivalName, name(record), S(150), 15, 10, true)
@@ -616,11 +618,15 @@ local function paintSheet(sheet, a)
     if record.className then identity[#identity + 1] = UI.plain(record.className) end
     if record.guild then identity[#identity + 1] = UI.plain(record.guild) end
     Panels.Fit(sheet.rivalClass, table.concat(identity, " · "), S(150), 11, 8)
-    sheet.story:SetText(R.RivalSentence(a))
+    -- The fact that names what happened (or what the score tells), then the push.
+    local tell = a.tell or {}
+    local story = tell.fact or R.RivalSentence(a)
+    if tell.push and tell.push ~= "" then story = story .. " " .. tell.push end
+    sheet.story:SetText(story)
     local debt = a.debt or 0
     local short = UI.plain(record.name or record.fullName or "?")
     if debt > 0 then
-        Panels.Fit(sheet.debt, (debt == 1 and L("%s vous doit %d point") or L("%s vous doit %d points")):format(short, debt), S(140), 13, 9, true)
+        Panels.Fit(sheet.debt, (debt == 1 and L("%s vous doit %d point") or L("%s vous doit %d points")):format(short, debt), S(132), 13, 9, true)
         sheet.debt:SetTextColor(unpack(RED))
     else
         sheet.debt:SetText(L("Comptes réglés"))
@@ -629,27 +635,32 @@ local function paintSheet(sheet, a)
     sheet.threadTitle:SetText(L("Derniers combats"))
     local timeline = a.timeline or {}
     local latest = timeline[1]
-    sheet.threadWhen:SetText(latest and (latest.zone and (day(latest.last) .. " · " .. UI.plain(latest.zone)) or day(latest.last)) or "")
+    sheet.threadWhen:SetText(latest and (stamp(latest.last) .. (latest.zone and (" · " .. UI.plain(latest.zone)) or "")) or "")
     if GL.ContactBountyMode and GL.ContactBountyMode(record) then sheet.bounty:Show() else sheet.bounty:Hide() end
     local shown = math.min(RIVAL_STEPS, #timeline)
     sheet.empty:SetText(shown == 0 and L("Aucun combat détaillé dans le journal.") or "")
+    -- Oldest on the left: the latest five, turned around, spread over the sheet.
+    local span = S(528) - 40
+    local width = shown > 0 and math.floor(span / shown) or 0
+    sheet.line:ClearAllPoints()
+    sheet.line:SetPoint("TOPLEFT", 20 + width / 2, -142)
+    sheet.line:SetWidth(math.max(1, width * (shown - 1)))
     if shown > 1 then sheet.line:Show() else sheet.line:Hide() end
-    -- Oldest on the left: the latest five, turned around.
-    local width = shown > 0 and math.floor(S(500) / math.max(shown, 1)) or 0
     for i, step in ipairs(sheet.steps) do
         local entry = i <= shown and timeline[shown - i + 1]
         if entry then
-            local word, color, mark, tint, how = stepLook(entry)
+            local word, color, mark, how = stepLook(entry)
             step:ClearAllPoints()
-            step:SetPoint("TOPLEFT", 14 + (i - 1) * width, -124)
+            step:SetPoint("TOPLEFT", 20 + (i - 1) * width, -131)
             step:SetWidth(width)
             step.mark:SetTexture(mark)
-            step.mark:SetVertexColor(unpack(tint))
+            -- The seals are coloured already: shown as they are.
+            step.mark:SetVertexColor(1, 1, 1)
             step.word:SetText(word)
             step.word:SetTextColor(unpack(color))
             Panels.Fit(step.how, how, width - 8, 10, 8)
             local where = entry.zone and (" · " .. UI.plain(entry.zone)) or ""
-            step.tip = { day(entry.at) .. where, entry.title }
+            step.tip = { stamp(entry.at) .. where, entry.title }
             step:Show()
         else
             step:Hide()
@@ -988,12 +999,11 @@ local ZOOM_STEP = 1.3
 local CONTINENT_IN = { 1.25, 2.1 } -- zoom where the continent pictures start and finish coming in
 local DETAIL_IN = { 150, 260 } -- width of a zone on screen where its explored pieces come in
 local ZONES_KEPT = 8 -- zones whose detail stays loaded at once
-local SKULL, SWORD = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", "Interface\\CURSOR\\Attack"
+-- The marks of a fight, from the addon's one list of pictures (Art.lua).
+local SKULL, SWORD = GL.Art.Death, GL.Art.Victory
 local ARROW = "Interface\\Minimap\\MinimapArrow"
 local FEATHER = "Interface\\AddOns\\GrudgeLedger\\Media\\MapFeather"
--- The owner's kit for the map page (25/11): the frame around the map, the icons of the entries.
 local fitHint -- below, with the map's caption
-local KIT = "Interface\\AddOns\\GrudgeLedger\\Media\\RelationsCarte\\"
 local function mapInfo(id)
     local info = id and C_Map and GL.Safe(C_Map.GetMapInfo, id)
     return type(info) == "table" and info or nil
@@ -1429,7 +1439,7 @@ local function buildMap(page)
     frame.pieces = {}
     local function piece(name, layer)
         local t = frame:CreateTexture(nil, "OVERLAY", nil, layer)
-        t:SetTexture(KIT .. name)
+        t:SetTexture(GL.Art.MapFrame .. (name:gsub("^cadre%-", "")))
         frame.pieces[name] = t
         return t
     end
@@ -1894,7 +1904,7 @@ local function buildLands(host)
     page.lead = Panels.Text(page, X(26), -54, S(400), 13, false, UI.theme.inkMuted)
     -- Under the title, the owner's separator (kit of 25/11).
     page.rule = page:CreateTexture(nil, "ARTWORK")
-    page.rule:SetTexture(KIT .. "separateur-carte")
+    page.rule:SetTexture(GL.Art.Separator)
     page.rule:SetPoint("TOPLEFT", X(18), -38)
     page.rule:SetSize(256, 16)
     page.mode = "map"
@@ -2798,7 +2808,7 @@ local function book(key)
         -- edge; the label moves right just enough to clear it.
         if entry[3] then
             tab.icon = tab:CreateTexture(nil, "OVERLAY")
-            tab.icon:SetTexture(KIT .. entry[3])
+            tab.icon:SetTexture(GL.Art.EntryIcon .. entry[3])
             tab.icon:SetSize(18, 18)
             tab.icon:SetPoint("LEFT", 8, 0)
             if tab.caption then
