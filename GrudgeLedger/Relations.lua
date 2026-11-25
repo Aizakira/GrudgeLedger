@@ -1207,6 +1207,13 @@ function R.MapTally(id, zones, guild)
     end
     return tallies, tallyOf, trim(own), trim(others)
 end
+-- From -1 (four deaths or more for a victory: deep red) to 1 (four victories or more for a death:
+-- strong green), 0 when even (the map's own colour). The owner's rule, 25/11.
+function R.ZoneBalance(kills, deaths)
+    kills, deaths = math.max(0, tonumber(kills) or 0), math.max(0, tonumber(deaths) or 0)
+    local ratio = (kills > 0 and deaths > 0) and kills / deaths or (kills + 1) / (deaths + 1)
+    return math.max(-1, math.min(1, math.log(ratio) / math.log(4)))
+end
 function R.MapPoints(id, zones)
     local _, _, points = R.MapTally(id, zones)
     return points
@@ -1348,13 +1355,11 @@ local function paintMap(view, byName)
     view.byName = byName
     -- Fights show once an ordinary zone is about a hundred pixels wide.
     view.pointZoom = math.max(1.4, 110 / math.max(1, world.zoneWidth * view.width))
-    -- Every zone you fought in, tinted by its share of your deaths: the worst zone is bright red
-    -- whatever its count, a zone where you win more than you die is green.
+    -- Every zone you fought in, tinted by the ratio of your victories to your deaths (below).
     -- Guild vision: the fights of the members who share theirs are counted and drawn with yours.
     local tallies, tallyOf, ownPlaced, guildPlaced = R.MapTally(root, zones, view.guildOn and GL.GuildMap and GL.GuildMap.Points() or nil)
-    local shapes, worst = {}, 1
+    local shapes = {}
     view.tallyOf = tallyOf
-    for _, tally in ipairs(tallies) do worst = math.max(worst, tally.deaths) end
     for _, region in ipairs(view.regions) do
         region:Hide()
         if region.boost then region.boost:Hide() end
@@ -1364,10 +1369,13 @@ local function paintMap(view, byName)
         label:Hide()
     end
     for i, entry in ipairs(tallies) do
-        local share = entry.deaths / worst
-        -- Red where your deaths outweigh your victories, green where you win more (owner report
-        -- 25/11: Felwood, 11 deaths for 20 victories, was red). The number is the side that wins.
-        entry.losing = entry.deaths > 0 and entry.deaths >= entry.kills
+        -- The owner's rule (25/11): the colour says the ratio of victories to deaths. Even, the map
+        -- keeps its own colour; four times more on one side, the colour is full, deep red or strong
+        -- green; in between it grows with the ratio (on a log scale, so 2 to 1 is half way).
+        -- A side with nothing counts one more, so three victories without a death are full green.
+        local kills, deaths = entry.kills, entry.deaths
+        local balance = R.ZoneBalance(kills, deaths)
+        entry.balance, entry.losing = balance, balance < 0
         if entry.zone.shape then
             local n = #shapes + 1
             local region = view.regions[n] or view.canvas:CreateTexture(nil, "ARTWORK")
@@ -1385,6 +1393,7 @@ local function paintMap(view, byName)
                 region:SetVertexColor(0.10, 0.75, 0.20)
             end
             region:Show()
+            -- A second light makes the red deep: added light is faint on parchment (0.51.0).
             local boost = region.boost or view.canvas:CreateTexture(nil, "ARTWORK")
             region.boost = boost
             if entry.losing then
@@ -1397,25 +1406,39 @@ local function paintMap(view, byName)
             else
                 boost:Hide()
             end
-            shapes[n] = { zone = entry.zone, alpha = entry.losing and 0.65 + 0.35 * share or 0.6, boost = 0.4 + 0.6 * share }
+            shapes[n] = { zone = entry.zone, alpha = math.abs(balance), boost = math.abs(balance) }
         end
         local label = marker(view, view.labels, i)
         label.used = true
-        label:SetSize(28, 20)
-        -- Just the number, outlined so it reads on any part of the map: your deaths in red, or, in a
-        -- zone where you only won, your victories in green. The owner found the plates ugly (0.51.0).
+        label:SetSize(30, 34)
+        -- The ratio as a small fraction (owner, 25/11): your victories in green above a thin rule,
+        -- your deaths in red below, outlined so they read on any part of the map.
         label.fill:SetColorTexture(0, 0, 0, 0)
-        if not label.outlined then
-            label.outlined = true
-            local font = GL.Safe(label.count.GetFont, label.count)
-            if font then GL.Safe(label.count.SetFont, label.count, font, 16, "OUTLINE") end
+        if not label.fraction then
+            label.fraction = true
+            label.count:SetText("")
+            local function number(y)
+                local text = label:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                local font = GL.Safe(label.count.GetFont, label.count)
+                if font then GL.Safe(text.SetFont, text, font, 12, "OUTLINE") end
+                text:SetPoint("CENTER", 0, y)
+                text:SetJustifyH("CENTER")
+                return text
+            end
+            label.kills, label.deaths = number(8), number(-8)
+            label.kills:SetTextColor(0.35, 1, 0.4)
+            label.deaths:SetTextColor(1, 0.3, 0.22)
+            label.shade = label:CreateTexture(nil, "ARTWORK")
+            label.shade:SetSize(18, 3)
+            label.shade:SetPoint("CENTER", 0, 0)
+            label.shade:SetColorTexture(0, 0, 0, 0.55)
+            label.rule = label:CreateTexture(nil, "OVERLAY")
+            label.rule:SetSize(16, 1)
+            label.rule:SetPoint("CENTER", 0, 0)
+            label.rule:SetColorTexture(0.96, 0.86, 0.62, 0.95)
         end
-        if entry.losing then
-            label.count:SetTextColor(1, 0.22, 0.16)
-        else
-            label.count:SetTextColor(0.35, 1, 0.4)
-        end
-        label.count:SetText(tostring(entry.losing and entry.deaths or entry.kills))
+        label.kills:SetText(tostring(kills))
+        label.deaths:SetText(tostring(deaths))
         label.zone = entry.zone.mapID
         label:SetScript("OnEnter", function(self)
             local line = L("%d morts · %d victoires"):format(entry.deaths, entry.kills)

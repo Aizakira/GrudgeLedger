@@ -223,9 +223,11 @@ do
     -- One region for the zone you fought in, in the game's shape, added to the map like the game
     -- does (never a black square); the worst zone is bright red. Zones of every continent, no total.
     assert(#view.tallies == 1 and view.tallies[1].zone.name == "Tanaris" and #view.shapes == 1 and view.regions[1]:IsShown())
-    -- 25/11: more victories than deaths (9 for 6) lights the zone green, with the victories' number.
-    assert(view.shapes[1].zone.shape.file == 9001 and view.shapes[1].alpha == 0.6 and view.regions[1].blendMode == "ADD")
-    assert(view.regions[1].vertex[2] > 0.5 and view.labels[1].count:GetText() == tostring(R.Lands()[1].kills))
+    -- The owner's rule (25/11): the colour follows the ratio of victories to deaths, none when even,
+    -- full at four to one. Here 9 victories for 6 deaths: a light green, and the fraction 9 over 6.
+    local lit = math.log(9 / 6) / math.log(4)
+    assert(view.shapes[1].zone.shape.file == 9001 and math.abs(view.shapes[1].alpha - lit) < 0.001 and view.regions[1].blendMode == "ADD")
+    assert(view.regions[1].vertex[2] > 0.5 and view.labels[1].kills:GetText() == "9" and view.labels[1].deaths:GetText() == "6")
     assert(math.abs(view.tallies[1].zone.rect.left - 0.26) < 0.001 and math.abs(view.shapes[1].zone.shape.width - 0.088) < 0.001)
     assert(view.caption:GetText():find("^Azeroth "), view.caption:GetText())
     -- The owner's kit (25/11): a brass frame over the map, an icon on each entry, the legend under
@@ -291,7 +293,7 @@ do
     R.MapOut()
     settle()
     assert(view.world.art.textures[1].vertex[1] < 0.5 and view.labels[1].fill.color[4] == 0, "no plate under the number")
-    assert(view.labels[1].count.color[2] == 1 and view.labels[1].count.font[3] == "OUTLINE")
+    assert(view.labels[1].kills.color[2] == 1 and view.labels[1].deaths.color[1] == 1 and view.labels[1].kills.font[3] == "OUTLINE")
     assert(not view.regions[1].boost:IsShown(), "only a losing zone is lit twice")
     -- Guild vision (0.49.0): one box on the page; the guild's fights are counted and drawn with yours.
     local realEnabled, realPoints, realEnable = GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable

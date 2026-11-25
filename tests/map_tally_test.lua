@@ -102,5 +102,13 @@ local guild = {
 local _, guildOf, _, others = tally(guild)
 assert(guildOf[1444].deaths == 1 and guildOf[1444].kills == 1 and guildOf[1448].deaths == 5 and #others == 3, #others)
 assert(math.abs(others[1].x - (0.1 + 0.5 * 0.2)) < 0.001 and others[1].guild == "Player-1-mate0001")
+-- The colour of a zone (owner's rule, 25/11): none when even, full at four to one either way.
+local B = R.ZoneBalance
+assert(B(20, 20) == 0 and B(1, 1) == 0, "even: the map's own colour")
+assert(B(4, 1) == 1 and B(40, 10) == 1 and B(9, 1) == 1, "four victories a death: full green")
+assert(B(1, 4) == -1 and B(10, 40) == -1 and B(0, 3) == -1, "four deaths a victory: deep red")
+assert(math.abs(B(2, 1) - 0.5) < 1e-9 and math.abs(B(10, 20) + 0.5) < 1e-9, "two to one: half way")
+assert(B(20, 11) > 0.4 and B(20, 11) < 0.5, "Felwood, 20 victories for 11 deaths: a fair green")
+assert(B(3, 0) == 1 and B(1, 0) == 0.5 and B(0, 1) == -0.5, "a side with nothing counts one more")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS map tally: one death once whatever the attackers, zones by map, no coups de main, forty marks a zone, guild counted as drawn")
