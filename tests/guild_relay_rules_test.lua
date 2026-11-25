@@ -65,5 +65,23 @@ for _ = 1, 400 do now = now + 1 tick() end
 local own = 0
 for _, text in ipairs(sent) do if text:find(";" .. me .. ";", 1, true) and text:find("Cible Exemple", 1, true) then own = own + 1 end end
 assert(own == 1, "own events answered once, not " .. own)
+-- 25/11: relayed events have a bound of their own, kept across sessions (1500 per relayer). A book
+-- that already holds 1500 relays from one member (several sessions) takes no more from them.
+roster[4][3] = false mock.Fire("GUILD_ROSTER_UPDATE")
+for i = 1, 1500 do
+    local key = away .. ":" .. (now * 1000 + 5000 + i)
+    s.events[key] = table.concat({ "D", away, now * 1000 + 5000 + i, now, ("Player-1-w%05d"):format(i), "", "Victime" }, ";")
+    s.relayed[key] = relayer
+end
+-- A new session: the guild space comes back from the saved file (a new table), counters start again.
+local reloaded = {}
+for k, v in pairs(s) do reloaded[k] = v end
+GL.db.bountyGuilds[s.guildKey] = reloaded
+s = reloaded
+mock.Fire("GUILD_ROSTER_UPDATE")
+now = now + 30
+local extra = away .. ":" .. (now * 1000 + 9)
+hear("R;" .. table.concat({ "D", away, now * 1000 + 9, now, "Player-1-extra01", "", "Victime" }, ";"), "Relayer-Realm")
+assert(not s.events[extra], "a relayer past its bound adds nothing")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS guild relay rules: connected members speak for themselves, relays outside their room, one answer, odd sender told once")

@@ -857,6 +857,8 @@ local function countMember(s,actor)
 end
 -- Words said in your name that you never said: told once per member who passed them on.
 local forgeryTold,relayCount,ownAnsweredAt={}, {}, nil
+local relayedCount
+local RELAYED_KEPT,RELAYED_PER_MEMBER=3000,1500
 local DENIED=ML("Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré.")
 local FORGED={O=ML("prime"),N=ML("prime"),A=ML("avis de recherche"),P=ML("contribution"),
     K=ML("victoire"),H=ML("victoire"),D=ML("mort"),Y=ML("paiement")}
@@ -992,6 +994,11 @@ local function receive(msg,sender)
         -- The author now says what a relay had told: it becomes theirs (counted, and a claim heard).
         local told=type(s.relayed)=="table" and s.relayed
         if not relay and e.actor==sender and told and told[e.key] then
+            if relayedCount and relayedCount.s==s then
+                local by=type(told[e.key])=="string" and told[e.key] or "?"
+                relayedCount.all=math.max(0,relayedCount.all-1)
+                relayedCount.by[by]=math.max(0,(relayedCount.by[by] or 1)-1)
+            end
             told[e.key]=nil
             if memberEvents and memberEvents.s==s then memberEvents.n[e.actor]=(memberEvents.n[e.actor] or 0)+1 end
             if e.kind=="K" or e.kind=="H" then direct(s,e.key) end
@@ -1037,12 +1044,32 @@ local function receive(msg,sender)
         local o=archive and archive[e.order]
         if not o or o.guildKey~=s.guildKey or (o.state=="paid" and o.arrivals) then return end
     end
+    if relay then
+        -- What relays may keep (25/11): relayed events stay out of the author's share, so they need
+        -- a bound of their own, kept across sessions: 1500 per member who relays, 3000 in all.
+        -- An author's own word frees the room (it adopts the event).
+        s.relayed=type(s.relayed)=="table" and s.relayed or {}
+        if not relayedCount or relayedCount.s~=s then
+            relayedCount={s=s,all=0,by={}}
+            for key,who in pairs(s.relayed) do
+                if s.events[key] then
+                    relayedCount.all=relayedCount.all+1
+                    local by=type(who)=="string" and who or "?"
+                    relayedCount.by[by]=(relayedCount.by[by] or 0)+1
+                else
+                    s.relayed[key]=nil
+                end
+            end
+        end
+        if relayedCount.all>=RELAYED_KEPT or (relayedCount.by[sender] or 0)>=RELAYED_PER_MEMBER then return end
+        relayedCount.all=relayedCount.all+1
+        relayedCount.by[sender]=(relayedCount.by[sender] or 0)+1
+    end
     openTargets=nil
     s.events[e.key]=raw
     if relay then
         -- Told by another member: not counted in the author's share of the book (audit 24/11).
-        s.relayed=type(s.relayed)=="table" and s.relayed or {}
-        s.relayed[e.key]=true
+        s.relayed[e.key]=sender
     end
     if (e.kind=="K" or e.kind=="H") and not relay then direct(s,e.key) end
     if (e.kind=="K" or e.kind=="H") and e.order:match("^([^:]+)")==me then finalize(s,me) end
@@ -1419,7 +1446,7 @@ local function join()
             if not e or (e.kind=="V" and e.time<GL.Now()-38*DAY and not GL.db.bountyHistory[e.actor]) then s.events[k]=nil end
         end
         lastPrune=GL.Now()
-        memberEvents=nil
+        memberEvents,relayedCount=nil,nil
     end
     if s and not next(roster) then joined,openTargets=nil,nil; return end
     if s~=joined then
