@@ -243,6 +243,11 @@ function M.Enabled()
     local s, me = scope()
     return on(s, me), type(s) == "table"
 end
+-- The guild's fights while the box is unticked, in memory only until the game closes (owner report
+-- 25/11): unticking then ticking again lost them, because the members who had just answered do not
+-- answer again within thirty seconds and a connected member's fights are never taken from a relay.
+-- Nothing of it is saved, and nothing is added to it while the box is unticked.
+local held = setmetatable({}, { __mode = "k" })
 function M.Enable(enabled)
     local s, me = scope()
     if type(s) ~= "table" then return false end
@@ -250,13 +255,27 @@ function M.Enable(enabled)
     s.shareMap[me] = enabled == true
     forgetIndex()
     if enabled == true then
+        local kept = held[s]
+        held[s] = nil
+        for actor, list in pairs(type(kept) == "table" and kept or {}) do
+            if actor ~= me and guid(actor) and type(list) == "table" then
+                for _, text in ipairs(list) do keep(s, actor, text) end
+            end
+        end
         seed(s, me)
         answer(s, me, true)
         GL.Transport.Send(s, "MQ")
     else
-        -- Nothing is kept while the box is unticked, and the guild is asked to forget yours. The space
+        -- Nothing is saved while the box is unticked, and the guild is asked to forget yours. The space
         -- is the account's: another character still sharing gets the guild's fights back at its next
-        -- login (owner's choice: unticking keeps nothing).
+        -- login (owner's choice: unticking keeps nothing). Until the game closes, the guild's fights
+        -- wait in memory, for a box ticked again (above).
+        if type(s.places) == "table" then
+            held[s] = held[s] or {}
+            for actor, list in pairs(s.places) do
+                if actor ~= me then held[s][actor] = list end
+            end
+        end
         s.places = nil
         GL.Transport.Cancel(s, "map:own")
         GL.Transport.Cancel(s, "map:relay")
@@ -295,6 +314,7 @@ function M.Receive(s, me, sender, raw, relay)
         if relay then return false end
         s.mapForgot = type(s.mapForgot) == "table" and s.mapForgot or {}
         s.mapForgot[sender] = GL.Now()
+        if held[s] then held[s][sender] = nil end
         if type(s.places) == "table" and s.places[sender] then
             s.places[sender] = nil
             forgetIndex()

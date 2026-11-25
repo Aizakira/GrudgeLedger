@@ -597,24 +597,49 @@ end
 
 -- Dangerous lands: where you die, zone by zone, and to whom. A list today, the world map later.
 local LAND_ROWS = 8
-function R.Lands()
-    local zones, list = {}, {}
+-- Your deaths and victories, each fight once (owner report 25/11). A death is written in the sheet
+-- of every attacker, under one event ID: counted once per attacker, three attackers made three
+-- deaths in Tanaris for a single marker. Events without an ID stay separate. Each entry: the
+-- event, the sheet it was found in, and every sheet of the same death ("records").
+local function fights()
+    local list, byId = {}, {}
     for _, record in pairs(players()) do
         for _, e in ipairs(record.history or {}) do
-            local zone = type(e) == "table" and not e.voided and e.voidReason ~= "battleground" and type(e.zone) == "string" and e.zone
-            if zone and zone ~= "" and zone ~= "?" and (e.kind == "death" or e.kind == "kill") then
-                local entry = zones[zone]
-                if not entry then
-                    entry = { zone = zone, deaths = 0, kills = 0, killers = {} }
-                    zones[zone] = entry
-                    list[#list + 1] = entry
-                end
-                if e.kind == "death" then
-                    entry.deaths = entry.deaths + 1
-                    entry.killers[record] = (entry.killers[record] or 0) + 1
+            if type(e) == "table" and not e.voided and e.voidReason ~= "battleground" and (e.kind == "death" or e.kind == "kill") then
+                local id = e.kind == "death" and e.eventId ~= nil and tostring(e.eventId) or nil
+                local known = id and byId[id]
+                if known then
+                    known.records[#known.records + 1] = record
+                    -- The place is the one written down: any sheet of the death may carry it.
+                    if type(known.event.mapX) ~= "number" and type(e.mapX) == "number" then known.event, known.record = e, record end
                 else
-                    entry.kills = entry.kills + 1
+                    local entry = { event = e, record = record, records = { record } }
+                    list[#list + 1] = entry
+                    if id then byId[id] = entry end
                 end
+            end
+        end
+    end
+    return list
+end
+R.Fights = fights
+function R.Lands()
+    local zones, list = {}, {}
+    for _, fight in ipairs(fights()) do
+        local e = fight.event
+        local zone = type(e.zone) == "string" and e.zone
+        if zone and zone ~= "" and zone ~= "?" then
+            local entry = zones[zone]
+            if not entry then
+                entry = { zone = zone, deaths = 0, kills = 0, killers = {} }
+                zones[zone] = entry
+                list[#list + 1] = entry
+            end
+            if e.kind == "death" then
+                entry.deaths = entry.deaths + 1
+                for _, record in ipairs(fight.records) do entry.killers[record] = (entry.killers[record] or 0) + 1 end
+            else
+                entry.kills = entry.kills + 1
             end
         end
     end
@@ -649,7 +674,7 @@ end
 --   fights               each one where it happened (kept since 0.45.0), once zones are readable
 -- Everything comes from the game's own pictures: the addon ships one small mask and no map.
 local MAP_W, MAP_H = 600, 400
-local MAP_POINTS = 80 -- fights drawn at once, the latest ones: more would be noise
+local MAP_POINTS = 40 -- fights drawn in one zone, the latest ones: more would be noise
 local ZOOM_MAX = 40 -- times the whole world: a zone fills the view well before
 local ZOOM_STEP = 1.3
 local CONTINENT_IN = { 1.25, 2.1 } -- zoom where the continent pictures start and finish coming in
@@ -1071,23 +1096,66 @@ local function buildMap(page)
 end
 -- The fights that kept their position, placed on this map: its own, or those of the zones it
 -- shows, moved through each zone's rectangle. The latest first.
-function R.MapPoints(id, zones)
-    local where = { [id] = false }
-    for _, zone in ipairs(zones or {}) do where[zone.mapID] = zone.rect end
-    local points = {}
-    for _, record in pairs(players()) do
-        for _, e in ipairs(record.history or {}) do
-            local rect = type(e) == "table" and where[e.mapID]
-            if rect ~= nil and not e.voided and type(e.mapX) == "number" and type(e.mapY) == "number" and type(e.time) == "number"
-                and (e.kind == "death" or e.kind == "kill" or e.kind == "assist") then
-                local x, y = e.mapX, e.mapY
-                if rect then x, y = rect.left + x * (rect.right - rect.left), rect.top + y * (rect.bottom - rect.top) end
-                points[#points + 1] = { record = record, event = e, x = x, y = y }
-            end
+-- What the map counts and what it draws come from one pass (owner report 25/11): the counts were
+-- read by zone name and the marks by map, the counts had each death once per attacker, the marks
+-- had the "coups de main" the counts left out, and only the latest 80 fights of the whole world
+-- were drawn. Now a fight belongs to the zone of its map, or, when it kept no place, to the zone
+-- of its name; it is counted there, and drawn there when it kept its place. Each zone draws its
+-- latest MAP_POINTS. The guild's fights (guild vision) are counted and drawn the same way.
+-- Returns the zones fought in (list and by map) and the marks, yours then the guild's.
+function R.MapTally(id, zones, guild)
+    local byMap, byName, where = {}, {}, { [id] = false }
+    for _, zone in ipairs(zones or {}) do
+        byMap[zone.mapID], where[zone.mapID] = zone, zone.rect
+        if type(zone.name) == "string" and byName[zone.name] == nil then byName[zone.name] = zone end
+    end
+    local tallies, tallyOf, drawn = {}, {}, {}
+    local function count(zone, kind)
+        local tally = tallyOf[zone.mapID]
+        if not tally then
+            tally = { zone = zone, deaths = 0, kills = 0 }
+            tallyOf[zone.mapID] = tally
+            tallies[#tallies + 1] = tally
+        end
+        if kind == "death" then tally.deaths = tally.deaths + 1 else tally.kills = tally.kills + 1 end
+    end
+    local function place(list, key, rect, x, y, mark)
+        if rect then x, y = rect.left + x * (rect.right - rect.left), rect.top + y * (rect.bottom - rect.top) end
+        mark.x, mark.y, mark.key = x, y, key
+        list[#list + 1] = mark
+    end
+    local own, others = {}, {}
+    for _, fight in ipairs(fights()) do
+        local e = fight.event
+        local placed = type(e.mapX) == "number" and type(e.mapY) == "number" and type(e.time) == "number"
+        local zone = byMap[e.mapID] or (type(e.zone) == "string" and byName[e.zone]) or nil
+        if zone then count(zone, e.kind) end
+        if placed and where[e.mapID] ~= nil then
+            place(own, e.mapID, where[e.mapID], e.mapX, e.mapY, { record = fight.record, event = e })
         end
     end
-    table.sort(points, function(a, b) return a.event.time > b.event.time end)
-    for i = #points, MAP_POINTS + 1, -1 do points[i] = nil end
+    for _, point in ipairs(guild or {}) do
+        local zone = byMap[point.mapID]
+        if zone and type(point.x) == "number" and type(point.y) == "number" then
+            count(zone, point.kind)
+            place(others, point.mapID, zone.rect, point.x, point.y,
+                { guild = point.actor, enemy = point.name, event = { kind = point.kind, time = point.time } })
+        end
+    end
+    -- The latest first, then MAP_POINTS a zone at most.
+    local function trim(list)
+        table.sort(list, function(a, b) return (a.event.time or 0) > (b.event.time or 0) end)
+        local per, kept = {}, {}
+        for _, mark in ipairs(list) do
+            per[mark.key] = (per[mark.key] or 0) + 1
+            if per[mark.key] <= MAP_POINTS then kept[#kept + 1] = mark end
+        end
+        return kept
+    end
+    return tallies, tallyOf, trim(own), trim(others)
+end
+function R.MapPoints(id, zones)
+    local _, _, points = R.MapTally(id, zones)
     return points
 end
 -- Re-places everything for the current zoom and centre. Cheap: a few dozen regions at most.
@@ -1229,35 +1297,11 @@ local function paintMap(view, byName)
     view.pointZoom = math.max(1.4, 110 / math.max(1, world.zoneWidth * view.width))
     -- Every zone you fought in, tinted by its share of your deaths: the worst zone is bright red
     -- whatever its count, a zone where you only won is green.
-    local tallies, shapes, worst = {}, {}, 1
     -- Guild vision: the fights of the members who share theirs are counted and drawn with yours.
-    local extra, guildPlaced, zoneOf = {}, {}, {}
-    for _, zone in ipairs(zones) do zoneOf[zone.mapID] = zone end
-    for _, point in ipairs(view.guildOn and GL.GuildMap and GL.GuildMap.Points() or {}) do
-        local zone = zoneOf[point.mapID]
-        if zone then
-            local more = extra[zone.mapID] or { deaths = 0, kills = 0 }
-            extra[zone.mapID] = more
-            if point.kind == "death" then more.deaths = more.deaths + 1 else more.kills = more.kills + 1 end
-            if #guildPlaced < MAP_POINTS then
-                local rect = zone.rect
-                guildPlaced[#guildPlaced + 1] = { guild = point.actor, enemy = point.name, event = { kind = point.kind, time = point.time },
-                    x = rect.left + point.x * (rect.right - rect.left), y = rect.top + point.y * (rect.bottom - rect.top) }
-            end
-        end
-    end
-    view.tallyOf = {}
-    for _, zone in ipairs(zones) do
-        local entry, more = byName[zone.name], extra[zone.mapID]
-        local deaths = (entry and entry.deaths or 0) + (more and more.deaths or 0)
-        local kills = (entry and entry.kills or 0) + (more and more.kills or 0)
-        if deaths + kills > 0 then
-            local tally = { zone = zone, deaths = deaths, kills = kills }
-            tallies[#tallies + 1] = tally
-            view.tallyOf[zone.mapID] = tally
-            worst = math.max(worst, deaths)
-        end
-    end
+    local tallies, tallyOf, ownPlaced, guildPlaced = R.MapTally(root, zones, view.guildOn and GL.GuildMap and GL.GuildMap.Points() or nil)
+    local shapes, worst = {}, 1
+    view.tallyOf = tallyOf
+    for _, tally in ipairs(tallies) do worst = math.max(worst, tally.deaths) end
     for _, region in ipairs(view.regions) do
         region:Hide()
         if region.boost then region.boost:Hide() end
@@ -1322,8 +1366,8 @@ local function paintMap(view, byName)
         end)
         label:SetScript("OnClick", function(self) R.MapFocus(self.zone) end)
     end
-    local points = R.MapPoints(root, zones)
-    local own = #points
+    local points, own = {}, #ownPlaced
+    for _, entry in ipairs(ownPlaced) do points[#points + 1] = entry end
     for _, entry in ipairs(guildPlaced) do points[#points + 1] = entry end
     for _, point in ipairs(view.points) do
         point.used = nil
