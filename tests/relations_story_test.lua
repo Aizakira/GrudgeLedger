@@ -299,7 +299,7 @@ do
     settle()
     assert(view.world.art.textures[1].vertex[1] < 0.5 and view.labels[1].fill.color[4] == 0, "no plate under the number")
     assert(view.labels[1].kills.color[2] == 1 and view.labels[1].deaths.color[1] == 1 and view.labels[1].kills.font[3] == "OUTLINE")
-    assert(not view.regions[1].boost:IsShown(), "only a losing zone is lit twice")
+    assert(view.regions[1].boost:IsShown() and view.regions[1].boost.vertex[2] > 0.9, "a won zone is lit twice, green, like a lost one in red")
     -- Guild vision (0.49.0): one box on the page; the guild's fights are counted and drawn with yours.
     local realEnabled, realPoints, realEnable = GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable
     local ticked = false

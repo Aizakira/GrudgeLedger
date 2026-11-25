@@ -1409,21 +1409,24 @@ local function paintMap(view, byName)
             -- nothing. Drawn any other way they showed as black squares (owner report, 0.47.0).
             GL.Safe(region.SetDesaturated, region, true)
             GL.Safe(region.SetBlendMode, region, "ADD")
+            -- Green is added to a map already green and brown: it needs a brighter tint than red to read
+            -- as clearly (owner report 25/11, a zone won 3 to 0 looked barely lit).
             if entry.losing then
                 region:SetVertexColor(1, 0.06, 0.03)
             else
-                region:SetVertexColor(0.10, 0.75, 0.20)
+                region:SetVertexColor(0.30, 1, 0.22)
             end
             region:Show()
-            -- A second light makes the red deep: added light is faint on parchment (0.51.0).
+            -- A second light makes the colour deep, red or green alike: added light is faint on the map
+            -- (0.51.0; green too since the owner's report of 25/11).
             local boost = region.boost or view.canvas:CreateTexture(nil, "ARTWORK")
             region.boost = boost
-            if entry.losing then
+            if balance ~= 0 then
                 if shape.atlas and boost.SetAtlas then boost:SetAtlas(shape.atlas) else boost:SetTexture(shape.file) end
                 boost:SetTexCoord(0, shape.usedX, 0, shape.usedY)
                 GL.Safe(boost.SetDesaturated, boost, true)
                 GL.Safe(boost.SetBlendMode, boost, "ADD")
-                boost:SetVertexColor(1, 0.04, 0.02)
+                if entry.losing then boost:SetVertexColor(1, 0.04, 0.02) else boost:SetVertexColor(0.22, 0.95, 0.16) end
                 boost:Show()
             else
                 boost:Hide()
