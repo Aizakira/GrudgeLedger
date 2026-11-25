@@ -51,7 +51,11 @@ for name, expected_width, expected_height, transparent in (
     ("PreyReticle.tga", 64, 64, True),
     ("BalanceGlow.tga", 256, 128, True), ("BalanceStarRuby.tga", 64, 64, True), ("BalanceStarGold.tga", 64, 64, True),
     # The map page's kit (owner, 25/11): the frame of the map and the six icons of the Relations entries.
-    ("RelationsCarte/cadre-carte.tga", 512, 256, True), ("RelationsCarte/bilan.tga", 64, 64, True),
+    ("RelationsCarte/cadre-hg.tga", 128, 128, True), ("RelationsCarte/cadre-hd.tga", 128, 128, True),
+    ("RelationsCarte/cadre-bg.tga", 128, 128, True), ("RelationsCarte/cadre-bd.tga", 128, 128, True),
+    ("RelationsCarte/cadre-haut.tga", 512, 32, True), ("RelationsCarte/cadre-bas.tga", 512, 32, True),
+    ("RelationsCarte/cadre-gauche.tga", 32, 256, True), ("RelationsCarte/cadre-droite.tga", 32, 256, True),
+    ("RelationsCarte/bilan.tga", 64, 64, True),
     ("RelationsCarte/tableaux-detailles.tga", 64, 64, True), ("RelationsCarte/dettes.tga", 64, 64, True),
     ("RelationsCarte/rivalites.tga", 64, 64, True), ("RelationsCarte/carte.tga", 64, 64, True),
     ("RelationsCarte/classements.tga", 64, 64, True),

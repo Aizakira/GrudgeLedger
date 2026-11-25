@@ -223,13 +223,14 @@ do
     -- One region for the zone you fought in, in the game's shape, added to the map like the game
     -- does (never a black square); the worst zone is bright red. Zones of every continent, no total.
     assert(#view.tallies == 1 and view.tallies[1].zone.name == "Tanaris" and #view.shapes == 1 and view.regions[1]:IsShown())
-    assert(view.shapes[1].zone.shape.file == 9001 and view.shapes[1].alpha > 0.9 and view.regions[1].blendMode == "ADD")
-    assert(view.regions[1].vertex[1] > 0.8 and view.labels[1].count:GetText() == tostring(R.Lands()[1].deaths))
+    -- 25/11: more victories than deaths (9 for 6) lights the zone green, with the victories' number.
+    assert(view.shapes[1].zone.shape.file == 9001 and view.shapes[1].alpha == 0.6 and view.regions[1].blendMode == "ADD")
+    assert(view.regions[1].vertex[2] > 0.5 and view.labels[1].count:GetText() == tostring(R.Lands()[1].kills))
     assert(math.abs(view.tallies[1].zone.rect.left - 0.26) < 0.001 and math.abs(view.shapes[1].zone.shape.width - 0.088) < 0.001)
     assert(view.caption:GetText():find("^Azeroth "), view.caption:GetText())
     -- The owner's kit (25/11): a brass frame over the map, an icon on each entry, the legend under
     -- the key figures while the map shows, the counts under the title.
-    assert(view.frame and view.frame.art and f.tabs.lands.icon and f.tabs.recap.icon and f.legend:IsShown(), "map kit")
+    assert(view.frame and view.frame.pieces["cadre-hg"] and f.tabs.lands.icon and f.tabs.recap.icon and f.legend:IsShown(), "map kit")
     assert(f.legend.heading:GetText() == "Légende" and f.legend.lines[1]:IsShown() and not f.legend.lines[3]:IsShown())
     assert(not landsPage.lead:IsShown() and view.caption:GetText():find("6 morts", 1, true))
     -- Zoomed out the fights are hidden; they are placed through the zone's rectangle on the world.
@@ -290,8 +291,8 @@ do
     R.MapOut()
     settle()
     assert(view.world.art.textures[1].vertex[1] < 0.5 and view.labels[1].fill.color[4] == 0, "no plate under the number")
-    assert(view.labels[1].count.color[1] == 1 and view.labels[1].count.color[2] < 0.3 and view.labels[1].count.font[3] == "OUTLINE")
-    assert(view.regions[1].boost:IsShown() and view.regions[1].boost.blendMode == "ADD", "the deadliest zone is lit twice")
+    assert(view.labels[1].count.color[2] == 1 and view.labels[1].count.font[3] == "OUTLINE")
+    assert(not view.regions[1].boost:IsShown(), "only a losing zone is lit twice")
     -- Guild vision (0.49.0): one box on the page; the guild's fights are counted and drawn with yours.
     local realEnabled, realPoints, realEnable = GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable
     local ticked = false

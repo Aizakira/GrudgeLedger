@@ -1012,7 +1012,7 @@ end
 -- What the view is looking at: the zone under its centre once zones are readable, else the
 -- continent, else the world. Counts follow.
 local function bars(text)
-    return (tostring(text or ""):gsub(" · ", "   |cff9c7a45||r   "))
+    return (tostring(text or ""):gsub(" · ", "   |cffa07b44|||r   "))
 end
 local function describe(view)
     local world, best, distance = view.world, nil, nil
@@ -1092,20 +1092,55 @@ local function buildMap(page)
             R.MapLayout()
         end
     end)
-    -- A brass frame over the edge of the map (the owner's kit, 25/11): it stays put while the map
-    -- moves under it, and takes no click.
-    view.frame = CreateFrame("Frame", nil, view)
-    view.frame:SetAllPoints(view.canvas)
-    GL.Safe(view.frame.SetFrameLevel, view.frame, (GL.Safe(view.canvas.GetFrameLevel, view.canvas) or 1) + 10)
-    view.frame.art = view.frame:CreateTexture(nil, "OVERLAY")
-    view.frame.art:SetAllPoints()
-    view.frame.art:SetTexture(KIT .. "cadre-carte")
-    view.out = UI.button(view, L("Monde"), 0, -410, 84, function() R.MapOut() end, nil, true)
-    view.mine = UI.button(view, L("Ma position"), 90, -410, 118, function() R.MapHere() end, nil, true)
+    -- A brass frame around the map (the owner's kit, 25/11), its line just outside the map's edge so
+    -- that the map stops where the frame starts; the leaves of the corners reach in a little. Four
+    -- corners at their own size and four straight edges that stretch (tools/slice_map_frame.py):
+    -- stretched whole, the corners took the map's shape (owner report). It takes no click.
+    local frame = CreateFrame("Frame", nil, view)
+    view.frame = frame
+    frame:SetPoint("TOPLEFT", view.canvas, "TOPLEFT", -5.5, 7.5)
+    frame:SetPoint("BOTTOMRIGHT", view.canvas, "BOTTOMRIGHT", 6, -5)
+    GL.Safe(frame.SetFrameLevel, frame, (GL.Safe(view.canvas.GetFrameLevel, view.canvas) or 1) + 10)
+    frame.pieces = {}
+    local function piece(name, layer)
+        local t = frame:CreateTexture(nil, "OVERLAY", nil, layer)
+        t:SetTexture(KIT .. name)
+        frame.pieces[name] = t
+        return t
+    end
+    local top, bottom = piece("cadre-haut", 0), piece("cadre-bas", 0)
+    top:SetPoint("TOPLEFT", 63, 0)
+    top:SetPoint("TOPRIGHT", -63, 0)
+    top:SetHeight(16)
+    bottom:SetPoint("BOTTOMLEFT", 63, 0)
+    bottom:SetPoint("BOTTOMRIGHT", -63, 0)
+    bottom:SetHeight(16)
+    local left, right = piece("cadre-gauche", 0), piece("cadre-droite", 0)
+    left:SetPoint("TOPLEFT", 0, -63)
+    left:SetPoint("BOTTOMLEFT", 0, 63)
+    left:SetWidth(16)
+    right:SetPoint("TOPRIGHT", 0, -63)
+    right:SetPoint("BOTTOMRIGHT", 0, 63)
+    right:SetWidth(16)
+    for name, at in pairs({ ["cadre-hg"] = { "TOPLEFT", -1, 1 }, ["cadre-hd"] = { "TOPRIGHT", 1, 1 },
+        ["cadre-bg"] = { "BOTTOMLEFT", -1, -1 }, ["cadre-bd"] = { "BOTTOMRIGHT", 1, -1 } }) do
+        local corner = piece(name, 1)
+        corner:SetSize(64, 64)
+        corner:SetPoint(at[1], at[2], at[3])
+    end
+    -- Under the map, one line (owner's mockup, 25/11): the buttons, then how to move and the count.
+    view.out = UI.button(view, L("Monde"), 0, 0, 84, function() R.MapOut() end, nil, true)
+    view.mine = UI.button(view, L("Ma position"), 0, 0, 118, function() R.MapHere() end, nil, true)
+    view.out:ClearAllPoints()
+    view.out:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", 0, -16)
+    view.mine:ClearAllPoints()
+    view.mine:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", 92, -16)
     -- Where you look and its counts, under the page's title, as in the owner's mockup (25/11).
     view.caption = Panels.Text(view, 0, 20, S(540), 13, true)
     GL.Safe(view.caption.SetWordWrap, view.caption, false)
-    view.hint = Panels.Text(view, 218, -416, S(540) - 218, 12, false, UI.theme.inkMuted)
+    view.hint = Panels.Text(view, 0, 0, MAP_W - 220, 12, true)
+    view.hint:ClearAllPoints()
+    view.hint:SetPoint("TOPRIGHT", view.canvas, "BOTTOMRIGHT", 0, -21)
     view.hint:SetJustifyH("RIGHT")
     GL.Safe(view.hint.SetWordWrap, view.hint, false)
     return view
@@ -1314,7 +1349,7 @@ local function paintMap(view, byName)
     -- Fights show once an ordinary zone is about a hundred pixels wide.
     view.pointZoom = math.max(1.4, 110 / math.max(1, world.zoneWidth * view.width))
     -- Every zone you fought in, tinted by its share of your deaths: the worst zone is bright red
-    -- whatever its count, a zone where you only won is green.
+    -- whatever its count, a zone where you win more than you die is green.
     -- Guild vision: the fights of the members who share theirs are counted and drawn with yours.
     local tallies, tallyOf, ownPlaced, guildPlaced = R.MapTally(root, zones, view.guildOn and GL.GuildMap and GL.GuildMap.Points() or nil)
     local shapes, worst = {}, 1
@@ -1330,6 +1365,9 @@ local function paintMap(view, byName)
     end
     for i, entry in ipairs(tallies) do
         local share = entry.deaths / worst
+        -- Red where your deaths outweigh your victories, green where you win more (owner report
+        -- 25/11: Felwood, 11 deaths for 20 victories, was red). The number is the side that wins.
+        entry.losing = entry.deaths > 0 and entry.deaths >= entry.kills
         if entry.zone.shape then
             local n = #shapes + 1
             local region = view.regions[n] or view.canvas:CreateTexture(nil, "ARTWORK")
@@ -1341,7 +1379,7 @@ local function paintMap(view, byName)
             -- nothing. Drawn any other way they showed as black squares (owner report, 0.47.0).
             GL.Safe(region.SetDesaturated, region, true)
             GL.Safe(region.SetBlendMode, region, "ADD")
-            if entry.deaths > 0 then
+            if entry.losing then
                 region:SetVertexColor(1, 0.06, 0.03)
             else
                 region:SetVertexColor(0.10, 0.75, 0.20)
@@ -1349,7 +1387,7 @@ local function paintMap(view, byName)
             region:Show()
             local boost = region.boost or view.canvas:CreateTexture(nil, "ARTWORK")
             region.boost = boost
-            if entry.deaths > 0 then
+            if entry.losing then
                 if shape.atlas and boost.SetAtlas then boost:SetAtlas(shape.atlas) else boost:SetTexture(shape.file) end
                 boost:SetTexCoord(0, shape.usedX, 0, shape.usedY)
                 GL.Safe(boost.SetDesaturated, boost, true)
@@ -1359,7 +1397,7 @@ local function paintMap(view, byName)
             else
                 boost:Hide()
             end
-            shapes[n] = { zone = entry.zone, alpha = entry.deaths > 0 and 0.65 + 0.35 * share or 0.6, boost = 0.4 + 0.6 * share }
+            shapes[n] = { zone = entry.zone, alpha = entry.losing and 0.65 + 0.35 * share or 0.6, boost = 0.4 + 0.6 * share }
         end
         local label = marker(view, view.labels, i)
         label.used = true
@@ -1372,12 +1410,12 @@ local function paintMap(view, byName)
             local font = GL.Safe(label.count.GetFont, label.count)
             if font then GL.Safe(label.count.SetFont, label.count, font, 16, "OUTLINE") end
         end
-        if entry.deaths > 0 then
+        if entry.losing then
             label.count:SetTextColor(1, 0.22, 0.16)
         else
             label.count:SetTextColor(0.35, 1, 0.4)
         end
-        label.count:SetText(tostring(entry.deaths > 0 and entry.deaths or entry.kills))
+        label.count:SetText(tostring(entry.losing and entry.deaths or entry.kills))
         label.zone = entry.zone.mapID
         label:SetScript("OnEnter", function(self)
             local line = L("%d morts · %d victoires"):format(entry.deaths, entry.kills)
@@ -1430,7 +1468,7 @@ local function paintMap(view, byName)
     view.tallies, view.shapes, view.placed = tallies, shapes, points
     local hint = L("Molette : zoomer · glisser : se déplacer · %d combats placés"):format(own)
     if view.guildOn then hint = hint .. " · " .. L("guilde : %d"):format(#guildPlaced) end
-    view.hint:SetText(bars(hint))
+    Panels.Fit(view.hint, bars(hint), MAP_W - 220, 12, 9, true)
     R.MapLayout()
     return true
 end
@@ -2474,25 +2512,21 @@ local function book(key)
         rule:SetSize(166, 1)
         rule:SetColorTexture(0.55, 0.40, 0.20, 0.30)
         f.legend.lines = {}
-        local kinds = { { color = { 1, 0.22, 0.16 } }, { color = { 0.35, 1, 0.4 } },
+        -- The marks of the map, in their colours: your skull red, your sword green, the guild's
+        -- skull yellow and sword blue (owner report 25/11: squares said nothing).
+        local kinds = { { texture = SKULL, color = { 1, 0.35, 0.3 } }, { texture = SWORD, color = { 0.5, 1, 0.5 } },
             { texture = SKULL, color = { 1, 0.72, 0.25 } }, { texture = SWORD, color = { 0.55, 0.8, 1 } } }
         for i, kind in ipairs(kinds) do
             local line = CreateFrame("Frame", nil, f.legend)
-            line:SetPoint("TOPLEFT", 0, -24 - (i - 1) * 18)
-            line:SetSize(166, 16)
+            line:SetPoint("TOPLEFT", 0, -26 - (i - 1) * 22)
+            line:SetSize(166, 20)
             line.mark = line:CreateTexture(nil, "ARTWORK")
-            if kind.texture then
-                line.mark:SetTexture(kind.texture)
-                line.mark:SetSize(14, 14)
-                line.mark:SetPoint("LEFT", 0, 0)
-            else
-                line.mark:SetColorTexture(1, 1, 1, 1)
-                line.mark:SetSize(8, 8)
-                line.mark:SetPoint("LEFT", 3, 0)
-            end
+            line.mark:SetTexture(kind.texture)
+            line.mark:SetSize(18, 18)
+            line.mark:SetPoint("LEFT", 0, 0)
             line.mark:SetVertexColor(unpack(kind.color))
-            line.label = UI.label(line, "", nil, 22, -1, 144)
-            UI.journalFont(line.label, "GameFontHighlight", 11)
+            line.label = UI.label(line, "", nil, 26, -3, 140)
+            UI.journalFont(line.label, "GameFontHighlight", 12)
             line.label:SetTextColor(unpack(UI.theme.paper))
             f.legend.lines[i] = line
         end
@@ -2578,7 +2612,7 @@ local function paintLegend(f)
     legend:ClearAllPoints()
     legend:SetPoint("TOPLEFT", 40, f.figuresTop - 20 - shown * 22 - 22)
     legend.heading:SetText(L("Légende"))
-    local labels = { L("Morts"), L("Victoires sans mort"), L("Morts de la guilde"), L("Victoires de la guilde") }
+    local labels = { L("Vos morts"), L("Vos victoires"), L("Morts de la guilde"), L("Victoires de la guilde") }
     for i, line in ipairs(legend.lines) do
         line.label:SetText(labels[i])
         if i <= 2 or map.guildOn then line:Show() else line:Hide() end
