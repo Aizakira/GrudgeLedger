@@ -540,7 +540,8 @@ local function buildMembers(host)
         row.seen:SetJustifyH("RIGHT")
         page.rows[i] = row
     end
-    page.empty = Panels.Text(page, X(26), -116, S(540), 13, false, UI.theme.inkMuted)
+    -- Under your own line, which is always there (owner report 25/11: it was written over it).
+    page.empty = Panels.Text(page, X(26), -164, S(540), 13, false, UI.theme.inkMuted)
     page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - MEMBER_ROWS)
         R.Refresh()

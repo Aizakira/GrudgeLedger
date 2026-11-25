@@ -26,6 +26,18 @@ B.Odd=odd
 function B.Online(id) return online[id]==true end
 -- Whether the guild roster has been read this session (a member list may be judged against it).
 function B.RosterKnown() return next(addresses)~=nil end
+-- Who wrote the bounty events kept, with the latest one each: the members whose addon spoke
+-- (the "Membres actifs" page, owner report 25/11).
+local unpackEvent
+function B.Authors()
+    local s=B.GuildScope and B.GuildScope()
+    local found={}
+    for _,raw in pairs(type(s)=="table" and type(s.events)=="table" and s.events or {}) do
+        local e=unpackEvent(raw,true)
+        if e and (not found[e.actor] or e.time>found[e.actor]) then found[e.actor]=e.time end
+    end
+    return found
+end
 -- What one member may keep in your book over the 38 days of the log, and the guild's fight counts.
 local MAX_MEMBER_EVENTS,MAX_SCORE_TARGETS,MAX_SCORE_ACTORS=600,1500,60
 local function guid(s)
@@ -94,7 +106,7 @@ local function scope()
     GL.db.bountyGuilds[key] = s
     return s, me
 end
-local function unpackEvent(raw,archiving)
+function unpackEvent(raw,archiving)
     if type(raw) ~= "string" or #raw > 250 then return end
     local f = {}
     for v in (raw..";"):gmatch("(.-);") do f[#f+1]=v end

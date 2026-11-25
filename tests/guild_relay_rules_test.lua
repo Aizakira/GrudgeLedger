@@ -112,5 +112,19 @@ for _, m in ipairs(GL.GuildMap.Members()) do if m.id == relayer then listed = m 
 assert(listed and listed.version == "0.58.11" and not listed.current and listed.name == "Relayer-Realm", "the member is listed with an old version")
 assert(GL.Bounties.GuildScope().addonMembers[relayer].v == "0.58.11", "kept in the guild's space")
 assert(GL.GuildMap.Members()[1].you, "you come first")
+-- Members heard before 0.62.1 were never written down: they are found in what their addon left,
+-- here the bounty events of the absent member and a card of the connected one (owner report 25/11).
+s.journal = s.journal or { cards = {} }
+s.journal.cards = s.journal.cards or {}
+s.journal.cards["synthetic"] = { key = "synthetic", owner = connected, time = now - 3 * 86400 }
+local byId = {}
+for i, m in ipairs(GL.GuildMap.Members()) do byId[m.id] = i end
+assert(byId[away] and byId[connected], "found in the bounty events and the cards")
+assert(GL.GuildMap.Members()[byId[away]].at <= now, "dated by their latest trace")
+-- Nothing older than sixty days, nobody outside the guild.
+s.journal.cards["synthetic"].time, s.journal.cards["stranger"] = now - 61 * 86400, { owner = "Player-1-stranger", time = now }
+byId = {}
+for i, m in ipairs(GL.GuildMap.Members()) do byId[m.id] = i end
+assert(not byId["Player-1-stranger"], "only members of the guild")
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
 print("PASS guild relay rules: connected members speak for themselves, relays outside their room, one answer, odd sender told once")

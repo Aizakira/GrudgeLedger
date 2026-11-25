@@ -499,7 +499,29 @@ function M.Members()
     local known = type(s.addonMembers) == "table" and s.addonMembers or {}
     local B = GL.Bounties
     local now = GL.Now()
-    for id, entry in pairs(known) do
+    -- Before 0.62.1 nobody was written down: the members are also found in what their addon left in
+    -- the guild's space, their fights, bounty events and cards, each with its latest date (owner
+    -- report 25/11: the page listed only you). Read each time, never stored.
+    local found = B and B.Authors and B.Authors() or {}
+    local function saw(id, at)
+        at = tonumber(at)
+        if guid(id) and at and at <= now + 60 and (not found[id] or at > found[id]) then found[id] = at end
+    end
+    for actor, list in pairs(type(s.places) == "table" and s.places or {}) do
+        if type(list) == "table" then saw(actor, (read(list[1]))) end
+    end
+    local journal = type(s.journal) == "table" and s.journal or {}
+    for _, card in pairs(type(journal.cards) == "table" and journal.cards or {}) do
+        if type(card) == "table" then saw(card.owner, card.time) end
+    end
+    local all = {}
+    for id, entry in pairs(known) do all[id] = entry end
+    for id, at in pairs(found) do
+        local entry = all[id]
+        if type(entry) ~= "table" then all[id] = { at = at }
+        elseif at > (tonumber(entry.at) or 0) then all[id] = { at = at, v = entry.v, mark = entry.mark } end
+    end
+    for id, entry in pairs(all) do
         if type(entry) ~= "table" or now - (tonumber(entry.at) or 0) > MEMBER_DAYS * DAY
             or (B and B.IsMember and B.RosterKnown and B.RosterKnown() and not B.IsMember(id)) then
             known[id] = nil
