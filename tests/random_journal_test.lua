@@ -141,4 +141,13 @@ for _, page in ipairs({ "recap", "honor", "debts", "rivals", "lands", "rankings"
     R.Refresh()
 end
 assert(#GL.errors == 0, GL.errors[1] and GL.errors[1].text)
+-- 6. The new facts of a fight (25/11) are kept as recorded, and an absurd one is dropped.
+local saved = GL.RecordPvP(people[2], "death", "confirmed", "fixture", "facts:1", { duration = 42, mounted = true, groupSize = 3,
+    sinceRevive = 50, opponentHealthPct = 12, healthPct = 80 })
+local e = saved.history[#saved.history]
+assert(e.combat.duration == 42 and e.combat.mounted == true and e.combat.groupSize == 3 and e.combat.sinceRevive == 50
+    and e.combat.opponentHealthPct == 12, "the facts of the fight are kept")
+local odd = GL.RecordPvP(people[3], "death", "confirmed", "fixture", "facts:2", { duration = -5, groupSize = 999, opponentHealthPct = 150 })
+local o = odd.history[#odd.history].combat or {}
+assert(o.duration == nil and o.groupSize == nil and o.opponentHealthPct == nil, "absurd values are dropped")
 print("PASS random journals: 25 runs of 40 fights, counters, lands, map, statistics and debts agree; every page opens")

@@ -14,6 +14,8 @@ local duelPendingUntil
 local serial, honorBaseline, session = 0, nil, nil
 local worldActive = true
 local idleOpponents, idleAt, openingFeed
+-- When you last came back to life: a death soon after it is a corpse camped (owner, 25/11).
+local revivedAt
 local damageEvents = {
     SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true, SPELL_PERIODIC_DAMAGE = true,
     SPELL_BUILDING_DAMAGE = true, DAMAGE_SHIELD = true, DAMAGE_SPLIT = true, ENVIRONMENTAL_DAMAGE = true,
@@ -289,6 +291,14 @@ local function observeOpponent(f, guid, level, live)
                 f.firstHealth = math.floor(100 * (hp / max) + 0.5)
             end
             f.observerLevel = GL.Clean(GL.Safe(UnitLevel, "player"), "number")
+            -- How the fight began for you (owner, 25/11: "toujours plus d'infos"): when, on your
+            -- mount or not, in a group of how many, how long after you came back to life.
+            local now = GL.Now()
+            f.startedAt = f.startedAt or now
+            f.mounted = GL.Clean(GL.Safe(IsMounted), "boolean")
+            local members = GL.Clean(GL.Safe(GetNumGroupMembers), "number")
+            f.groupSize = members and members >= 1 and members <= 40 and math.floor(members) or 1
+            if revivedAt and now >= revivedAt and now - revivedAt <= 900 then f.sinceRevive = now - revivedAt end
         end
     end
     if not f.combatants[guid] then
@@ -306,7 +316,18 @@ local function combatSnapshot(f, identity, viaPet, credit)
     if not f or not f.combatants then return end
     local level = identity.guid and f.combatants[identity.guid]
     local snapshot = { healthPct = f.firstHealth, playerLevel = f.observerLevel, opponentLevel = level,
-        opponents = f.opponentCount, pve = f.npcPressure, pet = viaPet }
+        opponents = f.opponentCount, pve = f.npcPressure, pet = viaPet,
+        mounted = f.mounted or nil, groupSize = f.groupSize, sinceRevive = f.sinceRevive }
+    local now = GL.Now()
+    if f.startedAt and now >= f.startedAt and now - f.startedAt <= 3600 then snapshot.duration = now - f.startedAt end
+    -- What was left of the opponent at that moment, when the game shows them (a nameplate, a target).
+    local token = identity.guid and GL.Clean(GL.Safe(UnitTokenFromGUID, identity.guid), "string")
+    if token and GL.Clean(GL.Safe(UnitGUID, token), "string") == identity.guid then
+        local hp, max = GL.Clean(GL.Safe(UnitHealth, token), "number"), GL.Clean(GL.Safe(UnitHealthMax, token), "number")
+        if hp and max and max > 0 and hp >= 0 and hp <= max and max < math.huge then
+            snapshot.opponentHealthPct = math.floor(100 * hp / max + 0.5)
+        end
+    end
     local opening = f.opening
     if opening and opening.guid == identity.guid and not opening.defeated and not (credit and f.endedAt) then
         snapshot.opener, snapshot.hadGrudge, snapshot.encounterId = opening.opener, opening.hadGrudge, f.id
@@ -1341,6 +1362,7 @@ function T.HandleEvent(event, ...)
         if fight then fight.endedAt = GL.Now() lastFight = fight fight = nil end
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
         if bool(UnitIsDeadOrGhost, "player") == false then
+            revivedAt = GL.Now()
             resolveDeath(true)
             deathHandled, resolvedDeath, leadLog, pendingCast = false, nil, nil, nil
             fight, lastFight, pendingDeath, idleOpponents = nil, nil, nil, nil

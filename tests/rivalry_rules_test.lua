@@ -150,6 +150,12 @@ local cases = {
     { "bully", { { "death", 9000 }, { "kill", 60, nil, nil, { playerLevel = 58, opponentLevel = 50 } } } },
     { "group", { { "death", 9000 }, { "kill", 60, nil, nil, { assist = "Célestine" } } } },
     { "returned", { { "death", 30 * DAY }, { "kill", 60 } } },
+    { "resCamp", { { "kill", 9000 }, { "death", 60, nil, nil, { sinceRevive = 35 } } } },
+    { "close", { { "kill", 9000 }, { "death", 60, nil, nil, { opponentHealthPct = 7 } } } },
+    { "mounted", { { "kill", 9000 }, { "death", 60, nil, nil, { mounted = true } } } },
+    { "outnumbered", { { "death", 9000 }, { "kill", 60, nil, nil, { opponents = 3, groupSize = 1 } } } },
+    { "quick", { { "death", 9000 }, { "kill", 60, nil, nil, { duration = 4 } } } },
+    { "long", { { "death", 9000 }, { "kill", 60, nil, nil, { duration = 240 } } } },
     { "domination", { { "kill", 5000 }, { "kill", 4000 }, { "kill", 3000 }, { "kill", 2000 }, { "death", 1000 }, { "kill", 60 } } },
     { "nemesis", { { "death", 5000 }, { "death", 4000 }, { "death", 3000 }, { "kill", 2000 }, { "death", 1000 } } },
 }
@@ -160,28 +166,46 @@ for i, case in ipairs(cases) do
     for _, part in ipairs({ tell.headline, tell.fact, tell.push }) do
         assert(type(part) == "string" and #part > 3 and not part:find("[{}]"), case[1] .. ": " .. tostring(part))
     end
-    assert(tell.fact:find("Ligne" .. i, 1, true) or not Lines.LINES.frFR.fact[case[1]][1]:find("{name}", 1, true), case[1] .. " names the rival")
+    assert(tell.fact:find("Ligne" .. i, 1, true), case[1] .. " names the rival: " .. tell.fact)
     -- The same sentence on every look, until something new happens.
     local again = Lines.Tell(record, story(record), now)
     assert(again.fact == tell.fact and again.push == tell.push, case[1] .. " is stable")
 end
+-- The last blows: the killing spell from the report kept with the death, in the sentence.
+local spelled = sheet("Sort", { { "kill", 9000 }, { "death", 60 } })
+spelled.history[2].report = { live = { { at = now - 70, src = spelled.guid, dst = "me" },
+    { at = now - 61, src = spelled.guid, dst = "me", fatal = true, spell = "Éviscération" } } }
+assert(Lines.Tell(spelled, story(spelled), now).fact:find("Éviscération", 1, true), "the killing spell is told")
+-- The rivalry behind the fight: the third death in the same zone, a streak, the count.
+local zoned = sheet("Zone", { { "death", 9 * DAY, nil, "Tanaris" }, { "kill", 5 * DAY, nil, "Tanaris" }, { "death", 2 * DAY, nil, "Tanaris" },
+    { "kill", DAY, nil, "Tanaris" }, { "death", 60, nil, "Tanaris" } })
+local zonedTell = Lines.Tell(zoned, story(zoned), now)
+assert(zonedTell.fact:find("troisième", 1, true) and zonedTell.fact:find("Tanaris", 1, true), zonedTell.fact)
+local streak = sheet("Serie", { { "death", 9000 }, { "kill", 5000 }, { "kill", 3000 }, { "kill", 60 } })
+assert(Lines.Tell(streak, story(streak), now).fact:find("3 de suite", 1, true) or Lines.Tell(streak, story(streak), now).fact:find("troisième", 1, true))
+-- When: today, yesterday, days ago, from the player's clock.
+assert(Lines.Tell(zoned, story(zoned), now).fact:find("^Ce ") or Lines.Tell(zoned, story(zoned), now).fact:find("^Cet") or zonedTell.fact:find("^Cette"))
 -- The sharpest wins: treachery before a low health, a low health before a first strike.
 assert(first(sheet("Ordre", { { "kill", 9000 }, { "death", 60, nil, nil, { pve = true, healthPct = 20, opener = "opponent" } } })) == "pve")
 -- Without a zone, no "à {zone}" left in the line.
 local nowhere = sheet("Nulle", { { "kill", 9000, nil, "?" }, { "death", 60, nil, "?", { pve = true } } })
 local tell = Lines.Tell(nowhere, story(nowhere), now)
 assert(tell.headline == "Vous a pris en traître" and not tell.fact:find("{", 1, true), tell.headline)
--- The two banks have the same situations and the same words in braces.
-for _, part in ipairs({ "headline", "fact" }) do
+-- The two banks have the same parts and the English never asks for a word the French lacks.
+local function strings(t, out)
+    out = out or {}
+    if type(t) == "string" then out[#out + 1] = t elseif type(t) == "table" then for _, v in pairs(t) do strings(v, out) end end
+    return out
+end
+for _, part in ipairs({ "headline", "verb", "detail", "memory", "push", "when" }) do
     for id, fr in pairs(Lines.LINES.frFR[part]) do
         local en = Lines.LINES.enUS[part][id]
-        assert(en, part .. " " .. id .. " in English")
-        local function marks(t)
-            local list = {}
-            for _, line in ipairs(type(t) == "table" and t or { t }) do for m in line:gmatch("{%w+}") do list[m] = true end end
-            return list
+        assert(en, part .. " " .. tostring(id) .. " in English")
+        local marks = {}
+        for _, line in ipairs(strings(fr)) do for m in line:gmatch("{%w+}") do marks[m] = true end end
+        for _, line in ipairs(strings(en)) do
+            for m in line:gmatch("{%w+}") do assert(marks[m], part .. " " .. tostring(id) .. ": " .. m .. " only in English") end
         end
-        for m in pairs(marks(en)) do assert(marks(fr)[m], id .. ": " .. m .. " only in English") end
     end
 end
 -- In English on an English client.

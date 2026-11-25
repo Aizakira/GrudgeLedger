@@ -88,7 +88,7 @@ local sheet = rivals.sheet
 assert(rivals.open == GL.Get(avenged).key and sheet:IsShown() and sheet.debt:GetText() == "Comptes réglés")
 -- The fact that names it, then a line that pushes: you lead, so it gloats.
 local told = sheet.story:GetText()
-assert(told:find("Siro", 1, true) and told:find("6", 1, true) and #told > 60 and not told:find("{", 1, true), told)
+assert(told:find("Siro", 1, true) and told:find("Tanaris", 1, true) and told:find("sixième", 1, true) and #told > 60 and not told:find("{", 1, true), told)
 assert(sheet.steps[5]:IsShown() and sheet.steps[5].word:GetText() == "Victoire" and sheet.threadWhen:GetText():find("Tanaris", 1, true))
 assert(sheet.youName:GetText() == "Vous" and sheet.rivalName:GetText() == "Siro Siro" and strips[2]:GetHeight() == 42)
 -- The band where you face your rival: Alliance blue on your side, Horde red on theirs, whatever

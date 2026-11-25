@@ -1267,6 +1267,11 @@ local function combatContext(value)
         opponentLevel = integer("opponentLevel", 1, 1000), opponents = integer("opponents", 1, 10000),
         pve = GL.Clean(value.pve, "boolean") or nil, pet = GL.Clean(value.pet, "boolean") or nil,
         assist = cleanName(value.assist),
+        -- 25/11: how long it lasted, on your mount or not, your group, since your last revival, and
+        -- the opponent's health when it ended (when the game showed it).
+        duration = integer("duration", 0, 3600), mounted = GL.Clean(value.mounted, "boolean") or nil,
+        groupSize = integer("groupSize", 1, 40), sinceRevive = integer("sinceRevive", 0, 900),
+        opponentHealthPct = integer("opponentHealthPct", 0, 100),
     }
     if (value.opener == "player" or value.opener == "opponent") and cleanName(value.encounterId) then
         snapshot.opener, snapshot.encounterId = value.opener, value.encounterId
