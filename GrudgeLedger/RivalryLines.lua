@@ -442,7 +442,9 @@ function M.Tell(record, analysis, now)
     if #clauses > 0 then sentence = sentence .. ", " .. table.concat(clauses, ", ") end
     sentence = sentence .. "."
     local remembered = memory(b, record, facts, found, key, name)
-    if remembered then sentence = sentence .. " " .. (remembered:gsub("^%l", string.upper)) end
+    -- The parts apart too: the page drops the reminder, then the push, before it ever cuts a line.
+    result.base, result.memory = sentence, remembered and (remembered:gsub("^%l", string.upper)) or nil
+    if result.memory then sentence = sentence .. " " .. result.memory end
     result.fact = sentence
     return result
 end

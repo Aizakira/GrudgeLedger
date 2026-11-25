@@ -241,6 +241,36 @@ assert(Lines.Tell(nowhere, story(nowhere), now).headline == "Te apuñaló por la
 GetLocale = function() return "deDE" end
 assert(Lines.Tell(nowhere, story(nowhere), now).headline == "Hat dir in den Rücken gestochen", "German without a zone")
 GetLocale = nativeLocale
+-- The sheet never cuts a sentence (owner, 25/11): the richest that holds in three lines, the
+-- reminder and then the push dropped first, the size lowered last. Counted like the page counts
+-- when the game cannot measure: half the size a letter, on the sheet's width.
+local region = { size = 12 }
+function region:GetFont() return "font", self.size end
+function region:SetFont(_, size) self.size = size end
+function region:SetHeight() end
+function region:SetText(text) self.text = text end
+function region:GetStringHeight() return 0 end
+region.fitWidth = 401
+local function letters(text) return #(text:gsub("[\128-\191]", "")) end
+for _, locale in ipairs({ "frFR", "enUS", "esES", "deDE", "ptBR" }) do
+    GetLocale = function() return locale end
+    for _, record in pairs(GL.db.players) do
+        if (tonumber(record.pvp.kills) or 0) + (tonumber(record.pvp.deaths) or 0) >= 2 and record.pvp.kills >= 0 then
+            local ok, a = pcall(story, record)
+            if ok then
+                local tell = Lines.Tell(record, a, now)
+                local text, size = R.FitStory(region, tell, a)
+                assert(math.ceil(letters(text) * size * 0.5 / 401) <= 3, locale .. ": " .. text)
+                assert(text:find(tell.base or tell.fact or "", 1, true), "the fact itself is never dropped")
+            end
+        end
+    end
+end
+-- A long line loses its reminder, then its push, before its size.
+local long = { base = string.rep("mot ", 40), memory = string.rep("rappel ", 12), push = string.rep("appel ", 10) }
+local text, size = R.FitStory(region, long, {})
+assert(not text:find("rappel", 1, true) and size == 12, "the reminder goes first")
+GetLocale = nativeLocale
 -- In English on an English client.
 local nativeLocale = GetLocale
 GetLocale = function() return "enUS" end

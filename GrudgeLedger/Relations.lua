@@ -558,7 +558,8 @@ local function buildRivals(host)
     sheet.rivalHit:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     -- What happened, then a line that pushes you; the debt on the right.
     sheet.story = Panels.Text(sheet, 20, -84, S(330), 12, false, UI.theme.ink)
-    sheet.story:SetHeight(44)
+    sheet.story.fitWidth = S(330)
+    sheet.story:SetHeight(46)
     GL.Safe(sheet.story.SetWordWrap, sheet.story, true)
     GL.Safe(sheet.story.SetJustifyV, sheet.story, "TOP")
     sheet.debt = Panels.Text(sheet, S(548) - 20 - S(140), -86, S(140), 13, true)
@@ -645,6 +646,53 @@ local function paintStrip(strip, a, small, open)
     chevron(strip.fold.art, open)
     strip:Show()
 end
+-- The story's box: three lines of 12 in the sheet; 11 only if nothing else holds.
+local STORY_LINES, STORY_BOX = 3, 46
+local function letters(text)
+    -- Continuation bytes of UTF-8 are not letters.
+    return #(tostring(text):gsub("[\128-\191]", ""))
+end
+-- How many lines a text takes at a size: measured by the game when it can, otherwise counted
+-- (an average letter is half the size wide).
+local function linesOf(region, text, size, width)
+    local font = GL.Safe(region.GetFont, region)
+    if font then GL.Safe(region.SetFont, region, font, size) end
+    GL.Safe(region.SetHeight, region, 0)
+    region:SetText(text)
+    local tall = tonumber(GL.Safe(region.GetStringHeight, region)) or 0
+    if tall > 0 then return math.floor(tall / (size + 1) + 0.6) end
+    return math.ceil(letters(text) * size * 0.5 / width)
+end
+function R.FitStory(region, tell, a)
+    local base = tell.base or tell.fact or R.RivalSentence(a)
+    local push = tell.push ~= "" and tell.push or nil
+    local tries = {}
+    local function try(...)
+        local parts = {}
+        for _, part in ipairs({ ... }) do if part then parts[#parts + 1] = part end end
+        tries[#tries + 1] = table.concat(parts, " ")
+    end
+    try(base, tell.memory, push)
+    if tell.memory then try(base, push) end
+    if push then try(base, tell.memory) end
+    try(base)
+    local width = region.fitWidth or S(330)
+    for _, size in ipairs({ 12, 11 }) do
+        for _, text in ipairs(tries) do
+            if linesOf(region, text, size, width) <= STORY_LINES then
+                GL.Safe(region.SetHeight, region, STORY_BOX)
+                region.fitSize = size
+                return text, size
+            end
+        end
+    end
+    -- The base alone at 11: it always holds (a verb and two details).
+    local text = tries[#tries]
+    linesOf(region, text, 11, width)
+    GL.Safe(region.SetHeight, region, STORY_BOX)
+    region.fitSize = 11
+    return text, 11
+end
 local function paintSheet(sheet, a)
     local record = a.record
     sheet.record = record
@@ -670,11 +718,9 @@ local function paintSheet(sheet, a)
     if record.className then identity[#identity + 1] = UI.plain(record.className) end
     if record.guild then identity[#identity + 1] = UI.plain(record.guild) end
     Panels.Fit(sheet.rivalClass, table.concat(identity, " · "), S(150), 11, 8)
-    -- The fact that names what happened (or what the score tells), then the push.
-    local tell = a.tell or {}
-    local story = tell.fact or R.RivalSentence(a)
-    if tell.push and tell.push ~= "" then story = story .. " " .. tell.push end
-    sheet.story:SetText(story)
+    -- The fact that names what happened (or what the score tells), its reminder, then the push:
+    -- the richest that holds in the sheet's three lines, never a cut word (owner, 25/11).
+    R.FitStory(sheet.story, a.tell or {}, a)
     local debt = a.debt or 0
     local short = UI.plain(record.name or record.fullName or "?")
     if debt > 0 then
