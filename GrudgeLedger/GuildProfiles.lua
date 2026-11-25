@@ -374,10 +374,8 @@ function G.Receive(s,me,sender,raw)
         local key=cardKey(sender,target,digest)
         -- A card that names a player you know by another name is refused (25/11).
         local known=knownName(target)
-        if known and not sameName(known,name) then
-            if B.Odd then B.Odd(sender) end
-            return
-        end
+        -- Without blame: a player may have changed name.
+        if known and not sameName(known,name) then return end
 
         if j.withdrawn[key] then
             j.retired=j.retired or {}

@@ -45,9 +45,15 @@ roster[4][3] = true mock.Fire("GUILD_ROSTER_UPDATE")
 hear(order(away, 2), "Away-Realm")
 assert(not s.relayed[relayedKey], "the author's own word adopts it")
 
--- 6. Five inconsistent messages: one line in the chat, once.
+-- 6. Relays about connected members are refused silently: a catch-up answer holds them too, and an
+-- honest member must not be accused (owner 25/11). Five messages sent straight in another
+-- member's name (a forgery): one line in the chat, once.
 local printed = #mock.messages
 for i = 3, 9 do hear("R;" .. order(connected, i), "Relayer-Realm") end
+for i = printed + 1, #mock.messages do
+    assert(not mock.messages[i]:find("incohérents", 1, true), "no warning for a catch-up answer")
+end
+for i = 10, 16 do hear(order(connected, i), "Relayer-Realm") end
 local told = 0
 for i = printed + 1, #mock.messages do
     if mock.messages[i]:find("messages incohérents de Relayer", 1, true) then told = told + 1 end
@@ -58,13 +64,27 @@ assert(told == 1, "told once: " .. told)
 assert(B.Post("Player-1-target01", "Cible Exemple", 0))
 for _ = 1, 20 do tick() end
 sent = {}
+local later = {}
+local after = C_Timer.After
+C_Timer.After = function(delay, fn) later[#later + 1] = fn end
 hear("Q", "Relayer-Realm")
 now = now + 11
 hear("Q", "Connected-Realm")
-for _ = 1, 400 do now = now + 1 tick() end
-local own = 0
-for _, text in ipairs(sent) do if text:find(";" .. me .. ";", 1, true) and text:find("Cible Exemple", 1, true) then own = own + 1 end end
-assert(own == 1, "own events answered once, not " .. own)
+now = now + 3
+hear("Q", "Other-Realm")
+for _ = 1, 200 do now = now + 1 tick() end
+local function ownSent()
+    local n = 0
+    for _, text in ipairs(sent) do if text:find(";" .. me .. ";", 1, true) and text:find("Cible Exemple", 1, true) then n = n + 1 end end
+    return n
+end
+assert(ownSent() == 1, "own events answered once in the window, not " .. ownSent())
+-- The questions inside the window get one answer at its end (owner 25/11: nobody misses you).
+assert(#later == 1, "one deferred answer for two late questions")
+later[1]()
+for _ = 1, 200 do now = now + 1 tick() end
+C_Timer.After = after
+assert(ownSent() == 2, "the late arrivals are answered at the end of the window")
 -- 25/11: relayed events have a bound of their own, kept across sessions (1500 per relayer). A book
 -- that already holds 1500 relays from one member (several sessions) takes no more from them.
 roster[4][3] = false mock.Fire("GUILD_ROSTER_UPDATE")

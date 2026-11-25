@@ -317,10 +317,7 @@ function M.Receive(s, me, sender, raw, relay)
         local at = read(rest)
         if not at or (forgot and at <= forgot) or not (GL.Bounties and GL.Bounties.IsMember and GL.Bounties.IsMember(actor)) then return false end
         -- A connected member speaks for itself: a relay of its fights is refused (audit 24/11).
-        if GL.Bounties.Online and GL.Bounties.Online(actor) then
-            if GL.Bounties.Odd then GL.Bounties.Odd(sender) end
-            return false
-        end
+        if GL.Bounties.Online and GL.Bounties.Online(actor) then return false end
         GL.Transport.Cancel(s, "map:relay")
     elseif actor ~= sender then
         return false
