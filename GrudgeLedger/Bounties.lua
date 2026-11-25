@@ -1163,6 +1163,7 @@ local function refreshRoster()
             if realm then roster[name.."-"..realm]=id end
         end
     end
+    if GL.GuildMap and GL.GuildMap.RosterChanged then GL.GuildMap.RosterChanged(addresses) end
 end
 function B.IsMember(id)
     return guid(id) and addresses[id]~=nil or false

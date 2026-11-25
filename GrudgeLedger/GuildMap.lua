@@ -553,6 +553,25 @@ function M.Versions()
 end
 -- The guild's fights, the latest first: who, when, which map, where (0 to 1), death or kill, and
 -- against whom. Yours are left out (the map reads them in your journal) unless asked for.
+-- Only the fights of members still in the guild are shown, and count for the "Tueur de guilde"
+-- alert (random test 25/11: a member who had left came back on the map; before that, a member who
+-- left stayed on it for 38 days). They are kept, not erased: a member who comes back is shown again.
+-- The views are rebuilt when the guild's members change, not at every roster update.
+local members
+function M.RosterChanged(addresses)
+    local same = members ~= nil
+    if same then
+        for id in pairs(members) do if not addresses[id] then same = false break end end
+        for id in pairs(addresses) do if not members[id] then same = false break end end
+    end
+    if same then return end
+    members = {}
+    for id in pairs(addresses) do members[id] = true end
+    forgetIndex()
+end
+local function departed(actor, me)
+    return actor ~= me and members ~= nil and next(members) ~= nil and not members[actor]
+end
 function M.Points(withMine)
     local s, me = scope()
     local points = {}
@@ -563,7 +582,7 @@ function M.Points(withMine)
     for actor, list in pairs(s.places) do
         -- Without withMine, the fights of every character of the account are left out: the map reads
         -- them in the account's journal (audit 24/11, they were counted twice).
-        if (withMine or not ownCharacter(actor)) and guid(actor) and type(list) == "table" then
+        if (withMine or not ownCharacter(actor)) and guid(actor) and type(list) == "table" and not departed(actor, me) then
             for i = 1, math.min(PER_MEMBER, #list) do
                 local at, map, x, y, kind, target, name = read(list[i])
                 if at then
@@ -590,7 +609,7 @@ function M.Killer(target)
     if indexed ~= s or not index or indexedBucket ~= bucket then
         index, indexed, indexedBucket = {}, s, bucket
         for actor, list in pairs(s.places) do
-            if not ownCharacter(actor) and guid(actor) and type(list) == "table" then
+            if not ownCharacter(actor) and guid(actor) and type(list) == "table" and not departed(actor, me) then
                 for _, text in ipairs(list) do
                     local at, map, _, _, kind, victim, name = read(text)
                     if at and kind == "d" and victim ~= "" then
