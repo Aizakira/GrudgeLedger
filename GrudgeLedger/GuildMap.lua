@@ -221,7 +221,7 @@ function M.Join()
     if not s.noticed then
         s.noticed = GL.Now()
         GL.Print(GL.L("Grudge Ledger partage avec votre guilde vos victoires, vos morts (avec l’endroit), vos repérages et vos avis. "
-            .. "Pour arrêter : options, pages Relations et Alertes, et la case « Vision de guilde » de la carte."))
+            .. "Pour arrêter : réglages, pages Relations et JcJ et Alertes."))
     end
     if ready[s] then return false end
     ready[s] = true

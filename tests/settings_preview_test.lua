@@ -21,13 +21,24 @@ assert(GL.version==version)
 GetNormalizedRealmName=function() return "Realm" end
 mock.units.player.guild="Première"
 mock.Fire("PLAYER_GUILD_UPDATE")
+-- The guild vision's switch, as GuildMap keeps it (not loaded here).
+local mapSharing, realGuildMap = true, GL.GuildMap
+GL.GuildMap = GL.GuildMap or { Enabled = function() return mapSharing, true end, Enable = function(value) mapSharing = value == true end }
 -- Sharing is on by default since 0.51.0; unticking is the way to stop.
 assert(f.shareFights:IsEnabled() and f.shareFights:GetChecked() and f.shareDeaths:GetChecked())
 f.shareFights:SetChecked(false); click(f.shareFights)
+-- The same box switches off the guild's journal and map (owner, 26/11: sharing is a setting).
+assert(GL.GuildMap.Enabled() == false, "the guild vision follows the setting")
 f.shareDeaths:SetChecked(false); click(f.shareDeaths)
 assert(not f.shareFights:GetChecked() and not f.shareDeaths:GetChecked())
 f.shareFights:SetChecked(true); click(f.shareFights)
-assert(select(1,GL.Bounties.Sharing()) and not select(2,GL.Bounties.Sharing()))
+assert(select(1,GL.Bounties.Sharing()) and not select(2,GL.Bounties.Sharing()) and GL.GuildMap.Enabled() == true)
+-- An older save that switched off only the map's part shows the box unticked.
+GL.GuildMap.Enable(false); f:SyncControls()
+assert(not f.shareFights:GetChecked(), "both parts must be on for the box to be ticked")
+f.shareFights:SetChecked(true); click(f.shareFights)
+assert(GL.GuildMap.Enabled() == true)
+GL.GuildMap = realGuildMap
 mock.units.player.guild="Deuxième"; mock.Fire("PLAYER_GUILD_UPDATE")
 -- Each guild has its own switches: in a new guild sharing is on again, until switched off there.
 assert(f.shareFights:GetChecked() and f.shareDeaths:GetChecked() and f.shareGuild:GetText():find("Deuxième",1,true))

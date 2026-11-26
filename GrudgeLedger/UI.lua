@@ -2808,8 +2808,22 @@ showSettings = function()
         settingText(p, L("Champs de bataille et arènes"), 356, 606, 548, 17)
         settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 635, 548, 13, theme.inkMuted)
         f.shareGuild = settingText(p, "", 356, 461, 541, 16)
+        -- One box for all of it (owner, 26/11): your scores for the bounties, and your fights with their
+        -- place in the guild's journal and on its map. Sharing is a setting, never a box of a page.
         f.shareFights = check("relations", nil, L("Partager mes victoires et morts avec ma guilde"), 489, nil, nil,
-            function(value) GL.Bounties.ShareFights(value); f:SyncControls() end)
+            function(value)
+                GL.Bounties.ShareFights(value)
+                if GL.GuildMap then GL.GuildMap.Enable(value) end
+                f:SyncControls()
+                if GL.RelationsPages and GL.RelationsPages.Refresh then GL.RelationsPages.Refresh() end
+            end)
+        f.shareFights:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(L("Vos victoires et vos morts, avec leur lieu, dans le Journal de guilde et sur la carte des membres, et vos scores pour les primes. "
+                .. "Décochée : rien n’est envoyé, et vous ne voyez plus les combats des autres."), 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        f.shareFights:SetScript("OnLeave", function() GameTooltip:Hide() end)
         f.shareDeaths = check("relations", nil, L("Signaler mes morts pour les primes automatiques"), 520, nil, nil,
             function(value) GL.Bounties.ShareDeaths(value); f:SyncControls() end)
         f.shareSocial = check("relations", nil, L("Partager mes faits datés et mon avis de guilde"), 551, nil, nil,
@@ -2862,7 +2876,9 @@ showSettings = function()
             local guild = GL.Safe(GetGuildInfo, "player")
             local fights, deaths
             if GL.Bounties and GL.Bounties.Sharing then fights, deaths = GL.Bounties.Sharing() end
-            self.shareFights:SetChecked(fights == true); self.shareDeaths:SetChecked(deaths == true)
+            -- Ticked only while both are on: an older save may have switched off only the map's part.
+            local mapped = not GL.GuildMap or GL.GuildMap.Enabled() == true
+            self.shareFights:SetChecked(fights == true and mapped); self.shareDeaths:SetChecked(deaths == true)
             self.shareFights:SetEnabled(guild ~= nil and GL.Bounties ~= nil); self.shareDeaths:SetEnabled(guild ~= nil and GL.Bounties ~= nil)
             self.shareSocial:SetChecked(GL.SharedDossiers and GL.SharedDossiers.SharingSocial() or false)
             self.shareSocial:SetEnabled(guild ~= nil and GL.SharedDossiers ~= nil)
@@ -4138,4 +4154,9 @@ SlashCmdList.GRUDGELEDGER = function(message)
     elseif command == "" then
         if ledger and ledger:IsShown() then ledger:Hide() else GL.ShowLedger() end
     else GL.Print(L("Commandes : /gl, /gl bilan, /gl chronique, /gl stats, /gl guildes, /gl traces, /gl + [raison], /gl - [raison], /gl ami|ennemi|auto|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl settings, /gl debug")) end
+end
+-- Opens the settings, on one of their pages when asked ("relations": sharing with the guild).
+function GL.ShowSettings(category)
+    showSettings()
+    if category and settingsWindow and settingsWindow.SelectCategory then settingsWindow:SelectCategory(category) end
 end

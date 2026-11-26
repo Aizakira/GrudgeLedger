@@ -381,16 +381,23 @@ do
             { actor = "Player-1-Mate0002", time = 1700000100, mapID = 99999, x = 0.2, y = 0.4, kind = "death" } }
     end
     R.Refresh()
-    assert(landsPage.guild:IsShown() and not landsPage.guild:GetChecked() and #view.tallies == 1 and #view.placed == 1)
-    landsPage.guild:SetChecked(true)
-    landsPage.guild.scripts.OnClick(landsPage.guild)
-    assert(ticked == true and landsPage.guild:GetChecked() and landsPage.lead:GetText() == "Vos combats et ceux de la guilde.")
+    -- Not sharing (a setting): nothing of the guild, and no filter to offer.
+    assert(not landsPage.guild:IsShown() and #view.tallies == 1 and #view.placed == 1)
+    ticked = true
+    R.Refresh()
+    -- Sharing: the box is a filter of the map only (owner, 26/11), ticked by default.
+    assert(landsPage.guild:IsShown() and landsPage.guild:GetChecked() and landsPage.lead:GetText() == "Vos combats et ceux de la guilde.")
     assert(#view.tallies == 2 and view.tallyOf[1444].deaths == 1 and view.tallyOf[1444].kills == 1, #view.tallies)
     assert(#view.placed == 3 and view.placed[2].guild == "Player-1-Mate0001" and view.hint:GetText():find("guilde : 2", 1, true), view.hint:GetText())
     assert(math.abs(view.placed[2].x - (0.1 + 0.2 * 0.4)) < 0.001, "placed through the zone's rectangle; an unknown map is left out")
     landsPage.guild:SetChecked(false)
     landsPage.guild.scripts.OnClick(landsPage.guild)
-    assert(#view.tallies == 1 and #view.placed == 1)
+    assert(#view.tallies == 1 and #view.placed == 1 and ticked == true and GL.db.mapHideGuild == true, "yours only, still sharing")
+    landsPage.guild:SetChecked(true)
+    landsPage.guild.scripts.OnClick(landsPage.guild)
+    assert(#view.tallies == 2 and GL.db.mapHideGuild == nil)
+    ticked = false
+    R.Refresh()
     -- The guild's journal (0.51.0): one line a fight, yours included, a click opens the opponent's sheet.
     ticked = true
     GL.GuildMap.Points = function(withMine)
@@ -512,12 +519,14 @@ do
     GL.OpenPlayerDossier = realDossier
     ticked = false
     R.Refresh()
-    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("sur la carte", 1, true) and log.reshare:IsShown())
-    -- One click shares again, without going to the map.
+    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("réglages", 1, true) and log.reshare:IsShown())
+    -- The way to the setting (owner, 26/11: sharing is a setting, never a box of a page).
+    local askedPage
+    local realShow = GL.ShowSettings
+    GL.ShowSettings = function(category) askedPage = category end
     click(log.reshare)
-    assert(ticked == true and log.rows[1]:IsShown() and not log.reshare:IsShown())
-    ticked = false
-    R.Refresh()
+    assert(askedPage == "relations" and ticked == false, tostring(askedPage))
+    GL.ShowSettings = realShow
     click(f.tabs.lands)
     GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable = realEnabled, realPoints, realEnable
     -- "Voir la liste" gives the list back; a client without map pictures only has the list.

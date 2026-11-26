@@ -2095,18 +2095,19 @@ local function buildLands(host)
         page.mode = page.mode == "map" and "list" or "map"
         R.Refresh()
     end, nil, true)
-    -- Guild vision: one box. Ticked, you see the fights of the members who ticked it and they see yours.
+    -- A filter of the map only (owner, 26/11): ticked, your fights and the guild's; unticked, yours
+    -- alone, to clear the map. Sharing with the guild is a setting, never this box.
     page.guild = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
     page.guild:SetPoint("TOPLEFT", X(286), -19)
     page.guild:SetSize(24, 24)
     page.guildLabel = Panels.Text(page, X(312), -25, S(110), 12, true)
     page.guild:SetScript("OnClick", function(self)
-        if GL.GuildMap then GL.GuildMap.Enable(self:GetChecked() and true or false) end
+        GL.db.mapHideGuild = not self:GetChecked() or nil
         R.Refresh()
     end)
     page.guild:SetScript("OnEnter", function(self)
-        tip(self, L("Vision de guilde"), L("Cochée : vous voyez sur la carte les victoires et les morts des membres qui l’ont cochée, et ils voient "
-            .. "les vôtres (la zone et l’endroit). Décochée : rien n’est envoyé, rien n’est gardé, et la guilde oublie vos combats."))
+        tip(self, L("Combats de la guilde"), L("Cochée : la carte montre vos combats et ceux de la guilde. Décochée : les vôtres seulement. "
+            .. "Ce filtre ne change rien à ce que vous partagez."))
     end)
     page.guild:SetScript("OnLeave", hideTip)
     page.rows = {}
@@ -2142,12 +2143,14 @@ end
 local function paintLands(page)
     page.title:SetText(L("Carte des combats"))
     local lands = R.Lands()
-    local guildOn, inGuild = false, false
-    if GL.GuildMap then guildOn, inGuild = GL.GuildMap.Enabled() end
+    local sharing, inGuild = false, false
+    if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
+    local shown = GL.db.mapHideGuild ~= true
+    local guildOn = sharing and shown
     page.map.guildOn = guildOn
     page.lead:SetText(guildOn and L("Vos combats et ceux de la guilde.") or #lands > 0 and L("Où vous mourez, et à cause de qui.") or "")
-    page.guildLabel:SetText(L("Vision de guilde"))
-    GL.Safe(page.guild.SetChecked, page.guild, guildOn)
+    page.guildLabel:SetText(L("Combats de la guilde"))
+    GL.Safe(page.guild.SetChecked, page.guild, shown)
     -- The map first, when the game gives its pictures. The list is one click away and is all there is
     -- on a client without them.
     local mapped = false
@@ -2159,7 +2162,8 @@ local function paintLands(page)
     if mapped then page.map:Show() else page.map:Hide() end
     -- With the map, its place and counts take the lead's line.
     if mapped then page.lead:Hide() else page.lead:Show() end
-    if mapped and inGuild then
+    -- Nothing of the guild to show without sharing: the filter leaves with it.
+    if mapped and inGuild and sharing then
         page.guild:Show()
         page.guildLabel:Show()
     else
@@ -2540,12 +2544,11 @@ local function openOpponent(row)
 end
 -- A wanted notice on the opponent of a line: a bounty without gold, in one click. The guild sees
 -- it in Primes and is alerted when one of its members meets that player.
--- Under the message of a guild page while the guild vision is off: share again in one click,
--- without going to the map (owner, 26/11).
+-- Under the message of a guild page while you do not share your fights: the way to the setting,
+-- where sharing is decided (owner, 26/11: never a box of a page).
 local function reshareButton(page, y)
-    local button = UI.button(page, L("Partager à nouveau mes combats"), X(26), y, S(260), function()
-        if GL.GuildMap then GL.GuildMap.Enable(true) end
-        R.Refresh()
+    local button = UI.button(page, L("Ouvrir les réglages"), X(26), y, S(200), function()
+        if GL.ShowSettings then GL.ShowSettings("relations") end
     end)
     button:Hide()
     return button
@@ -2916,7 +2919,7 @@ local function paintGuildJournal(page)
     if not inGuild then
         empty = L("Vous n’êtes dans aucune guilde : ce journal raconte les combats de la vôtre.")
     elseif not sharing then
-        empty = L("La vision de guilde est décochée. Cochez-la sur la carte pour lire ce journal et y figurer.")
+        empty = L("Vous ne partagez pas vos combats avec la guilde : ce journal reste fermé. Le partage se règle dans les réglages, page Relations et JcJ.")
     elseif #lines == 0 and filtered then
         empty = L("Aucun combat ne correspond. « Effacer » dans les filtres remet tout.")
     elseif #lines == 0 then
@@ -3054,7 +3057,7 @@ local function paintEnemies(page)
     if not inGuild then
         empty = L("Vous n’êtes dans aucune guilde : cette page dit qui tue les membres de la vôtre.")
     elseif not sharing then
-        empty = L("La vision de guilde est décochée : cochez-la sur la carte pour voir cette page.")
+        empty = L("Vous ne partagez pas vos combats avec la guilde : cette page reste fermée. Le partage se règle dans les réglages, page Relations et JcJ.")
     elseif #list == 0 then
         empty = L("Aucun membre de la guilde n’a été tué sur cette période.")
     end
