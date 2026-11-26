@@ -2463,7 +2463,6 @@ end
 local GUILD_ROWS = 6
 local GROUP_NAMES = 5 -- names offered in a group of the panel, after "everyone": the search finds the rest
 local PERIODS = { { 0, "Toujours" }, { 86400, "24 h" }, { 7 * 86400, "7 jours" }, { 30 * 86400, "30 jours" } }
-local VIEWS = { { "all", "Tous" }, { "death", "Morts" }, { "kill", "Victoires" }, { "mine", "Mes combats" } }
 local function elapsed(at)
     local delta = math.max(0, GL.Now() - at)
     if delta < 3600 then return L("il y a %d min"):format(math.max(1, math.floor(delta / 60))) end
@@ -2641,16 +2640,70 @@ local function paintFilterPanel(page)
     panel.whoCaption:SetText(L("Membre : %s"):format(whoName))
     panel.foeCaption:SetText(L("Ennemi : %s"):format(foeLabel))
 end
+-- The guild's journal as a register (owner's kit, 26/11): an engraved header, the four lists as
+-- buttons side by side, then a table: when, outcome, member, opponent and place, and "…" for the
+-- actions. A pennant marks the fights come in since your last visit.
+local LOG_VIEWS = { { "all", "Tous", 52 }, { "kill", "Victoires", 82 }, { "death", "Morts", 64 }, { "mine", "Mes combats", 100 } }
+local LOG_TOP, LOG_ROW, LOG_STEP = -126, 52, 53
+local LOG_WHEN, LOG_ISSUE, LOG_MEMBER, LOG_FOE, LOG_MORE = 12, 84, 196, 352, 506
+-- The actions of a line, under its "…": the opponent's sheet, a wanted notice.
+local function buildLineMenu(page)
+    local menu = CreateFrame("Frame", nil, page)
+    menu:SetSize(S(210), 66)
+    menu:EnableMouse(true)
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:SetToplevel(true)
+    GL.Safe(menu.SetFrameLevel, menu, (GL.Safe(page.GetFrameLevel, page) or 1) + 20)
+    UI.surface(menu, UI.theme.gold)
+    UI.surface(menu, UI.theme.panel, 1)
+    menu.sheet = UI.button(menu, L("Ouvrir la fiche"), 6, -6, S(198), function()
+        menu:Hide()
+        openOpponent(menu.row)
+    end, true)
+    menu.wanted = UI.button(menu, L("Poser un avis de recherche"), 6, -36, S(198), function()
+        menu:Hide()
+        wanted(menu.row)
+    end, true)
+    menu:Hide()
+    return menu
+end
+local function toggleLineMenu(page, row)
+    local menu = page.lineMenu
+    if menu:IsShown() and menu.row == row then menu:Hide() return end
+    menu.row = row
+    local count = 0
+    for _, button in ipairs({ menu.sheet, menu.wanted }) do
+        local usable = button == menu.sheet and row.target ~= nil or button == menu.wanted and row.canWant
+        if usable then
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", 6, -6 - count * 30)
+            button:Show()
+            count = count + 1
+        else
+            button:Hide()
+        end
+    end
+    menu:SetHeight(12 + count * 30)
+    menu:ClearAllPoints()
+    menu:SetPoint("TOPRIGHT", row.more, "BOTTOMRIGHT", 0, -2)
+    menu:Show()
+    menu:Raise()
+end
 local function buildGuildJournal(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    -- The engraved header: its double rule runs under the title, its book on the right.
+    page.header = page:CreateTexture(nil, "ARTWORK")
+    page.header:SetTexture(GL.Art.GuildLogHeader)
+    page.header:SetPoint("TOPLEFT", X(26), -6)
+    page.header:SetSize(S(540), 58)
+    page.title = Panels.Text(page, X(26), -16, S(330), 24, true)
     page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
     page.filter, page.offset = { view = "all" }, 0
-    -- The Journal's three controls, in the same order: search, list, filters.
+    -- The Journal's controls, in the same order: search, the lists, filters.
     page.search = CreateFrame("EditBox", nil, page)
     page.search:SetPoint("TOPLEFT", X(26), -72)
-    page.search:SetSize(S(196), 26)
+    page.search:SetSize(S(146), 26)
     page.search:SetAutoFocus(false)
     page.search:SetMaxLetters(60)
     UI.styleInput(page.search, false, false)
@@ -2663,8 +2716,9 @@ local function buildGuildJournal(host)
     end
     page.search:SetScript("OnEnterPressed", applySearch)
     page.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    page.searchHint = UI.label(page.search, L("Rechercher…"), nil, 8, -5, S(180))
+    page.searchHint = UI.label(page.search, L("Membre ou adversaire…"), nil, 8, -5, S(132))
     page.searchHint:SetTextColor(unpack(UI.theme.muted))
+    GL.Safe(page.searchHint.SetWordWrap, page.searchHint, false)
     page.search:SetScript("OnTextChanged", function(self)
         if self:GetText():find("%S") then
             page.searchHint:Hide()
@@ -2676,19 +2730,22 @@ local function buildGuildJournal(host)
             end
         end
     end)
-    -- One button names the current list with its count; a click shows the next one. A list always
-    -- starts clean: the other filters are put back, as in the Journal.
-    page.viewCycle = UI.button(page, "", X(226), -72, S(196), function()
-        local following = VIEWS[1][1]
-        for i, view in ipairs(VIEWS) do
-            if view[1] == page.filter.view then following = VIEWS[i % #VIEWS + 1][1] end
-        end
-        page.filter, page.offset = { view = following }, 0
-        page.search:SetText("")
-        page.filterPanel:Hide()
-        R.Refresh()
-    end)
-    page.openFilters = UI.button(page, L("Filtres"), X(426), -72, S(140), function()
+    -- The four lists side by side (they were one button turning through them): one click each. A
+    -- list always starts clean, the other filters put back, as in the Journal.
+    page.views = {}
+    local x = 150
+    for i, view in ipairs(LOG_VIEWS) do
+        local key = view[1]
+        page.views[i] = UI.button(page, L(view[2]), X(26) + S(x), -72, S(view[3]), function()
+            page.filter, page.offset = { view = key }, 0
+            page.search:SetText("")
+            page.filterPanel:Hide()
+            R.Refresh()
+        end, true, true)
+        page.views[i].view = key
+        x = x + view[3] + 4
+    end
+    page.openFilters = UI.button(page, L("Filtres"), X(26) + S(464), -72, S(76), function()
         if page.filterPanel:IsShown() then
             page.filterPanel:Hide()
         else
@@ -2697,31 +2754,61 @@ local function buildGuildJournal(host)
             R.Refresh()
         end
     end)
+    -- The table's heads, and the rule under them.
+    page.heads = {}
+    for i, head in ipairs({ { "Quand", LOG_WHEN, 70 }, { "Issue", LOG_ISSUE, 108 }, { "Membre de la guilde", LOG_MEMBER, 152 },
+        { "Adversaire", LOG_FOE, 150 } }) do
+        page.heads[i] = Panels.Text(page, X(26) + S(head[2]), -106, S(head[3]), 13, true)
+        page.heads[i].key, page.heads[i].width = head[1], S(head[3])
+    end
+    local headRule = page:CreateTexture(nil, "BORDER")
+    headRule:SetPoint("TOPLEFT", X(26), -123)
+    headRule:SetSize(S(540), 1)
+    headRule:SetColorTexture(0.40, 0.25, 0.10, 0.55)
     page.rows = {}
     for i = 1, GUILD_ROWS do
         local row = CreateFrame("Button", nil, page)
-        row:SetPoint("TOPLEFT", X(26), -108 - (i - 1) * 56)
-        row:SetSize(S(540), 54)
+        row:SetPoint("TOPLEFT", X(26), LOG_TOP - (i - 1) * LOG_STEP)
+        row:SetSize(S(540), LOG_ROW)
         local rule = row:CreateTexture(nil, "BORDER")
         rule:SetPoint("BOTTOMLEFT")
         rule:SetPoint("BOTTOMRIGHT")
         rule:SetHeight(1)
         rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+        local hover = row:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetAllPoints()
+        hover:SetColorTexture(0.91, 0.77, 0.48, 0.12)
+        row.pennant = row:CreateTexture(nil, "OVERLAY")
+        row.pennant:SetTexture(GL.Art.GuildLogPennant)
+        row.pennant:SetPoint("TOPLEFT", -2, -8)
+        row.pennant:SetSize(15, 32)
+        row.when = Panels.Text(row, S(LOG_WHEN), -19, S(70), 12, false, UI.theme.inkMuted)
+        GL.Safe(row.when.SetWordWrap, row.when, false)
         row.mark = row:CreateTexture(nil, "ARTWORK")
-        row.mark:SetPoint("TOPLEFT", S(2), -13)
+        row.mark:SetPoint("TOPLEFT", S(LOG_ISSUE), -15)
         row.mark:SetSize(22, 22)
-        row.story = Panels.Text(row, S(32), -7, S(340), 15, true)
-        GL.Safe(row.story.SetWordWrap, row.story, false)
-        row.where = Panels.Text(row, S(32), -29, S(340), 12, false, UI.theme.inkMuted)
+        row.issue = Panels.Text(row, S(LOG_ISSUE) + 26, -17, S(80), 15, true)
+        GL.Safe(row.issue.SetWordWrap, row.issue, false)
+        row.member = Panels.Text(row, S(LOG_MEMBER), -17, S(150), 15, true)
+        GL.Safe(row.member.SetWordWrap, row.member, false)
+        row.foe = Panels.Text(row, S(LOG_FOE), -8, S(150), 15, true)
+        GL.Safe(row.foe.SetWordWrap, row.foe, false)
+        row.where = Panels.Text(row, S(LOG_FOE), -28, S(150), 12, false, UI.theme.inkMuted)
         GL.Safe(row.where.SetWordWrap, row.where, false)
-        row.wanted = UI.button(row, L("Rechercher"), S(380), -14, S(92), function() wanted(row) end, nil, true)
-        row.sheet = UI.button(row, L("Fiche"), S(476), -14, S(64), function() openOpponent(row) end, nil, true)
+        row.more = UI.button(row, "…", S(LOG_MORE), -14, S(34), function() toggleLineMenu(page, row) end, nil, true)
         row:SetScript("OnClick", openOpponent)
         page.rows[i] = row
     end
     page.filterPanel = buildFilterPanel(page)
-    page:SetScript("OnHide", function() page.filterPanel:Hide() end)
-    page.empty = Panels.Text(page, X(26), -124, S(540), 13, false, UI.theme.inkMuted)
+    page.lineMenu = buildLineMenu(page)
+    -- Leaving the page: the panels close, and the fights shown count as seen for the pennant.
+    page:SetScript("OnHide", function()
+        page.filterPanel:Hide()
+        page.lineMenu:Hide()
+        if page.newest then GL.db.guildLogSeenAt = math.max(page.newest, tonumber(GL.db.guildLogSeenAt) or 0) end
+        page.seenBefore, page.newest = nil, nil
+    end)
+    page.empty = Panels.Text(page, X(26), -132, S(540), 13, false, UI.theme.inkMuted)
     page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - GUILD_ROWS)
         R.Refresh()
@@ -2730,9 +2817,32 @@ local function buildGuildJournal(host)
         page.offset = page.offset + GUILD_ROWS
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(76), -469, S(440), 13, true, UI.theme.ink)
     page.count:SetJustifyH("CENTER")
+    -- The two fleurons point at the count, about 8 units from its text, whatever its length.
+    page.fleuronLeft = page:CreateTexture(nil, "ARTWORK")
+    page.fleuronLeft:SetTexture(GL.Art.GuildLogFleuronLeft)
+    page.fleuronLeft:SetSize(105, 13)
+    page.fleuronRight = page:CreateTexture(nil, "ARTWORK")
+    page.fleuronRight:SetTexture(GL.Art.GuildLogFleuronRight)
+    page.fleuronRight:SetSize(105, 12)
     return page
+end
+local function placeFleurons(page)
+    local text = page.count:GetText() or ""
+    if text == "" then
+        page.fleuronLeft:Hide()
+        page.fleuronRight:Hide()
+        return
+    end
+    local width = GL.Clean(GL.Safe(page.count.GetStringWidth, page.count), "number") or #text * 6
+    local centre, half = X(76) + S(220), math.min(S(220), width / 2)
+    page.fleuronLeft:ClearAllPoints()
+    page.fleuronLeft:SetPoint("TOPLEFT", centre - half - 8 - 105, -472)
+    page.fleuronRight:ClearAllPoints()
+    page.fleuronRight:SetPoint("TOPLEFT", centre + half + 8, -472)
+    page.fleuronLeft:Show()
+    page.fleuronRight:Show()
 end
 local function paintGuildJournal(page)
     page.title:SetText(L("Journal de guilde"))
@@ -2740,52 +2850,53 @@ local function paintGuildJournal(page)
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
     local filter = page.filter
     local lines = sharing and R.GuildLog(filter) or {}
-    page.lead:SetText(sharing and L("Les victoires et les morts des membres qui partagent leurs combats.") or "")
-    -- The list button: its name and how many lines it holds, as in the Journal.
-    local viewName = VIEWS[1][2]
-    for _, view in ipairs(VIEWS) do
-        if view[1] == filter.view then viewName = view[2] end
-    end
-    page.viewCycle:SetText(L("%s · %d"):format(L(viewName), #lines))
-    UI.selectButton(page.viewCycle, filter.view ~= "all")
+    -- No lead sentence any more: the header and the table's heads say what the page is.
+    page.lead:SetText("")
+    for _, button in ipairs(page.views) do UI.selectButton(button, button.view == (filter.view or "all")) end
     local active = (filter.who and 1 or 0) + (filter.foe and 1 or 0) + ((filter.period or 0) > 0 and 1 or 0)
     page.openFilters:SetText(active > 0 and (L("Filtres") .. " · " .. active) or L("Filtres"))
     UI.selectButton(page.openFilters, active > 0)
-    for _, control in ipairs({ page.search, page.viewCycle, page.openFilters }) do
+    for _, control in ipairs({ page.search, page.openFilters, unpack(page.views) }) do
         if sharing then control:Show() else control:Hide() end
+    end
+    for _, head in ipairs(page.heads) do
+        Panels.Fit(head, sharing and #lines > 0 and L(head.key) or "", head.width, 13, 9, true)
     end
     if not sharing then page.filterPanel:Hide() end
     if page.filterPanel:IsShown() then paintFilterPanel(page) end
+    page.lineMenu:Hide()
     page.offset = math.min(page.offset, math.max(0, math.floor((#lines - 1) / GUILD_ROWS) * GUILD_ROWS))
-    local deaths = 0
-    for _, point in ipairs(lines) do
-        if point.kind == "death" then deaths = deaths + 1 end
+    -- The pennant: the fights come in after your last visit; nothing on a first visit.
+    if not page.seenBefore then
+        local stored = tonumber(GL.db.guildLogSeenAt)
+        page.seenBefore = stored and stored == stored and stored or math.huge
+    end
+    for _, point in ipairs(sharing and R.GuildLog({ view = "all" }) or {}) do
+        if type(point.time) == "number" and point.time > (page.newest or 0) then page.newest = point.time end
     end
     for i, row in ipairs(page.rows) do
         local point = lines[page.offset + i]
         if point then
-            local member, enemy = memberName(point), foeName(point)
             local died = point.kind == "death"
-            local story
-            if point.mine then
-                story = (died and L("Vous avez été tué par %s") or L("Vous avez tué %s")):format(enemy)
-            else
-                story = (died and L("%s a été tué par %s") or L("%s a tué %s")):format(member, enemy)
-            end
-            Panels.Fit(row.story, story, S(340), 15, 10, true)
-            if died then row.story:SetTextColor(0.55, 0.12, 0.12) else row.story:SetTextColor(0.18, 0.37, 0.20) end
-            row.mark:SetTexture(died and SKULL or SWORD)
+            local ink = died and { 0.55, 0.12, 0.12 } or { 0.18, 0.37, 0.20 }
+            Panels.Fit(row.when, elapsed(point.time), S(70), 12, 9)
+            row.mark:SetTexture(died and GL.Art.GuildLogDeath or GL.Art.GuildLogVictory)
+            Panels.Fit(row.issue, died and L("Mort") or L("Victoire"), S(80), 15, 10, true)
+            row.issue:SetTextColor(unpack(ink))
+            Panels.Fit(row.member, memberName(point), S(150), 15, 10, true)
+            Panels.Fit(row.foe, foeName(point), S(150), 15, 10, true)
             local info = mapInfo(point.mapID)
-            local zone = info and type(info.name) == "string" and UI.plain(info.name)
-            row.where:SetText(zone and (zone .. " · " .. elapsed(point.time)) or elapsed(point.time))
+            local zone = info and type(info.name) == "string" and UI.plain(info.name) or ""
+            Panels.Fit(row.where, zone, S(150), 12, 9)
+            if type(point.time) == "number" and point.time > page.seenBefore then row.pennant:Show() else row.pennant:Hide() end
             row.target, row.enemy = point.target, point.name
-            if point.target then row.sheet:Show() else row.sheet:Hide() end
             -- Wanted: only on a player known by name, and not while a notice or a bounty already runs.
             local open = point.target and GL.Bounties and GL.Bounties.OpenFor and GL.Bounties.OpenFor(point.target)
-            if point.target and point.name and not open then row.wanted:Show() else row.wanted:Hide() end
+            row.canWant = point.target ~= nil and point.name ~= nil and not open
+            if point.target or row.canWant then row.more:Show() else row.more:Hide() end
             row:Show()
         else
-            row.target, row.enemy = nil, nil
+            row.target, row.enemy, row.canWant = nil, nil, false
             row:Hide()
         end
     end
@@ -2810,7 +2921,9 @@ local function paintGuildJournal(page)
         page.previous:Hide()
         page.next:Hide()
     end
-    page.count:SetText(#lines > 0 and L("%d combats · %d morts"):format(#lines, deaths) or "")
+    local first, last = page.offset + 1, math.min(page.offset + GUILD_ROWS, #lines)
+    page.count:SetText(#lines > 0 and L("%d–%d sur %d combats"):format(first, last, #lines) or "")
+    placeFleurons(page)
 end
 
 -- The guild's enemies (0.55.0): the players who killed members of the guild, the deadliest first.

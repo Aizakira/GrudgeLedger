@@ -24,4 +24,13 @@ GL.Art = {
     MapFrame = media .. "RelationsCarte\\cadre-",
     -- The icons of the Relations entries, by entry.
     EntryIcon = media .. "RelationsCarte\\",
+    -- The guild's journal as a register (owner's kit, 26/11): the engraved header with its book, the
+    -- two fleurons around the count, the pennant of the new fights, and the outcomes in colour
+    -- (crossed swords, skull), shown as they are.
+    GuildLogHeader = media .. "JournalGuilde\\EnteteGravee",
+    GuildLogFleuronLeft = media .. "JournalGuilde\\FleuronGauche",
+    GuildLogFleuronRight = media .. "JournalGuilde\\FleuronDroit",
+    GuildLogPennant = media .. "JournalGuilde\\Fanion",
+    GuildLogVictory = media .. "JournalGuilde\\Victoire",
+    GuildLogDeath = media .. "JournalGuilde\\Mort",
 }

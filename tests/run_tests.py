@@ -65,6 +65,10 @@ for name, expected_width, expected_height, transparent in (
     # The guilds' armorial (owner's kit, 26/11): fifteen crests, their motifs, six alphabets.
     *((f"Crest{i}.tga", 128, 128, True) for i in range(1, 16)),
     ("GuildCrestFields.tga", 512, 1024, True),
+    # The guild's journal as a register (owner's kit, 26/11).
+    ("JournalGuilde/EnteteGravee.tga", 1024, 128, True), ("JournalGuilde/FleuronGauche.tga", 256, 32, True),
+    ("JournalGuilde/FleuronDroit.tga", 256, 32, True), ("JournalGuilde/Fanion.tga", 32, 64, True),
+    ("JournalGuilde/Victoire.tga", 64, 64, True), ("JournalGuilde/Mort.tga", 64, 64, True),
     *((f"Letters{name}.tga", 512, 256, True) for name in ("Hurlevent", "Chanteguerre", "Kaldorei", "Gnomeregan", "Karazhan", "Amani")),
 ):
     texture = (addon / "Media" / name).read_bytes()

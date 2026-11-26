@@ -26,6 +26,7 @@ Depuis la 0.54.0, le carnet est tenu **par faction** : `players`, `aliases`, `gu
 | `unassignedHonor` | Gains d'honneur sans adversaire identifié | `Core.lua` | — |
 | `quarantine` | Entrées illisibles mises de côté au lieu d'être effacées. `quarantine.guild` (0.62.1) : les 50 dernières parties d'un espace de guilde qui n'avaient plus la bonne forme, réparé une fois par session (l'espace, le champ, un aperçu de la valeur, la date) | `Core.lua`, `Bounties.lua` | — |
 | `armoryRequests` | Demandes d'import destinées au compagnon | `Core.lua` | Purgées après 7 jours |
+| `guildLogSeenAt` | Date du combat le plus récent vu dans le Journal de guilde à votre dernière visite (0.62.1) : le fanion marque ceux arrivés après | `Relations.lua` | Un nombre |
 | `detectionLog` | Dernières décisions de détection et d'alerte | `Core.lua` | 200 entrées |
 | `battlegroundArchive` | Fiches retirées par le nettoyage des champs de bataille | `Core.lua` | — |
 | `battlegroundCleanupVersion` | Marqueur de la migration 2 | `Core.lua` | — |

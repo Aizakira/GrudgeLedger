@@ -405,17 +405,28 @@ do
     end
     local gb = R.OpenGuild("guildlog")
     local log = gb.host.pages.guildlog
-    assert(log:IsShown() and log.title:GetText() == "Journal de guilde" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
-    assert(log.rows[2].story:GetText() == "Un membre de la guilde a tué Bad Guy" and log.rows[2].where:GetText() == "Feralas · il y a 2 h")
-    assert(log.rows[6]:IsShown() and log.count:GetText() == "9 combats · 5 morts" and log.next:IsEnabled() and not log.previous:IsEnabled())
-    -- The Journal's three controls: search, the list button with its count, "Filtres".
-    assert(log.viewCycle:GetText() == "Tous · 9" and log.openFilters:GetText() == "Filtres" and not log.filterPanel:IsShown())
+    -- The register (owner's kit, 26/11): when, outcome, member, opponent and place, one fight a line.
+    local function line(i) local r = log.rows[i] return table.concat({ r.when:GetText(), r.issue:GetText(), r.member:GetText(), r.foe:GetText(), r.where:GetText() }, " | ") end
+    assert(log:IsShown() and log.title:GetText() == "Journal de guilde" and line(1) == "il y a 1 h | Mort | Vous | Bad Guy | Feralas", line(1))
+    assert(line(2) == "il y a 2 h | Victoire | Un membre de la guilde | Bad Guy | Feralas", line(2))
+    assert(log.heads[1]:GetText() == "Quand" and log.heads[3]:GetText() == "Membre de la guilde" and log.heads[4]:GetText() == "Adversaire")
+    assert(log.rows[6]:IsShown() and log.count:GetText() == "1–6 sur 9 combats" and log.next:IsEnabled() and not log.previous:IsEnabled())
+    assert(log.fleuronLeft:IsShown() and log.fleuronRight:IsShown(), "the count between its fleurons")
+    -- The controls: search, the four lists side by side (Tous lit), "Filtres".
+    assert(log.views[1].active and not log.views[2].active and log.openFilters:GetText() == "Filtres" and not log.filterPanel:IsShown())
+    -- A first visit marks nothing new.
+    assert(not log.rows[1].pennant:IsShown(), "no pennant on a first visit")
     local opened
     local realDossier = GL.OpenPlayerDossier
     GL.OpenPlayerDossier = function(id, _, known) opened = id .. "/" .. tostring(known) end
     click(log.rows[2])
     assert(opened == "Player-1-Foe0001/Bad Guy", opened)
-    -- "Rechercher": a wanted notice without gold, in one click; the button leaves once one runs.
+    -- "…": the sheet and a wanted notice without gold; the notice leaves once one runs.
+    opened = nil
+    click(log.rows[2].more)
+    assert(log.lineMenu:IsShown() and log.lineMenu.sheet:IsShown() and log.lineMenu.wanted:IsShown())
+    click(log.lineMenu.sheet)
+    assert(opened == "Player-1-Foe0001/Bad Guy" and not log.lineMenu:IsShown(), tostring(opened))
     local posted
     local realPost, realOpen = GL.Bounties.Post, GL.Bounties.OpenFor
     GL.Bounties.Post = function(target, known, copper)
@@ -423,29 +434,33 @@ do
         return "order-1"
     end
     GL.Bounties.OpenFor = function(target) return posted and target == "Player-1-Foe0001" and { state = "open" } or nil end
-    assert(log.rows[2].wanted:IsShown())
-    click(log.rows[2].wanted)
-    assert(posted == "Player-1-Foe0001/Bad Guy/0" and not log.rows[2].wanted:IsShown(), posted)
+    click(log.rows[2].more)
+    click(log.lineMenu.wanted)
+    assert(posted == "Player-1-Foe0001/Bad Guy/0" and not log.rows[2].canWant, posted)
+    click(log.rows[2].more)
+    assert(log.lineMenu.sheet:IsShown() and not log.lineMenu.wanted:IsShown(), "no second notice")
+    click(log.rows[2].more)
+    assert(not log.lineMenu:IsShown(), "a second click closes the menu")
     GL.Bounties.Post, GL.Bounties.OpenFor = realPost, realOpen
     click(log.next)
-    assert(log.rows[3].story:GetText() == "Un membre de la guilde a été tué par un joueur inconnu" and not log.rows[3].sheet:IsShown())
-    assert(not log.rows[3].wanted:IsShown() and not log.rows[4]:IsShown() and not log.next:IsEnabled())
-    -- The list button: Tous, Morts, Victoires, Mes combats, each with its count; a new list starts clean.
-    click(log.viewCycle)
-    assert(log.viewCycle:GetText() == "Morts · 5" and log.count:GetText() == "5 combats · 5 morts" and log.offset == 0)
-    click(log.viewCycle)
-    assert(log.viewCycle:GetText() == "Victoires · 4")
-    click(log.viewCycle)
-    assert(log.viewCycle:GetText() == "Mes combats · 1" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
-    click(log.viewCycle)
-    assert(log.viewCycle:GetText() == "Tous · 9")
+    assert(log.rows[3].foe:GetText() == "un joueur inconnu" and not log.rows[3].more:IsShown(), "nothing to do on an unknown opponent")
+    assert(not log.rows[4]:IsShown() and not log.next:IsEnabled() and log.count:GetText() == "7–9 sur 9 combats", log.count:GetText())
+    -- The four lists, each one click away; a new list starts clean.
+    click(log.views[3])
+    assert(log.views[3].active and log.count:GetText() == "1–5 sur 5 combats" and log.offset == 0, log.count:GetText())
+    click(log.views[2])
+    assert(log.count:GetText() == "1–4 sur 4 combats")
+    click(log.views[4])
+    assert(log.count:GetText() == "1–1 sur 1 combats" and log.rows[1].member:GetText() == "Vous")
+    click(log.views[1])
+    assert(log.views[1].active and log.count:GetText() == "1–6 sur 9 combats")
     -- The search finds a member or an opponent by part of the name.
     log.search:SetText("bad")
     log.search.scripts.OnEnterPressed(log.search)
-    assert(log.count:GetText() == "8 combats · 4 morts", log.count:GetText())
+    assert(log.count:GetText() == "1–6 sur 8 combats", log.count:GetText())
     log.search:SetText("")
     log.search.scripts.OnTextChanged(log.search)
-    assert(log.count:GetText() == "9 combats · 5 morts")
+    assert(log.count:GetText() == "1–6 sur 9 combats")
     -- "Filtres" opens the Journal's panel: period, member, enemy; the button counts what is chosen.
     click(log.openFilters)
     local panel = log.filterPanel
@@ -453,20 +468,34 @@ do
     assert(panel.who[1]:GetText() == "Tous les membres" and panel.who[2]:GetText() == "Vous · 1" and panel.who[3]:GetText() == "Un membre de l… · 8")
     assert(panel.foe[2]:GetText() == "Bad Guy · 8" and not panel.foe[3]:IsShown(), "an unnamed opponent is not offered")
     click(panel.who[3])
-    assert(panel:IsShown() and log.count:GetText() == "8 combats · 4 morts" and log.openFilters:GetText() == "Filtres · 1")
+    assert(panel:IsShown() and log.count:GetText() == "1–6 sur 8 combats" and log.openFilters:GetText() == "Filtres · 1")
     assert(panel.whoCaption:GetText() == "Membre : Un membre de la guilde")
     click(panel.periods[3])
     assert(panel.periodCaption:GetText() == "Période : 7 jours" and log.openFilters:GetText() == "Filtres · 2")
     click(panel.foe[2])
-    assert(log.count:GetText() == "7 combats · 3 morts" and log.openFilters:GetText() == "Filtres · 3")
+    assert(log.count:GetText() == "1–6 sur 7 combats" and log.openFilters:GetText() == "Filtres · 3")
     -- Nothing left: the page says how to get everything back, and "Effacer" does it.
     log.filter.who = "Player-1-Nobody01"
     R.Refresh()
     assert(not log.rows[1]:IsShown() and log.empty:GetText():find("Effacer", 1, true))
     click(panel.clear)
-    assert(log.count:GetText() == "9 combats · 5 morts" and log.openFilters:GetText() == "Filtres" and log.viewCycle:GetText() == "Tous · 9")
+    assert(log.count:GetText() == "1–6 sur 9 combats" and log.openFilters:GetText() == "Filtres" and log.views[1].active)
     click(panel.close)
     assert(not panel:IsShown())
+    -- The pennant: leaving the page counts its fights as seen; a fight come in after is marked.
+    log.scripts.OnHide(log)
+    assert(GL.db.guildLogSeenAt == GL.Now() - 3600, tostring(GL.db.guildLogSeenAt))
+    local earlier = GL.GuildMap.Points
+    GL.GuildMap.Points = function(withMine)
+        local list = earlier(withMine)
+        table.insert(list, 1, { actor = "Player-1-Mate0002", time = GL.Now() - 60, mapID = 1444, kind = "kill", target = "Player-1-Foe0002", name = "New Guy" })
+        return list
+    end
+    R.Refresh()
+    assert(log.rows[1].pennant:IsShown() and log.rows[1].foe:GetText() == "New Guy" and not log.rows[2].pennant:IsShown(), "only the new fight")
+    GL.GuildMap.Points = earlier
+    log.scripts.OnHide(log)
+    R.Refresh()
     -- The guild's book (0.55.0): the guild vision's box, the guild's week as key figures, and the
     -- guild's enemies, the deadliest first.
     assert(gb.vision:IsShown() and gb.vision:GetChecked() and gb.keyHeading:GetText() == "Chiffres clés")
