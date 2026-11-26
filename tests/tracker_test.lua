@@ -305,6 +305,27 @@ test("a groupmate who avenges your death wins the same fight", function()
     IsInGroup = nil
 end)
 
+-- Owner report (26/11): a player of your fight finished by a monster was not counted.
+test("a monster finishing a player you fought is your victory, not a helping hand", function()
+    local e = start(opponent("mob-finish"))
+    cle("SPELL_DAMAGE", unitData.player, e, -1, 0, 64)
+    local mob = { guid = "Creature-0-1-1-1-4321-0000AA", name = "Basilic", surname = "Peau-de-verre" }
+    cle("SPELL_DAMAGE", mob, e, 50, 0, 64)
+    local record = GL.Get("guid:" .. e.guid)
+    local kill = record and record.history[#record.history]
+    assert(record and record.pvp.kills == 1 and kill.kind == "kill", "the victory is counted")
+    assert(kill.evidence:find("monstre", 1, true), kill.evidence)
+    cle("SPELL_DAMAGE", mob, opponent("never-touched"), 50, 0, 64)
+    assert(total("kills") == 1, "a monster's kill of a player you never fought is not yours")
+    local otherPet = { guid = "Pet-0-1-1-1-99-0000BB", name = "Loup", surname = "Gris" }
+    local e2 = opponent("pet-finish")
+    unitData.nameplate1 = e2
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    cle("SPELL_DAMAGE", unitData.player, e2, -1, 0, 64)
+    cle("SPELL_DAMAGE", otherPet, e2, 50, 0, 64)
+    assert(total("kills") == 1, "another player's pet is not a monster")
+end)
+
 test("confirmed kill requires personal source and player victim", function()
     local e = opponent("known")
     cle("PARTY_KILL", opponent("other"), e)

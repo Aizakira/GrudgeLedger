@@ -431,8 +431,17 @@ local function killingBlow(src, dst, name, evidence, native)
             end
             return
         end
-        if src ~= GL.Clean(GL.Safe(UnitGUID, "pet"), "string") then return end
-        evidence = "Votre familier a porté le coup fatal à ce joueur."
+        if src == GL.Clean(GL.Safe(UnitGUID, "pet"), "string") then
+            evidence = "Votre familier a porté le coup fatal à ce joueur."
+        else
+            -- A monster finished a player of YOUR fight (owner, 26/11): no other player killed them,
+            -- the victory is yours, not a helping hand. Another player's pet does not count.
+            local f = combatSession()
+            local fought = f and (f.enemies["guid:" .. dst] or (f.combatants and f.combatants[dst]))
+            local monster = (src:match("^Creature%-") or src:match("^Vehicle%-")) and not petOwners[src]
+            if not (fought and monster) then return end
+            evidence = "Achevé par un monstre pendant votre combat : aucun autre joueur ne lui a porté le coup fatal."
+        end
     end
     creditKill(identityForGUID(dst, name), "confirmed", evidence, native)
     local credit=recentCredits[dst]
