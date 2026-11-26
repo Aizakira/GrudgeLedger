@@ -129,6 +129,16 @@ do
     light:GetScript("OnUpdate")(light, 0.1)
     GL.ShowLedger(aqua.key)
     assert(light:IsShown() and light.kind == "ruby", "a debt has ruby stars")
+    -- Owner, 26/11: a +1 earned by friendly gestures is a friend's, in green, not the gold of victories.
+    local pal = GL.IdentityFromName("Copain", "Exemple", "Player-1-friend-example")
+    GL.Remember(pal)
+    table.insert(GL.Get(pal).history, { kind = "reputation", source = "emote", delta = 1, time = GetServerTime() })
+    local friendly = GL.AutomaticBalance(GL.Get(pal))
+    assert(friendly == 1, "one friendly gesture: " .. tostring(friendly))
+    GL.ShowLedger(GL.Get(pal).key)
+    local r, g = unpack(GrudgeLedgerWindow.balance.color)
+    assert(GrudgeLedgerWindow.balance:GetText() == "+1" and light.kind == "friend" and g > r, "the friend's +1 is green")
+    GL.ShowLedger(aqua.key)
 end
 assert(GrudgeLedgerWindow.reactions.neutral.active and not GrudgeLedgerWindow.reactions.warning.active
     and GrudgeLedgerWindow.reactions.warning.outline[1]:IsShown(), "automatic outlines the effective dangerous relation")

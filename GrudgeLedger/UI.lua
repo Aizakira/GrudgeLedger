@@ -2452,10 +2452,15 @@ local function renderDetail()
             -- Against you: red, with ruby stars. For you (or ahead, 0.61.2): a deep gold that stays
             -- readable on the parchment, with gold stars. Even: plain ink, no light.
             local text = ahead and ("+" .. raw) or (score > 0 and ("+" .. score) or tostring(score))
+            -- A positive score only ever comes from friendly gestures (victories cannot make a
+            -- friend): it is the friend's green (owner, 26/11); the gold stays for being ahead.
             if score < 0 then
                 local c = inkColors.enemy
                 ledger.paintBalance(text, c[1], c[2], c[3], "ruby")
-            elseif ahead or score > 0 then
+            elseif score > 0 then
+                local c = inkColors.friend
+                ledger.paintBalance(text, c[1], c[2], c[3], "friend")
+            elseif ahead then
                 ledger.paintBalance(text, 0.72, 0.50, 0.06, "gold")
             else
                 ledger.paintBalance(text, theme.ink[1], theme.ink[2], theme.ink[3], nil)
@@ -3437,7 +3442,7 @@ local function buildLedger()
         light.glow:SetPoint("CENTER", f.balance, "LEFT", width / 2, 4)
         light.glow:SetSize(width + 64, 46)
         light.glow:SetVertexColor(r, g, b)
-        light.kind, light.glowAlpha = kind, kind == "ruby" and 0.16 or 0.22
+        light.kind, light.glowAlpha = kind, kind == "ruby" and 0.16 or kind == "friend" and 0.26 or 0.22
         local art = media .. (kind == "ruby" and "BalanceStarRuby" or "BalanceStarGold")
         light.width = width
         for _, star in ipairs(light.stars) do
