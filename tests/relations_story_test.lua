@@ -498,7 +498,8 @@ do
     R.Refresh()
     -- The guild's book (0.55.0): the guild vision's box, the guild's week as key figures, and the
     -- guild's enemies, the deadliest first.
-    assert(gb.vision:IsShown() and gb.vision:GetChecked() and gb.keyHeading:GetText() == "Chiffres clés")
+    -- The box is on the map only now (owner, 26/11): the guild's book has none.
+    assert(gb.vision == nil and gb.keyHeading:GetText() == "Chiffres clés" and not log.reshare:IsShown())
     assert(gb.tally[1].label:GetText() == "Morts · 7 j" and gb.tally[1].value:GetText() == "5" and gb.tally[4].value:GetText() == "2")
     click(gb.tally[3])
     local enemies = gb.host.pages.enemies
@@ -511,7 +512,12 @@ do
     GL.OpenPlayerDossier = realDossier
     ticked = false
     R.Refresh()
-    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("décochée", 1, true))
+    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("sur la carte", 1, true) and log.reshare:IsShown())
+    -- One click shares again, without going to the map.
+    click(log.reshare)
+    assert(ticked == true and log.rows[1]:IsShown() and not log.reshare:IsShown())
+    ticked = false
+    R.Refresh()
     click(f.tabs.lands)
     GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable = realEnabled, realPoints, realEnable
     -- "Voir la liste" gives the list back; a client without map pictures only has the list.

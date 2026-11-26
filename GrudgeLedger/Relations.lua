@@ -2540,6 +2540,16 @@ local function openOpponent(row)
 end
 -- A wanted notice on the opponent of a line: a bounty without gold, in one click. The guild sees
 -- it in Primes and is alerted when one of its members meets that player.
+-- Under the message of a guild page while the guild vision is off: share again in one click,
+-- without going to the map (owner, 26/11).
+local function reshareButton(page, y)
+    local button = UI.button(page, L("Partager à nouveau mes combats"), X(26), y, S(260), function()
+        if GL.GuildMap then GL.GuildMap.Enable(true) end
+        R.Refresh()
+    end)
+    button:Hide()
+    return button
+end
 local function wanted(row)
     if not (row.target and row.enemy and GL.Bounties and GL.Bounties.Post) then return end
     local id, err = GL.Bounties.Post(row.target, row.enemy, 0)
@@ -2809,6 +2819,7 @@ local function buildGuildJournal(host)
         page.seenBefore, page.newest = nil, nil
     end)
     page.empty = Panels.Text(page, X(26), -132, S(540), 13, false, UI.theme.inkMuted)
+    page.reshare = reshareButton(page, -160)
     page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - GUILD_ROWS)
         R.Refresh()
@@ -2905,12 +2916,13 @@ local function paintGuildJournal(page)
     if not inGuild then
         empty = L("Vous n’êtes dans aucune guilde : ce journal raconte les combats de la vôtre.")
     elseif not sharing then
-        empty = L("La vision de guilde est décochée. Cochez-la à gauche pour lire ce journal et y figurer.")
+        empty = L("La vision de guilde est décochée. Cochez-la sur la carte pour lire ce journal et y figurer.")
     elseif #lines == 0 and filtered then
         empty = L("Aucun combat ne correspond. « Effacer » dans les filtres remet tout.")
     elseif #lines == 0 then
         empty = L("Aucun combat partagé pour l’instant. Le journal se remplit quand un membre gagne ou meurt.")
     end
+    if inGuild and not sharing then page.reshare:Show() else page.reshare:Hide() end
     page.empty:SetText(empty)
     page.previous:SetEnabled(page.offset > 0)
     page.next:SetEnabled(page.offset + GUILD_ROWS < #lines)
@@ -2995,6 +3007,7 @@ local function buildEnemies(host)
         page.rows[i] = row
     end
     page.empty = Panels.Text(page, X(26), -124, S(540), 13, false, UI.theme.inkMuted)
+    page.reshare = reshareButton(page, -152)
     page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - ENEMY_ROWS)
         R.Refresh()
@@ -3041,10 +3054,11 @@ local function paintEnemies(page)
     if not inGuild then
         empty = L("Vous n’êtes dans aucune guilde : cette page dit qui tue les membres de la vôtre.")
     elseif not sharing then
-        empty = L("La vision de guilde est décochée. Cochez-la à gauche pour voir cette page.")
+        empty = L("La vision de guilde est décochée : cochez-la sur la carte pour voir cette page.")
     elseif #list == 0 then
         empty = L("Aucun membre de la guilde n’a été tué sur cette période.")
     end
+    if inGuild and not sharing then page.reshare:Show() else page.reshare:Hide() end
     page.empty:SetText(empty)
     page.previous:SetEnabled(page.offset > 0)
     page.next:SetEnabled(page.offset + ENEMY_ROWS < #list)
@@ -3145,25 +3159,9 @@ local function book(key)
         -- names still open their page.
         if not f.tabs[section[1]] then f.tabs[section[1]] = button end
     end
-    -- The guild's book carries the guild vision's box under its entries: sharing your fights is what
-    -- fills its pages.
-    local figuresTop = key == "relations" and -444 or -424
-    if key == "guild" then
-        f.vision = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-        f.vision:SetPoint("TOPLEFT", 36, -308)
-        f.vision:SetSize(24, 24)
-        f.visionLabel = Panels.Text(f, 64, -314, 142, 12, true, UI.theme.paper)
-        f.vision:SetScript("OnClick", function(self)
-            if GL.GuildMap then GL.GuildMap.Enable(self:GetChecked() and true or false) end
-            R.Refresh()
-        end)
-        f.vision:SetScript("OnEnter", function(self)
-            tip(self, L("Vision de guilde"), L("Cochée : vous voyez sur la carte les victoires et les morts des membres qui l’ont cochée, et ils voient "
-                .. "les vôtres (la zone et l’endroit). Décochée : rien n’est envoyé, rien n’est gardé, et la guilde oublie vos combats."))
-        end)
-        f.vision:SetScript("OnLeave", hideTip)
-        figuresTop = -366
-    end
+    -- The guild vision's box is on the map only (owner, 26/11: in the guild's book, unticking it
+    -- emptied every page of the book it sat in). Its pages offer to share again when it is off.
+    local figuresTop = key == "relations" and -444 or key == "guild" and -322 or -424
     -- The key figures, drawn like those of the player sheet's left column: a caption, then one
     -- line each, the name on the left and the number on the right. Each line opens its page.
     f.keyHeading = Panels.Text(f, 40, figuresTop, 166, 12, true, UI.theme.brass)
@@ -3370,19 +3368,6 @@ end
 function R.Refresh()
     for _, f in pairs(R.books) do
         if f:IsShown() and f.page then
-            if f.vision then
-                local sharing, inGuild = false, false
-                if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
-                GL.Safe(f.vision.SetChecked, f.vision, sharing)
-                f.visionLabel:SetText(L("Vision de guilde"))
-                if inGuild then
-                    f.vision:Show()
-                    f.visionLabel:Show()
-                else
-                    f.vision:Hide()
-                    f.visionLabel:Hide()
-                end
-            end
             painters[f.page](f.host.pages[f.page])
             paintSections(f)
             paintTally(f)

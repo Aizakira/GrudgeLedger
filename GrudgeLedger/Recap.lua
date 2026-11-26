@@ -478,7 +478,7 @@ local function paintGuild(card, facts)
         local _, inGuild = false, false
         if GL.GuildMap then _, inGuild = GL.GuildMap.Enabled() end
         card.note:SetText(not inGuild and L("Pas de guilde : cette page raconte ce que vous apportez à la vôtre.")
-            or not guild and L("La vision de guilde est décochée : cochez-la dans l’onglet Guilde pour voir cette page.")
+            or not guild and L("La vision de guilde est décochée : cochez-la sur la carte pour voir cette page.")
             or L("Aucun combat de la guilde sur cette période."))
         return
     end
