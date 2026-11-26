@@ -19,6 +19,7 @@ Locales_deDE.lua
 Locales_ptBR.lua
 Core.lua
 Art.lua
+Heraldry.lua
 EngravingData.lua
 Tags.lua
 ZoneTime.lua

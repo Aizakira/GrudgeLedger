@@ -153,7 +153,14 @@ known = R.Guilds()
 assert(known[1].stance == "enemy" and known[1].ruled)
 R.Refresh()
 assert(crests.cards[1]:IsShown() and crests.cards[1].stance:GetText() == "En guerre · votre règle", crests.cards[1].stance:GetText())
-assert(crests.cards[1].initials:GetText() == "OB" and R.Initials("ducks") == "D" and R.Initials("Éclats d’Ombre") == "ÉD", R.Initials("Éclats d’Ombre"))
+local drawn = crests.cards[1].crest.placed
+assert(drawn and drawn[1].letter == "O" and drawn[2].letter == "B" and R.Initials("ducks") == "D", "the crest draws OB")
+-- Articles, linking words and elisions are skipped, in every language; a name of such words keeps them.
+for name, initials in pairs({ ["Éclats d’Ombre"] = "ÉO", ["Les Corbeaux de la Dernière Nuit"] = "CD", ["La Compagnie du Lys"] = "CL",
+    ["Les Veilleurs de l'Aube"] = "VA", ["The Order of Dawn"] = "OD", ["Los Hijos del Sol"] = "HS", ["Die Wächter"] = "W",
+    ["Os Lobos"] = "L", ["The A"] = "TA" }) do
+    assert(R.Initials(name) == initials, name .. " gives " .. R.Initials(name))
+end
 -- A stranger grouped with three times nine days ago is not "your companion"; a friend grouped with is.
 GL.Remember(person("Valf", "Gank", "0010"))
 GL.RecordGroup(person("Valf", "Gank", "0010"), "g1", "Tanaris")
@@ -193,7 +200,10 @@ end
 click(g.tabs.guilds)
 click(crests.cards[1])
 assert(R.page == "rankings" and rankings.group == 3 and f.sections[5].active and rankings.rows[1].item.name == "Ok Bodycount"
-    and rankings.rows[1].initials:GetText() == "OB")
+    and rankings.rows[1].crest.placed and rankings.rows[1].crest.placed[2].letter == "B" and rankings.rows[1].initials:GetText() == "")
+-- The crest no longer tells the relation: the guild's name does, in the colour of your rule.
+local nameColor, enemyInk = { rankings.rows[1].name:GetTextColor() }, GL.RelationInks.enemy
+assert(not enemyInk or math.abs(nameColor[1] - enemyInk[1]) < 0.01, "the name in the colour of the rule")
 click(rankings.chips[6])
 assert(rankings.title:GetText() == "Mes règles de guilde" and rankings.rows[1].value:GetText() == "Ennemi", rankings.rows[1].value:GetText())
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)

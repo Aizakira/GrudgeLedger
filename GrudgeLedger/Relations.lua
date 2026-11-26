@@ -817,8 +817,6 @@ end
 
 -- Guild crests: the guilds that weigh in your book, hostile or friendly, six at most.
 local CRESTS = 6
-local crestColors = { enemy = { 0.35, 0.08, 0.08 }, hostile = { 0.45, 0.16, 0.10 }, warning = { 0.42, 0.29, 0.08 },
-    friend = { 0.18, 0.37, 0.20 }, neutral = { 0.23, 0.16, 0.11 } }
 function R.Guilds()
     local list = {}
     for _, row in ipairs(GL.GuildStatistics()) do
@@ -839,14 +837,106 @@ function R.Guilds()
 end
 -- "Ok Bodycount" gives "OB", "ducks" gives "D": the first letter of the first two words, whole
 -- UTF-8 letters only.
+-- Articles and small linking words are skipped (owner's kit, 26/11: "Les Corbeaux" and "La Compagnie"
+-- both gave "LC"), in the five languages, and so is an elided "l'" or "d'" before a word. A name made
+-- of such words only keeps them all.
+local LINKING = {}
+for word in ("le la les l the a an de du des d of au aux en et and el los las lo y del die der das den dem von und "
+    .. "os o as e do da dos das di"):gmatch("%S+") do LINKING[word] = true end
 function R.Initials(guild)
-    local letters = {}
+    local letters, words, kept = {}, {}, {}
     for word in tostring(guild or ""):gmatch("%S+") do
+        word = word:gsub("^[LlDd]'", ""):gsub("^[LlDd]\226\128\153", "")
+        if word ~= "" then
+            words[#words + 1] = word
+            if not LINKING[word:lower()] then kept[#kept + 1] = word end
+        end
+    end
+    for _, word in ipairs(#kept > 0 and kept or words) do
         local letter = word:match("^[%z\1-\127\194-\244][\128-\191]*")
         if letter and #letters < 2 and not letter:match("^[%p%d]$") then letters[#letters + 1] = letter:upper() end
     end
     return UI.plain(table.concat(letters))
 end
+-- A guild's crest from the armorial (owner's kit, 26/11): the crest of its side, a motif over it in
+-- some cases, and its initials in one of the six alphabets. Square, of any size.
+local function crestFrame(parent, size)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetSize(size, size)
+    f.size = size
+    f.base = f:CreateTexture(nil, "ARTWORK")
+    f.base:SetAllPoints()
+    f.motif = f:CreateTexture(nil, "ARTWORK")
+    GL.Safe(f.motif.SetDrawLayer, f.motif, "ARTWORK", 1)
+    f.motif:SetAllPoints()
+    f.shadows, f.glyphs = {}, {}
+    for i = 1, 2 do
+        f.shadows[i] = f:CreateTexture(nil, "OVERLAY")
+        f.glyphs[i] = f:CreateTexture(nil, "OVERLAY")
+        GL.Safe(f.glyphs[i].SetDrawLayer, f.glyphs[i], "OVERLAY", 2)
+    end
+    -- Initials the alphabets cannot draw (a digit, another script) are written as text.
+    f.label = Panels.Text(f, 0, -math.floor(size * 0.34), size, math.max(10, math.floor(size * 0.36)), true, UI.theme.brass)
+    f.label:SetJustifyH("CENTER")
+    GL.Safe(f.label.SetDrawLayer, f.label, "OVERLAY", 7)
+    return f
+end
+function R.PaintCrest(f, guild)
+    local H = GL.Art.GuildHeraldry
+    local key = guild.key or (tostring(guild.name or "") .. "-" .. tostring(guild.realm or ""))
+    local choice = H.Choose(key, guild.faction)
+    local crest = H.crests[choice.crest]
+    f.base:SetTexture(H.root .. crest.file)
+    f.base:SetTexCoord(0, 1, 0, 1)
+    f.base:SetVertexColor(1, 1, 1, 1)
+    if choice.pattern > 1 then
+        local col, row = choice.pattern - 1, choice.crest - 1
+        local accent = H.palettes[choice.palette].accent
+        f.motif:SetTexture(H.root .. H.fields.file)
+        f.motif:SetTexCoord(col / H.fields.columns, (col + 1) / H.fields.columns, row / H.fields.rows, (row + 1) / H.fields.rows)
+        f.motif:SetVertexColor(accent[1], accent[2], accent[3], 0.55)
+        f.motif:Show()
+    else
+        f.motif:Hide()
+    end
+    local initials = R.Initials(guild.name)
+    local placed = H.Layout(choice.crest, choice.alphabet, H.Letters(initials))
+    local k = f.size / 128
+    local alphabet = H.root .. H.alphabets[choice.alphabet].file
+    for i = 1, 2 do
+        local glyph, shadow, spot = f.glyphs[i], f.shadows[i], placed and placed[i]
+        if spot then
+            local u1, u2 = spot.col / H.columns, (spot.col + 1) / H.columns
+            local v1, v2 = spot.row / H.rows, (spot.row + 1) / H.rows
+            glyph:SetTexture(alphabet)
+            glyph:SetTexCoord(u1, u2, v1, v2)
+            glyph:SetVertexColor(1, 1, 1, 1)
+            GL.Safe(glyph.SetBlendMode, glyph, "BLEND")
+            glyph:ClearAllPoints()
+            glyph:SetPoint("TOPLEFT", spot.left * k, -spot.top * k)
+            glyph:SetSize(spot.side * k, spot.side * k)
+            glyph:Show()
+            -- The ivory banner carries a dark shadow under its letters, for contrast.
+            if crest.shadow then
+                shadow:SetTexture(alphabet)
+                shadow:SetTexCoord(u1, u2, v1, v2)
+                shadow:SetVertexColor(61 / 255, 41 / 255, 29 / 255, 0.85)
+                shadow:ClearAllPoints()
+                shadow:SetPoint("TOPLEFT", (spot.left - 2) * k, -(spot.top - 1) * k)
+                shadow:SetSize((spot.side + 4) * k, (spot.side + 4) * k)
+                shadow:Show()
+            else
+                shadow:Hide()
+            end
+        else
+            glyph:Hide()
+            shadow:Hide()
+        end
+    end
+    f.label:SetText(placed and "" or initials)
+    f.choice, f.placed = choice, placed
+end
+R.CrestFrame = crestFrame
 local function buildGuilds(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
@@ -859,16 +949,8 @@ local function buildGuilds(host)
         card:SetSize(S(266), 116)
         UI.surface(card, { 0.79, 0.66, 0.42 })
         UI.surface(card, { 0.96, 0.91, 0.78 }, 1, 1)
-        card.crestRim = card:CreateTexture(nil, "ARTWORK")
-        card.crestRim:SetPoint("TOPLEFT", S(12), -14)
-        card.crestRim:SetSize(44, 54)
-        card.crestRim:SetColorTexture(0.52, 0.38, 0.20)
-        card.crest = card:CreateTexture(nil, "OVERLAY")
-        card.crest:SetPoint("TOPLEFT", S(14), -16)
-        card.crest:SetSize(40, 50)
-        card.initials = Panels.Text(card, S(14), -28, S(40), 20, true, UI.theme.brass)
-        card.initials:SetJustifyH("CENTER")
-        GL.Safe(card.initials.SetDrawLayer, card.initials, "OVERLAY", 7)
+        card.crest = crestFrame(card, 52)
+        card.crest:SetPoint("TOPLEFT", S(9), -10)
         card.name = Panels.Text(card, S(66), -12, S(190), 15, true)
         GL.Safe(card.name.SetWordWrap, card.name, false)
         card.stance = Panels.Text(card, S(66), -33, S(190), 12, true, UI.theme.red)
@@ -893,8 +975,7 @@ local function paintGuilds(page)
         if entry then
             local row = entry.row
             Panels.Fit(card.name, UI.plain(row.name), S(190), 15, 10, true)
-            card.crest:SetColorTexture(unpack(crestColors[entry.stance] or crestColors.neutral))
-            card.initials:SetText(R.Initials(row.name))
+            R.PaintCrest(card.crest, row)
             card.stance:SetText((stances[entry.stance] or stances.neutral) .. (entry.ruled and (" · " .. L("votre règle")) or ""))
             local lines = {}
             if (row.grudges or 0) > 0 then
@@ -2188,9 +2269,9 @@ local function buildRankings(host)
         row.rank = Panels.Text(row, S(0), -12, S(18), 12, false, UI.theme.inkMuted)
         row.face = face(row, 34)
         row.face:SetPoint("TOPLEFT", S(24), -4)
-        row.crest = row:CreateTexture(nil, "ARTWORK")
-        row.crest:SetPoint("TOPLEFT", S(24), -4)
-        row.crest:SetSize(34, 34)
+        -- 38 px rather than 34: a pair of letters stays readable (owner's kit, 26/11).
+        row.crest = crestFrame(row, 38)
+        row.crest:SetPoint("TOPLEFT", S(22) - 1, -2)
         row.initials = Panels.Text(row, S(24), -12, S(34), 14, true, UI.theme.brass)
         row.initials:SetJustifyH("CENTER")
         row.name = Panels.Text(row, S(60), -4, S(250), 14, true)
@@ -2255,10 +2336,11 @@ local function paintRankings(page)
                 row.face:Hide()
                 row.crest:Show()
                 local rule = GL.GetGuildRule(item.name, item.realm)
-                row.crest:SetColorTexture(unpack(crestColors[rule and rule.reaction or "neutral"] or crestColors.neutral))
-                row.initials:SetText(R.Initials(item.name))
+                R.PaintCrest(row.crest, item)
+                row.initials:SetText("")
                 Panels.Fit(row.name, UI.plain(item.name), S(250), 14, 10, true)
-                row.name:SetTextColor(unpack(UI.theme.ink))
+                -- The crest no longer says the relation: the name does, in the colour of your rule.
+                row.name:SetTextColor(unpack(rule and inks[rule.reaction] or UI.theme.ink))
                 row.meta:SetText(GL.RealmLabel(item.realm))
                 row.value:SetText(choice[1] == "rules" and (names[rule and rule.reaction] or "") or tostring(item[choice[1]] or 0))
             else

@@ -62,6 +62,10 @@ for name, expected_width, expected_height, transparent in (
     ("RelationsCarte/tableaux-detailles.tga", 64, 64, True), ("RelationsCarte/dettes.tga", 64, 64, True),
     ("RelationsCarte/rivalites.tga", 64, 64, True), ("RelationsCarte/carte.tga", 64, 64, True),
     ("RelationsCarte/classements.tga", 64, 64, True),
+    # The guilds' armorial (owner's kit, 26/11): fifteen crests, their motifs, six alphabets.
+    *((f"Crest{i}.tga", 128, 128, True) for i in range(1, 16)),
+    ("GuildCrestFields.tga", 512, 1024, True),
+    *((f"Letters{name}.tga", 512, 256, True) for name in ("Hurlevent", "Chanteguerre", "Kaldorei", "Gnomeregan", "Karazhan", "Amani")),
 ):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")

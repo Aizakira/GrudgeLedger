@@ -894,7 +894,7 @@ local function buildGuildStatistics()
         if not key then return end
         if not guilds[key] then
             guilds[key] = { key = key, name = clean, realm = server, members = 0, grudges = 0,
-                friends = 0, deaths = 0, kills = 0, aggressions = 0 }
+                friends = 0, deaths = 0, kills = 0, aggressions = 0, sides = {} }
         end
         return guilds[key]
     end
@@ -903,6 +903,9 @@ local function buildGuildStatistics()
         local guild = record.guild and not GL.IsGroupOnly(record) and get(record.guild, record.realm)
         if guild then
             guild.members = guild.members + 1
+            if record.faction == "Alliance" or record.faction == "Horde" then
+                guild.sides[record.faction] = (guild.sides[record.faction] or 0) + 1
+            end
             local relation = GL.Relation(record)
             -- A guild rule must not manufacture personal grudges/friends in its own ranking.
             if GL.RelationSource(record) ~= "guild" then
@@ -930,6 +933,10 @@ local function buildGuildStatistics()
     local result = {}
     for key, guild in pairs(guilds) do
         for _, field in pairs(deaths[key] or {}) do guild[field] = guild[field] + 1 end
+        -- The guild's side, from its known members (most of them); none when undecided.
+        local alliance, horde = guild.sides.Alliance or 0, guild.sides.Horde or 0
+        guild.faction = alliance > horde and "Alliance" or horde > alliance and "Horde" or nil
+        guild.sides = nil
         result[#result + 1] = guild
     end
     return result
