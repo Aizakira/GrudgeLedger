@@ -3443,7 +3443,8 @@ local function buildLedger()
         light.glow:SetSize(width + 64, 46)
         light.glow:SetVertexColor(r, g, b)
         light.kind, light.glowAlpha = kind, kind == "ruby" and 0.16 or kind == "friend" and 0.26 or 0.22
-        local art = media .. (kind == "ruby" and "BalanceStarRuby" or "BalanceStarGold")
+        -- A friend's balance gives off little green hearts, the "Ami" heart (owner, 26/11).
+        local art = media .. (kind == "ruby" and "BalanceStarRuby" or kind == "friend" and relationIcons.friend or "BalanceStarGold")
         light.width = width
         for _, star in ipairs(light.stars) do
             star:SetTexture(art)

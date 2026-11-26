@@ -135,9 +135,11 @@ do
     table.insert(GL.Get(pal).history, { kind = "reputation", source = "emote", delta = 1, time = GetServerTime() })
     local friendly = GL.AutomaticBalance(GL.Get(pal))
     assert(friendly == 1, "one friendly gesture: " .. tostring(friendly))
+    for _, star in ipairs(light.stars) do star.SetTexture = function(self, value) self.texture = value end end
     GL.ShowLedger(GL.Get(pal).key)
     local r, g = unpack(GrudgeLedgerWindow.balance.color)
     assert(GrudgeLedgerWindow.balance:GetText() == "+1" and light.kind == "friend" and g > r, "the friend's +1 is green")
+    assert(tostring(light.stars[1].texture):find("RelationFriend", 1, true), "green hearts, not gold stars")
     GL.ShowLedger(aqua.key)
 end
 assert(GrudgeLedgerWindow.reactions.neutral.active and not GrudgeLedgerWindow.reactions.warning.active
