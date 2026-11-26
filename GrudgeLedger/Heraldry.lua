@@ -250,6 +250,8 @@ function H.Choose(key, faction)
     return {
         crest = family[h % #family + 1],
         alphabet = H.alphabetIds[math.floor(h / 16) % #H.alphabetIds + 1],
+        -- Each letter its own alphabet (owner, 26/11: more variety); the same one now and then.
+        alphabet2 = H.alphabetIds[math.floor(h / 3001) % #H.alphabetIds + 1],
         -- Pattern 1 leaves the crest in its own colours; 2 to 6 lay a motif over it.
         pattern = math.floor(h / 97) % #H.patterns + 1,
         palette = math.floor(h / 613) % #H.palettes + 1,
@@ -280,12 +282,15 @@ end
 -- 39 px high and at most min(48, width) wide, a pair about 27 px high with 2 px between their inks,
 -- the pair shrunk as a whole if wider than the crest allows. The group is centred on the crest's
 -- centre; letters share their cell's top, so they keep a common baseline.
-function H.Layout(crestId, alphabetId, letters)
-    local crest, alphabet = H.crests[crestId], H.alphabets[alphabetId]
-    if not crest or not alphabet or type(letters) ~= "table" or #letters == 0 then return nil end
+-- alphabetIds: one alphabet for every letter, or a list with one per letter.
+function H.Layout(crestId, alphabetIds, letters)
+    local crest = H.crests[crestId]
+    if not crest or type(letters) ~= "table" or #letters == 0 then return nil end
     local boxes, tallest, minTop, maxBottom = {}, 0, math.huge, 0
     for i, letter in ipairs(letters) do
-        local box = alphabet.glyphs[letter]
+        local id = type(alphabetIds) == "table" and alphabetIds[i] or alphabetIds
+        local alphabet = H.alphabets[id]
+        local box = alphabet and alphabet.glyphs[letter]
         if not box then return nil end
         boxes[i] = box
         tallest = math.max(tallest, box[4] - box[2])
@@ -305,7 +310,8 @@ function H.Layout(crestId, alphabetId, letters)
     for i, box in ipairs(boxes) do
         local cell = letters[i]:byte() - 65
         placed[i] = {
-            letter = letters[i], col = cell % H.columns, row = math.floor(cell / H.columns),
+            letter = letters[i], alphabet = type(alphabetIds) == "table" and alphabetIds[i] or alphabetIds,
+            col = cell % H.columns, row = math.floor(cell / H.columns),
             left = x - box[1] * scale, top = top, side = H.cell * scale,
             ink = { x, top + box[2] * scale, x + (box[3] - box[1]) * scale, top + box[4] * scale },
         }

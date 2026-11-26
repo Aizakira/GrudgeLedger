@@ -16,22 +16,27 @@ end
 -- The side chooses the family, and the same guild always gets the same crest.
 local allianceOnly, hordeOnly = { [1] = true, [2] = true, [4] = true, [9] = true, [11] = true, [13] = true },
     { [3] = true, [5] = true, [6] = true, [7] = true, [8] = true, [12] = true }
-local seen = { Horde = {}, Alliance = {}, any = {} }
+local seen, mixed = { Horde = {}, Alliance = {}, any = {} }, 0
 for i = 1, 600 do
     local key = "guild:Synthetic Guild " .. i .. "-Realm" .. (i % 7)
     local horde, alliance, any = H.Choose(key, "Horde"), H.Choose(key, "Alliance"), H.Choose(key, nil)
     assert(not allianceOnly[horde.crest], key .. ": a Horde guild under an Alliance banner")
     assert(not hordeOnly[alliance.crest], key .. ": an Alliance guild under a Horde banner")
     local again = H.Choose(key:upper(), "Horde")
-    assert(again.crest == horde.crest and again.alphabet == horde.alphabet and again.pattern == horde.pattern,
+    assert(again.crest == horde.crest and again.alphabet == horde.alphabet and again.alphabet2 == horde.alphabet2
+        and again.pattern == horde.pattern,
         key .. ": the crest changes from one visit to the next")
     for side, choice in pairs({ Horde = horde, Alliance = alliance, any = any }) do
         seen[side][choice.crest] = true
-        assert(H.alphabets[choice.alphabet] and H.patterns[choice.pattern] and H.palettes[choice.palette], key .. ": a valid choice")
+        assert(H.alphabets[choice.alphabet] and H.alphabets[choice.alphabet2] and H.patterns[choice.pattern]
+            and H.palettes[choice.palette], key .. ": a valid choice")
+        if choice.alphabet ~= choice.alphabet2 then mixed = mixed + 1 end
     end
 end
 local function count(set) local n = 0 for _ in pairs(set) do n = n + 1 end return n end
 assert(count(seen.Horde) == 9 and count(seen.Alliance) == 9 and count(seen.any) == 15, "every crest of a family is used")
+-- The two letters mostly come from two alphabets (owner, 26/11), sometimes from the same one.
+assert(mixed > 1200 and mixed < 1800, "mixed alphabets: " .. mixed .. " of 1800")
 
 -- Letters: the plain capital of an accented one, nothing the alphabets cannot draw.
 local function same(a, b) return table.concat(a or {}, ",") == table.concat(b or {}, ",") end
@@ -44,10 +49,12 @@ assert(H.Letters("") == nil and H.Letters("1") == nil and H.Letters("Д") == nil
 local checked = 0
 for crestId, crest in ipairs(H.crests) do
     for _, alphabetId in ipairs(H.alphabetIds) do
+      for _, alphabet2 in ipairs(H.alphabetIds) do
         for a = 65, 90 do
-            for b = 64, 90 do
+            for b = alphabet2 == alphabetId and 64 or 65, 90 do
                 local letters = b == 64 and { string.char(a) } or { string.char(a), string.char(b) }
-                local placed = assert(H.Layout(crestId, alphabetId, letters), "a layout")
+                local placed = assert(H.Layout(crestId, { alphabetId, alphabet2 }, letters), "a layout")
+                assert(placed[#placed].alphabet == (#letters == 1 and alphabetId or alphabet2), "each letter its alphabet")
                 local left, right = placed[1].ink[1], placed[#placed].ink[3]
                 local width = #letters == 1 and math.min(48, crest.width) or crest.width
                 assert(right - left <= width + 0.01, ("%d/%d %s: wider than the crest"):format(crestId, alphabetId, table.concat(letters)))
@@ -60,6 +67,7 @@ for crestId, crest in ipairs(H.crests) do
                 checked = checked + 1
             end
         end
+      end
     end
 end
 

@@ -900,12 +900,12 @@ function R.PaintCrest(f, guild)
         f.motif:Hide()
     end
     local initials = R.Initials(guild.name)
-    local placed = H.Layout(choice.crest, choice.alphabet, H.Letters(initials))
+    local placed = H.Layout(choice.crest, { choice.alphabet, choice.alphabet2 }, H.Letters(initials))
     local k = f.size / 128
-    local alphabet = H.root .. H.alphabets[choice.alphabet].file
     for i = 1, 2 do
         local glyph, shadow, spot = f.glyphs[i], f.shadows[i], placed and placed[i]
         if spot then
+            local alphabet = H.root .. H.alphabets[spot.alphabet].file
             local u1, u2 = spot.col / H.columns, (spot.col + 1) / H.columns
             local v1, v2 = spot.row / H.rows, (spot.row + 1) / H.rows
             glyph:SetTexture(alphabet)
