@@ -69,10 +69,13 @@ ASSETS = {
     "ClouDroite": ("details/nail-forged-right.png", 64, 64),
     "Chevron": ("details/dropdown-chevron.png", 32, 16),
 }
-# The tapestry's corners, drawn one by one at the page's corners (the book draws the straight rules).
+# The tapestry's border (owner, 27/11: the gold rules link the flourishes): four corners and four
+# straight edges, drawn apart at the page's corners and along its sides; the edges stretch.
 for side, faction in (("alliance", "Alliance"), ("horde", "Horde")):
     for part, corner in (("tl", "HG"), ("tr", "HD"), ("bl", "BG"), ("br", "BD")):
         ASSETS[f"Coin{faction}{corner}"] = (f"backgrounds/{side}-corner-{part}.png", 128, 128)
+    for part, edge in (("top", "Haut"), ("bottom", "Bas"), ("left", "Gauche"), ("right", "Droite")):
+        ASSETS[f"Bord{faction}{edge}"] = (f"backgrounds/{side}-edge-{part}.png", 64, 64)
 PAD = 2
 # How much the tapestry's centre is lit: its colour times 1 + LIGHT at the centre, times 1 at the edges.
 LIGHT = 0.55
@@ -106,21 +109,6 @@ def lit(cloth):
     out = Image.composite(bright, rgb, mask).convert("RGBA")
     out.putalpha(255)
     return out
-
-
-def corner(image, part):
-    """A corner without its two rule stubs: the book draws the straight rules, the flourish fades
-    out before the canvas's inner edges."""
-    w, h = image.size
-    alpha = image.getchannel("A").load()
-    inward_x, inward_y = part[1] == "l", part[0] == "t"
-    for y in range(h):
-        fy = y / h if inward_y else 1 - y / h
-        for x in range(w):
-            fx = x / w if inward_x else 1 - x / w
-            keep = min(1.0, max(0.0, (0.96 - fx) / 0.12), max(0.0, (0.96 - fy) / 0.12))
-            alpha[x, y] = int(alpha[x, y] * keep)
-    return image
 
 
 # The book's frame ornament at the page's bottom right reaches over the page: the tapestry covers
@@ -200,8 +188,6 @@ def main(kit):
             version, source = source.split(":", 1)
             path = kit.parent / ("kit-ennemis-guilde" + ("" if version == "v2" else "-" + version)) / source
         image = clean(Image.open(path).convert("RGBA"))
-        if "-corner-" in source:
-            image = corner(image, source.rsplit("-", 1)[1][:2])
         if source.startswith("posters/poster-"):
             box, zones[name] = paper_zone(image, manifest[source])
         elif source.startswith("backgrounds/"):

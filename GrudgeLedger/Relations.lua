@@ -3444,7 +3444,7 @@ local function placePoster(page, p, spot)
     GL.Safe(p.hit.SetFrameLevel, p.hit, level + 15)
 end
 -- A choice of the page's head (owner, 27/11: discreet, not a big button): its words in ivory
--- italics and the kit's gold chevron, over the head's gold rule; under it, the choices in the guild
+-- italics and the kit's gold chevron in a fine gold outline; under it, the choices in the guild
 -- journal's small menu. As wide as its words (paintEnemies sets it).
 local function chooser(page, options, current, choose)
     local b = CreateFrame("Button", nil, page)
@@ -3459,6 +3459,21 @@ local function chooser(page, options, current, choose)
     b.arrow = wantedTexture(b, "OVERLAY", 1, "Chevron")
     b.arrow:SetSize(12, math.floor(12 / RATIO.Chevron + 0.5))
     b.arrow:SetPoint("RIGHT", b, "RIGHT", 0, 0)
+    -- A fine gold outline on a dark ground, like the guild journal's small menu.
+    b.ground = b:CreateTexture(nil, "BACKGROUND")
+    b.ground:SetPoint("TOPLEFT", -8, 2)
+    b.ground:SetPoint("BOTTOMRIGHT", 7, -2)
+    b.ground:SetColorTexture(0.06, 0.05, 0.09, 0.55)
+    b.edges = {}
+    for i, side in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, 1 },
+        { "TOPLEFT", "BOTTOMLEFT", 1, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", 1, 0 } }) do
+        local edge = b:CreateTexture(nil, "BORDER")
+        edge:SetColorTexture(0.78, 0.6, 0.3, 0.9)
+        edge:SetPoint(side[1], b.ground, side[1])
+        edge:SetPoint(side[2], b.ground, side[2])
+        if side[3] == 1 then edge:SetWidth(1) else edge:SetHeight(1) end
+        b.edges[i] = edge
+    end
     b:SetScript("OnEnter", function() b.caption:SetTextColor(1, 0.82, 0.45) end)
     b:SetScript("OnLeave", function() b.caption:SetTextColor(unpack(CLOTH_IVORY)) end)
     local width = 184
@@ -3497,15 +3512,28 @@ local function buildEnemies(host)
     -- head's rule to the foot's, so the book's gold rules stay over it and no parchment shows.
     page.cloth:SetPoint("TOPLEFT", -20, 7)
     page.cloth:SetPoint("BOTTOMRIGHT", 35, -12)
-    -- Four flourishes against the book's rules (owner, 27/11: part of the design); the bottom right
-    -- one stands on the side, over the frame's own ornament.
+    -- The border (owner, 27/11: part of the design): four flourishes in the corners and the kit's
+    -- gold rules linking them along the sides, at the kit's proportions (a corner of 288, a rule 96
+    -- wide). The frame's own ornament stays over the bottom right one; the bottom and right rules run
+    -- on under it, so no gap shows where it hides the flourish.
     page.corners = {}
-    for i, corner in ipairs({ { "TOPLEFT", "HG", 0 }, { "TOPRIGHT", "HD", 0 }, { "BOTTOMLEFT", "BG", 0 }, { "BOTTOMRIGHT", "BD", 62 } }) do
+    local corner, rule = 70, math.floor(70 * 96 / 288 + 0.5)
+    for i, at in ipairs({ { "TOPLEFT", "HG" }, { "TOPRIGHT", "HD" }, { "BOTTOMLEFT", "BG" }, { "BOTTOMRIGHT", "BD" } }) do
         local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
-        piece:SetSize(70, 70)
-        piece:SetPoint(corner[1], page.cloth, corner[1], 0, corner[3])
-        piece.corner = corner[2]
+        piece:SetSize(corner, corner)
+        piece:SetPoint(at[1], page.cloth, at[1], 0, 0)
+        piece.corner = "Coin%s" .. at[2]
         page.corners[i] = piece
+    end
+    for _, at in ipairs({ { "Haut", "TOPLEFT", corner, 0, "TOPRIGHT", -corner, -rule },
+        { "Bas", "BOTTOMLEFT", corner, rule, "BOTTOMRIGHT", -24, 0 },
+        { "Gauche", "TOPLEFT", 0, -corner, "BOTTOMLEFT", rule, corner },
+        { "Droite", "TOPRIGHT", -rule, -corner, "BOTTOMRIGHT", 0, 24 } }) do
+        local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
+        piece:SetPoint("TOPLEFT", page.cloth, at[2], at[3], at[4])
+        piece:SetPoint("BOTTOMRIGHT", page.cloth, at[5], at[6], at[7])
+        piece.corner = "Bord%s" .. at[1]
+        page.corners[#page.corners + 1] = piece
     end
     -- The book's frame reaches over the page at the bottom right: its ornament drawn again over the
     -- tapestry, cut from the book's painting (tools/import_wanted_kit.py), at its place in the book.
@@ -3680,8 +3708,20 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         p.seen:SetWidth(p.inner)
         p.seen:SetJustifyH("CENTER")
     else
-        -- The portrait is as tall as the room between the name and the ribbon or the button allows.
+        -- The portrait is as tall as the room between the name and the ribbon or the button allows,
+        -- and gives way to the figures' longest word (owner, 27/11: "1 mem…" in game, larger type).
         local side = math.max(36, math.min(style.face, math.floor(h - floor + top - 4)))
+        local need = 0
+        for _, figure in ipairs(p.figures) do
+            local text, longest = figure.words:GetText() or "", ""
+            for word in text:gmatch("%S+") do if #word > #longest then longest = word end end
+            figure.words:SetText(longest)
+            UI.journalFont(figure.words, "GameFontHighlight", style.label - 1)
+            local numberW = GL.Safe(figure.number.GetStringWidth, figure.number) or 10
+            need = math.max(need, figure.icon:GetWidth() + 8 + numberW + (GL.Safe(figure.words.GetStringWidth, figure.words) or 0) + 2)
+            figure.words:SetText(text)
+        end
+        side = math.max(34, math.min(side, math.floor(p.inner - 7 - need)))
         p.face:ClearAllPoints()
         p.face:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx, top)
         paintPortrait(page, p, enemy, side)
@@ -3757,7 +3797,7 @@ local function paintEnemies(page)
         or GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string") == "Horde" and "Horde" or "Alliance"
     page.previewNote:SetText(preview and L("Aperçu : ennemis d’exemple, rien n’est enregistré") or "")
     page.cloth:SetTexture(WANTED .. "Toile" .. faction)
-    for _, piece in ipairs(page.corners) do piece:SetTexture(WANTED .. "Coin" .. faction .. piece.corner) end
+    for _, piece in ipairs(page.corners) do piece:SetTexture(WANTED .. piece.corner:format(faction)) end
     for _, mark in ipairs(page.marks) do
         mark:SetTexture(WANTED .. "Filigrane" .. faction)
         mark:SetSize(math.floor(mark.side * RATIO["Filigrane" .. faction] + 0.5), mark.side)
@@ -3798,9 +3838,9 @@ local function paintEnemies(page)
         button:SetWidth(math.ceil(GL.Safe(button.caption.GetStringWidth, button.caption) or 100) + 18)
     end
     page.showButton:ClearAllPoints()
-    page.showButton:SetPoint("TOPRIGHT", page, "TOPLEFT", 622, -24)
+    page.showButton:SetPoint("TOPRIGHT", page, "TOPLEFT", 614, -22)
     page.periodButton:ClearAllPoints()
-    page.periodButton:SetPoint("TOPRIGHT", page.showButton, "TOPLEFT", -24, 0)
+    page.periodButton:SetPoint("TOPRIGHT", page.showButton, "TOPLEFT", -26, 0)
     for _, button in ipairs({ page.periodButton, page.showButton }) do
         if sharing then button:Show() else button:Hide() end
     end

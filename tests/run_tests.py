@@ -74,6 +74,7 @@ for name, expected_width, expected_height, transparent in (
     ("AvisRecherche/ToileAlliance.tga", 1024, 512, False), ("AvisRecherche/ToileHorde.tga", 1024, 512, False),
     *((f"AvisRecherche/{name}.tga", w, h, True) for name, w, h in (
         *((f"Coin{faction}{corner}", 128, 128) for faction in ("Alliance", "Horde") for corner in ("HG", "HD", "BG", "BD")),
+        *((f"Bord{faction}{edge}", 64, 64) for faction in ("Alliance", "Horde") for edge in ("Haut", "Bas", "Gauche", "Droite")),
         ("FanionAlliance", 128, 256), ("CadreCoinBD", 128, 128), ("FanionHorde", 128, 256), ("EmblemeAlliance", 128, 128), ("EmblemeHorde", 128, 128),
         ("FiligraneAlliance", 128, 128), ("FiligraneHorde", 128, 128),
         *((f"{paper}{format}{tilt}", 256, 512 if format == "Grande" else 256)
