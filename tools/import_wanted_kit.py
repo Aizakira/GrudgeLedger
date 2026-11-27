@@ -34,11 +34,12 @@ OUT = ROOT / "GrudgeLedger" / "Media" / "AvisRecherche"
 
 # Media name: (kit file, width, height)
 ASSETS = {
-    "FanionAlliance": ("factions/alliance-banner-blank.png", 128, 128),
+    # The owner keeps the classic arms (27/11): the tall banner, the v2 lion, the crest in the cloth.
+    "FanionAlliance": ("v5:factions/alliance-banner-blank.png", 128, 256),
     "FanionHorde": ("factions/horde-banner-blank.png", 128, 256),
-    "EmblemeAlliance": ("factions/alliance-emblem.png", 128, 128),
+    "EmblemeAlliance": ("v2:factions/alliance-emblem.png", 128, 128),
     "EmblemeHorde": ("factions/horde-emblem.png", 128, 128),
-    "FiligraneAlliance": ("factions/alliance-watermark.png", 128, 128),
+    "FiligraneAlliance": ("v5:factions/alliance-watermark.png", 128, 128),
     "FiligraneHorde": ("factions/horde-watermark.png", 128, 128),
     "AfficheGrande1": ("posters/poster-hero-minus-2_5.png", 256, 512),
     "AfficheGrande2": ("posters/poster-hero-plus-2.png", 256, 512),
@@ -118,6 +119,30 @@ def corner(image, part):
     return image
 
 
+# The book's frame ornament at the page's bottom right reaches over the page: the tapestry covers
+# it, so the addon draws it again over the tapestry, cut from the book's painting (960 x 720 units)
+# along the ornament's inner edge, traced by hand (owner, 27/11: the frame stays above).
+FRAME_CORNER = (880, 628, 944, 692)
+FRAME_EDGE = [(944, 628), (937, 632), (935, 641), (932, 651), (928, 660), (922, 667), (914, 673), (904, 678),
+              (894, 683), (888, 685), (880, 686), (880, 692), (944, 692)]
+
+
+def frame_corner():
+    from PIL import ImageDraw, ImageFilter
+    book = Image.open(ROOT / "GrudgeLedger" / "Media" / "JournalReferenceSheetBook.tga").convert("RGBA")
+    sx, sy = book.width / 960, book.height / 720
+    left, top, right, bottom = FRAME_CORNER
+    piece = book.crop((round(left * sx), round(top * sy), round(right * sx), round(bottom * sy))).resize((128, 128), Image.LANCZOS)
+    mask = Image.new("L", (512, 512), 0)
+    k = 512 / (right - left)
+    ImageDraw.Draw(mask).polygon([((x - left) * k, (y - top) * k) for x, y in FRAME_EDGE], fill=255)
+    piece.putalpha(mask.resize((128, 128), Image.LANCZOS).filter(ImageFilter.GaussianBlur(0.6)))
+    for x in (0, 127):
+        for y in (0, 127):
+            piece.putpixel((x, y), (0, 0, 0, 0))
+    return piece
+
+
 def inner_frame(image):
     """The inside of the paper's printed frame: on the paper's middle lines, the last dark row or
     column (the frame's rule) seen from each edge."""
@@ -164,8 +189,12 @@ def main(kit):
     for side, faction in (("alliance", "Alliance"), ("horde", "Horde")):
         cloth = Image.open(kit / f"backgrounds/{side}-cloth.png").convert("RGBA").resize((1024, 512), Image.LANCZOS)
         write_tga(OUT / f"Toile{faction}.tga", lit(cloth))
+    write_tga(OUT / "CadreCoinBD.tga", frame_corner())
     for name, (source, width, height) in ASSETS.items():
-        path = kit.parent / "kit-ennemis-guilde" / source[3:] if source.startswith("v2:") else kit / source
+        path, older = kit / source, source[:1] == "v" and ":" in source
+        if older:
+            version, source = source.split(":", 1)
+            path = kit.parent / ("kit-ennemis-guilde" + ("" if version == "v2" else "-" + version)) / source
         image = clean(Image.open(path).convert("RGBA"))
         if "-corner-" in source:
             image = corner(image, source.rsplit("-", 1)[1][:2])
@@ -175,7 +204,8 @@ def main(kit):
             box = (0, 0) + image.size
         else:
             box = image.getchannel("A").getbbox()
-        entry = manifest.get(source, {})
+        # The marks of this kit's manifest belong to its own drawings, not to an older kit's.
+        entry = {} if older else manifest.get(source, {})
         w, h = box[2] - box[0], box[3] - box[1]
         if entry.get("entry_point_px"):
             x, y = entry["entry_point_px"]

@@ -2960,6 +2960,8 @@ function R.GuildEnemies(period)
                 list[#list + 1] = enemy
             end
             enemy.deaths = enemy.deaths + 1
+            -- A member who saw the killer's identity gives it, even if the first report had none.
+            if not enemy.target and point.target then enemy.target = point.target end
             local victim = point.actor or "?"
             if not enemy.victims[victim] then
                 enemy.victims[victim] = {}
@@ -2981,6 +2983,26 @@ function R.GuildEnemies(period)
         return a.key < b.key
     end)
     return list
+end
+-- An enemy's open bounty or notice, and its gold (owner, 27/11: Avec une prime must show them all).
+-- By the enemy's identity; else by name, for a killer the guild never saw with an identity (the
+-- bounty then gives it, and the poster opens the sheet).
+function R.EnemyBounty(enemy)
+    local B = GL.Bounties
+    if not (B and B.OpenFor) then return nil, 0 end
+    local open = enemy.target and B.OpenFor(enemy.target)
+    if not open and enemy.name and B.List then
+        local name = UI.plain(enemy.name):lower()
+        for _, o in pairs(B.List()) do
+            if (o.state == "open" or o.state == "claimed") and type(o.name) == "string" and o.name:lower() == name
+                and (o.state == "claimed" or GL.Now() <= (o.expires or 0)) then
+                open = o
+                enemy.target = enemy.target or o.target
+                break
+            end
+        end
+    end
+    return open, open and GL.BountyTotal and GL.BountyTotal(open) or 0
 end
 -- The guild's worst threats (owner, 26/11): time and harm together. Each death of a member weighs 1,
 -- halved every three weeks; the same member killed again weighs less (1, 1/2, 1/3…); and each other
@@ -3022,12 +3044,13 @@ local PAPER = { hero = "Grande", medium = "Carree", compact = "Carree" }
 -- Where posters may go on the page (its 664 x 510): under the head, above the foot.
 local BOARD = { left = 6, right = 660, top = -64, bottom = -478 }
 local STYLE = {
-    hero = { title = 32, name = 22, number = 22, label = 14, seen = 15, face = 124, medal = 58, rank = 22, icon = 24 },
-    medium = { title = 20, name = 16, number = 17, label = 12, seen = 12, face = 70, medal = 40, rank = 15, icon = 16 },
-    compact = { title = 16, name = 15, number = 15, label = 11, seen = 11, face = 50, medal = 38, rank = 14, icon = 14 },
+    hero = { title = 32, name = 22, number = 22, label = 14, seen = 15, face = 124, medal = 58, rank = 26, icon = 24 },
+    medium = { title = 20, name = 16, number = 17, label = 12, seen = 12, face = 70, medal = 40, rank = 18, icon = 16 },
+    compact = { title = 16, name = 15, number = 15, label = 11, seen = 11, face = 44, medal = 38, rank = 17, icon = 13 },
 }
 local POSTER_RED, POSTER_INK, POSTER_MUTED = { 0.6, 0.09, 0.06 }, { 0.17, 0.1, 0.05 }, { 0.3, 0.2, 0.11 }
 local CLOTH_IVORY, CLOTH_SOFT, MEDAL_IVORY = { 0.97, 0.92, 0.8 }, { 0.86, 0.8, 0.68 }, { 1, 0.93, 0.74 }
+local RANK_GOLD = { 1, 0.8, 0.4 }
 local STAMP_INK = { 0.36, 0.22, 0.45 }
 -- Capitals for the poster's headings, accents included (string.upper leaves é alone).
 local CAPITALS = { ["à"] = "À", ["â"] = "Â", ["ä"] = "Ä", ["á"] = "Á", ["ã"] = "Ã", ["é"] = "É", ["è"] = "È", ["ê"] = "Ê",
@@ -3130,15 +3153,15 @@ local function medalOf(spot)
     local left = spot.medalSide == "right" and spot.x + spot.w + m * 0.22 - m or spot.x - m * 0.22
     return { left, spot.y + m * 0.2, left + m, spot.y + m * 0.2 - m }
 end
--- A forged nail (v6): about a tenth of its paper's width, its point near the paper's top middle,
+-- A forged nail (v6): about a seventh of its paper's width (owner, 27/11: bigger), its point near the paper's top middle,
 -- where the paper's turn takes it. Returns the nail's rectangle and where its point goes.
 local NAIL = GL.Art.WantedNail
 function R.NailOf(spot)
     local a = math.rad(spot.turn or 0)
-    local d = spot.h / 2 - math.max(10, spot.h * 0.095)
+    local d = spot.h / 2 - math.max(9, spot.h * 0.075)
     local px = spot.x + spot.w / 2 + spot.pinX + math.sin(a) * d
     local py = spot.y - (spot.h / 2 - math.cos(a) * d)
-    local nh = math.floor(spot.w * 0.1 + 0.5)
+    local nh = math.floor(spot.w * 0.14 + 0.5)
     local nw = math.floor(nh * RATIO[spot.pin] + 0.5)
     local left, top = px - NAIL[spot.pin][1] * nw, py + NAIL[spot.pin][2] * nh
     return { left, top, left + nw, top - nh }, px, py
@@ -3227,11 +3250,10 @@ local function buildPoster(page, index)
     p.pin = wantedTexture(p.badge, "OVERLAY", 3)
     p.medal = wantedTexture(p.badge, "OVERLAY", 2, kind == "hero" and "MedaillonUn" or "Medaillon")
     p.medal:SetSize(style.medal, style.medal)
-    p.rank = Panels.Text(p.badge, 0, 0, style.medal, style.rank, true, MEDAL_IVORY)
-    p.rank:ClearAllPoints()
-    p.rank:SetPoint("CENTER", p.medal, "CENTER", 0, 1)
-    p.rank:SetJustifyH("CENTER")
+    p.rank = Panels.Text(p.badge, 0, 0, style.medal, style.rank, true, RANK_GOLD)
     p.rank:SetDrawLayer("OVERLAY", 7)
+    p.rankHash = Panels.Text(p.badge, 0, 0, 20, math.floor(style.rank * 0.62 + 0.5), true, RANK_GOLD)
+    p.rankHash:SetDrawLayer("OVERLAY", 7)
     p.title = Panels.Text(p, 0, 0, 100, style.title, true, POSTER_RED)
     p.title:SetJustifyH("CENTER")
     if kind == "hero" then
@@ -3329,6 +3351,8 @@ local function placePoster(page, p, spot)
     local zh = h - p.top - p.bottom
     local ix, iy = math.ceil(zh * math.abs(s) / 4), math.ceil(p.inner * math.abs(s) / 4)
     p.mx, p.inner, p.top, p.bottom = p.mx + ix, p.inner - 2 * ix, p.top + iy, p.bottom + iy
+    -- The heading starts under the nail's point.
+    p.top = math.max(p.top, math.floor(math.max(9, h * 0.075) + 8))
     p.cx = math.floor(p.mx + p.inner / 2 - w / 2 + 0.5)
     p.pin:SetTexture(WANTED .. spot.pin)
     local nail = R.NailOf(spot)
@@ -3422,13 +3446,18 @@ local function buildEnemies(host)
     page.cloth:SetPoint("BOTTOMRIGHT", 35, -12)
     -- Four small flourishes in the corners, against the book's rules.
     page.corners = {}
-    for i, corner in ipairs({ { "TOPLEFT", "HG" }, { "TOPRIGHT", "HD" }, { "BOTTOMLEFT", "BG" }, { "BOTTOMRIGHT", "BD" } }) do
+    for i, corner in ipairs({ { "TOPLEFT", "HG" }, { "TOPRIGHT", "HD" }, { "BOTTOMLEFT", "BG" } }) do
         local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
         piece:SetSize(58, 58)
         piece:SetPoint(corner[1], page.cloth, corner[1], 0, 0)
         piece.corner = corner[2]
         page.corners[i] = piece
     end
+    -- The book's frame reaches over the page at the bottom right: its ornament drawn again over the
+    -- tapestry, cut from the book's painting (tools/import_wanted_kit.py), at its place in the book.
+    page.frameCorner = wantedTexture(page, "BACKGROUND", 2, "CadreCoinBD")
+    page.frameCorner:SetSize(64, 64)
+    page.frameCorner:SetPoint("TOPLEFT", page, "TOPLEFT", 640, -466)
     -- The faction's arms woven into the cloth, faint, at the right where the posters leave room.
     page.marks = {}
     for i, at in ipairs({ { 618, -150, 78 }, { 626, -400, 66 } }) do
@@ -3441,13 +3470,13 @@ local function buildEnemies(host)
     page.banner = page:CreateTexture(nil, "ARTWORK")
     page.banner:SetPoint("TOPLEFT", 4, 14)
     page.emblem = page:CreateTexture(nil, "OVERLAY")
-    page.title = Panels.Text(page, 88, -16, 248, 28, true, CLOTH_IVORY)
+    page.title = Panels.Text(page, 88, -17, 226, 26, true, CLOTH_IVORY)
     page.period, page.show, page.offset = 1, 1, 0
-    page.periodButton = chooser(page, 340, 146, ENEMY_PERIODS, function() return page.period end, function(i)
+    page.periodButton = chooser(page, 318, 156, ENEMY_PERIODS, function() return page.period end, function(i)
         page.period, page.offset = i, 0
         R.Refresh()
     end)
-    page.showButton = chooser(page, 492, 148, POSTER_FILTERS, function() return page.show end, function(i)
+    page.showButton = chooser(page, 480, 160, POSTER_FILTERS, function() return page.show end, function(i)
         page.show, page.offset = i, 0
         R.Refresh()
     end)
@@ -3514,8 +3543,24 @@ end
 local function paintPoster(page, p, enemy, rank, spot, open, gold)
     placePoster(page, p, spot)
     local style, h = p.style, spot.h
-    p.rank:SetText("#" .. rank)
-    shadowed(p.rank, 0.9)
+    -- The rank's number in gold and the small # before it, the two centred together in the medal.
+    p.rank:SetText(tostring(rank))
+    p.rankHash:SetText("#")
+    UI.journalFont(p.rank, "GameFontNormalLarge", style.rank)
+    UI.journalFont(p.rankHash, "GameFontNormalLarge", math.floor(style.rank * 0.62 + 0.5))
+    shadowed(p.rank, 0.95)
+    shadowed(p.rankHash, 0.95)
+    local numberW = math.ceil(GL.Safe(p.rank.GetStringWidth, p.rank) or style.rank * 0.6)
+    local hashW = math.ceil(GL.Safe(p.rankHash.GetStringWidth, p.rankHash) or style.rank * 0.4)
+    p.rank:SetWidth(numberW + 2)
+    p.rankHash:SetWidth(hashW + 2)
+    p.rank:SetJustifyH("LEFT")
+    p.rankHash:SetJustifyH("LEFT")
+    local start = -math.floor((numberW + hashW + 1) / 2 + 0.5)
+    p.rankHash:ClearAllPoints()
+    p.rankHash:SetPoint("LEFT", p.medal, "CENTER", start, math.floor(style.rank * 0.12 + 0.5))
+    p.rank:ClearAllPoints()
+    p.rank:SetPoint("LEFT", p.medal, "CENTER", start + hashW + 1, 1)
     fit(p.title, capitals(L("Recherché")), p.inner + 8, style.title, 10, true, 0.35)
     if p.label then
         if rank == 1 then
@@ -3634,7 +3679,7 @@ local function paintEnemies(page)
     else
         page.emblem:SetPoint("CENTER", page.banner, "TOP", 0, -46)
     end
-    fit(page.title, L("Ennemis de la guilde"), 248, 28, 18, true, 0.85)
+    fit(page.title, L("Ennemis de la guilde"), 226, 26, 18, true, 0.85)
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
     local list = sharing and R.GuildEnemies(ENEMY_PERIODS[page.period][1]) or {}
@@ -3642,15 +3687,14 @@ local function paintEnemies(page)
     if show ~= "all" then
         local kept = {}
         for _, enemy in ipairs(list) do
-            local open = enemy.target and GL.Bounties and GL.Bounties.OpenFor and GL.Bounties.OpenFor(enemy.target)
-            local gold = open and GL.BountyTotal and GL.BountyTotal(open) or 0
+            local _, gold = R.EnemyBounty(enemy)
             if (show == "bounty") == (gold > 0) then kept[#kept + 1] = enemy end
         end
         list = kept
     end
     -- A choice is never cut: its letters get smaller until it fits.
     for button, text in pairs({ [page.periodButton] = L(ENEMY_PERIODS[page.period][2]), [page.showButton] = L(POSTER_FILTERS[page.show][2]) }) do
-        local caption, size = button.caption, 14
+        local caption, size = button.caption, 15
         button:SetText(text)
         UI.journalFont(caption, "GameFontHighlightSmall", size)
         while size > 9 and (GL.Safe(caption.GetStringWidth, caption) or 0) > button:GetWidth() - 36 do
@@ -3667,8 +3711,7 @@ local function paintEnemies(page)
     for i = 1, ENEMY_ROWS do
         local enemy = list[page.offset + i]
         if not enemy then break end
-        local open = enemy.target and GL.Bounties and GL.Bounties.OpenFor and GL.Bounties.OpenFor(enemy.target)
-        local gold = open and GL.BountyTotal and GL.BountyTotal(open) or 0
+        local open, gold = R.EnemyBounty(enemy)
         shown[i] = { key = enemy.key, enemy = enemy, open = open, gold = gold, bounty = gold > 0 }
     end
     page.spots = R.PosterLayout(shown)

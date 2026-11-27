@@ -39,8 +39,8 @@ GL.Art = {
     Wanted = media .. "AvisRecherche\\",
 }
 GL.Art.WantedRatio = {
-    FanionAlliance = 1.204, FanionHorde = 0.844, EmblemeAlliance = 1.207, EmblemeHorde = 0.641,
-    FiligraneAlliance = 1.207, FiligraneHorde = 0.641,
+    FanionAlliance = 0.753, FanionHorde = 0.844, EmblemeAlliance = 0.754, EmblemeHorde = 0.641,
+    FiligraneAlliance = 0.76, FiligraneHorde = 0.641,
     AfficheGrande1 = 0.665, AfficheGrande2 = 0.695, AfficheCarree1 = 0.982, AfficheCarree2 = 0.96,
     PrimeGrande1 = 0.667, PrimeGrande2 = 0.706, PrimeCarree1 = 0.991, PrimeCarree2 = 0.963,
     CadrePortrait = 1.006, Medaillon = 0.989, MedaillonUn = 0.975, Bandeau = 5.066, SceauPrime = 0.989, Tampon = 4.094,
@@ -48,9 +48,10 @@ GL.Art.WantedRatio = {
     ClouFace = 0.725, ClouGauche = 1.011, ClouDroite = 0.73, Chevron = 1.667,
 }
 -- The forged nails (v6) are drawn in perspective: where the point enters the paper, in fractions of
--- the drawing from its top left. The Alliance banner gives its lion's place (left, top, right, bottom).
+-- the drawing from its top left. A banner may give its arms' place (left, top, right, bottom): the
+-- classic ones (owner, 27/11) are centred instead.
 GL.Art.WantedNail = { ClouFace = { 0.659, 0.933 }, ClouGauche = { 0.869, 0.971 }, ClouDroite = { 0.108, 0.921 } }
-GL.Art.WantedEmblem = { Alliance = { 0.165, 0.173, 0.833, 0.84 } }
+GL.Art.WantedEmblem = {}
 -- Where the posters' papers take writing (v5, 27/11): margins left, top, right, bottom in fractions of
 -- the drawing, inside its printed frame (tools/import_wanted_kit.py prints them). 1 and 2 are the two
 -- tilts drawn in the paper; the text itself stands straight.

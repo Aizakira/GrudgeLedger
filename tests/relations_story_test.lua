@@ -515,11 +515,24 @@ do
     assert(enemies.showButton:GetText() == "Toutes les affiches")
     -- Wanted posters (owner's kit, 27/11): the first on the tall one, every figure as text.
     local hero = enemies.posters[1]
-    assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "#1" and hero.title:GetText() == "RECHERCHÉ" and not enemies.posters[2]:IsShown())
+    assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "1" and hero.rankHash:GetText() == "#" and hero.title:GetText() == "RECHERCHÉ" and not enemies.posters[2]:IsShown())
     assert(hero.labelText:GetText() == "ENNEMI PUBLIC N°1" and hero.figures[1].number:GetText() == "2" and hero.figures[1].words:GetText() == "membres distincts tués")
     assert(hero.figures[2].number:GetText() == "4" and hero.figures[2].words:GetText() == "morts infligées" and hero.seen:GetText() == "Vu il y a 1 h")
     assert(hero.where == "Feralas" and hero.kills == "vaincu 4 fois par la guilde")
     assert(not hero.seal:IsShown() and not hero.stamp:IsShown() and not hero.ribbon:IsShown())
+    -- A killer the guild never saw with an identity keeps the bounty posted on their name (owner, 27/11:
+    -- Avec une prime shows them all), and takes the bounty's identity to open the sheet.
+    local savedBounties, savedTotal = GL.Bounties, GL.BountyTotal
+    GL.Bounties = { OpenFor = function() return nil end, List = function()
+        return { a = { state = "open", name = "Lone Killer", target = "Player-1-0000AAAA", expires = GL.Now() + 100 },
+            b = { state = "open", name = "Other", target = "Player-1-0000BBBB", expires = GL.Now() + 100 } }
+    end }
+    GL.BountyTotal = function() return 5000 end
+    local stranger = { name = "Lone Killer" }
+    local open, gold = R.EnemyBounty(stranger)
+    assert(open and open.target == "Player-1-0000AAAA" and gold == 5000 and stranger.target == "Player-1-0000AAAA")
+    assert(R.EnemyBounty({ name = "Nobody" }) == nil)
+    GL.Bounties, GL.BountyTotal = savedBounties, savedTotal
     -- The posters' layout (owner, 27/11): drawn from who is on the page, the same while they stay,
     -- another when one arrives; never over another's writing, never off the board.
     local function items(n, bountyAt)
