@@ -3022,9 +3022,9 @@ local PAPER = { hero = "Grande", medium = "Carree", compact = "Carree" }
 -- Where posters may go on the page (its 664 x 510): under the head, above the foot.
 local BOARD = { left = 6, right = 660, top = -64, bottom = -478 }
 local STYLE = {
-    hero = { title = 32, name = 22, number = 22, label = 14, seen = 15, face = 124, medal = 64, rank = 25, icon = 24 },
-    medium = { title = 20, name = 16, number = 17, label = 12, seen = 12, face = 70, medal = 44, rank = 17, icon = 16 },
-    compact = { title = 16, name = 15, number = 15, label = 11, seen = 11, face = 50, medal = 40, rank = 15, icon = 14 },
+    hero = { title = 32, name = 22, number = 22, label = 14, seen = 15, face = 124, medal = 58, rank = 22, icon = 24 },
+    medium = { title = 20, name = 16, number = 17, label = 12, seen = 12, face = 70, medal = 40, rank = 15, icon = 16 },
+    compact = { title = 16, name = 15, number = 15, label = 11, seen = 11, face = 50, medal = 38, rank = 14, icon = 14 },
 }
 local POSTER_RED, POSTER_INK, POSTER_MUTED = { 0.6, 0.09, 0.06 }, { 0.17, 0.1, 0.05 }, { 0.3, 0.2, 0.11 }
 local CLOTH_IVORY, CLOTH_SOFT, MEDAL_IVORY = { 0.97, 0.92, 0.8 }, { 0.86, 0.8, 0.68 }, { 1, 0.93, 0.74 }
@@ -3130,10 +3130,20 @@ local function medalOf(spot)
     local left = spot.medalSide == "right" and spot.x + spot.w + m * 0.22 - m or spot.x - m * 0.22
     return { left, spot.y + m * 0.2, left + m, spot.y + m * 0.2 - m }
 end
-local function pinOf(spot)
-    local side, x = math.floor(STYLE[spot.kind].medal * 0.3), spot.x + spot.w / 2 + spot.pinX
-    return { x - side / 2, spot.y - 5 + side / 2, x + side / 2, spot.y - 5 - side / 2 }
+-- A forged nail (v6): about a tenth of its paper's width, its point near the paper's top middle,
+-- where the paper's turn takes it. Returns the nail's rectangle and where its point goes.
+local NAIL = GL.Art.WantedNail
+function R.NailOf(spot)
+    local a = math.rad(spot.turn or 0)
+    local d = spot.h / 2 - math.max(10, spot.h * 0.095)
+    local px = spot.x + spot.w / 2 + spot.pinX + math.sin(a) * d
+    local py = spot.y - (spot.h / 2 - math.cos(a) * d)
+    local nh = math.floor(spot.w * 0.1 + 0.5)
+    local nw = math.floor(nh * RATIO[spot.pin] + 0.5)
+    local left, top = px - NAIL[spot.pin][1] * nw, py + NAIL[spot.pin][2] * nh
+    return { left, top, left + nw, top - nh }, px, py
 end
+local pinOf = R.NailOf
 -- Rectangles as { left, top, right, bottom }, the page's y going down (negative).
 local function crosses(a, b) return a[1] < b[3] and b[1] < a[3] and a[4] < b[2] and b[4] < a[2] end
 local function readable(spots)
@@ -3160,7 +3170,9 @@ local function arrange(items, roll, nudge)
         local size = SIZES[i]
         local paper = (item.bounty and "Prime" or "Affiche") .. PAPER[size.kind] .. (roll(2) + 1)
         local spot = { kind = size.kind, h = size.h, paper = paper, level = 20 * (ENEMY_ROWS + 1 - i),
-            pin = "ClouLaiton", medalSide = "left" }
+            medalSide = "left" }
+        local nail = roll(4)
+        spot.pin = nail < 2 and "ClouFace" or nail == 2 and "ClouGauche" or "ClouDroite"
         -- The paper turns further the way it is drawn tilted: 2.5 to 4 degrees more.
         spot.turn = (paper:sub(-1) == "1" and -1 or 1) * (2.5 + roll(4) * 0.5) * (nudge > 0 and 1 or 0.8)
         spot.w = math.floor(size.h * RATIO[paper] + 0.5)
@@ -3212,8 +3224,7 @@ local function buildPoster(page, index)
     p.badge = CreateFrame("Frame", nil, p)
     p.badge:SetAllPoints()
     GL.Safe(p.badge.SetFrameLevel, p.badge, (GL.Safe(page.GetFrameLevel, page) or 1) + 130)
-    p.pin = wantedTexture(p.badge, "OVERLAY", 3, "ClouLaiton")
-    p.pin:SetSize(math.floor(style.medal * 0.3), math.floor(style.medal * 0.3))
+    p.pin = wantedTexture(p.badge, "OVERLAY", 3)
     p.medal = wantedTexture(p.badge, "OVERLAY", 2, kind == "hero" and "MedaillonUn" or "Medaillon")
     p.medal:SetSize(style.medal, style.medal)
     p.rank = Panels.Text(p.badge, 0, 0, style.medal, style.rank, true, MEDAL_IVORY)
@@ -3320,8 +3331,10 @@ local function placePoster(page, p, spot)
     p.mx, p.inner, p.top, p.bottom = p.mx + ix, p.inner - 2 * ix, p.top + iy, p.bottom + iy
     p.cx = math.floor(p.mx + p.inner / 2 - w / 2 + 0.5)
     p.pin:SetTexture(WANTED .. spot.pin)
+    local nail = R.NailOf(spot)
+    p.pin:SetSize(nail[3] - nail[1], nail[2] - nail[4])
     p.pin:ClearAllPoints()
-    p.pin:SetPoint("CENTER", p, "TOP", spot.pinX, -5)
+    p.pin:SetPoint("TOPLEFT", p, "TOPLEFT", nail[1] - spot.x, nail[2] - spot.y)
     local m = style.medal
     p.medal:ClearAllPoints()
     if spot.medalSide == "right" then p.medal:SetPoint("TOPRIGHT", p, "TOPRIGHT", math.floor(m * 0.22), math.floor(m * 0.2))
@@ -3607,12 +3620,20 @@ local function paintEnemies(page)
         mark:SetSize(math.floor(mark.side * RATIO["Filigrane" .. faction] + 0.5), mark.side)
     end
     page.banner:SetTexture(WANTED .. "Fanion" .. faction)
-    page.banner:SetSize(math.floor(100 * RATIO["Fanion" .. faction] + 0.5), 100)
+    local place = GL.Art.WantedEmblem[faction]
+    if place then page.banner:SetSize(78, math.floor(78 / RATIO["Fanion" .. faction] + 0.5))
+    else page.banner:SetSize(math.floor(100 * RATIO["Fanion" .. faction] + 0.5), 100) end
     local emblemW = math.floor(page.banner:GetWidth() * 0.7 + 0.5)
     page.emblem:SetTexture(WANTED .. "Embleme" .. faction)
     page.emblem:SetSize(emblemW, math.floor(emblemW / RATIO["Embleme" .. faction] + 0.5))
     page.emblem:ClearAllPoints()
-    page.emblem:SetPoint("CENTER", page.banner, "TOP", 0, -46)
+    if place then
+        local bw, bh = page.banner:GetWidth(), page.banner:GetHeight()
+        page.emblem:SetSize(math.floor((place[3] - place[1]) * bw + 0.5), math.floor((place[4] - place[2]) * bh + 0.5))
+        page.emblem:SetPoint("TOPLEFT", page.banner, "TOPLEFT", math.floor(place[1] * bw + 0.5), -math.floor(place[2] * bh + 0.5))
+    else
+        page.emblem:SetPoint("CENTER", page.banner, "TOP", 0, -46)
+    end
     fit(page.title, L("Ennemis de la guilde"), 248, 28, 18, true, 0.85)
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end

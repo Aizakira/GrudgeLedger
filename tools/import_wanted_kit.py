@@ -1,6 +1,6 @@
-"""Imports the owner's wanted-poster kit for Ennemis de la guilde (v5, 27/11).
+"""Imports the owner's wanted-poster kit for Ennemis de la guilde (v6, 27/11).
 
-Usage: python tools/import_wanted_kit.py PATH_TO/kit-ennemis-guilde-v5
+Usage: python tools/import_wanted_kit.py PATH_TO/kit-ennemis-guilde-v6
 
 Each PNG is cropped to what can be seen (alpha > 8), given two clear pixels around it, then resized
 to a power-of-two texture. The game stretches a texture to its region: the addon draws each piece at
@@ -15,6 +15,10 @@ The papers carry their tilt in the drawing. For each, the text zone is read from
 given as fractions of the cropped drawing (left, top, right, bottom margins), with the foot: the
 margin under the lowest opaque row across the paper's middle, where the ribbon and the button sit.
 Both go to Art.lua as GL.Art.WantedText.
+
+The forged nails (v6) are drawn in perspective, their point entering the paper off the canvas's
+centre: GL.Art.WantedNail gives that point in fractions of the cropped drawing. The Alliance banner
+gives the lion's place on it (GL.Art.WantedEmblem, fractions of the cropped banner).
 Writes GrudgeLedger/Media/AvisRecherche/*.tga.
 """
 import json
@@ -30,10 +34,9 @@ OUT = ROOT / "GrudgeLedger" / "Media" / "AvisRecherche"
 
 # Media name: (kit file, width, height)
 ASSETS = {
-    "FanionAlliance": ("factions/alliance-banner-blank.png", 128, 256),
+    "FanionAlliance": ("factions/alliance-banner-blank.png", 128, 128),
     "FanionHorde": ("factions/horde-banner-blank.png", 128, 256),
-    # The owner prefers the v2 lion on the banner (27/11): gold and flat, it reads at that size.
-    "EmblemeAlliance": ("v2:factions/alliance-emblem.png", 128, 128),
+    "EmblemeAlliance": ("factions/alliance-emblem.png", 128, 128),
     "EmblemeHorde": ("factions/horde-emblem.png", 128, 128),
     "FiligraneAlliance": ("factions/alliance-watermark.png", 128, 128),
     "FiligraneHorde": ("factions/horde-watermark.png", 128, 128),
@@ -56,8 +59,9 @@ ASSETS = {
     "SeparateurOr": ("details/divider-gold.png", 256, 16),
     "IconeMembres": ("details/icon-members.png", 64, 64),
     "IconeCrane": ("details/icon-skull.png", 64, 64),
-    "ClouLaiton": ("details/pin-brass.png", 64, 64),
-    "ClouFer": ("details/pin-iron.png", 64, 64),
+    "ClouFace": ("details/nail-forged-front.png", 64, 64),
+    "ClouGauche": ("details/nail-forged-left.png", 64, 64),
+    "ClouDroite": ("details/nail-forged-right.png", 64, 64),
     "Chevron": ("details/dropdown-chevron.png", 32, 16),
 }
 # The tapestry's corners, drawn one by one at the page's corners (the book draws the straight rules).
@@ -156,7 +160,7 @@ def main(kit):
     OUT.mkdir(parents=True, exist_ok=True)
     kit = Path(kit)
     manifest = {a["file"]: a for a in json.loads((kit / "manifest.json").read_text(encoding="utf-8"))["assets"]}
-    ratios, zones = {}, {}
+    ratios, zones, marks = {}, {}, {}
     for side, faction in (("alliance", "Alliance"), ("horde", "Horde")):
         cloth = Image.open(kit / f"backgrounds/{side}-cloth.png").convert("RGBA").resize((1024, 512), Image.LANCZOS)
         write_tga(OUT / f"Toile{faction}.tga", lit(cloth))
@@ -171,6 +175,15 @@ def main(kit):
             box = (0, 0) + image.size
         else:
             box = image.getchannel("A").getbbox()
+        entry = manifest.get(source, {})
+        w, h = box[2] - box[0], box[3] - box[1]
+        if entry.get("entry_point_px"):
+            x, y = entry["entry_point_px"]
+            marks[name] = (round((x - box[0]) / w, 3), round((y - box[1]) / h, 3))
+        if entry.get("emblem_rect_px"):
+            left, top, right, bottom = entry["emblem_rect_px"]
+            marks[name] = (round((left - box[0]) / w, 3), round((top - box[1]) / h, 3),
+                           round((right - box[0]) / w, 3), round((bottom - box[1]) / h, 3))
         image = image.crop(box)
         ratios[name] = round(image.width / image.height, 3)
         write_tga(OUT / (name + ".tga"), fitted(image, width, height))
@@ -182,6 +195,9 @@ def main(kit):
     for name, zone in zones.items():
         print(f"    {name} = {{ {', '.join(str(v) for v in zone)} }},")
     print("}")
+    print("-- Nails: where the point enters the paper; banner: the lion's place (left, top, right, bottom)")
+    for name, mark in marks.items():
+        print(f"    {name} = {{ {', '.join(str(v) for v in mark)} }},")
 
 
 if __name__ == "__main__":

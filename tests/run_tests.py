@@ -74,14 +74,14 @@ for name, expected_width, expected_height, transparent in (
     ("AvisRecherche/ToileAlliance.tga", 1024, 512, False), ("AvisRecherche/ToileHorde.tga", 1024, 512, False),
     *((f"AvisRecherche/{name}.tga", w, h, True) for name, w, h in (
         *((f"Coin{faction}{corner}", 128, 128) for faction in ("Alliance", "Horde") for corner in ("HG", "HD", "BG", "BD")),
-        ("FanionAlliance", 128, 256), ("FanionHorde", 128, 256), ("EmblemeAlliance", 128, 128), ("EmblemeHorde", 128, 128),
+        ("FanionAlliance", 128, 128), ("FanionHorde", 128, 256), ("EmblemeAlliance", 128, 128), ("EmblemeHorde", 128, 128),
         ("FiligraneAlliance", 128, 128), ("FiligraneHorde", 128, 128),
         *((f"{paper}{format}{tilt}", 256, 512 if format == "Grande" else 256)
           for paper in ("Affiche", "Prime") for format in ("Grande", "Carree") for tilt in (1, 2)),
         ("CadrePortrait", 128, 128), ("Medaillon", 128, 128), ("MedaillonUn", 128, 128), ("Chevron", 32, 16),
         ("Bandeau", 256, 64), ("SceauPrime", 64, 64),
         ("Tampon", 256, 64), ("Cartouche", 256, 32), ("SeparateurEncre", 256, 16), ("SeparateurOr", 256, 16),
-        ("IconeMembres", 64, 64), ("IconeCrane", 64, 64), ("ClouLaiton", 64, 64), ("ClouFer", 64, 64))),
+        ("IconeMembres", 64, 64), ("IconeCrane", 64, 64), ("ClouFace", 64, 64), ("ClouGauche", 64, 64), ("ClouDroite", 64, 64))),
 ):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")

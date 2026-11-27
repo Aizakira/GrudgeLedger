@@ -283,6 +283,16 @@ def render(name, frames, root):
             if coords and len(coords) == 4:
                 left, right, top, bottom = coords
                 tex = tex.crop((round(left*tex.width), round(top*tex.height), round(right*tex.width), round(bottom*tex.height)))
+            elif coords and len(coords) == 8 and any(abs(v * 64 - round(v * 64)) > 1e-6 for v in coords):
+                # Any other turn (the posters' papers, 27/11): each pixel of the region shows the point of
+                # the texture its corners' coordinates give, like the game; outside the texture, clear
+                # (the game stretches the texture's clear edge there).
+                ul, ll, ur = coords[0:2], coords[2:4], coords[4:6]
+                W, H = max(1, round(w)), max(1, round(h))
+                tw, th = tex.width, tex.height
+                data = ((ur[0] - ul[0]) * tw / W, (ll[0] - ul[0]) * tw / H, ul[0] * tw,
+                        (ur[1] - ul[1]) * th / W, (ll[1] - ul[1]) * th / H, ul[1] * th)
+                tex = tex.transform((W, H), Image.Transform.AFFINE, data, resample=Image.Resampling.BICUBIC)
             elif coords and len(coords) == 8:
                 # UL, LL, UR, LR corners: quarter turns and mirrors of an atlas cell (book stains).
                 xs, ys = coords[0::2], coords[1::2]
