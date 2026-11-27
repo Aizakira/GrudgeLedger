@@ -3205,9 +3205,10 @@ local function hashOf(text)
 end
 local function lot(seed)
     local s = seed % 2147483646 + 1
+    -- The draw's high part decides (its low digits repeat in short cycles).
     return function(n)
         s = s * 16807 % 2147483647
-        return s % n
+        return math.floor(s / 2147483647 * n)
     end
 end
 local function zoneOf(spot)
@@ -3289,7 +3290,9 @@ local function arrange(items, roll, nudge)
         else
             local column, row = spot.corner[1], spot.corner[2]
             local dx = roll(17) * nudge
-            local dy = roll(math.max(14, math.floor(math.max(0, spare[column]) / 2) + 14)) * nudge
+            -- A nudge up or down only where the column has room to spare: a poster pushed into the
+            -- one above would put its nail on that one's writing.
+            local dy = roll(math.max(3, math.floor(math.max(0, spare[column]) / 2) + 3)) * nudge
             spot.x = column == 0 and left + dx or BOARD.right - spot.w - dx
             spot.y = row == 0 and BOARD.top - dy or BOARD.bottom + spot.h + dy
             spot.medalSide = column == 1 and "right" or "left"
@@ -3799,7 +3802,13 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     p.target, p.enemy = enemy.target, enemy.name
     p.bountyTarget = open and not enemy.preview and enemy.target or nil
     if p.bountyTarget then p.prizeHit:Show() else p.prizeHit:Hide() end
-    R.TiltPoster(p, spot.turn)
+    -- The game places what was just anchored when it draws the next image: the writing turns then,
+    -- unless the poster was painted again meanwhile (owner, 28/11: it never turned in game).
+    p.tiltToken = (p.tiltToken or 0) + 1
+    local token = p.tiltToken
+    if not R.TiltPoster(p, spot.turn) and C_Timer and C_Timer.After then
+        C_Timer.After(0, function() if p.tiltToken == token then R.TiltPoster(p, spot.turn) end end)
+    end
     p.canWant = enemy.target and enemy.name and not open and not enemy.preview and true or nil
     p:Show()
 end
@@ -3860,9 +3869,9 @@ end
 -- turned by it. Positions are read once, all of them, before anything moves (some hang on others).
 -- Without the game's layout (the test fixtures give every region the same centre), nothing moves.
 function R.TiltPoster(p, degrees)
-    if not degrees or degrees == 0 or not (p.title and p.title.SetRotation) then return end
+    if not degrees or degrees == 0 or not (p.title and p.title.SetRotation) then return true end
     local cx, cy = GL.Safe(p.GetCenter, p)
-    if type(cx) ~= "number" or type(cy) ~= "number" then return end
+    if type(cx) ~= "number" or type(cy) ~= "number" then return false end
     local regions, places, distinct = R.PosterRegions(p), {}, false
     regions[#regions + 1] = p.face
     for i, region in ipairs(regions) do
@@ -3872,7 +3881,7 @@ function R.TiltPoster(p, degrees)
             distinct = distinct or math.abs(x - cx) > 0.5 or math.abs(y - cy) > 0.5
         end
     end
-    if not distinct then return end
+    if not distinct then return false end
     local a = math.rad(degrees)
     local c, s = math.cos(a), math.sin(a)
     -- The portrait's frame and picture turn on the portrait's own centre (they cover it).
@@ -3890,6 +3899,7 @@ function R.TiltPoster(p, degrees)
             if region ~= p.face then GL.Safe(region.SetRotation, region, -a) end
         end
     end
+    return true
 end
 local function paintEnemies(page)
     local preview = R.preview
