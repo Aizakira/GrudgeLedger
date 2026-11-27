@@ -20,7 +20,7 @@ for filename, digest in {
     # The posters' display fonts (owner, 27/11), upstream google/fonts, with their OFL.
     "NewRocker-Regular.ttf": "28a499ce5b8bcf0652f8b2e25135183eaddf0c3c8c3e251259b075c71d1ef14c",
     "CinzelDecorative-Bold.ttf": "e854e68a388aa50d742a4415c1ae5c17a617ef7956c95a70021d0a4a44f20518",
-    "OFL-NewRocker.txt": "942d51cf079299e83e9dd7a9a37eb92260524e8d1d576b2f0b3f7ca207c53f8e",
+    "OFL-NewRocker.txt": "3b9f1bbe33dc7c6f93cf5e010b3de066efb635c0c7f34281790e7c9f61207b43",
     "OFL-CinzelDecorative.txt": "1e5d6660366ddcfca4f2fc10e2acfba9fa4d97d40aec80d7dbfd41d730a420ae",
 }.items():
     assert sha256((font_dir / filename).read_bytes()).hexdigest() == digest, filename
