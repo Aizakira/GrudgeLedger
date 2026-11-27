@@ -478,10 +478,22 @@ local function unresolvedAttack(f)
     return f.pve or (f.unknownPets and next(f.unknownPets))
 end
 
--- A monster blocks the health guess only while it is on you (owner, 27/11): a player who jumps
--- you after the mob you were fighting is still an aggressor.
+-- A monster on you excuses nobody (owner, 27/11): a player who hits you meanwhile still attacks you.
+-- Only a pet whose owner is unseen leaves the blow unexplained.
 local function aggressionBlocked(f)
-    return (f.pveAt and GL.Now() - f.pveAt <= 3) or (f.unknownPets and next(f.unknownPets))
+    return f.unknownPets and next(f.unknownPets)
+end
+
+-- No one visibly targets you (an ambush, a hidden target): the only hostile player in combat seen
+-- around you in the last two seconds is the attacker (owner, 27/11), unless a monster is on you.
+local function loneAttacker(f)
+    local now = GL.Now()
+    if (f.pveAt and now - f.pveAt <= 3) or aggressionBlocked(f) then return nil end
+    local found, count = nil, 0
+    for key, seen in pairs(f.nearby or {}) do
+        if now - seen.at <= 2 then count, found = count + 1, { [key] = seen.identity } end
+    end
+    return count == 1 and found or nil
 end
 
 local function observeHealth()
@@ -501,11 +513,16 @@ local function observeHealth()
     f.woundAt = nil
     if hurt and not f.damageLogged then
         if not f.opening then f.idleOpponents = nil end
-        local candidates = recentAttackers(f, 2)
-        if aggressionBlocked(f) then
-            for _, identity in pairs(candidates) do GL.Trace("monster", identity) end
-        elseif next(candidates) and not f.pendingAggression then
-            f.pendingAggression = { candidates = candidates, at = now }
+        local candidates, lone = recentAttackers(f, 2), nil
+        if not next(candidates) then
+            candidates = loneAttacker(f)
+            lone = candidates ~= nil
+        end
+        if aggressionBlocked(f) or not candidates then
+            -- Say why nothing was written, so a missed ambush can be explained.
+            if not aggressionBlocked(f) and not (f.pveAt and now - f.pveAt <= 3) then GL.Trace("unseen") end
+        elseif not f.pendingAggression then
+            f.pendingAggression = { candidates = candidates, at = now, lone = lone }
         end
     end
     f.health, f.maxHealth, f.healthAt = health, maximum, now
@@ -554,9 +571,12 @@ local function tryAggression()
     if age < 1 then return end -- give explicit combat-log evidence priority
     f.pendingAggression = nil
     if age <= 3 and not aggressionBlocked(f) and not f.damageLogged then
-        local candidates = recentAttackers(f, 2)
+        local candidates = pending.lone and pending.candidates or recentAttackers(f, 2)
         for key, identity in pairs(pending.candidates) do
-            if candidates[key] then
+            if pending.lone then
+                recordAggression(f, identity, "confirmed",
+                    "Baisse de santé alors que ce joueur hostile était le seul adversaire en combat autour de vous ; source non confirmée.")
+            elseif candidates[key] then
                 local pet = f.petAttackers and f.petAttackers[key]
                 local evidence = pet and GL.Now() - pet.at <= 2 and "Votre santé a baissé pendant que le familier de ce joueur vous ciblait en combat."
                     or "Baisse de santé pendant que cet adversaire PvP en combat vous ciblait ; participation déduite, source de dégâts non confirmée."
@@ -626,6 +646,11 @@ function T.Observe(unit, reuseObservation)
     local faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
     if not faction or not identity.faction or faction == identity.faction then return end
     if bool(UnitIsPVP, "player") ~= true or bool(UnitIsPVP, unit) ~= true then return end
+    -- Every hostile player in combat around you, targeting you or not (see loneAttacker).
+    f.nearby = f.nearby or {}
+    if fight and engaged and bool(UnitIsDeadOrGhost, unit) == false then
+        f.nearby[identity.key] = { identity = identity, at = GL.Now() }
+    else f.nearby[identity.key] = nil end
     local enemy = f.enemies[identity.key]
     if not enemy and identity.guid and identity.alias then
         enemy = f.enemies[identity.alias]

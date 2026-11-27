@@ -949,30 +949,51 @@ test("explicit friendly or different hostile damage cancels health guesses", fun
     assert(GL.Get(GL.Identity("target")) == nil)
 end)
 
-test("observed NPC pressure or max health change blocks health inference", function()
+test("a max health change blocks health inference", function()
     start()
-    unitData.mouseover = { hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
-    now = now + 1 unitData.player.health = 900 T.Poll()
-    now = now + 1 T.Poll() assert(count() == 0)
-    T.HandleEvent("PLAYER_ENTERING_WORLD") unitData.mouseover = nil start()
     now = now + 1 unitData.player.health = 800 unitData.player.maxHealth = 800 T.Poll()
     now = now + 1 T.Poll() assert(count() == 0)
 end)
 
-test("a monster blocks the health guess only while it is on you, and leaves a trace", function()
+test("a monster on you excuses no player who targets you while you lose health", function()
     start()
     unitData.mouseover = { guid = "Creature-1-wolf", hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
     now = now + 1 unitData.player.health = 900 T.Poll()
-    now = now + 1 T.Poll() assert(total("aggressions") == 0)
-    local traced = false
-    for _, line in ipairs(GL.db.detectionLog or {}) do traced = traced or line.code == "monster" end
-    assert(traced, "the detection trace says why the blow was not counted")
-    -- The wolf is dead; the player who jumped you keeps hitting.
-    unitData.mouseover = nil
-    now = now + 4 T.Poll()
-    now = now + 1 unitData.player.health = 800 T.Poll()
     now = now + 1 T.Poll()
     assert(total("aggressions") == 1 and GL.Relation(GL.Get(GL.Identity("target"))) == "enemy")
+end)
+
+local function traced(code)
+    for _, line in ipairs(GL.db.detectionLog or {}) do if line.code == code then return true end end
+end
+
+test("the only hostile player in combat around you is the attacker, even without targeting you", function()
+    local e = start()
+    e.target = nil -- an ambush: his target is hidden or elsewhere
+    unitData.target = nil
+    unitData.nameplate1 = e T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 1, "the lone hostile player is written")
+    local record = GL.Get("guid:" .. e.guid)
+    assert(record and GL.Relation(record) == "enemy" and record.fullName == e.name .. " " .. e.surname)
+    -- Two of them, or a monster on you: nobody can be singled out, and the trace says why.
+    fixture() local a = opponent("first") a.target = nil start(a)
+    unitData.nameplate1 = opponent("second") unitData.nameplate1.target = nil
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 0 and traced("unseen"))
+    fixture() local b = opponent("first") b.target = nil start(b)
+    unitData.mouseover = { guid = "Creature-1-wolf", hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 0 and not traced("unseen"), "an ordinary mob fight writes no trace")
+    -- A player out of combat nearby is no suspect.
+    fixture() local c = opponent("first") c.target, c.combat = nil, false start(c)
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 0)
 end)
 
 test("a harmful effect from a hostile player is an aggression even with a monster on you", function()

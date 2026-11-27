@@ -96,7 +96,7 @@ local traceReasons = {
     neutral = "Neutre : pas d'alerte", grouped = "Ami dans le groupe", present = "Ami déjà présent ou visibilité non confirmée",
     disabled = "Alerte désactivée", cooldown = "Délai entre alertes", priority = "Alerte plus prioritaire affichée",
     burst = "Regroupé avec l'alerte de guilde", shown = "Fenêtre affichée", protected = "Marqueur : cadre protégé",
-    indirect = "Signal indirect affiché", monster = "Agression non comptée : un monstre vous attaquait aussi",
+    indirect = "Signal indirect affiché", unseen = "Blessé sans adversaire visible : ciblez-le ou affichez les barres ennemies",
 }
 function GL.Trace(code, identity, unit)
     if not GL.db or not GL.Settings().detectionLog or not traceReasons[code] then return end
