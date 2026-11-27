@@ -3081,6 +3081,8 @@ local SIZES = {
 }
 local ENEMY_ROWS = #SIZES
 local PAPER = { hero = "Grande", medium = "Carree", compact = "Carree" }
+-- The v8 collection's families (owner, 27/11): each enemy keeps its own, never twice on the page.
+local FAMILIES = { "Humain", "ElfeNuit", "ElfeSang", "Aerien", "Roublard", "Demoniste", "Troll", "Orc", "Tauren", "MortVivant" }
 -- Where posters may go on the page (its 664 x 510): under the head, above the foot.
 local BOARD = { left = 6, right = 660, top = -64, bottom = -478 }
 local STYLE = {
@@ -3193,7 +3195,7 @@ local function medalOf(spot)
     local left = spot.medalSide == "right" and spot.x + spot.w + m * 0.22 - m or spot.x - m * 0.22
     return { left, spot.y + m * 0.2, left + m, spot.y + m * 0.2 - m }
 end
--- A forged nail (v6): about a seventh of its paper's width (owner, 27/11: bigger), its point near the paper's top middle,
+-- A forged nail (v6): about a fifth of its paper's width (owner, 27/11: bigger, fatter), its point near the paper's top middle,
 -- where the paper's turn takes it. Returns the nail's rectangle and where its point goes.
 local NAIL = GL.Art.WantedNail
 function R.NailOf(spot)
@@ -3201,7 +3203,7 @@ function R.NailOf(spot)
     local d = spot.h / 2 - math.max(9, spot.h * 0.075)
     local px = spot.x + spot.w / 2 + spot.pinX + math.sin(a) * d
     local py = spot.y - (spot.h / 2 - math.cos(a) * d)
-    local nh = math.floor(spot.w * 0.14 + 0.5)
+    local nh = math.floor(spot.w * 0.19 + 0.5)
     local nw = math.floor(nh * RATIO[spot.pin] + 0.5)
     local left, top = px - NAIL[spot.pin][1] * nw, py + NAIL[spot.pin][2] * nh
     return { left, top, left + nw, top - nh }, px, py
@@ -3228,16 +3230,19 @@ local function arrange(items, roll, nudge)
         local j = roll(i) + 1
         corners[i], corners[j] = corners[j], corners[i]
     end
-    local spots, left = {}, BOARD.left
+    local spots, left, taken = {}, BOARD.left, {}
     for i, item in ipairs(items) do
         local size = SIZES[i]
-        local paper = (item.bounty and "Prime" or "Affiche") .. PAPER[size.kind] .. (roll(2) + 1)
+        local family = hashOf(tostring(item.key)) % #FAMILIES + 1
+        while taken[family] do family = family % #FAMILIES + 1 end
+        taken[family] = true
+        local paper = (item.bounty and "Prime" or "Affiche") .. FAMILIES[family] .. PAPER[size.kind]
         local spot = { kind = size.kind, h = size.h, paper = paper, level = 20 * (ENEMY_ROWS + 1 - i),
             medalSide = "left" }
         local nail = roll(4)
         spot.pin = nail < 2 and "ClouFace" or nail == 2 and "ClouGauche" or "ClouDroite"
-        -- The paper turns further the way it is drawn tilted: 2.5 to 4 degrees more.
-        spot.turn = (paper:sub(-1) == "1" and -1 or 1) * (2.5 + roll(4) * 0.5) * (nudge > 0 and 1 or 0.8)
+        -- The paper turns 2.5 to 4 degrees, one way or the other.
+        spot.turn = (roll(2) == 0 and -1 or 1) * (2.5 + roll(4) * 0.5) * (nudge > 0 and 1 or 0.8)
         spot.w = math.floor(size.h * RATIO[paper] + 0.5)
         spot.pinX = (roll(9) - 4) * math.floor(spot.w / 40) * nudge
         spot.corner = corners[i - 1]
@@ -3433,16 +3438,25 @@ local function placePoster(page, p, spot)
     p.hit:SetAllPoints()
     GL.Safe(p.hit.SetFrameLevel, p.hit, level + 15)
 end
--- A list button of the page's head (the mockup's two): its choice, a turned-down arrow, and under it
--- the choices in the guild journal's small menu.
-local function chooser(page, x, width, options, current, choose)
-    local b = UI.button(page, "", x, -18, width, nil, nil, true)
-    b.arrow = wantedTexture(b, "OVERLAY", 1, "Chevron")
-    b.arrow:SetSize(15, math.floor(15 / RATIO.Chevron + 0.5))
-    b.arrow:SetPoint("RIGHT", -10, -1)
+-- A choice of the page's head (owner, 27/11: discreet, not a big button): its words in ivory
+-- italics and the kit's gold chevron, over the head's gold rule; under it, the choices in the guild
+-- journal's small menu. As wide as its words (paintEnemies sets it).
+local function chooser(page, options, current, choose)
+    local b = CreateFrame("Button", nil, page)
+    b:SetSize(120, 22)
+    b.caption = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    b:SetFontString(b.caption)
     b.caption:ClearAllPoints()
-    b.caption:SetPoint("CENTER", -8, 0)
-    b.caption:SetWidth(width - 34)
+    b.caption:SetPoint("LEFT", b, "LEFT", 0, 1)
+    b.caption:SetTextColor(unpack(CLOTH_IVORY))
+    UI.journalFont(b.caption, "GameFontHighlightSmall", 14, true)
+    shadowed(b.caption, 0.8)
+    b.arrow = wantedTexture(b, "OVERLAY", 1, "Chevron")
+    b.arrow:SetSize(12, math.floor(12 / RATIO.Chevron + 0.5))
+    b.arrow:SetPoint("RIGHT", b, "RIGHT", 0, 0)
+    b:SetScript("OnEnter", function() b.caption:SetTextColor(1, 0.82, 0.45) end)
+    b:SetScript("OnLeave", function() b.caption:SetTextColor(unpack(CLOTH_IVORY)) end)
+    local width = 184
     local menu = CreateFrame("Frame", nil, page)
     menu:SetSize(width, 12 + #options * 30)
     menu:EnableMouse(true)
@@ -3450,7 +3464,7 @@ local function chooser(page, x, width, options, current, choose)
     menu:SetToplevel(true)
     UI.surface(menu, UI.theme.gold)
     UI.surface(menu, UI.theme.panel, 1)
-    menu:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT", 0, -2)
+    menu:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT", 6, -6)
     menu.choices = {}
     for i, option in ipairs(options) do
         menu.choices[i] = UI.button(menu, L(option[2]), 6, -6 - (i - 1) * 30, width - 12, function()
@@ -3469,18 +3483,6 @@ local function chooser(page, x, width, options, current, choose)
     b:HookScript("OnHide", function() menu:Hide() end)
     return b
 end
--- A page-turning button of the posters: the head's buttons' look, the kit's gold chevron turned to
--- the left or the right; dimmed when there is no page that way.
-local function pagerButton(page, x, left, onClick)
-    local b = UI.button(page, "", x, -482, 26, onClick, nil, true)
-    b:SetHeight(24)
-    b.arrow = wantedTexture(b, "OVERLAY", 1, "Chevron")
-    b.arrow:SetSize(9, 15)
-    b.arrow:SetPoint("CENTER", 0, 0)
-    if left then GL.Safe(b.arrow.SetTexCoord, b.arrow, 0, 1, 1, 1, 0, 0, 1, 0)
-    else GL.Safe(b.arrow.SetTexCoord, b.arrow, 1, 0, 0, 0, 1, 1, 0, 1) end
-    return b
-end
 local function buildEnemies(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
@@ -3490,12 +3492,13 @@ local function buildEnemies(host)
     -- head's rule to the foot's, so the book's gold rules stay over it and no parchment shows.
     page.cloth:SetPoint("TOPLEFT", -20, 7)
     page.cloth:SetPoint("BOTTOMRIGHT", 35, -12)
-    -- Four small flourishes in the corners, against the book's rules.
+    -- Four flourishes against the book's rules (owner, 27/11: part of the design); the bottom right
+    -- one stands on the side, over the frame's own ornament.
     page.corners = {}
-    for i, corner in ipairs({ { "TOPLEFT", "HG" }, { "TOPRIGHT", "HD" }, { "BOTTOMLEFT", "BG" } }) do
+    for i, corner in ipairs({ { "TOPLEFT", "HG", 0 }, { "TOPRIGHT", "HD", 0 }, { "BOTTOMLEFT", "BG", 0 }, { "BOTTOMRIGHT", "BD", 62 } }) do
         local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
-        piece:SetSize(58, 58)
-        piece:SetPoint(corner[1], page.cloth, corner[1], 0, 0)
+        piece:SetSize(70, 70)
+        piece:SetPoint(corner[1], page.cloth, corner[1], 0, corner[3])
         piece.corner = corner[2]
         page.corners[i] = piece
     end
@@ -3518,11 +3521,11 @@ local function buildEnemies(host)
     page.emblem = page:CreateTexture(nil, "OVERLAY")
     page.title = Panels.Text(page, 88, -17, 226, 26, true, CLOTH_IVORY)
     page.period, page.show, page.offset = 1, 1, 0
-    page.periodButton = chooser(page, 318, 156, ENEMY_PERIODS, function() return page.period end, function(i)
+    page.periodButton = chooser(page, ENEMY_PERIODS, function() return page.period end, function(i)
         page.period, page.offset = i, 0
         R.Refresh()
     end)
-    page.showButton = chooser(page, 480, 160, POSTER_FILTERS, function() return page.show end, function(i)
+    page.showButton = chooser(page, POSTER_FILTERS, function() return page.show end, function(i)
         page.show, page.offset = i, 0
         R.Refresh()
     end)
@@ -3536,20 +3539,10 @@ local function buildEnemies(host)
     page.reshare = reshareButton(page, -176)
     page.reshare:ClearAllPoints()
     page.reshare:SetPoint("TOP", page, "TOP", 0, -176)
-    -- At the foot: what the order weighs, then the pages.
-    page.legend = Panels.Text(page, 70, -490, 440, 12, false, CLOTH_SOFT)
+    -- At the foot: what the order weighs. One page (owner, 27/11): the five the guild wants most.
+    page.legend = Panels.Text(page, 112, -490, 440, 12, false, CLOTH_SOFT)
     UI.journalFont(page.legend, "GameFontHighlight", 12, true)
     page.legend:SetJustifyH("CENTER")
-    page.previous = pagerButton(page, 524, true, function()
-        page.offset = math.max(0, page.offset - ENEMY_ROWS)
-        R.Refresh()
-    end)
-    page.next = pagerButton(page, 610, false, function()
-        page.offset = page.offset + ENEMY_ROWS
-        R.Refresh()
-    end)
-    page.count = Panels.Text(page, 552, -488, 56, 14, true, CLOTH_IVORY)
-    page.count:SetJustifyH("CENTER")
     return page
 end
 -- The record a portrait is painted from: the sheet when you know the player, else what the guild says.
@@ -3580,8 +3573,9 @@ end
 -- The figures' words: the long ones on the tall poster, the short ones on the others.
 -- The second line names the victims (owner, 27/11: the grudge is personal); the deaths when the
 -- guild's roster names none of them.
-local function figureTexts(p, enemy)
-    local victims = R.VictimNames(enemy, p.kind == "hero" and 3 or 2)
+local function figureTexts(p, enemy, open)
+    -- A small poster with a ribbon has room for one name.
+    local victims = R.VictimNames(enemy, p.kind == "hero" and 3 or (open and p.kind == "compact") and 1 or 2)
     if p.kind == "hero" then
         return { enemy.members, enemy.members > 1 and L("membres distincts tués") or L("membre tué") },
             victims and { "", victims } or { enemy.deaths, enemy.deaths > 1 and L("morts infligées") or L("mort infligée") }
@@ -3647,7 +3641,7 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         p.prize:Hide()
         p.seal:Hide()
     end
-    local first, second = figureTexts(p, enemy)
+    local first, second = figureTexts(p, enemy, open)
     for i, figure in ipairs(p.figures) do
         local text = i == 1 and first or second
         figure.number:SetText(tostring(text[1]))
@@ -3752,20 +3746,20 @@ local function paintEnemies(page)
         end
         list = kept
     end
-    -- A choice is never cut: its letters get smaller until it fits.
-    for button, text in pairs({ [page.periodButton] = L(ENEMY_PERIODS[page.period][2]), [page.showButton] = L(POSTER_FILTERS[page.show][2]) }) do
-        local caption, size = button.caption, 15
-        button:SetText(text)
-        UI.journalFont(caption, "GameFontHighlightSmall", size)
-        while size > 9 and (GL.Safe(caption.GetStringWidth, caption) or 0) > button:GetWidth() - 36 do
-            size = size - 1
-            UI.journalFont(caption, "GameFontHighlightSmall", size)
-        end
+    -- The two choices as wide as their words, side by side left of the corner's flourish.
+    for _, pair in ipairs({ { page.showButton, L(POSTER_FILTERS[page.show][2]) }, { page.periodButton, L(ENEMY_PERIODS[page.period][2]) } }) do
+        local button = pair[1]
+        button:SetText(pair[2])
+        button:SetWidth(math.ceil(GL.Safe(button.caption.GetStringWidth, button.caption) or 100) + 18)
     end
+    page.showButton:ClearAllPoints()
+    page.showButton:SetPoint("TOPRIGHT", page, "TOPLEFT", 622, -24)
+    page.periodButton:ClearAllPoints()
+    page.periodButton:SetPoint("TOPRIGHT", page.showButton, "TOPLEFT", -24, 0)
     for _, button in ipairs({ page.periodButton, page.showButton }) do
         if sharing then button:Show() else button:Hide() end
     end
-    page.offset = math.min(page.offset, math.max(0, math.floor((#list - 1) / ENEMY_ROWS) * ENEMY_ROWS))
+    page.offset = 0
     -- The page's enemies, their bounties, then where their posters go.
     local shown = {}
     for i = 1, ENEMY_ROWS do
@@ -3794,20 +3788,6 @@ local function paintEnemies(page)
     if inGuild and not sharing then page.reshare:Show() else page.reshare:Hide() end
     page.empty:SetText(empty)
     page.legend:SetText(#list > 0 and L("Victimes distinctes · Morts infligées · Fraîcheur des faits") or "")
-    local pages = math.max(1, math.ceil(#list / ENEMY_ROWS))
-    page.previous:SetEnabled(page.offset > 0)
-    page.next:SetEnabled(page.offset + ENEMY_ROWS < #list)
-    page.previous:SetAlpha(page.offset > 0 and 1 or 0.45)
-    page.next:SetAlpha(page.offset + ENEMY_ROWS < #list and 1 or 0.45)
-    if pages > 1 then
-        page.previous:Show()
-        page.next:Show()
-        page.count:SetText(L("%d / %d"):format(page.offset / ENEMY_ROWS + 1, pages))
-    else
-        page.previous:Hide()
-        page.next:Hide()
-        page.count:SetText("")
-    end
 end
 
 -- The books: the narrow format of the player sheet. Left, the entries and the key figures. Right,

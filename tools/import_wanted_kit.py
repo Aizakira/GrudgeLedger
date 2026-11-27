@@ -1,6 +1,10 @@
 """Imports the owner's wanted-poster kit for Ennemis de la guilde (v6, 27/11).
 
-Usage: python tools/import_wanted_kit.py PATH_TO/kit-ennemis-guilde-v6
+Usage: python tools/import_wanted_kit.py PATH_TO/kit-ennemis-guilde-v6 [PATH_TO/collection-affiches-v8]
+
+The v8 collection (owner, 27/11) gives ten families of papers, each a tall one for the first poster
+and a small one for the others, plain and gold (a bounty): Affiche<Family><Grande|Carree> and
+Prime<Family><Grande|Carree>.
 
 Each PNG is cropped to what can be seen (alpha > 8), given two clear pixels around it, then resized
 to a power-of-two texture. The game stretches a texture to its region: the addon draws each piece at
@@ -168,16 +172,16 @@ def inner_frame(image):
             rule(cols, range(w - 1, int(w * .65), -1)), rule(rows, range(h - 1, int(h * .65), -1)))
 
 
-def paper_zone(image, entry):
+def paper_zone(image, entry, pad=12):
     """Where the addon writes on a paper, as margins (left, top, right, bottom) in fractions of its
     cropped drawing: on each side the roomier of the kit's text zone and the inside of the printed
     frame less 12 pixels (the kit's zone is careful: the squares' leave a third of the paper empty)."""
     box = image.getchannel("A").getbbox()
     left, top, right, bottom = box
     w, h = right - left, bottom - top
-    tl, tt, tr, tb = entry["text_rect_px"]
+    tl, tt, tr, tb = entry.get("text_rect_px") or entry["suggested_text_roi_px"]
     fl, ft, fr, fb = inner_frame(image)
-    zl, zt, zr, zb = min(tl, fl + 12), min(tt, ft + 12), max(tr, fr - 12), max(tb, fb - 12)
+    zl, zt, zr, zb = min(tl, fl + pad), min(tt, ft + pad), max(tr, fr - pad), max(tb, fb - pad)
     return box, (round((zl - left) / w, 3), round((zt - top) / h, 3), round((right - zr) / w, 3), round((bottom - zb) / h, 3))
 
 
@@ -230,5 +234,31 @@ def main(kit):
         print(f"    {name} = {{ {', '.join(str(v) for v in mark)} }},")
 
 
+FAMILIES = {"01-humain": "Humain", "02-elfe-nuit": "ElfeNuit", "03-elfe-sang": "ElfeSang", "04-aerien": "Aerien",
+            "05-roublard": "Roublard", "06-demoniste": "Demoniste", "07-troll": "Troll", "08-orc": "Orc",
+            "09-tauren": "Tauren", "10-mort-vivant": "MortVivant"}
+
+
+def collection(folder):
+    folder = Path(folder)
+    records = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))["records"]
+    ratios, zones = {}, {}
+    for record in records:
+        family = FAMILIES[record["file"].split("/")[0]]
+        tall = record["format"] == "hero"
+        name = ("Prime" if record["edition"] == "gold" else "Affiche") + family + ("Grande" if tall else "Carree")
+        image = clean(Image.open(folder / record["file"]).convert("RGBA"))
+        # Their printed frames are richer: the writing keeps further from them.
+        box, zones[name] = paper_zone(image, record, 26)
+        image = image.crop(box)
+        ratios[name] = round(image.width / image.height, 3)
+        write_tga(OUT / (name + ".tga"), fitted(image, 256, 512 if tall else 256))
+    print("-- v8 collection")
+    for name in sorted(ratios):
+        print(f"    {name} = {ratios[name]}, -- zone {{ {', '.join(str(v) for v in zones[name])} }}")
+
+
 if __name__ == "__main__":
     main(sys.argv[1])
+    if len(sys.argv) > 2:
+        collection(sys.argv[2])

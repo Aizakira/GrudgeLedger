@@ -78,6 +78,10 @@ for name, expected_width, expected_height, transparent in (
         ("FiligraneAlliance", 128, 128), ("FiligraneHorde", 128, 128),
         *((f"{paper}{format}{tilt}", 256, 512 if format == "Grande" else 256)
           for paper in ("Affiche", "Prime") for format in ("Grande", "Carree") for tilt in (1, 2)),
+        # The v8 collection (owner, 27/11): ten families, tall and small, plain and gold.
+        *((f"{paper}{family}{format}", 256, 512 if format == "Grande" else 256) for paper in ("Affiche", "Prime")
+          for family in ("Humain", "ElfeNuit", "ElfeSang", "Aerien", "Roublard", "Demoniste", "Troll", "Orc", "Tauren", "MortVivant")
+          for format in ("Grande", "Carree")),
         ("CadrePortrait", 128, 128), ("Medaillon", 128, 128), ("MedaillonUn", 128, 128), ("Chevron", 32, 16),
         ("Bandeau", 256, 64), ("SceauPrime", 64, 64),
         ("Tampon", 256, 64), ("Cartouche", 256, 32), ("SeparateurEncre", 256, 16), ("SeparateurOr", 256, 16),
