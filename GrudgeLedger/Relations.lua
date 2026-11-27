@@ -3582,7 +3582,6 @@ local function buildEnemies(host)
     end
     page.banner = page:CreateTexture(nil, "ARTWORK")
     page.banner:SetPoint("TOPLEFT", 4, 14)
-    page.emblem = page:CreateTexture(nil, "OVERLAY")
     page.title = Panels.Text(page, 88, -17, 226, 26, true, CLOTH_IVORY)
     page.previewNote = Panels.Text(page, 90, -46, 300, 11, false, { 1, 0.82, 0.45 })
     UI.journalFont(page.previewNote, "GameFontHighlight", 11, true)
@@ -3885,21 +3884,14 @@ local function paintEnemies(page)
         mark:SetSize(math.floor(mark.side * RATIO["Filigrane" .. faction] + 0.5), mark.side)
     end
     page.banner:SetTexture(WANTED .. "Fanion" .. faction)
-    local place = GL.Art.WantedEmblem[faction]
-    if place then page.banner:SetSize(78, math.floor(78 / RATIO["Fanion" .. faction] + 0.5))
-    else page.banner:SetSize(math.floor(100 * RATIO["Fanion" .. faction] + 0.5), 100) end
-    local emblemW = math.floor(page.banner:GetWidth() * 0.7 + 0.5)
-    page.emblem:SetTexture(WANTED .. "Embleme" .. faction)
-    page.emblem:SetSize(emblemW, math.floor(emblemW / RATIO["Embleme" .. faction] + 0.5))
-    page.emblem:ClearAllPoints()
-    if place then
-        local bw, bh = page.banner:GetWidth(), page.banner:GetHeight()
-        page.emblem:SetSize(math.floor((place[3] - place[1]) * bw + 0.5), math.floor((place[4] - place[2]) * bh + 0.5))
-        page.emblem:SetPoint("TOPLEFT", page.banner, "TOPLEFT", math.floor(place[1] * bw + 0.5), -math.floor(place[2] * bh + 0.5))
-    else
-        page.emblem:SetPoint("CENTER", page.banner, "TOP", 0, -46)
-    end
-    fit(page.title, L("Ennemis de la guilde"), 226, 26, 18, true, 0.85)
+    -- The validated banners (owner, 28/11) carry their arms painted in: no emblem laid over them.
+    local bannerW = math.floor(96 * RATIO["Fanion" .. faction] + 0.5)
+    page.banner:SetSize(bannerW, 96)
+    -- The title starts after the banner and keeps clear of the two choices (from x 306).
+    page.title:ClearAllPoints()
+    page.title:SetPoint("TOPLEFT", page, "TOPLEFT", 10 + bannerW, -17)
+    page.title:SetWidth(296 - bannerW)
+    fit(page.title, L("Ennemis de la guilde"), 296 - bannerW, 26, 16, true, 0.85)
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
     if preview then sharing, inGuild = true, true end
