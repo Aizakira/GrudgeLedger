@@ -2945,7 +2945,7 @@ end
 -- first (R.Threat, 27/11). Each says how many deaths, how many members, how many times the guild
 -- won, when last. The Journal's list button chooses the period. A click opens the sheet;
 -- "Rechercher" posts a wanted notice. Pages turn, nothing scrolls.
-local ENEMY_PERIODS = { { 0, "Toujours" }, { 30 * 86400, "30 jours" }, { 7 * 86400, "7 jours" } }
+local ENEMY_PERIODS = { { 30 * 86400, "30 derniers jours" }, { 7 * 86400, "7 derniers jours" }, { 0, "Toujours" } }
 function R.GuildEnemies(period)
     local enemies, list = {}, {}
     local points = R.GuildLog({ view = "all", period = period or 0 })
@@ -3001,180 +3001,283 @@ function R.Threat(victims)
     end
     return sum * (1 + 0.5 * math.max(0, members - 1))
 end
--- The guild's enemies as wanted posters (owner's kit, 27/11), on your faction's tapestry: the five
--- worst threats of the page (R.Threat). The first on the tall poster, the second on the middle one,
--- the others on the small ones: the size says the threat. An open bounty with gold turns its poster
--- gold, with the ribbon of the prize and the seal; a notice without gold keeps the paper and shows
--- the ribbon. A killer whose last victim is over three weeks old wears the cold-trail stamp. Neither
--- a text nor a 3D portrait can turn in the game: the posters stand straight. A click opens the sheet.
+-- The guild's enemies as wanted posters (owner's kit and mockup, 27/11), on your faction's tapestry
+-- spread over the whole page: the five worst threats of the page (R.Threat). The first on the tall
+-- poster, the others on smaller ones that overlap and step like papers pinned in a hurry: the size
+-- says the threat. An open bounty with gold turns its poster gold, with the prize's ribbon and seal;
+-- a notice without gold keeps the paper and shows the ribbon. A killer whose last victim is over
+-- three weeks old wears the cold-trail stamp. A click opens the sheet; a right click posts a wanted
+-- notice. Neither a text nor a 3D portrait can turn in the game: the posters stand straight.
 local WANTED, RATIO = GL.Art.Wanted, GL.Art.WantedRatio
 local COLD_AFTER = 21 * 86400
+local POSTER_FILTERS = { { "all", "Toutes les affiches" }, { "bounty", "Avec une prime" }, { "plain", "Sans prime" } }
+-- Places on the page (its 664 x 510), the later ones under the earlier ones where they overlap.
 local POSTERS = {
-    { kind = "hero", x = 14, y = -72, h = 394 },
-    { kind = "medium", x = 282, y = -70, h = 220 },
-    { kind = "compact", x = 462, y = -92, h = 176 },
-    { kind = "compact", x = 276, y = -298, h = 176 },
-    { kind = "compact", x = 468, y = -298, h = 176 },
+    { kind = "hero", x = 14, y = -70, h = 402, level = 10 },
+    { kind = "medium", x = 256, y = -66, h = 232, level = 8 },
+    { kind = "compact", x = 481, y = -84, h = 176, level = 6 },
+    { kind = "compact", x = 266, y = -302, h = 180, level = 4 },
+    { kind = "compact", x = 452, y = -290, h = 188, level = 2 },
 }
 local ENEMY_ROWS = #POSTERS
-local PAPER = { hero = "Grande", medium = "Moyenne", compact = "Petite" }
+-- The mockup's second poster is nearly square: the small paper, drawn larger.
+local PAPER = { hero = "Grande", medium = "Petite", compact = "Petite" }
 local STYLE = {
-    hero = { title = 24, name = 17, line = 13, face = 110, gap = 10, step = 18, medal = 46, rank = 18, button = 22, pin = 24 },
-    medium = { title = 16, name = 13, line = 11, face = 46, gap = 8, step = 15, medal = 34, rank = 13, button = 20, pin = 18 },
-    compact = { title = 15, name = 12, line = 11, face = 42, medal = 34, rank = 13, button = 20, pin = 18 },
+    hero = { title = 32, name = 22, number = 20, label = 15, seen = 15, face = 118, medal = 66, rank = 26, icon = 20, button = 26 },
+    medium = { title = 20, name = 16, number = 15, label = 12, seen = 11, face = 72, medal = 46, rank = 17, icon = 12, button = 22 },
+    compact = { title = 17, name = 14, number = 13, label = 10, seen = 10, face = 54, medal = 42, rank = 15, icon = 10, button = 20 },
 }
-local WANTED_RED, CLOTH_GOLD, CLOTH_INK = { 0.55, 0.1, 0.08 }, { 1, 0.84, 0.45 }, { 0.93, 0.86, 0.72 }
+local POSTER_RED, POSTER_INK, POSTER_MUTED = { 0.6, 0.09, 0.06 }, { 0.2, 0.12, 0.06 }, { 0.38, 0.27, 0.16 }
+local CLOTH_IVORY, CLOTH_SOFT, MEDAL_IVORY = { 0.97, 0.92, 0.8 }, { 0.86, 0.8, 0.68 }, { 1, 0.93, 0.74 }
 local STAMP_INK = { 0.36, 0.22, 0.45 }
+-- Capitals for the poster's headings, accents included (string.upper leaves é alone).
+local CAPITALS = { ["à"] = "À", ["â"] = "Â", ["ä"] = "Ä", ["á"] = "Á", ["ã"] = "Ã", ["é"] = "É", ["è"] = "È", ["ê"] = "Ê",
+    ["ë"] = "Ë", ["í"] = "Í", ["î"] = "Î", ["ï"] = "Ï", ["ó"] = "Ó", ["ô"] = "Ô", ["ö"] = "Ö", ["õ"] = "Õ", ["ú"] = "Ú",
+    ["û"] = "Û", ["ü"] = "Ü", ["ç"] = "Ç", ["ñ"] = "Ñ" }
+local function capitals(text)
+    text = text:upper()
+    for small, big in pairs(CAPITALS) do text = text:gsub(small, big) end
+    return text
+end
 local function wantedTexture(parent, layer, sub, name)
     local t = parent:CreateTexture(nil, layer, nil, sub)
     if name then t:SetTexture(WANTED .. name) end
     return t
 end
--- A line of the poster: its pictogram, then the text that fits.
-local function posterLine(p, icon, x, y, width, size, iconSize)
-    local line = {}
-    if icon then
-        line.icon = wantedTexture(p, "ARTWORK", 2, icon)
-        iconSize = iconSize or size
-        line.icon:SetSize(math.floor(iconSize * RATIO[icon] + 0.5), iconSize)
-        line.icon:SetPoint("TOPLEFT", x, y - 1 - (size - iconSize) / 2)
-        x, width = x + iconSize * RATIO[icon] + 3, width - iconSize * RATIO[icon] - 3
-    end
-    line.words = Panels.Text(p, x, y, width, size, false)
-    line.width, line.size = width, size
-    return line
+-- A heading that stands out of the paper or the cloth: a dark shadow under the letters.
+local function shadowed(label, alpha)
+    GL.Safe(label.SetShadowColor, label, 0, 0, 0, alpha or 0.75)
+    GL.Safe(label.SetShadowOffset, label, 1, -1)
+end
+local function fit(label, text, width, biggest, smallest, bold, shadow)
+    Panels.Fit(label, text, width, biggest, smallest, bold)
+    if shadow then shadowed(label, shadow) end
+end
+-- A figure of the poster: its pictogram, the number in bold, the words after it (they may wrap).
+local function posterFigure(p, icon, size)
+    local figure = { size = size }
+    figure.icon = wantedTexture(p, "ARTWORK", 2, icon)
+    figure.icon:SetSize(math.floor(size.icon * RATIO[icon] + 0.5), size.icon)
+    figure.number = Panels.Text(p, 0, 0, 60, size.number, true, POSTER_INK)
+    figure.words = Panels.Text(p, 0, 0, 100, size.label, false, POSTER_INK)
+    return figure
+end
+local function placeFigure(figure, p, x, y, width)
+    local iconW = figure.icon:GetWidth()
+    figure.icon:ClearAllPoints()
+    figure.icon:SetPoint("TOPLEFT", p, "TOPLEFT", x, y - math.max(0, (figure.size.number - figure.size.icon) / 2) - 1)
+    figure.number:ClearAllPoints()
+    figure.number:SetPoint("TOPLEFT", p, "TOPLEFT", x + iconW + 4, y)
+    local used = (GL.Safe(figure.number.GetStringWidth, figure.number) or 10) + iconW + 8
+    figure.words:ClearAllPoints()
+    figure.words:SetPoint("TOPLEFT", p, "TOPLEFT", x + used, y - (figure.size.number - figure.size.label) + 1)
+    figure.words:SetWidth(math.max(20, width - used))
+    GL.Safe(figure.words.SetWordWrap, figure.words, true)
+    local lines = (GL.Safe(figure.words.GetStringWidth, figure.words) or 0) > width - used and 2 or 1
+    return math.max(figure.size.number, lines * (figure.size.label + 2) + (figure.size.number - figure.size.label)) + 4
 end
 local function buildPoster(page, slot)
     local style, h = STYLE[slot.kind], slot.h
     local w = math.floor(h * RATIO["Affiche" .. PAPER[slot.kind]] + 0.5)
-    local p = CreateFrame("Button", nil, page)
+    local p = CreateFrame("Frame", nil, page)
     p:SetPoint("TOPLEFT", slot.x, slot.y)
     p:SetSize(w, h)
+    GL.Safe(p.SetFrameLevel, p, (GL.Safe(page.GetFrameLevel, page) or 1) + slot.level)
     p.kind, p.style = slot.kind, style
+    p.mx, p.top = math.floor(w * 0.12 + 0.5), math.floor(h * 0.085 + 0.5)
+    p.inner = w - 2 * p.mx
     p.paper = wantedTexture(p, "BACKGROUND", 1)
     p.paper:SetPoint("TOP")
     p.paper:SetHeight(h)
-    local mx, top = math.floor(w * 0.12 + 0.5), math.floor(h * 0.09 + 0.5)
-    local inner = w - 2 * mx
-    p.inner = inner
-    p.pin = wantedTexture(p, "OVERLAY", 3)
-    p.pin:SetSize(style.pin, style.pin)
-    p.pin:SetPoint("CENTER", p, "TOP", 0, -4)
-    p.medal = wantedTexture(p, "OVERLAY", 2, "Medaillon")
+    -- The medal and the pin stay above every paper, even where a neighbour overlaps.
+    p.badge = CreateFrame("Frame", nil, p)
+    p.badge:SetAllPoints()
+    GL.Safe(p.badge.SetFrameLevel, p.badge, (GL.Safe(page.GetFrameLevel, page) or 1) + 30)
+    p.pin = wantedTexture(p.badge, "OVERLAY", 3, "ClouLaiton")
+    p.pin:SetSize(math.floor(style.medal * 0.42), math.floor(style.medal * 0.42))
+    p.pin:SetPoint("CENTER", p, "TOP", 0, -5)
+    p.medal = wantedTexture(p.badge, "OVERLAY", 2, "Medaillon")
     p.medal:SetSize(style.medal, style.medal)
-    p.medal:SetPoint("TOPLEFT", -8, 8)
-    p.rank = Panels.Text(p, 0, 0, style.medal, style.rank, true, CLOTH_GOLD)
+    p.medal:SetPoint("TOPLEFT", -math.floor(style.medal * 0.22), math.floor(style.medal * 0.2))
+    p.rank = Panels.Text(p.badge, 0, 0, style.medal, style.rank, true, MEDAL_IVORY)
     p.rank:ClearAllPoints()
-    p.rank:SetPoint("CENTER", p.medal, "CENTER", 0, 0)
+    p.rank:SetPoint("CENTER", p.medal, "CENTER", 0, 1)
     p.rank:SetJustifyH("CENTER")
     p.rank:SetDrawLayer("OVERLAY", 7)
-    p.seal = wantedTexture(p, "OVERLAY", 2, "SceauPrime")
-    p.seal:SetSize(style.medal, style.medal)
-    p.seal:SetPoint("TOPRIGHT", 8, 8)
-    p.title = Panels.Text(p, mx, -top, inner, style.title, true, WANTED_RED)
+    p.title = Panels.Text(p, p.mx - 4, -p.top, p.inner + 8, style.title, true, POSTER_RED)
     p.title:SetJustifyH("CENTER")
-    local y = -top - style.title - 4
+    local y = -p.top - style.title - (slot.kind == "hero" and 8 or 3)
     if slot.kind == "hero" then
         p.label = wantedTexture(p, "ARTWORK", 1, "Cartouche")
-        p.label:SetSize(inner, math.floor(inner / RATIO.Cartouche + 0.5))
-        p.label:SetPoint("TOPLEFT", mx, y)
-        p.labelText = Panels.Text(p, mx + 14, y - 6, inner - 28, 11, true)
+        p.label:SetSize(p.inner + 10, math.floor((p.inner + 10) / RATIO.Cartouche + 0.5))
+        p.label:SetPoint("TOP", p, "TOP", 0, y)
+        p.labelText = Panels.Text(p, 0, 0, p.inner - 30, 12, true, POSTER_INK)
+        p.labelText:ClearAllPoints()
+        p.labelText:SetPoint("CENTER", p.label, "CENTER", 0, 0)
         p.labelText:SetJustifyH("CENTER")
         p.labelText:SetDrawLayer("OVERLAY", 7)
-        y = y - inner / RATIO.Cartouche - 6
+        y = y - p.label:GetHeight() - 5
     end
-    p.name = Panels.Text(p, mx, y, inner, style.name, true)
+    p.name = Panels.Text(p, p.mx - 4, y, p.inner + 8, style.name, true, POSTER_INK)
     p.name:SetJustifyH("CENTER")
-    y = y - style.name - 6
+    p.faceTop = y - style.name - 6
     local face = CreateFrame("Frame", nil, p)
     face:SetSize(style.face, style.face)
-    if slot.kind == "compact" then face:SetPoint("TOPLEFT", mx, y - 2)
-    else face:SetPoint("TOP", p, "TOP", 0, y - 4) end
     face.raceIcon = face:CreateTexture(nil, "ARTWORK")
     face.raceIcon:SetAllPoints()
     face.classIcon = face:CreateTexture(nil, "OVERLAY")
     face.classIcon:SetSize(math.floor(style.face / 4.5), math.floor(style.face / 4.5))
     face.classIcon:SetPoint("BOTTOMRIGHT")
     p.face = face
-    -- The cold-trail stamp across the bottom of the portrait, its words inside.
+    p.figures = { posterFigure(p, "IconeMembres", style), posterFigure(p, "IconeCrane", style) }
+    p.rule = wantedTexture(p, "ARTWORK", 1, "SeparateurEncre")
+    p.seen = Panels.Text(p, 0, 0, p.inner, style.seen, false, POSTER_MUTED)
+    UI.journalFont(p.seen, "GameFontHighlight", style.seen, true)
+    -- The cold-trail stamp: in the ribbon's place, or across the portrait when a ribbon is there.
     p.stamp = CreateFrame("Frame", nil, p)
-    p.stamp:SetSize(math.floor(inner * 0.78), math.floor(inner * 0.78 / RATIO.Tampon + 0.5))
+    p.stamp:SetSize(math.floor(p.inner * 0.72), math.floor(p.inner * 0.72 / RATIO.Tampon + 0.5))
     p.stamp:SetFrameLevel(face:GetFrameLevel() + 6)
     p.stamp.ink = wantedTexture(p.stamp, "OVERLAY", 1, "Tampon")
     p.stamp.ink:SetAllPoints()
-    p.stamp.words = Panels.Text(p.stamp, 8, -5, p.stamp:GetWidth() - 16, style.line, true, STAMP_INK)
+    p.stamp.words = Panels.Text(p.stamp, 8, -5, p.stamp:GetWidth() - 16, style.label + 1, true, STAMP_INK)
     p.stamp.words:SetJustifyH("CENTER")
     p.stamp.words:SetDrawLayer("OVERLAY", 7)
-    local lines = {}
-    if slot.kind == "compact" then
-        local x = mx + style.face + 5
-        lines[1] = posterLine(p, "IconeMembres", x, y, inner - style.face - 5, style.line, style.line - 3)
-        lines[2] = posterLine(p, "IconeCrane", x, y - 14, inner - style.face - 5, style.line, style.line - 3)
-        lines[3] = posterLine(p, nil, x, y - 28, inner - style.face - 5, style.line - 1)
-    else
-        y = y - style.face - style.gap
-        local step = style.step
-        lines[1] = posterLine(p, "IconeMembres", mx, y, inner, style.line)
-        lines[2] = posterLine(p, "IconeCrane", mx, y - step, inner, style.line)
-        lines[3] = posterLine(p, nil, mx, y - 2 * step, inner, style.line - 1)
-        if slot.kind == "hero" then lines[4] = posterLine(p, nil, mx, y - 3 * step, inner, style.line - 1) end
-    end
-    p.lines = lines
-    -- At the bottom: the buttons, and above them the ribbon of a bounty or a notice.
-    local bottom = math.floor(h * 0.08 + 0.5)
-    local half = math.floor((inner - 4) / 2)
-    p.sheet = UI.button(p, L("Fiche"), mx, 0, half, function() openOpponent(p) end, nil, true)
-    p.wanted = UI.button(p, L("Rechercher"), mx + half + 4, 0, half, function() wanted(p) end, nil, true)
-    for _, button in ipairs({ p.sheet, p.wanted }) do
-        button:SetHeight(style.button)
-        local x = button == p.sheet and mx or mx + half + 4
-        button:ClearAllPoints()
-        button:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", x, bottom)
-    end
+    p.bottom = math.floor(h * 0.075 + 0.5)
+    local width = math.floor(p.inner * (slot.kind == "hero" and 0.72 or 0.62))
+    p.sheet = UI.button(p, slot.kind == "hero" and L("Voir la fiche") or L("Fiche"), 0, 0, width, function() openOpponent(p) end, nil, true)
+    p.sheet:SetHeight(style.button)
+    p.sheet:ClearAllPoints()
+    p.sheet:SetPoint("BOTTOM", p, "BOTTOM", 0, p.bottom)
     p.ribbon = wantedTexture(p, "ARTWORK", 3, "Bandeau")
-    p.ribbon:SetSize(inner + 12, math.floor((inner + 12) / RATIO.Bandeau + 0.5))
-    p.ribbon:SetPoint("BOTTOM", p, "BOTTOM", 0, bottom + style.button + 2)
-    p.prize = Panels.Text(p, 0, 0, inner - 24, style.line, true, CLOTH_GOLD)
+    p.ribbon:SetSize(p.inner + 18, math.floor((p.inner + 18) / RATIO.Bandeau + 0.5))
+    p.ribbon:SetPoint("BOTTOM", p, "BOTTOM", 0, p.bottom + style.button + 3)
+    p.prize = Panels.Text(p, 0, 0, p.inner - 30, style.label + 2, true, MEDAL_IVORY)
     p.prize:ClearAllPoints()
-    p.prize:SetPoint("CENTER", p.ribbon, "CENTER", 0, 1)
+    p.prize:SetPoint("CENTER", p.ribbon, "CENTER", -6, 1)
     p.prize:SetJustifyH("CENTER")
     p.prize:SetDrawLayer("OVERLAY", 7)
-    p:SetScript("OnClick", openOpponent)
+    p.seal = wantedTexture(p, "OVERLAY", 4, "SceauPrime")
+    p.seal:SetSize(math.floor(p.ribbon:GetHeight() * 1.3), math.floor(p.ribbon:GetHeight() * 1.3))
+    p.seal:SetPoint("CENTER", p.ribbon, "RIGHT", -8, 0)
+    -- The paper takes the clicks, above its button: a click opens the sheet, a right click posts a notice.
+    p.hit = CreateFrame("Button", nil, p)
+    p.hit:SetPoint("TOPLEFT")
+    p.hit:SetPoint("BOTTOMRIGHT", 0, p.bottom + style.button + 2)
+    GL.Safe(p.hit.RegisterForClicks, p.hit, "LeftButtonUp", "RightButtonUp")
+    p.hit:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then
+            if p.canWant then wanted(p) end
+        else
+            openOpponent(p)
+        end
+    end)
+    p.hit:SetScript("OnEnter", function(hit)
+        local self = p
+        if not GameTooltip or not self.enemy then return end
+        GameTooltip:SetOwner(hit, "ANCHOR_RIGHT")
+        GameTooltip:SetText(UI.plain(self.enemy))
+        if self.where then GameTooltip:AddLine(self.where, 1, 1, 1, true) end
+        if self.kills then GameTooltip:AddLine(self.kills, 1, 1, 1, true) end
+        if self.target then GameTooltip:AddLine(L("Clic : ouvrir la fiche"), 0.8, 0.8, 0.8) end
+        if self.canWant then GameTooltip:AddLine(L("Clic droit : poser un avis de recherche"), 0.8, 0.8, 0.8) end
+        GameTooltip:Show()
+    end)
+    p.hit:SetScript("OnLeave", function(hit) if GameTooltip and GameTooltip:GetOwner() == hit then GameTooltip:Hide() end end)
     return p
+end
+-- A list button of the page's head (the mockup's two): its choice, a turned-down arrow, and under it
+-- the choices in the guild journal's small menu.
+local function chooser(page, x, width, options, current, choose)
+    local b = UI.button(page, "", x, -18, width, nil, nil, true)
+    b.arrow = b:CreateTexture(nil, "OVERLAY")
+    b.arrow:SetTexture(media .. "JournalReferenceArrowRight")
+    b.arrow:SetSize(14, 14)
+    b.arrow:SetPoint("RIGHT", -8, 0)
+    chevron(b.arrow, false)
+    b.caption:ClearAllPoints()
+    b.caption:SetPoint("CENTER", -8, 0)
+    b.caption:SetWidth(width - 34)
+    local menu = CreateFrame("Frame", nil, page)
+    menu:SetSize(width, 12 + #options * 30)
+    menu:EnableMouse(true)
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:SetToplevel(true)
+    UI.surface(menu, UI.theme.gold)
+    UI.surface(menu, UI.theme.panel, 1)
+    menu:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT", 0, -2)
+    menu.choices = {}
+    for i, option in ipairs(options) do
+        menu.choices[i] = UI.button(menu, L(option[2]), 6, -6 - (i - 1) * 30, width - 12, function()
+            menu:Hide()
+            choose(i)
+        end, true)
+    end
+    menu:Hide()
+    b.menu = menu
+    b:SetScript("OnClick", function()
+        if menu:IsShown() then menu:Hide() return end
+        for i, choice in ipairs(menu.choices) do UI.selectButton(choice, i == current()) end
+        menu:Show()
+        menu:Raise()
+    end)
+    b:HookScript("OnHide", function() menu:Hide() end)
+    return b
 end
 local function buildEnemies(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
+    -- The tapestry covers the book's whole page, its parchment and torn edges included.
     page.cloth = page:CreateTexture(nil, "BACKGROUND", nil, -2)
-    page.cloth:SetAllPoints()
+    page.cloth:SetPoint("TOPLEFT", -19, 12)
+    page.cloth:SetPoint("BOTTOMRIGHT", 22, -9)
     page.trim = page:CreateTexture(nil, "BACKGROUND", nil, 0)
-    page.trim:SetAllPoints()
+    page.trim:SetAllPoints(page.cloth)
+    -- The faction's arms woven into the cloth, faint, at the right where the posters leave room.
+    page.marks = {}
+    for i, at in ipairs({ { 618, -150, 78 }, { 626, -400, 66 } }) do
+        local mark = page:CreateTexture(nil, "BACKGROUND", nil, -1)
+        mark:SetPoint("CENTER", page, "TOPLEFT", at[1], at[2])
+        mark.side = at[3]
+        GL.Safe(mark.SetDesaturated, mark, true)
+        mark:SetAlpha(0.16)
+        page.marks[i] = mark
+    end
     page.banner = page:CreateTexture(nil, "ARTWORK")
-    page.banner:SetPoint("TOPLEFT", 14, -2)
+    page.banner:SetPoint("TOPLEFT", 4, 14)
     page.emblem = page:CreateTexture(nil, "OVERLAY")
-    page.title = Panels.Text(page, 68, -24, 380, 22, true, CLOTH_GOLD)
-    page.lead = Panels.Text(page, 68, -52, 560, 11, false, CLOTH_INK)
-    page.period, page.offset = 1, 0
-    page.viewCycle = UI.button(page, "", 468, -22, 180, function()
-        page.period, page.offset = page.period % #ENEMY_PERIODS + 1, 0
+    page.title = Panels.Text(page, 88, -16, 252, 28, true, CLOTH_IVORY)
+    page.period, page.show, page.offset = 1, 1, 0
+    page.periodButton = chooser(page, 344, 150, ENEMY_PERIODS, function() return page.period end, function(i)
+        page.period, page.offset = i, 0
         R.Refresh()
     end)
+    page.showButton = chooser(page, 500, 176, POSTER_FILTERS, function() return page.show end, function(i)
+        page.show, page.offset = i, 0
+        R.Refresh()
+    end)
+    page.rule = wantedTexture(page, "ARTWORK", 1, "SeparateurOr")
+    page.rule:SetSize(460, math.floor(460 / RATIO.SeparateurOr + 0.5))
+    page.rule:SetPoint("CENTER", page, "TOPLEFT", 376, -56)
     page.posters = {}
     for i, slot in ipairs(POSTERS) do page.posters[i] = buildPoster(page, slot) end
-    page.empty = Panels.Text(page, 40, -124, 584, 14, false, CLOTH_INK)
+    page.empty = Panels.Text(page, 60, -130, 544, 15, false, CLOTH_IVORY)
     page.empty:SetJustifyH("CENTER")
-    page.reshare = reshareButton(page, -164)
+    page.reshare = reshareButton(page, -176)
     page.reshare:ClearAllPoints()
-    page.reshare:SetPoint("TOP", page, "TOP", 0, -164)
-    page.previous = UI.button(page, "‹", 236, -476, 40, function()
+    page.reshare:SetPoint("TOP", page, "TOP", 0, -176)
+    -- At the foot: what the order weighs, then the pages.
+    page.legend = Panels.Text(page, 70, -490, 440, 12, false, CLOTH_SOFT)
+    UI.journalFont(page.legend, "GameFontHighlight", 12, true)
+    page.legend:SetJustifyH("CENTER")
+    page.previous = UI.button(page, "‹", 548, -482, 32, function()
         page.offset = math.max(0, page.offset - ENEMY_ROWS)
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", 388, -476, 40, function()
+    page.next = UI.button(page, "›", 632, -482, 32, function()
         page.offset = page.offset + ENEMY_ROWS
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, 276, -481, 112, 11, false, CLOTH_INK)
+    page.count = Panels.Text(page, 580, -487, 52, 13, true, CLOTH_IVORY)
     page.count:SetJustifyH("CENTER")
     return page
 end
@@ -3183,116 +3286,185 @@ local function enemyRecord(page, enemy)
     local record = enemy.target and GL.Get(enemy.target)
     if record then return record end
     page.strangers = page.strangers or {}
-    local key = enemy.key
-    local stranger = page.strangers[key]
+    local stranger = page.strangers[enemy.key]
     if not stranger then
-        stranger = { key = key, guid = enemy.target, name = enemy.name, fullName = enemy.name }
-        page.strangers[key] = stranger
+        stranger = { key = enemy.key, guid = enemy.target, name = enemy.name, fullName = enemy.name }
+        page.strangers[enemy.key] = stranger
     end
     return stranger
 end
-local function paintPoster(page, p, enemy, rank, faction)
+local function paintPortrait(page, p, enemy, side)
+    p.face:SetSize(side, side)
+    if not GL.PaintBookPortrait then return end
+    GL.PaintBookPortrait(p.face, enemyRecord(page, enemy))
+    -- The kit's gold frame instead of the books' one, its opening on the face.
+    local rim, pad = p.face.portraitRim, math.floor(side * 0.085 + 0.5)
+    if rim then
+        rim:SetTexture(WANTED .. "CadrePortrait")
+        rim:ClearAllPoints()
+        rim:SetPoint("TOPLEFT", p.face, "TOPLEFT", -pad, pad)
+        rim:SetPoint("BOTTOMRIGHT", p.face, "BOTTOMRIGHT", pad, -pad)
+    end
+end
+-- The figures' words: the long ones on the tall poster, the short ones on the others.
+local function figureTexts(p, enemy)
+    if p.kind == "hero" then
+        return { enemy.members, enemy.members > 1 and L("membres distincts tués") or L("membre tué") },
+            { enemy.deaths, enemy.deaths > 1 and L("morts infligées") or L("mort infligée") }
+    end
+    return { enemy.members, enemy.members > 1 and L("membres tués") or L("membre tué") },
+        { enemy.deaths, enemy.deaths > 1 and L("morts") or L("mort") }
+end
+local function paintPoster(page, p, enemy, rank)
     local style, h = p.style, p:GetHeight()
     local open = enemy.target and GL.Bounties and GL.Bounties.OpenFor and GL.Bounties.OpenFor(enemy.target)
     local gold = open and GL.BountyTotal and GL.BountyTotal(open) or 0
     local paper = (gold > 0 and "Prime" or "Affiche") .. PAPER[p.kind]
     p.paper:SetTexture(WANTED .. paper)
     p.paper:SetWidth(math.floor(h * RATIO[paper] + 0.5))
-    p.pin:SetTexture(WANTED .. (gold > 0 and "ClouLaiton" or "ClouFer"))
     p.rank:SetText("#" .. rank)
-    if gold > 0 then p.seal:Show() else p.seal:Hide() end
-    Panels.Fit(p.title, L("Recherché"), p.inner, style.title, 9, true)
+    shadowed(p.rank, 0.9)
+    fit(p.title, capitals(L("Recherché")), p.inner + 8, style.title, 10, true, 0.35)
     if p.label then
         if rank == 1 then
             p.label:Show()
             p.labelText:Show()
-            Panels.Fit(p.labelText, L("Ennemi public n°1"), p.inner - 28, 11, 7, true)
+            fit(p.labelText, capitals(L("Ennemi public n°1")), p.inner - 30, 12, 7, true)
         else
             p.label:Hide()
             p.labelText:Hide()
         end
     end
-    Panels.Fit(p.name, UI.plain(enemy.name or L("un joueur inconnu")), p.inner, style.name, 8, true)
-    local record = enemyRecord(page, enemy)
-    if GL.PaintBookPortrait then
-        GL.PaintBookPortrait(p.face, record)
-        -- The kit's gold frame instead of the books' one, its opening on the face.
-        local rim, pad = p.face.portraitRim, math.floor(style.face * 0.085 + 0.5)
-        if rim then
-            rim:SetTexture(WANTED .. "CadrePortrait")
-            rim:ClearAllPoints()
-            rim:SetPoint("TOPLEFT", p.face, "TOPLEFT", -pad, pad)
-            rim:SetPoint("BOTTOMRIGHT", p.face, "BOTTOMRIGHT", pad, -pad)
-        end
-    end
-    if GL.Now() - enemy.last > COLD_AFTER then
-        -- In the ribbon's place; across the portrait when a ribbon is there.
-        p.stamp:ClearAllPoints()
-        if open then p.stamp:SetPoint("CENTER", p.face, "BOTTOM", 0, 4)
-        else p.stamp:SetPoint("BOTTOM", p, "BOTTOM", 0, math.floor(h * 0.08 + 0.5) + style.button + 3) end
-        p.stamp:Show()
-        Panels.Fit(p.stamp.words, L("Piste froide"), p.stamp:GetWidth() - 16, style.line, 7, true)
-    else
-        p.stamp:Hide()
-    end
-    local info = mapInfo(enemy.mapID)
-    local texts = {
-        enemy.members > 1 and L("%d membres tués"):format(enemy.members) or L("1 membre tué"),
-        countForm(enemy.deaths, "%d mort", "%d morts"),
-        (info and type(info.name) == "string" and (UI.plain(info.name) .. ", ") or "") .. elapsed(enemy.last),
-        enemy.kills > 0 and L("vaincu %d fois par la guilde"):format(enemy.kills) or "",
-    }
-    for i, line in ipairs(p.lines) do Panels.Fit(line.words, texts[i], line.width, line.size, 7, false) end
+    fit(p.name, UI.plain(enemy.name or L("un joueur inconnu")), p.inner + 8, style.name, 8, true)
+    -- A name too long for one line takes two: what is under it moves down a line.
+    local nameSize = select(2, GL.Safe(p.name.GetFont, p.name)) or style.name
+    local extra = (GL.Safe(p.name.GetStringWidth, p.name) or 0) > p.inner + 8 and math.floor(nameSize + 2) or 0
+    -- From the bottom up: the button, the ribbon, then the date and the figures.
+    -- A small poster has no room for both: its ribbon takes the button's place, the paper opens the sheet.
+    local ribbonOnly = open and p.kind == "compact"
+    local floor = ribbonOnly and p.bottom + 2 or p.bottom + style.button + 5
+    p.ribbon:ClearAllPoints()
+    p.ribbon:SetPoint("BOTTOM", p, "BOTTOM", 0, ribbonOnly and p.bottom or p.bottom + style.button + 3)
     if open then
         p.ribbon:Show()
         p.prize:Show()
-        Panels.Fit(p.prize, gold > 0 and L("Prime · %s"):format(GL.BountyMoney(gold)) or L("Avis de recherche"),
-            p.inner - 24, style.line, 7, true)
+        local prize = gold > 0 and capitals(L("Prime · %s"):format(GL.BountyMoney(gold))) or capitals(L("Avis de recherche"))
+        fit(p.prize, prize, p.inner - 34, style.label + 2, 7, true, 0.6)
+        floor = floor + p.ribbon:GetHeight() + 4
+        if gold > 0 then p.seal:Show() else p.seal:Hide() end
     else
         p.ribbon:Hide()
         p.prize:Hide()
+        p.seal:Hide()
     end
-    -- A word on a button is never cut: its letters get smaller until it fits.
-    for button, text in pairs({ [p.sheet] = L("Fiche"), [p.wanted] = L("Rechercher") }) do
-        local caption, size = button.caption, 14
-        button:SetText(text)
-        caption:SetWidth(button:GetWidth() - 4)
-        UI.journalFont(caption, "GameFontHighlightSmall", size)
-        while size > 8 and (GL.Safe(caption.GetStringWidth, caption) or 0) > button:GetWidth() - 10 do
-            size = size - 1
-            UI.journalFont(caption, "GameFontHighlightSmall", size)
-        end
+    local first, second = figureTexts(p, enemy)
+    for i, figure in ipairs(p.figures) do
+        local text = i == 1 and first or second
+        figure.number:SetText(tostring(text[1]))
+        UI.journalFont(figure.number, "GameFontNormalLarge", style.number)
+        figure.words:SetText(text[2])
+        UI.journalFont(figure.words, "GameFontHighlight", style.label)
+    end
+    p.seen:SetText(L("Vu %s"):format(elapsed(enemy.last)))
+    local info = mapInfo(enemy.mapID)
+    p.where = info and type(info.name) == "string" and UI.plain(info.name) or nil
+    p.kills = enemy.kills > 0 and L("vaincu %d fois par la guilde"):format(enemy.kills) or nil
+    local top = p.faceTop - extra
+    if p.kind == "hero" then
+        -- The portrait takes the room left between the name and the figures.
+        local below = 12 + 2 * (style.number + 8) + 12 + style.seen + 6
+        local side = math.max(60, math.min(style.face, math.floor(top - 4 + (h - floor) - below)))
+        p.face:ClearAllPoints()
+        p.face:SetPoint("TOP", p, "TOP", 0, top - 4)
+        paintPortrait(page, p, enemy, side)
+        local x = p.mx + 4
+        local y = top - 4 - side - 12
+        for _, figure in ipairs(p.figures) do y = y - placeFigure(figure, p, x, y, p.inner - 4) end
+        p.rule:SetSize(math.floor(p.inner * 0.8), math.floor(p.inner * 0.8 / RATIO.SeparateurEncre + 0.5) + 2)
+        p.rule:ClearAllPoints()
+        p.rule:SetPoint("TOP", p, "TOP", 0, y - 2)
+        p.seen:ClearAllPoints()
+        p.seen:SetPoint("TOP", p, "TOP", 0, y - 10)
+        p.seen:SetWidth(p.inner)
+        p.seen:SetJustifyH("CENTER")
+    else
+        local side = style.face
+        p.face:ClearAllPoints()
+        p.face:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx, top)
+        paintPortrait(page, p, enemy, side)
+        local x, width = p.mx + side + 7, p.inner - side - 7
+        local y = top
+        for _, figure in ipairs(p.figures) do y = y - placeFigure(figure, p, x, y, width) end
+        p.rule:SetSize(width, 4)
+        p.rule:ClearAllPoints()
+        p.rule:SetPoint("TOPLEFT", p, "TOPLEFT", x, y - 1)
+        p.seen:ClearAllPoints()
+        p.seen:SetPoint("TOPRIGHT", p, "TOPLEFT", p.mx + p.inner, y - 5)
+        p.seen:SetWidth(width)
+        p.seen:SetJustifyH("RIGHT")
+    end
+    if GL.Now() - enemy.last > COLD_AFTER then
+        p.stamp:ClearAllPoints()
+        if open then p.stamp:SetPoint("CENTER", p.face, "BOTTOM", 0, 4)
+        else p.stamp:SetPoint("BOTTOM", p, "BOTTOM", 0, p.bottom + style.button + 4) end
+        p.stamp:Show()
+        fit(p.stamp.words, L("Piste froide"), p.stamp:GetWidth() - 16, style.label + 1, 7, true)
+    else
+        p.stamp:Hide()
     end
     p.target, p.enemy = enemy.target, enemy.name
-    if enemy.target then p.sheet:Show() else p.sheet:Hide() end
-    if enemy.target and enemy.name and not open then p.wanted:Show() else p.wanted:Hide() end
+    p.canWant = enemy.target and enemy.name and not open and true or nil
+    if enemy.target and not ribbonOnly then p.sheet:Show() else p.sheet:Hide() end
     p:Show()
 end
 local function paintEnemies(page)
     local faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string") == "Horde" and "Horde" or "Alliance"
     page.cloth:SetTexture(WANTED .. "Toile" .. faction)
     page.trim:SetTexture(WANTED .. "Bordure" .. faction)
+    for _, mark in ipairs(page.marks) do
+        mark:SetTexture(WANTED .. "Embleme" .. faction)
+        mark:SetSize(math.floor(mark.side * RATIO["Embleme" .. faction] + 0.5), mark.side)
+    end
     page.banner:SetTexture(WANTED .. "Fanion" .. faction)
-    page.banner:SetSize(math.floor(58 * RATIO["Fanion" .. faction] + 0.5), 58)
-    local emblemW = math.floor(page.banner:GetWidth() * 0.6 + 0.5)
+    page.banner:SetSize(math.floor(100 * RATIO["Fanion" .. faction] + 0.5), 100)
+    local emblemW = math.floor(page.banner:GetWidth() * 0.62 + 0.5)
     page.emblem:SetTexture(WANTED .. "Embleme" .. faction)
     page.emblem:SetSize(emblemW, math.floor(emblemW / RATIO["Embleme" .. faction] + 0.5))
     page.emblem:ClearAllPoints()
-    page.emblem:SetPoint("CENTER", page.banner, "TOP", 0, -25)
-    page.title:SetText(L("Ennemis de la guilde"))
+    page.emblem:SetPoint("CENTER", page.banner, "TOP", 0, -46)
+    fit(page.title, L("Ennemis de la guilde"), 252, 28, 18, true, 0.85)
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
     local list = sharing and R.GuildEnemies(ENEMY_PERIODS[page.period][1]) or {}
-    page.lead:SetText(sharing and L("Les pires menaces d’abord : membres tués, nombre de morts et fraîcheur des faits.") or "")
-    page.viewCycle:SetText(L("%s · %d"):format(L(ENEMY_PERIODS[page.period][2]), #list))
-    UI.selectButton(page.viewCycle, page.period ~= 1)
-    if sharing then page.viewCycle:Show() else page.viewCycle:Hide() end
+    local show = POSTER_FILTERS[page.show][1]
+    if show ~= "all" then
+        local kept = {}
+        for _, enemy in ipairs(list) do
+            local open = enemy.target and GL.Bounties and GL.Bounties.OpenFor and GL.Bounties.OpenFor(enemy.target)
+            local gold = open and GL.BountyTotal and GL.BountyTotal(open) or 0
+            if (show == "bounty") == (gold > 0) then kept[#kept + 1] = enemy end
+        end
+        list = kept
+    end
+    -- A choice is never cut: its letters get smaller until it fits.
+    for button, text in pairs({ [page.periodButton] = L(ENEMY_PERIODS[page.period][2]), [page.showButton] = L(POSTER_FILTERS[page.show][2]) }) do
+        local caption, size = button.caption, 14
+        button:SetText(text)
+        UI.journalFont(caption, "GameFontHighlightSmall", size)
+        while size > 9 and (GL.Safe(caption.GetStringWidth, caption) or 0) > button:GetWidth() - 36 do
+            size = size - 1
+            UI.journalFont(caption, "GameFontHighlightSmall", size)
+        end
+    end
+    for _, button in ipairs({ page.periodButton, page.showButton }) do
+        if sharing then button:Show() else button:Hide() end
+    end
     page.offset = math.min(page.offset, math.max(0, math.floor((#list - 1) / ENEMY_ROWS) * ENEMY_ROWS))
     for i, p in ipairs(page.posters) do
         local enemy = list[page.offset + i]
-        if enemy then paintPoster(page, p, enemy, page.offset + i, faction)
+        if enemy then paintPoster(page, p, enemy, page.offset + i)
         else
-            p.target, p.enemy = nil, nil
+            p.target, p.enemy, p.canWant = nil, nil, nil
             p:Hide()
         end
     end
@@ -3306,13 +3478,14 @@ local function paintEnemies(page)
     end
     if inGuild and not sharing then page.reshare:Show() else page.reshare:Hide() end
     page.empty:SetText(empty)
+    page.legend:SetText(#list > 0 and L("Victimes distinctes · Morts infligées · Fraîcheur des faits") or "")
+    local pages = math.max(1, math.ceil(#list / ENEMY_ROWS))
     page.previous:SetEnabled(page.offset > 0)
     page.next:SetEnabled(page.offset + ENEMY_ROWS < #list)
-    local pages = math.max(1, math.ceil(#list / ENEMY_ROWS))
     if pages > 1 then
         page.previous:Show()
         page.next:Show()
-        page.count:SetText(L("Page %d sur %d"):format(page.offset / ENEMY_ROWS + 1, pages))
+        page.count:SetText(L("%d / %d"):format(page.offset / ENEMY_ROWS + 1, pages))
     else
         page.previous:Hide()
         page.next:Hide()

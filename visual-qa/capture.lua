@@ -707,8 +707,10 @@ function QA.capture(name)
                 local orders = { ["Player-1-QA0000W2"] = { pot = { a = 2500000 } }, ["Player-1-QA0000W3"] = { pot = {} } }
                 GL.Bounties = GL.Bounties or {}
                 GL.Bounties.OpenFor = function(target) return orders[target] end
-                if name:find("%-horde") then UnitFactionGroup = function() return "Horde", "Horde" end end
             end
+            -- The faction of the page's tapestry, put back for the next views.
+            GL.qaFaction = GL.qaFaction or UnitFactionGroup
+            UnitFactionGroup = name:find("%-horde") and function() return "Horde", "Horde" end or GL.qaFaction
         end
         if page == "members" and GL.GuildMap then
             -- Synthetic members (example names): you, two up to date (one an alt), one old, one unknown.

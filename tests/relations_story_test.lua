@@ -510,13 +510,27 @@ do
     assert(gb.tally[1].label:GetText() == "Morts · 7 j" and gb.tally[1].value:GetText() == "5" and gb.tally[4].value:GetText() == "2")
     click(gb.tally[3])
     local enemies = gb.host.pages.enemies
-    assert(R.page == "enemies" and enemies:IsShown() and enemies.viewCycle:GetText() == "Toujours · 1")
+    -- The mockup's two lists (owner, 27/11): the last 30 days and every poster at first.
+    assert(R.page == "enemies" and enemies:IsShown() and enemies.periodButton:GetText() == "30 derniers jours")
+    assert(enemies.showButton:GetText() == "Toutes les affiches")
     -- Wanted posters (owner's kit, 27/11): the first on the tall one, every figure as text.
     local hero = enemies.posters[1]
-    assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "#1" and hero.title:GetText() == "Recherché" and not enemies.posters[2]:IsShown())
-    assert(hero.labelText:GetText() == "Ennemi public n°1" and hero.lines[1].words:GetText() == "2 membres tués" and hero.lines[2].words:GetText() == "4 morts")
-    assert(hero.lines[3].words:GetText() == "Feralas, il y a 1 h" and hero.lines[4].words:GetText() == "vaincu 4 fois par la guilde")
+    assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "#1" and hero.title:GetText() == "RECHERCHÉ" and not enemies.posters[2]:IsShown())
+    assert(hero.labelText:GetText() == "ENNEMI PUBLIC N°1" and hero.figures[1].number:GetText() == "2" and hero.figures[1].words:GetText() == "membres distincts tués")
+    assert(hero.figures[2].number:GetText() == "4" and hero.figures[2].words:GetText() == "morts infligées" and hero.seen:GetText() == "Vu il y a 1 h")
+    assert(hero.where == "Feralas" and hero.kills == "vaincu 4 fois par la guilde")
     assert(not hero.seal:IsShown() and not hero.stamp:IsShown() and not hero.ribbon:IsShown())
+    -- The lists open under their button; a choice closes the menu and repaints the posters.
+    click(enemies.periodButton)
+    assert(enemies.periodButton.menu:IsShown())
+    click(enemies.periodButton.menu.choices[3])
+    assert(not enemies.periodButton.menu:IsShown() and enemies.periodButton:GetText() == "Toujours" and hero:IsShown())
+    click(enemies.showButton)
+    click(enemies.showButton.menu.choices[2])
+    assert(enemies.showButton:GetText() == "Avec une prime" and not hero:IsShown(), "no bounty on him")
+    click(enemies.showButton)
+    click(enemies.showButton.menu.choices[1])
+    assert(hero:IsShown())
     -- The worst threats (owner, 26/11): time and harm together, his examples.
     local now, D = GL.Now(), 86400
     local function near(a, b) return math.abs(a - b) < 0.05 end
@@ -526,7 +540,7 @@ do
     assert(R.Threat({ a = { now - 7 * D }, b = { now - 7 * D } }) > fiveWeeks, "two members last week come first")
     assert(R.Threat({ a = { now - 90 * D }, b = { now - 90 * D } }) < 0.2, "unseen for three months: nearly nothing")
     assert(R.Threat({ a = { now, now, now } }) < R.Threat({ a = { now }, b = { now }, c = { now } }), "different victims weigh more")
-    click(hero)
+    click(hero.hit)
     assert(opened == "Player-1-Foe0001/Bad Guy")
     click(gb.tabs.guildlog)
     GL.OpenPlayerDossier = realDossier
