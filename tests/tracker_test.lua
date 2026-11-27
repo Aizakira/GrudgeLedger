@@ -8,6 +8,7 @@ local function fixture(saved, formats)
     function IsInInstance() return instanceType ~= "none", instanceType end
     C_DeathRecap, C_NamePlate, C_CombatLog = nil, nil, nil
     C_TooltipInfo, Enum, UnitTokenFromGUID, UnitNameFromGUID, UnitPlayerControlled, GetTime = nil, nil, nil, nil, nil, nil
+    C_UnitAuras, UnitDebuff = nil, nil
     unitData = { player = { guid = "Player-1-self", name = "Testeur", surname = "Exemple", dead = false, isPlayer = true, health = 1000, maxHealth = 1000 } }
     local function unit(token)
         if unitData[token] then return unitData[token] end
@@ -956,6 +957,69 @@ test("observed NPC pressure or max health change blocks health inference", funct
     T.HandleEvent("PLAYER_ENTERING_WORLD") unitData.mouseover = nil start()
     now = now + 1 unitData.player.health = 800 unitData.player.maxHealth = 800 T.Poll()
     now = now + 1 T.Poll() assert(count() == 0)
+end)
+
+test("a monster blocks the health guess only while it is on you, and leaves a trace", function()
+    start()
+    unitData.mouseover = { guid = "Creature-1-wolf", hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll() assert(total("aggressions") == 0)
+    local traced = false
+    for _, line in ipairs(GL.db.detectionLog or {}) do traced = traced or line.code == "monster" end
+    assert(traced, "the detection trace says why the blow was not counted")
+    -- The wolf is dead; the player who jumped you keeps hitting.
+    unitData.mouseover = nil
+    now = now + 4 T.Poll()
+    now = now + 1 unitData.player.health = 800 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 1 and GL.Relation(GL.Get(GL.Identity("target"))) == "enemy")
+end)
+
+test("a harmful effect from a hostile player is an aggression even with a monster on you", function()
+    start()
+    unitData.mouseover = { guid = "Creature-1-wolf", hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
+    local auras = {}
+    C_UnitAuras = { GetAuraDataByIndex = function(token, index, filter)
+        assert(token == "player" and filter == "HARMFUL")
+        return auras[index]
+    end }
+    auras[1] = { name = "Morsure", sourceUnit = "mouseover" }
+    now = now + 1 T.HandleEvent("UNIT_AURA", "player")
+    assert(total("aggressions") == 0, "a monster's effect accuses nobody")
+    auras[2] = { name = "Poison", sourceUnit = "target" }
+    T.HandleEvent("UNIT_AURA", "player")
+    T.HandleEvent("UNIT_AURA", "player")
+    assert(total("aggressions") == 1 and GL.Relation(GL.Get(GL.Identity("target"))) == "enemy")
+    local proof
+    for _, entry in ipairs(GL.Get(GL.Identity("target")).history) do
+        if entry.kind == "aggression" then proof = entry.evidence end
+    end
+    assert(proof and proof:find("Effet néfaste", 1, true))
+    -- A hidden source, an unflagged or same-faction caster prove nothing.
+    fixture() start()
+    C_UnitAuras = { GetAuraDataByIndex = function(_, index) return index == 1 and { sourceUnit = secret } or nil end }
+    T.HandleEvent("UNIT_AURA", "player") assert(total("aggressions") == 0)
+    unitData.target.flagged = false
+    C_UnitAuras = { GetAuraDataByIndex = function(_, index) return index == 1 and { sourceUnit = "target" } or nil end }
+    T.HandleEvent("UNIT_AURA", "player") assert(total("aggressions") == 0)
+    unitData.target.flagged, unitData.target.faction = nil, "Alliance"
+    T.HandleEvent("UNIT_AURA", "player") assert(total("aggressions") == 0)
+    -- The older client API gives the caster as its seventh value.
+    fixture() start()
+    UnitDebuff = function(_, index) if index == 1 then return "Poison", nil, 1, nil, 10, 20, "target" end end
+    T.HandleEvent("UNIT_AURA", "player") assert(total("aggressions") == 1)
+end)
+
+test("the client's wound event stands in for hidden health", function()
+    start()
+    unitData.player.health = secret T.Poll()
+    now = now + 1 T.HandleEvent("UNIT_COMBAT", "player", "WOUND", "", secret, 1)
+    now = now + 1 T.Poll() assert(total("aggressions") == 0, "a hidden amount proves nothing")
+    T.HandleEvent("UNIT_COMBAT", "player", "HEAL", "", 120, 1)
+    now = now + 1 T.Poll() assert(total("aggressions") == 0)
+    T.HandleEvent("UNIT_COMBAT", "player", "WOUND", "", 120, 1)
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 1)
 end)
 
 test("secret health and non-combat opponent cannot trigger inferred aggression", function()

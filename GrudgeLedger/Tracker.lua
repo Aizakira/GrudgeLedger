@@ -478,6 +478,12 @@ local function unresolvedAttack(f)
     return f.pve or (f.unknownPets and next(f.unknownPets))
 end
 
+-- A monster blocks the health guess only while it is on you (owner, 27/11): a player who jumps
+-- you after the mob you were fighting is still an aggressor.
+local function aggressionBlocked(f)
+    return (f.pveAt and GL.Now() - f.pveAt <= 3) or (f.unknownPets and next(f.unknownPets))
+end
+
 local function observeHealth()
     local f = fight
     if not enabled() or not f then return end
@@ -488,15 +494,52 @@ local function observeHealth()
     local health = GL.Clean(GL.Safe(UnitHealth, "player"), "number")
     local maximum = GL.Clean(GL.Safe(UnitHealthMax, "player"), "number")
     local now = GL.Now()
-    if health and maximum and f.health and f.maxHealth == maximum and f.healthAt
-        and now - f.healthAt <= 2 and health < f.health and not unresolvedAttack(f) and not f.damageLogged then
+    local hurt = health and maximum and f.health and f.maxHealth == maximum and f.healthAt
+        and now - f.healthAt <= 2 and health < f.health
+    -- Forever can hide health in combat; the client's own "you were wounded" event says the same.
+    if not hurt and f.woundAt and now - f.woundAt <= 1 then hurt = true end
+    f.woundAt = nil
+    if hurt and not f.damageLogged then
         if not f.opening then f.idleOpponents = nil end
         local candidates = recentAttackers(f, 2)
-        if next(candidates) and not f.pendingAggression then
+        if aggressionBlocked(f) then
+            for _, identity in pairs(candidates) do GL.Trace("monster", identity) end
+        elseif next(candidates) and not f.pendingAggression then
             f.pendingAggression = { candidates = candidates, at = now }
         end
     end
     f.health, f.maxHealth, f.healthAt = health, maximum, now
+end
+
+-- A harmful effect a hostile player put on you is an attack, whatever else hits you (owner, 27/11).
+local function auraSource(index)
+    if C_UnitAuras and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
+        local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, "player", index, "HARMFUL")
+        data = ok and GL.Clean(data, "table")
+        if not data then return false end
+        return GL.Clean(data.sourceUnit, "string")
+    end
+    if type(UnitDebuff) ~= "function" then return false end
+    local ok, name, _, _, _, _, _, source = pcall(UnitDebuff, "player", index)
+    if not ok or not GL.Clean(name) then return false end
+    return GL.Clean(source, "string")
+end
+
+local function observeAuras()
+    local f = fight
+    if not enabled() or not f or deathHandled or bool(UnitIsPVP, "player") ~= true then return end
+    local faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
+    for index = 1, 40 do
+        local source = auraSource(index)
+        if source == false then break end
+        if source and bool(UnitCanAttack, "player", source) == true and bool(UnitIsPVP, source) == true then
+            local identity = GL.Identity(source, true)
+            if identity and faction and identity.faction and identity.faction ~= faction then
+                observeOpponent(f, identity.guid, identity.level, true)
+                recordAggression(f, identity, "confirmed", "Effet néfaste posé sur vous par ce joueur hostile pendant le combat.")
+            end
+        end
+    end
 end
 
 local function tryAggression()
@@ -510,7 +553,7 @@ local function tryAggression()
     local age = GL.Now() - pending.at
     if age < 1 then return end -- give explicit combat-log evidence priority
     f.pendingAggression = nil
-    if age <= 3 and not unresolvedAttack(f) and not f.damageLogged then
+    if age <= 3 and not aggressionBlocked(f) and not f.damageLogged then
         local candidates = recentAttackers(f, 2)
         for key, identity in pairs(pending.candidates) do
             if candidates[key] then
@@ -568,7 +611,7 @@ function T.Observe(unit, reuseObservation)
                 f.unknownPets = f.unknownPets or {}
                 f.unknownPets[guid] = true
             else
-                f.pve = true
+                f.pve, f.pveAt = true, GL.Now()
                 if controlled == false and guid and guid:match("^Creature%-") then f.npcPressure = true end
             end
         end
@@ -1102,7 +1145,7 @@ function T.OnCombatLog(...)
         local identity, viaPet = attacker(src, srcName, srcFlags)
         local f = combatSession()
         if not identity and f then
-            f.pve = true
+            f.pve, f.pveAt = true, GL.Now()
             if src and src:match("^Creature%-") and hasFlag(srcFlags, COMBATLOG_OBJECT_CONTROL_NPC or 512)
                 and hostileFlags(srcFlags) and not viaPet then f.npcPressure = true end
         end
@@ -1313,6 +1356,7 @@ function T.Poll()
     end
     for _, unit in ipairs(units()) do T.Observe(unit, true) end
     observeHealth()
+    observeAuras()
     tryAggression()
     tryKills()
     local now = GL.Now()
@@ -1383,6 +1427,14 @@ function T.HandleEvent(event, ...)
         arg = GL.Clean(arg, "string")
         if arg then plates[arg] = nil end
     elseif event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" then T.Poll()
+    elseif event == "UNIT_AURA" then
+        if GL.Clean(arg, "string") == "player" then observeAuras() end
+    elseif event == "UNIT_COMBAT" then
+        local amount = GL.Clean((select(4, ...)), "number")
+        if GL.Clean(arg, "string") == "player" and GL.Clean(second, "string") == "WOUND" and amount and amount > 0 then
+            if fight then fight.woundAt = GL.Now() end
+            T.Poll()
+        end
     elseif event == "UNIT_TARGET" or event == "UNIT_FLAGS" or event == "UNIT_HEALTH" or event == "UNIT_NAME_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
         arg = GL.Clean(arg, "string")
         if event == "UNIT_HEALTH" and arg == "player" then T.Poll() else T.Observe(arg) end
@@ -1416,6 +1468,10 @@ GL.On("READY", function()
     }
     T.nativeKillEvent = pcall(frame.RegisterEvent, frame, "PARTY_KILL")
     for _, event in ipairs(events) do pcall(frame.RegisterEvent, frame, event) end
+    for _, event in ipairs({"UNIT_AURA", "UNIT_COMBAT"}) do
+        if frame.RegisterUnitEvent then pcall(frame.RegisterUnitEvent, frame, event, "player")
+        else pcall(frame.RegisterEvent, frame, event) end
+    end
     -- Forever may reject registration even when the getter exists.
     if (C_CombatLog and C_CombatLog.GetCurrentEventInfo) or CombatLogGetCurrentEventInfo then
         openingFeed = pcall(frame.RegisterEvent, frame, "COMBAT_LOG_EVENT_UNFILTERED")
