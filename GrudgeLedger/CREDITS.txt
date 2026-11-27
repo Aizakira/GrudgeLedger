@@ -37,6 +37,13 @@ The three unmodified TrueType files in Media/Fonts are distributed under the
 SIL Open Font License 1.1; the full license is included in Media/Fonts/OFL.txt.
 https://github.com/google/fonts/tree/29b4ec6df2522a8aee279414b78a07910b065874/ofl/ptserif
 
+New Rocker (Pablo Impallari, Brenda Gallo, Rodrigo Fuenzalida) and Cinzel Decorative
+(Natanael Gama) give the wanted posters their titles and figures. The unmodified files
+in Media/Fonts are distributed under the SIL Open Font License 1.1, with their licenses
+in Media/Fonts/OFL-NewRocker.txt and Media/Fonts/OFL-CinzelDecorative.txt.
+https://github.com/google/fonts/tree/main/ofl/newrocker
+https://github.com/google/fonts/tree/main/ofl/cinzeldecorative
+
 Forever death-recap fields were checked against Blizzard's public API documentation
 and the client observations documented by GudaAddons/HeadHunter. The reader and
 validation logic here are independently implemented; no HeadHunter files are bundled.

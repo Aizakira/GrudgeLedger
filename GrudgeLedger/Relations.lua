@@ -3118,10 +3118,27 @@ local function shadowed(label, alpha)
     GL.Safe(label.SetShadowColor, label, 0, 0, 0, alpha or 0.75)
     GL.Safe(label.SetShadowOffset, label, 1, -1)
 end
-local function fit(label, text, width, biggest, smallest, bold, shadow)
-    Panels.Fit(label, text, width, biggest, smallest, bold)
+local function fit(label, text, width, biggest, smallest, bold, shadow, face)
+    if face then
+        -- A display font of Media\Fonts: smaller until the text fits its line.
+        GL.Safe(label.SetWordWrap, label, false)
+        label:SetText(text or "")
+        local size = biggest
+        UI.journalFont(label, "GameFontNormalLarge", size, face)
+        while size > smallest and (GL.Safe(label.GetStringWidth, label) or 0) > width do
+            size = size - 1
+            UI.journalFont(label, "GameFontNormalLarge", size, face)
+        end
+    else
+        Panels.Fit(label, text, width, biggest, smallest, bold)
+    end
     if shadow then shadowed(label, shadow) end
 end
+-- The posters' display fonts by the faction that posts them (owner, 27/11; SIL OFL, Media\Fonts):
+-- carved New Rocker for the Horde's titles, names and figures; Cinzel Decorative's capitals for the
+-- Alliance's titles and figures, its names in the book's serif.
+R.Faces = { Horde = { title = "NewRocker-Regular", name = "NewRocker-Regular", number = "NewRocker-Regular" },
+    Alliance = { title = "CinzelDecorative-Bold", number = "CinzelDecorative-Bold" } }
 -- A figure of the poster: its pictogram, the number in bold, the words after it (they may wrap).
 local function posterFigure(p, icon, size)
     local figure = { size = size }
@@ -3379,6 +3396,20 @@ local function placePoster(page, p, spot)
     p:SetPoint("TOPLEFT", page, "TOPLEFT", spot.x, spot.y)
     p:SetSize(w, h)
     GL.Safe(p.SetFrameLevel, p, (GL.Safe(page.GetFrameLevel, page) or 1) + spot.level)
+    -- Back to straight and to their own anchors before the layout (R.TiltPoster turned them last time).
+    for _, region in ipairs(R.PosterRegions(p)) do GL.Safe(region.SetRotation, region, 0) end
+    p.prize:ClearAllPoints()
+    p.prize:SetPoint("CENTER", p.ribbon, "CENTER", -6, 1)
+    p.seal:ClearAllPoints()
+    p.seal:SetPoint("CENTER", p.ribbon, "RIGHT", -8, 0)
+    if p.labelText then
+        p.labelText:ClearAllPoints()
+        p.labelText:SetPoint("CENTER", p.label, "CENTER", 0, 0)
+    end
+    p.stamp.ink:ClearAllPoints()
+    p.stamp.ink:SetAllPoints(p.stamp)
+    p.stamp.words:ClearAllPoints()
+    p.stamp.words:SetPoint("TOPLEFT", p.stamp, "TOPLEFT", 8, -5)
     p.paper:SetTexture(WANTED .. spot.paper)
     -- The paper turns in a larger square of the texture (its clear edge stretches around it): every
     -- corner of the region shows the point of the drawing turned back by the angle.
@@ -3624,8 +3655,9 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     -- The rank's number in gold and the small # before it, the two centred together in the medal.
     p.rank:SetText(tostring(rank))
     p.rankHash:SetText("#")
-    UI.journalFont(p.rank, "GameFontNormalLarge", style.rank)
-    UI.journalFont(p.rankHash, "GameFontNormalLarge", math.floor(style.rank * 0.62 + 0.5))
+    local rankFace = (R.Faces[page.faction] or R.Faces.Alliance).number
+    UI.journalFont(p.rank, "GameFontNormalLarge", style.rank, rankFace)
+    UI.journalFont(p.rankHash, "GameFontNormalLarge", math.floor(style.rank * 0.62 + 0.5), rankFace)
     shadowed(p.rank, 0.95)
     shadowed(p.rankHash, 0.95)
     local numberW = math.ceil(GL.Safe(p.rank.GetStringWidth, p.rank) or style.rank * 0.6)
@@ -3639,7 +3671,8 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     p.rankHash:SetPoint("LEFT", p.medal, "CENTER", start, math.floor(style.rank * 0.12 + 0.5))
     p.rank:ClearAllPoints()
     p.rank:SetPoint("LEFT", p.medal, "CENTER", start + hashW + 1, 1)
-    fit(p.title, capitals(L("Recherché")), p.inner + 8, style.title, 10, true, 0.35)
+    local faces = R.Faces[page.faction] or R.Faces.Alliance
+    fit(p.title, capitals(L("Recherché")), p.inner + 8, style.title, 10, true, 0.35, faces.title)
     if p.label then
         if rank == 1 then
             p.label:Show()
@@ -3656,7 +3689,7 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     p.name:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx - 4, nameY)
     p.name:SetWidth(p.inner + 8)
     p.faceTop = nameY - style.name - (p.kind == "compact" and 4 or 6)
-    fit(p.name, UI.plain(enemy.name or L("un joueur inconnu")), p.inner + 8, style.name, 8, true)
+    fit(p.name, UI.plain(enemy.name or L("un joueur inconnu")), p.inner + 8, style.name, 8, true, nil, faces.name)
     -- A name too long for one line takes two: what is under it moves down a line.
     local nameSize = select(2, GL.Safe(p.name.GetFont, p.name)) or style.name
     local extra = (GL.Safe(p.name.GetStringWidth, p.name) or 0) > p.inner + 8 and math.floor(nameSize + 2) or 0
@@ -3680,7 +3713,7 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     for i, figure in ipairs(p.figures) do
         local text = i == 1 and first or second
         figure.number:SetText(tostring(text[1]))
-        UI.journalFont(figure.number, "GameFontNormalLarge", style.number)
+        UI.journalFont(figure.number, "GameFontNormalLarge", style.number, faces.number)
         figure.words:SetText(text[2])
         UI.journalFont(figure.words, "GameFontHighlight", style.label)
     end
@@ -3754,6 +3787,7 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         p.stamp:Hide()
     end
     p.target, p.enemy = enemy.target, enemy.name
+    R.TiltPoster(p, spot.turn)
     p.canWant = enemy.target and enemy.name and not open and not enemy.preview and true or nil
     p:Show()
 end
@@ -3791,10 +3825,58 @@ function R.PreviewEnemies(faction)
     R.Refresh()
 end
 end
+-- What turns with a poster's paper: its words, pictograms, rules, ribbon, seal and stamp. The 3D
+-- portrait cannot turn: it moves with the rest and stays straight.
+function R.PosterRegions(p)
+    local regions = { p.title, p.name, p.seen, p.rule, p.ribbon, p.prize, p.seal, p.stamp.ink, p.stamp.words }
+    if p.label then
+        regions[#regions + 1] = p.label
+        regions[#regions + 1] = p.labelText
+    end
+    for _, figure in ipairs(p.figures) do
+        regions[#regions + 1] = figure.icon
+        regions[#regions + 1] = figure.number
+        regions[#regions + 1] = figure.words
+    end
+    return regions
+end
+-- The writing turns with the paper (owner, 27/11), where the game can turn a text (Forever can:
+-- FontString:SetRotation): every piece is moved around the poster's centre by the paper's angle and
+-- turned by it. Positions are read once, all of them, before anything moves (some hang on others).
+-- Without the game's layout (the test fixtures give every region the same centre), nothing moves.
+function R.TiltPoster(p, degrees)
+    if not degrees or degrees == 0 or not (p.title and p.title.SetRotation) then return end
+    local cx, cy = GL.Safe(p.GetCenter, p)
+    if type(cx) ~= "number" or type(cy) ~= "number" then return end
+    local regions, places, distinct = R.PosterRegions(p), {}, false
+    regions[#regions + 1] = p.face
+    for i, region in ipairs(regions) do
+        local x, y = GL.Safe(region.GetCenter, region)
+        if GL.Safe(region.IsShown, region) and type(x) == "number" and type(y) == "number" then
+            places[i] = { x - cx, cy - y, region:GetWidth(), region:GetHeight() }
+            distinct = distinct or math.abs(x - cx) > 0.5 or math.abs(y - cy) > 0.5
+        end
+    end
+    if not distinct then return end
+    local a = math.rad(degrees)
+    local c, s = math.cos(a), math.sin(a)
+    for i, region in ipairs(regions) do
+        local at = places[i]
+        if at then
+            local dx, dy = at[1], at[2]
+            region:ClearAllPoints()
+            region:SetPoint("CENTER", p, "CENTER", c * dx - s * dy, -(s * dx + c * dy))
+            if region.GetStringWidth then region:SetWidth(at[3]) else region:SetSize(at[3], at[4]) end
+            -- The paper turns clockwise for a positive angle; the game turns counter-clockwise.
+            if region ~= p.face then GL.Safe(region.SetRotation, region, -a) end
+        end
+    end
+end
 local function paintEnemies(page)
     local preview = R.preview
     local faction = preview and preview.faction
         or GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string") == "Horde" and "Horde" or "Alliance"
+    page.faction = faction
     page.previewNote:SetText(preview and L("Aperçu : ennemis d’exemple, rien n’est enregistré") or "")
     page.cloth:SetTexture(WANTED .. "Toile" .. faction)
     for _, piece in ipairs(page.corners) do piece:SetTexture(WANTED .. piece.corner:format(faction)) end

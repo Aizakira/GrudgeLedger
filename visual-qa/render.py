@@ -53,8 +53,10 @@ def font(size, face=None):
 @lru_cache(maxsize=32)
 def font_path(face):
     name = (face or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
-    if name.startswith("ptserif-"):
-        return ADDON / "Media" / "Fonts" / face.replace("\\", "/").rsplit("/", 1)[-1]
+    # Every font the addon bundles (PT Serif, Spectral, the posters' display fonts) is drawn as itself.
+    bundled = ADDON / "Media" / "Fonts" / face.replace("\\", "/").rsplit("/", 1)[-1] if face else None
+    if bundled and bundled.is_file():
+        return bundled
     candidates = {"frizqt__.ttf": ("FRIZQT__.TTF", "georgia.ttf"),
                   "morpheus.ttf": ("MORPHEUS.TTF", "georgia.ttf"),
                   "arialn.ttf": ("ARIALN.TTF", "arial.ttf")}
