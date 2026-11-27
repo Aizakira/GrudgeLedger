@@ -39,10 +39,20 @@ GL.Art = {
     Wanted = media .. "AvisRecherche\\",
 }
 GL.Art.WantedRatio = {
-    FanionAlliance = 0.753, FanionHorde = 0.844, EmblemeAlliance = 0.754, EmblemeHorde = 0.645,
-    AfficheGrande = 0.638, AfficheMoyenne = 0.755, AffichePetite = 1.014,
-    PrimeGrande = 0.621, PrimeMoyenne = 0.758, PrimePetite = 1.065,
-    CadrePortrait = 1.006, Medaillon = 0.966, Bandeau = 5.985, SceauPrime = 0.989, Tampon = 4.094,
+    FanionAlliance = 0.753, FanionHorde = 0.844, EmblemeAlliance = 0.76, EmblemeHorde = 0.641,
+    FiligraneAlliance = 0.76, FiligraneHorde = 0.641,
+    AfficheGrande1 = 0.665, AfficheGrande2 = 0.695, AfficheCarree1 = 0.982, AfficheCarree2 = 0.96,
+    PrimeGrande1 = 0.667, PrimeGrande2 = 0.706, PrimeCarree1 = 0.991, PrimeCarree2 = 0.963,
+    CadrePortrait = 1.006, Medaillon = 0.978, MedaillonUn = 0.963, Bandeau = 5.066, SceauPrime = 0.989, Tampon = 4.094,
     Cartouche = 7.659, SeparateurEncre = 28.06, SeparateurOr = 19.363, IconeMembres = 1.685, IconeCrane = 0.913,
-    ClouLaiton = 0.953, ClouFer = 0.976,
+    ClouLaiton = 0.953, ClouFer = 0.976, Chevron = 1.667,
+}
+-- Where the posters' papers take writing (v5, 27/11): margins left, top, right, bottom in fractions of
+-- the drawing, inside its printed frame (tools/import_wanted_kit.py prints them). 1 and 2 are the two
+-- tilts drawn in the paper; the text itself stands straight.
+GL.Art.WantedText = {
+    AfficheGrande1 = { 0.134, 0.099, 0.122, 0.09 }, AfficheGrande2 = { 0.12, 0.101, 0.124, 0.081 },
+    AfficheCarree1 = { 0.095, 0.123, 0.109, 0.127 }, AfficheCarree2 = { 0.1, 0.105, 0.093, 0.099 },
+    PrimeGrande1 = { 0.136, 0.087, 0.128, 0.091 }, PrimeGrande2 = { 0.099, 0.103, 0.136, 0.081 },
+    PrimeCarree1 = { 0.079, 0.112, 0.123, 0.132 }, PrimeCarree2 = { 0.094, 0.102, 0.104, 0.108 },
 }

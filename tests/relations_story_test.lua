@@ -520,6 +520,36 @@ do
     assert(hero.figures[2].number:GetText() == "4" and hero.figures[2].words:GetText() == "morts infligées" and hero.seen:GetText() == "Vu il y a 1 h")
     assert(hero.where == "Feralas" and hero.kills == "vaincu 4 fois par la guilde")
     assert(not hero.seal:IsShown() and not hero.stamp:IsShown() and not hero.ribbon:IsShown())
+    -- The posters' layout (owner, 27/11): drawn from who is on the page, the same while they stay,
+    -- another when one arrives; never over another's writing, never off the board.
+    local function items(n, bountyAt)
+        local out = {}
+        for i = 1, n do out[i] = { key = "Enemy" .. i .. "-Realm", bounty = i == bountyAt } end
+        return out
+    end
+    local function same(a, b)
+        for i = 1, #a do
+            if a[i].x ~= b[i].x or a[i].y ~= b[i].y or a[i].paper ~= b[i].paper then return false end
+        end
+        return #a == #b
+    end
+    local changed, draws = 0, 0
+    for n = 1, 5 do
+        for bountyAt = 0, n do
+            local spots, drawn = R.PosterLayout(items(n, bountyAt))
+            assert(#spots == n and R.PosterReadable(spots) and same(spots, R.PosterLayout(items(n, bountyAt))))
+            if drawn then draws = draws + 1 end
+            for i, spot in ipairs(spots) do
+                assert(spot.x >= 0 and spot.x + spot.w <= 664 and spot.y <= -60 and spot.y - spot.h >= -480, spot.paper)
+                assert(spot.paper:find(bountyAt == i and "^Prime" or "^Affiche"), spot.paper)
+            end
+            assert(spots[1].paper:find("Grande") and (n < 2 or spots[2].paper:find("Carree")))
+        end
+        local more = items(5)
+        more[n].key = "Newcomer-Realm"
+        if not same(R.PosterLayout(items(5)), R.PosterLayout(more)) then changed = changed + 1 end
+    end
+    assert(changed >= 4 and draws >= 18, "a newcomer moves the posters, and most draws are kept")
     -- The lists open under their button; a choice closes the menu and repaints the posters.
     click(enemies.periodButton)
     assert(enemies.periodButton.menu:IsShown())

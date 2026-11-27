@@ -71,13 +71,15 @@ for name, expected_width, expected_height, transparent in (
     ("JournalGuilde/Victoire.tga", 64, 64, True), ("JournalGuilde/Mort.tga", 64, 64, True),
     *((f"Letters{name}.tga", 512, 256, True) for name in ("Hurlevent", "Chanteguerre", "Kaldorei", "Gnomeregan", "Karazhan", "Amani")),
     # The guild's enemies as wanted posters (owner's kit, 27/11; tools/import_wanted_kit.py).
-    *((f"AvisRecherche/{name}.tga", 1024, 512, opaque is False) for name, opaque in (
-        ("ToileAlliance", True), ("ToileHorde", True), ("BordureAlliance", False), ("BordureHorde", False))),
+    ("AvisRecherche/ToileAlliance.tga", 1024, 512, False), ("AvisRecherche/ToileHorde.tga", 1024, 512, False),
     *((f"AvisRecherche/{name}.tga", w, h, True) for name, w, h in (
+        ("BordureAlliance", 1024, 1024), ("BordureHorde", 1024, 1024),
         ("FanionAlliance", 128, 256), ("FanionHorde", 128, 256), ("EmblemeAlliance", 128, 128), ("EmblemeHorde", 128, 128),
-        ("AfficheGrande", 256, 512), ("AfficheMoyenne", 256, 256), ("AffichePetite", 256, 256),
-        ("PrimeGrande", 256, 512), ("PrimeMoyenne", 256, 256), ("PrimePetite", 256, 256),
-        ("CadrePortrait", 128, 128), ("Medaillon", 64, 64), ("Bandeau", 256, 64), ("SceauPrime", 64, 64),
+        ("FiligraneAlliance", 128, 128), ("FiligraneHorde", 128, 128),
+        *((f"{paper}{format}{tilt}", 256, 512 if format == "Grande" else 256)
+          for paper in ("Affiche", "Prime") for format in ("Grande", "Carree") for tilt in (1, 2)),
+        ("CadrePortrait", 128, 128), ("Medaillon", 128, 128), ("MedaillonUn", 128, 128), ("Chevron", 32, 16),
+        ("Bandeau", 256, 64), ("SceauPrime", 64, 64),
         ("Tampon", 256, 64), ("Cartouche", 256, 32), ("SeparateurEncre", 256, 16), ("SeparateurOr", 256, 16),
         ("IconeMembres", 64, 64), ("IconeCrane", 64, 64), ("ClouLaiton", 64, 64), ("ClouFer", 64, 64))),
 ):
