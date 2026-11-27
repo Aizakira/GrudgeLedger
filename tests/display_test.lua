@@ -131,7 +131,7 @@ assert(loadfile(TEST_ROOT .. "/Display.lua"))()
 GL.Emit("READY")
 local D, eventFrame = GL.Display, GrudgeLedgerDisplayEvents
 local marker = assert(markerFor(plate), "READY must scan existing plates")
-local icon = marker.children[2]
+local icon = marker.children[1]
 assert(marker.shown and icon.texture:find("RelationFriend") and icon.vertex[1] == 1 and icon.vertex[2] == 1 and icon.vertex[3] == 1)
 assert(marker.frameLevel > plate.TPFrame.frameLevel)
 assert(marker.anchor[2] == font, "icon must follow visible ThreatPlates name")
@@ -385,10 +385,10 @@ D.Refresh()
 assert(#sounds == soundsAfterRevive + 1)
 GL.SetSetting("sounds", false)
 local warningMarker = assert(markerFor(warningPlate))
-assert(warningMarker.shown and warningMarker.children[2].texture:find("RelationEnemy"))
-assert(warningMarker.children[2].vertex[2] == 1, "keep the custom artwork's original colors")
+assert(warningMarker.shown and warningMarker.children[1].texture:find("RelationEnemy"))
+assert(warningMarker.children[1].vertex[2] == 1, "keep the custom artwork's original colors")
 assert(toast.relation == "enemy" and toast.title.text == "Ennemi à proximité")
-assert(not warningMarker.children[3])
+assert(not warningMarker.children[2])
 GL.SetSetting("enemyAlerts", false)
 assert(not toast.shown, "orange alerts use enemyAlerts setting")
 GL.SetSetting("enemyAlerts", true)
@@ -414,30 +414,30 @@ text = ""
 for _, line in ipairs(GameTooltip.lines) do text = text .. tostring(line[1]) end
 assert(text:find("Note personnelle conservée") and not text:find("Identification PvP probable"))
 GL.RecordAggression(warning, "confirmed", "combat log", "test-warning-confirmed")
-assert(not warningMarker.children[3] and toast.title.text == "Ennemi à proximité")
+assert(not warningMarker.children[2] and toast.title.text == "Ennemi à proximité")
 local warningRecord = GL.Get(warning)
 assert(GL.VoidPvP(warning, warningRecord.history[#warningRecord.history]))
-assert(not warningMarker.children[3] and not toast.title.text:find("%(probable%)"), "correction restores uncertainty")
+assert(not warningMarker.children[2] and not toast.title.text:find("%(probable%)"), "correction restores uncertainty")
 GL.RecordPvP(warning, "death", "confirmed", "target", "test-warning-death")
-assert(warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3])
+assert(warningMarker.children[1].texture:find("RelationEnemy") and not warningMarker.children[2])
 assert(GL.VoidPvP(warning, warningRecord.history[#warningRecord.history]))
-assert(warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3], "voiding death downgrades to aggression")
+assert(warningMarker.children[1].texture:find("RelationEnemy") and not warningMarker.children[2], "voiding death downgrades to aggression")
 GL.RecordPvP(warning, "death", "confirmed", "combat log", "test-warning-confirmed-death")
-assert(warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3])
+assert(warningMarker.children[1].texture:find("RelationEnemy") and not warningMarker.children[2])
 assert(GL.VoidPvP(warning, warningRecord.history[#warningRecord.history]))
-assert(not warningMarker.children[3], "removing confirmed death leaves only probable aggression")
+assert(not warningMarker.children[2], "removing confirmed death leaves only probable aggression")
 GL.SetReaction(warning, "warning")
-assert(not warningMarker.children[3], "manual choices never display inferred uncertainty")
+assert(not warningMarker.children[2], "manual choices never display inferred uncertainty")
 GL.SetReaction(warning, "neutral")
-assert(warningMarker.shown and warningMarker.children[2].texture:find("RelationEnemy") and not warningMarker.children[3],
+assert(warningMarker.shown and warningMarker.children[1].texture:find("RelationEnemy") and not warningMarker.children[2],
     "automatic restores outstanding aggression and its uncertainty instead of hiding it behind neutral")
 warningRecord.reaction = nil
 GL.InitDB()
 D.Refresh()
-assert(not warningMarker.children[3])
+assert(not warningMarker.children[2])
 units.nameplate4 = { name = "Recycled", surname = "Player", guid = "Player-1-444" }
 D.OnEvent(nil, "NAME_PLATE_UNIT_ADDED", "nameplate4")
-assert(not warningMarker.shown and not warningMarker.children[3], "recycled plates cannot retain '?' badges")
+assert(not warningMarker.shown and not warningMarker.children[2], "recycled plates cannot retain '?' badges")
 
 -- A guild rule applies immediately to already visible, previously unknown members.
 units.nameplate6 = { name = "Guild", surname = "Member", guid = "Player-1-66", guild = "Les Corbeaux" }
@@ -450,13 +450,13 @@ assert(not markerFor(guildPlate) and not markerFor(otherGuildPlate))
 now = now + 200
 GL.SetGuildReaction("Les Corbeaux", "warning", "Ils nous ont agressés")
 local guildMarker = assert(markerFor(guildPlate), "guild rule must refresh already visible members")
-assert(guildMarker.shown and guildMarker.children[2].texture:find("RelationWarning"))
-assert(not guildMarker.children[3], "guild opinions do not claim inferred PvP evidence")
+assert(guildMarker.shown and guildMarker.children[1].texture:find("RelationWarning"))
+assert(not guildMarker.children[2], "guild opinions do not claim inferred PvP evidence")
 assert(not markerFor(otherGuildPlate), "a different guild must not inherit this rule")
 assert(toast.shown and toast.relation == "warning" and toast.title.text == "Rancune de guilde : Les Corbeaux")
 assert(toast.name.text == "Guild Member" and toast.note.text == "Ils nous ont agressés")
 GL.SetGuildReaction("Les Corbeaux", "enemy", "Plusieurs attaques")
-assert(guildMarker.children[2].texture:find("RelationEnemy") and toast.relation == "enemy")
+assert(guildMarker.children[1].texture:find("RelationEnemy") and toast.relation == "enemy")
 GameTooltip.hooks.OnTooltipCleared(GameTooltip)
 GameTooltip.lines, tooltipUnit = {}, "nameplate6"
 tooltipCallback(GameTooltip)
@@ -476,22 +476,22 @@ D.Refresh()
 assert(GL.Get(guildMember).guild == "Les Corbeaux", "empty lookup cannot erase the last observed guild")
 GL.Remember({ name = guildMember.name, surname = guildMember.surname, guid = guildMember.guid, guildKnown = true })
 D.Refresh()
-assert(guildMarker.shown and guildMarker.children[2].texture:find("RelationNeutral") and not toast.shown,
+assert(guildMarker.shown and guildMarker.children[1].texture:find("RelationNeutral") and not toast.shown,
     "leaving the guild replaces inherited danger with a neutral marker and clears the stale toast")
 assert(GL.Get(guildMember).guild == nil and guildFont.color[1] == 1 and guildFont.color[2] == 1)
 
 -- An individually marked friend is exempt from a guild grudge, even after a rule change.
 units.nameplate6.guild = "Les Corbeaux"
 GL.SetReaction(GL.Identity("nameplate6"), "friend")
-assert(guildMarker.shown and guildMarker.children[2].texture:find("RelationFriend"))
+assert(guildMarker.shown and guildMarker.children[1].texture:find("RelationFriend"))
 GL.SetGuildReaction("Les Corbeaux", "warning")
-assert(guildMarker.children[2].texture:find("RelationFriend") and GL.RelationSource(GL.Get(guildMember)) == "manual")
+assert(guildMarker.children[1].texture:find("RelationFriend") and GL.RelationSource(GL.Get(guildMember)) == "manual")
 GL.SetGuildReaction("Les Moineaux", "friend", "Une guilde sympathique")
 local otherGuildMarker = assert(markerFor(otherGuildPlate))
-assert(otherGuildMarker.shown and otherGuildMarker.children[2].texture:find("RelationFriend"))
+assert(otherGuildMarker.shown and otherGuildMarker.children[1].texture:find("RelationFriend"))
 assert(toast.title.text == "Amitié de guilde : Les Moineaux" and toast.note.text == "Une guilde sympathique")
 GL.SetGuildReaction("Les Moineaux", "neutral")
-assert(otherGuildMarker.shown and otherGuildMarker.children[2].texture:find("RelationNeutral") and not toast.shown,
+assert(otherGuildMarker.shown and otherGuildMarker.children[1].texture:find("RelationNeutral") and not toast.shown,
     "neutral guild rule clears inherited danger without hiding the known person's neutral marker")
 
 -- Same-guild bursts keep the first captured player, count unique observations,
@@ -628,13 +628,13 @@ GL.AdjustReputation(debt, -1, "SPIT", "emote")
 GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k1")
 GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k2")
 local debtMarker = markerFor(debtPlate)
-assert(GL.Get(debt).reputation == -4 and debtMarker.shown and debtMarker.children[2].texture:find("RelationWarning"))
+assert(GL.Get(debt).reputation == -4 and debtMarker.shown and debtMarker.children[1].texture:find("RelationWarning"))
 -- 0.31.0: a victory over a player who owed you is a revenge moment; the danger marker stays.
 assert(toast.shown and toast.banner and toast.title.text == "Revanche", "a victory over a debtor is a revenge moment")
 for i=3,11 do GL.RecordPvP(debt, "kill", "confirmed", "Observed", "debt-k" .. i) end
 local repaidSounds = #sounds
-assert(GL.Get(debt).reputation == 0 and debtMarker.shown and debtMarker.children[2].texture:find("RelationNeutral"))
-assert(toast.shown and toast.title.text == "Compte réglé" and not debtMarker.children[3])
+assert(GL.Get(debt).reputation == 0 and debtMarker.shown and debtMarker.children[1].texture:find("RelationNeutral"))
+assert(toast.shown and toast.title.text == "Compte réglé" and not debtMarker.children[2])
 D.Refresh()
 assert(#sounds == repaidSounds and toast.banner, "the repaid debt leaves a neutral marker and no new alert")
 

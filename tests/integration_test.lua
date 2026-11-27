@@ -81,7 +81,7 @@ hooks.PerformEmote("KISS")
 assert(GL.Relation(GL.Get(opponent)) == "friend" and GL.Get(opponent).reputation == 1)
 local heart
 for _, child in ipairs(plate.children) do
-    local icon = child.children[2]
+    local icon = child.children[1]
     if icon and type(icon.texture) == "string" and icon.texture:find("RelationFriend") then heart = child end
 end
 assert(heart and heart:IsShown(), "party friends retain their heart even in combat on modifiable plates")
