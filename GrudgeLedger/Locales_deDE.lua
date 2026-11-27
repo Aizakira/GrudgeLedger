@@ -2342,6 +2342,7 @@ T["Votre familier a porté le coup fatal à ce joueur."] = "Dein Begleiter hat d
 T["Achevé par un monstre pendant votre combat : aucun autre joueur ne lui a porté le coup fatal."] = "Während deines Kampfes von einem Monster erledigt: Kein anderer Spieler hat den Todesstoß versetzt."
 T["Effet néfaste posé sur vous par ce joueur hostile pendant le combat."] = "Dieser feindliche Spieler hat dir im Kampf einen schädlichen Effekt auferlegt."
 T["Recherché"] = "Gesucht"
+T["Clic : voir la prime"] = "Klick: Kopfgeld ansehen"
 T["Aperçu : ennemis d’exemple, rien n’est enregistré"] = "Vorschau: Beispielfeinde, nichts wird gespeichert"
 T["Vu à %s, %s"] = "Gesehen in %s, %s"
 T["%s pour sa tête"] = "%s für den Kopf"

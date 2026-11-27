@@ -20,6 +20,8 @@ for filename, digest in {
     # The posters' display fonts (owner, 27/11), upstream google/fonts, with their OFL.
     "NewRocker-Regular.ttf": "28a499ce5b8bcf0652f8b2e25135183eaddf0c3c8c3e251259b075c71d1ef14c",
     "CinzelDecorative-Bold.ttf": "e854e68a388aa50d742a4415c1ae5c17a617ef7956c95a70021d0a4a44f20518",
+    "GermaniaOne-Regular.ttf": "3ee3d56584bab8c9e3f59cc3360aa8a36e219dcf0a9f3c8928e3da5a19277e3f",
+    "OFL-GermaniaOne.txt": "b7574cd4c76770e5e3915d16bd93f09663bd77cb041a4ec09d824c52b540529a",
     "OFL-NewRocker.txt": "3b9f1bbe33dc7c6f93cf5e010b3de066efb635c0c7f34281790e7c9f61207b43",
     "OFL-CinzelDecorative.txt": "1e5d6660366ddcfca4f2fc10e2acfba9fa4d97d40aec80d7dbfd41d730a420ae",
 }.items():

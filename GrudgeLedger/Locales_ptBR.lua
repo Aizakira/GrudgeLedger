@@ -2342,6 +2342,7 @@ T["Votre familier a porté le coup fatal à ce joueur."] = "Seu ajudante deu o g
 T["Achevé par un monstre pendant votre combat : aucun autre joueur ne lui a porté le coup fatal."] = "Finalizado por um monstro durante sua luta: nenhum outro jogador deu o golpe final."
 T["Effet néfaste posé sur vous par ce joueur hostile pendant le combat."] = "Este jogador hostil aplicou um efeito nocivo em você durante a luta."
 T["Recherché"] = "Procurado"
+T["Clic : voir la prime"] = "Clique: ver a recompensa"
 T["Aperçu : ennemis d’exemple, rien n’est enregistré"] = "Prévia: inimigos de exemplo, nada é salvo"
 T["Vu à %s, %s"] = "Visto em %s, %s"
 T["%s pour sa tête"] = "%s pela cabeça"
