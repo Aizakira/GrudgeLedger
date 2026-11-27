@@ -2968,14 +2968,25 @@ function R.GuildEnemies(period)
                 enemy.members = enemy.members + 1
             end
             table.insert(enemy.victims[victim], point.time)
+            if point.mine then
+                enemy.mine = enemy.mine or {}
+                enemy.mine[victim] = true
+            end
             if point.time > enemy.last then enemy.last, enemy.mapID = point.time, point.mapID end
         end
     end
     for _, point in ipairs(points) do
         local enemy = point.kind == "kill" and enemies[foeKey(point) or ""]
-        if enemy then enemy.kills = enemy.kills + 1 end
+        if enemy then
+            enemy.kills = enemy.kills + 1
+            enemy.avengedAt = math.max(enemy.avengedAt or 0, point.time)
+        end
     end
-    for _, enemy in ipairs(list) do enemy.threat = R.Threat(enemy.victims) end
+    -- Avenged: the guild killed them after their last victim (owner, 27/11: who is left to punish).
+    for _, enemy in ipairs(list) do
+        enemy.threat = R.Threat(enemy.victims)
+        enemy.avenged = (enemy.avengedAt or 0) > enemy.last
+    end
     table.sort(list, function(a, b)
         if a.threat ~= b.threat then return a.threat > b.threat end
         if a.deaths ~= b.deaths then return a.deaths > b.deaths end
@@ -2983,6 +2994,35 @@ function R.GuildEnemies(period)
         return a.key < b.key
     end)
     return list
+end
+-- The members an enemy killed, the latest first, by name: "Vous" for you, the guild's roster's
+-- name else, without the realm; those the roster cannot name are counted after (+2).
+function R.VictimNames(enemy, most)
+    local order = {}
+    for member, times in pairs(enemy.victims or {}) do
+        local latest = 0
+        for _, at in ipairs(times) do latest = math.max(latest, at) end
+        order[#order + 1] = { member = member, latest = latest }
+    end
+    table.sort(order, function(a, b)
+        if a.latest ~= b.latest then return a.latest > b.latest end
+        return tostring(a.member) < tostring(b.member)
+    end)
+    local names, unnamed = {}, 0
+    for _, victim in ipairs(order) do
+        local name = enemy.mine and enemy.mine[victim.member] and L("Vous")
+            or GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(victim.member)
+        if type(name) == "string" and name ~= "" and #names < most then
+            name = UI.plain(name)
+            names[#names + 1] = name:match("^[^-]+") or name
+        else
+            unnamed = unnamed + 1
+        end
+    end
+    if #names == 0 then return nil end
+    local text = table.concat(names, ", ")
+    if unnamed > 0 then text = text .. " " .. L("+%d"):format(unnamed) end
+    return text
 end
 -- An enemy's open bounty or notice, and its gold (owner, 27/11: Avec une prime must show them all).
 -- By the enemy's identity; else by name, for a killer the guild never saw with an identity (the
@@ -3051,7 +3091,7 @@ local STYLE = {
 local POSTER_RED, POSTER_INK, POSTER_MUTED = { 0.6, 0.09, 0.06 }, { 0.17, 0.1, 0.05 }, { 0.3, 0.2, 0.11 }
 local CLOTH_IVORY, CLOTH_SOFT, MEDAL_IVORY = { 0.97, 0.92, 0.8 }, { 0.86, 0.8, 0.68 }, { 1, 0.93, 0.74 }
 local RANK_GOLD = { 1, 0.8, 0.4 }
-local STAMP_INK = { 0.36, 0.22, 0.45 }
+local STAMP_INK, AVENGED_INK = { 0.36, 0.22, 0.45 }, { 0.55, 0.1, 0.07 }
 -- Capitals for the poster's headings, accents included (string.upper leaves é alone).
 local CAPITALS = { ["à"] = "À", ["â"] = "Â", ["ä"] = "Ä", ["á"] = "Á", ["ã"] = "Ã", ["é"] = "É", ["è"] = "È", ["ê"] = "Ê",
     ["ë"] = "Ë", ["í"] = "Í", ["î"] = "Î", ["ï"] = "Ï", ["ó"] = "Ó", ["ô"] = "Ô", ["ö"] = "Ö", ["õ"] = "Õ", ["ú"] = "Ú",
@@ -3312,6 +3352,7 @@ local function buildPoster(page, index)
         GameTooltip:SetOwner(hit, "ANCHOR_RIGHT")
         GameTooltip:SetText(UI.plain(self.enemy))
         if self.where then GameTooltip:AddLine(self.where, 1, 1, 1, true) end
+        if self.deaths then GameTooltip:AddLine(self.deaths, 1, 1, 1, true) end
         if self.kills then GameTooltip:AddLine(self.kills, 1, 1, 1, true) end
         if self.target then GameTooltip:AddLine(L("Clic : ouvrir la fiche"), 0.8, 0.8, 0.8) end
         if self.canWant then GameTooltip:AddLine(L("Clic droit : poser un avis de recherche"), 0.8, 0.8, 0.8) end
@@ -3383,9 +3424,14 @@ local function placePoster(page, p, spot)
     local seal = math.floor(p.ribbon:GetHeight() * 1.15 + 0.5)
     p.seal:SetSize(seal, seal)
     p.prize:SetWidth(p.inner - 30)
+    -- The poster's own layers follow it when it moves above or under a neighbour: the portrait just
+    -- over the paper, the stamp over the portrait, the click area over everything.
+    local level = GL.Safe(p.GetFrameLevel, p) or 1
+    GL.Safe(p.face.SetFrameLevel, p.face, level + 1)
+    GL.Safe(p.stamp.SetFrameLevel, p.stamp, level + 8)
     p.hit:ClearAllPoints()
     p.hit:SetAllPoints()
-    GL.Safe(p.hit.SetFrameLevel, p.hit, (GL.Safe(p.GetFrameLevel, p) or 1) + 15)
+    GL.Safe(p.hit.SetFrameLevel, p.hit, level + 15)
 end
 -- A list button of the page's head (the mockup's two): its choice, a turned-down arrow, and under it
 -- the choices in the guild journal's small menu.
@@ -3532,13 +3578,16 @@ local function paintPortrait(page, p, enemy, side)
     end
 end
 -- The figures' words: the long ones on the tall poster, the short ones on the others.
+-- The second line names the victims (owner, 27/11: the grudge is personal); the deaths when the
+-- guild's roster names none of them.
 local function figureTexts(p, enemy)
+    local victims = R.VictimNames(enemy, p.kind == "hero" and 3 or 2)
     if p.kind == "hero" then
         return { enemy.members, enemy.members > 1 and L("membres distincts tués") or L("membre tué") },
-            { enemy.deaths, enemy.deaths > 1 and L("morts infligées") or L("mort infligée") }
+            victims and { "", victims } or { enemy.deaths, enemy.deaths > 1 and L("morts infligées") or L("mort infligée") }
     end
     return { enemy.members, enemy.members > 1 and L("membres tués") or L("membre tué") },
-        { enemy.deaths, enemy.deaths > 1 and L("morts") or L("mort") }
+        victims and { "", victims } or { enemy.deaths, enemy.deaths > 1 and L("morts") or L("mort") }
 end
 local function paintPoster(page, p, enemy, rank, spot, open, gold)
     placePoster(page, p, spot)
@@ -3589,7 +3638,7 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     if open then
         p.ribbon:Show()
         p.prize:Show()
-        local prize = gold > 0 and capitals(L("Prime · %s"):format(GL.BountyMoney(gold))) or capitals(L("Avis de recherche"))
+        local prize = gold > 0 and capitals(L("%s pour sa tête"):format(GL.BountyMoney(gold))) or capitals(L("Avis de recherche"))
         fit(p.prize, prize, p.inner - 34, style.label + 2, 7, true, 0.6)
         floor = floor + p.ribbon:GetHeight() + 4
         if gold > 0 then p.seal:Show() else p.seal:Hide() end
@@ -3606,10 +3655,12 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         figure.words:SetText(text[2])
         UI.journalFont(figure.words, "GameFontHighlight", style.label)
     end
-    p.seen:SetText(L("Vu %s"):format(elapsed(enemy.last)))
     local info = mapInfo(enemy.mapID)
     p.where = info and type(info.name) == "string" and UI.plain(info.name) or nil
+    -- Where the guild last met them, and when (owner, 27/11: where to hunt them).
+    p.seen:SetText(p.where and L("Vu à %s, %s"):format(p.where, elapsed(enemy.last)) or L("Vu %s"):format(elapsed(enemy.last)))
     p.kills = enemy.kills > 0 and L("vaincu %d fois par la guilde"):format(enemy.kills) or nil
+    p.deaths = enemy.deaths .. " " .. (enemy.deaths > 1 and L("morts infligées") or L("mort infligée"))
     local top = p.faceTop - extra
     if p.kind == "hero" then
         -- The portrait takes the room the figures and the date leave (measured first: their words may wrap).
@@ -3635,20 +3686,29 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         paintPortrait(page, p, enemy, side)
         local x, width = p.mx + side + 7, p.inner - side - 7
         local y = placeFigures(p, x, top, width)
-        p.rule:SetSize(width, 4)
+        y = math.min(y, top - side - 4)
+        p.rule:SetSize(p.inner, 4)
         p.rule:ClearAllPoints()
-        p.rule:SetPoint("TOPLEFT", p, "TOPLEFT", x, y + 4)
+        p.rule:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx, y + 3)
         p.seen:ClearAllPoints()
-        p.seen:SetPoint("TOPRIGHT", p, "TOPLEFT", p.mx + p.inner, y)
-        p.seen:SetWidth(width)
-        p.seen:SetJustifyH("RIGHT")
+        p.seen:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx, y - 1)
+        p.seen:SetWidth(p.inner)
+        p.seen:SetJustifyH("CENTER")
     end
-    if GL.Now() - enemy.last > COLD_AFTER then
+    local seenSize = style.seen
+    UI.journalFont(p.seen, "GameFontHighlight", seenSize, true)
+    while seenSize > 8 and (GL.Safe(p.seen.GetStringWidth, p.seen) or 0) > p.inner do
+        seenSize = seenSize - 1
+        UI.journalFont(p.seen, "GameFontHighlight", seenSize, true)
+    end
+    -- The stamp: avenged first (the guild has answered), else a cold trail after three weeks.
+    if enemy.avenged or GL.Now() - enemy.last > COLD_AFTER then
         p.stamp:ClearAllPoints()
         if open then p.stamp:SetPoint("CENTER", p.face, "BOTTOM", 0, 4)
         else p.stamp:SetPoint("BOTTOM", p, "BOTTOM", p.cx, p.bottom + 2) end
         p.stamp:Show()
-        fit(p.stamp.words, L("Piste froide"), p.stamp:GetWidth() - 16, style.label + 1, 7, true)
+        fit(p.stamp.words, enemy.avenged and capitals(L("Vengé")) or L("Piste froide"), p.stamp:GetWidth() - 16, style.label + 1, 7, true)
+        p.stamp.words:SetTextColor(unpack(enemy.avenged and AVENGED_INK or STAMP_INK))
     else
         p.stamp:Hide()
     end

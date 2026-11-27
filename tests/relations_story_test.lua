@@ -517,9 +517,16 @@ do
     local hero = enemies.posters[1]
     assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "1" and hero.rankHash:GetText() == "#" and hero.title:GetText() == "RECHERCHÉ" and not enemies.posters[2]:IsShown())
     assert(hero.labelText:GetText() == "ENNEMI PUBLIC N°1" and hero.figures[1].number:GetText() == "2" and hero.figures[1].words:GetText() == "membres distincts tués")
-    assert(hero.figures[2].number:GetText() == "4" and hero.figures[2].words:GetText() == "morts infligées" and hero.seen:GetText() == "Vu il y a 1 h")
-    assert(hero.where == "Feralas" and hero.kills == "vaincu 4 fois par la guilde")
+    -- A hunting board (owner, 27/11): the victims by name (you, then one the roster cannot name), where
+    -- and when the guild last met them; the deaths in the tooltip; not avenged (his last kill is later).
+    assert(hero.figures[2].number:GetText() == "" and hero.figures[2].words:GetText() == "Vous +1", hero.figures[2].words:GetText())
+    assert(hero.seen:GetText() == "Vu à Feralas, il y a 1 h", hero.seen:GetText())
+    assert(hero.where == "Feralas" and hero.kills == "vaincu 4 fois par la guilde" and hero.deaths == "4 morts infligées", hero.deaths)
     assert(not hero.seal:IsShown() and not hero.stamp:IsShown() and not hero.ribbon:IsShown())
+    local enemy = R.GuildEnemies(0)[1]
+    assert(enemy.avenged == false and enemy.avengedAt < enemy.last)
+    enemy.avengedAt = enemy.last + 60
+    assert(R.VictimNames(enemy, 1) == "Vous +1" and R.VictimNames({ victims = {} }, 3) == nil)
     -- A killer the guild never saw with an identity keeps the bounty posted on their name (owner, 27/11:
     -- Avec une prime shows them all), and takes the bounty's identity to open the sheet.
     local savedBounties, savedTotal = GL.Bounties, GL.BountyTotal

@@ -691,10 +691,13 @@ function QA.capture(name)
                 local points = {}
                 local function deaths(target, foe, list)
                     for i, d in ipairs(list) do
-                        points[#points + 1] = { actor = "Player-1-QA00000" .. d[1], time = at - d[2] * 3600, mapID = 1,
+                        points[#points + 1] = { actor = "Player-1-QA00000" .. d[1], time = at - d[2] * 3600, mapID = 1444,
                             kind = "death", target = target, name = foe }
                     end
                 end
+                -- Fy Rion was avenged: the guild killed him after his last victim (owner, 27/11).
+                points[#points + 1] = { actor = "Player-1-QA000002", time = at - 60 * 3600, mapID = 1444, kind = "kill",
+                    target = "Player-1-QA0000W4", name = "Fy Rion" }
                 deaths("Player-1-QA0000W1", "Shmigly Wins", { { 1, 20 }, { 2, 30 }, { 3, 50 }, { 4, 70 }, { 1, 90 } })
                 deaths("Player-1-QA0000W2", "Chêne Molle", { { 1, 24 }, { 2, 60 }, { 3, 100 } })
                 deaths("Player-1-QA0000W3", "Adva Tidemand", { { 2, 40 }, { 4, 140 } })
@@ -707,6 +710,14 @@ function QA.capture(name)
                 local orders = { ["Player-1-QA0000W2"] = { pot = { a = 2500000 } }, ["Player-1-QA0000W3"] = { pot = {} } }
                 GL.Bounties = GL.Bounties or {}
                 GL.Bounties.OpenFor = function(target) return orders[target] end
+                -- The victims' names, as the guild's roster gives them (invented names).
+                local roster = { ["Player-1-QA000001"] = "Célestine-Exemple", ["Player-1-QA000002"] = "Aubin",
+                    ["Player-1-QA000003"] = "Isabeau", ["Player-1-QA000004"] = "Gaspard" }
+                GL.Bounties.MemberName = function(id) return roster[id] end
+                -- Where the guild met them: a zone the renderer can name.
+                C_Map = C_Map or {}
+                local mapInfo = C_Map.GetMapInfo
+                C_Map.GetMapInfo = function(id) if id == 1444 then return { name = "Féralas" } end return mapInfo and mapInfo(id) end
             end
             -- The faction of the page's tapestry, put back for the next views.
             GL.qaFaction = GL.qaFaction or UnitFactionGroup
