@@ -8,8 +8,8 @@ its true proportions (printed here, copied into Art.lua as GL.Art.WantedRatio), 
 drawing. Alpha at 8 or less (the kit's near-invisible residue) is cleared.
 
 The tapestry keeps its whole 4:3 canvas (the page is 705 x 531 with its torn edges, 4:3), lit from
-its centre: a radial light (owner, 27/11) that leaves the edges at the kit's dark blue or red. The
-border is assembled from its eight pieces as the kit's manifest places them, on the same canvas.
+its centre: a radial light (owner, 27/11) that leaves the edges at the kit's dark blue or red. Its four
+corners are drawn apart at the page's corners, without their rule stubs (the book has its rules).
 
 The papers carry their tilt in the drawing. For each, the text zone is read from the manifest and
 given as fractions of the cropped drawing (left, top, right, bottom margins), with the foot: the
@@ -32,7 +32,8 @@ OUT = ROOT / "GrudgeLedger" / "Media" / "AvisRecherche"
 ASSETS = {
     "FanionAlliance": ("factions/alliance-banner-blank.png", 128, 256),
     "FanionHorde": ("factions/horde-banner-blank.png", 128, 256),
-    "EmblemeAlliance": ("factions/alliance-emblem.png", 128, 128),
+    # The owner prefers the v2 lion on the banner (27/11): gold and flat, it reads at that size.
+    "EmblemeAlliance": ("v2:factions/alliance-emblem.png", 128, 128),
     "EmblemeHorde": ("factions/horde-emblem.png", 128, 128),
     "FiligraneAlliance": ("factions/alliance-watermark.png", 128, 128),
     "FiligraneHorde": ("factions/horde-watermark.png", 128, 128),
@@ -59,10 +60,13 @@ ASSETS = {
     "ClouFer": ("details/pin-iron.png", 64, 64),
     "Chevron": ("details/dropdown-chevron.png", 32, 16),
 }
+# The tapestry's corners, drawn one by one at the page's corners (the book draws the straight rules).
+for side, faction in (("alliance", "Alliance"), ("horde", "Horde")):
+    for part, corner in (("tl", "HG"), ("tr", "HD"), ("bl", "BG"), ("br", "BD")):
+        ASSETS[f"Coin{faction}{corner}"] = (f"backgrounds/{side}-corner-{part}.png", 128, 128)
 PAD = 2
 # How much the tapestry's centre is lit: its colour times 1 + LIGHT at the centre, times 1 at the edges.
 LIGHT = 0.55
-BORDER = ("corner-tl", "corner-tr", "corner-bl", "corner-br", "edge-top", "edge-bottom", "edge-left", "edge-right")
 
 
 def clean(image):
@@ -95,19 +99,19 @@ def lit(cloth):
     return out
 
 
-def border(kit, manifest, side):
-    panel = Image.new("RGBA", (2048, 1536), (0, 0, 0, 0))
-    for part in BORDER:
-        name = f"backgrounds/{side}-{part}.png"
-        left, top, right, bottom = manifest[name]["panel_rect_px"]
-        piece = Image.open(kit / name).convert("RGBA").resize((right - left, bottom - top), Image.BICUBIC)
-        panel.alpha_composite(piece, (left, top))
-    out = clean(panel.resize((1024, 1024), Image.LANCZOS))
-    # The game draws the border over the page's whole rectangle: its corners stay clear of the drawing.
-    for x in (0, 1023):
-        for y in (0, 1023):
-            out.putpixel((x, y), (0, 0, 0, 0))
-    return out
+def corner(image, part):
+    """A corner without its two rule stubs: the book draws the straight rules, the flourish fades
+    out before the canvas's inner edges."""
+    w, h = image.size
+    alpha = image.getchannel("A").load()
+    inward_x, inward_y = part[1] == "l", part[0] == "t"
+    for y in range(h):
+        fy = y / h if inward_y else 1 - y / h
+        for x in range(w):
+            fx = x / w if inward_x else 1 - x / w
+            keep = min(1.0, max(0.0, (0.96 - fx) / 0.12), max(0.0, (0.96 - fy) / 0.12))
+            alpha[x, y] = int(alpha[x, y] * keep)
+    return image
 
 
 def inner_frame(image):
@@ -156,11 +160,15 @@ def main(kit):
     for side, faction in (("alliance", "Alliance"), ("horde", "Horde")):
         cloth = Image.open(kit / f"backgrounds/{side}-cloth.png").convert("RGBA").resize((1024, 512), Image.LANCZOS)
         write_tga(OUT / f"Toile{faction}.tga", lit(cloth))
-        write_tga(OUT / f"Bordure{faction}.tga", border(kit, manifest, side))
     for name, (source, width, height) in ASSETS.items():
-        image = clean(Image.open(kit / source).convert("RGBA"))
+        path = kit.parent / "kit-ennemis-guilde" / source[3:] if source.startswith("v2:") else kit / source
+        image = clean(Image.open(path).convert("RGBA"))
+        if "-corner-" in source:
+            image = corner(image, source.rsplit("-", 1)[1][:2])
         if source.startswith("posters/poster-"):
             box, zones[name] = paper_zone(image, manifest[source])
+        elif source.startswith("backgrounds/"):
+            box = (0, 0) + image.size
         else:
             box = image.getchannel("A").getbbox()
         image = image.crop(box)

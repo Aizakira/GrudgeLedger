@@ -73,7 +73,7 @@ for name, expected_width, expected_height, transparent in (
     # The guild's enemies as wanted posters (owner's kit, 27/11; tools/import_wanted_kit.py).
     ("AvisRecherche/ToileAlliance.tga", 1024, 512, False), ("AvisRecherche/ToileHorde.tga", 1024, 512, False),
     *((f"AvisRecherche/{name}.tga", w, h, True) for name, w, h in (
-        ("BordureAlliance", 1024, 1024), ("BordureHorde", 1024, 1024),
+        *((f"Coin{faction}{corner}", 128, 128) for faction in ("Alliance", "Horde") for corner in ("HG", "HD", "BG", "BD")),
         ("FanionAlliance", 128, 256), ("FanionHorde", 128, 256), ("EmblemeAlliance", 128, 128), ("EmblemeHorde", 128, 128),
         ("FiligraneAlliance", 128, 128), ("FiligraneHorde", 128, 128),
         *((f"{paper}{format}{tilt}", 256, 512 if format == "Grande" else 256)
