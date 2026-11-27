@@ -592,6 +592,23 @@ do
     assert(R.Threat({ a = { now, now, now } }) < R.Threat({ a = { now }, b = { now }, c = { now } }), "different victims weigh more")
     click(hero.hit)
     assert(opened == "Player-1-Foe0001/Bad Guy")
+    -- The preview from the Horde (owner, 27/11: no Horde character, no guild): invented enemies on
+    -- the Horde's tapestry, a bounty, a notice, an avenged one; their posters open nothing; closing
+    -- the book ends it.
+    opened = nil
+    SlashCmdList.GRUDGELEDGER("apercu horde")
+    assert(R.preview and R.preview.faction == "Horde" and enemies:IsShown())
+    assert(enemies.previewNote:GetText():find("Aperçu", 1, true) and enemies.cloth.texture:find("ToileHorde"))
+    assert(enemies.posters[5]:IsShown() and hero.name:GetText() == "Aldric Fendroc" and hero.ribbon:IsShown())
+    assert(enemies.posters[4].stamp:IsShown() and enemies.posters[4].stamp.words:GetText() == "VENGÉ")
+    click(hero.hit)
+    assert(opened == nil and not hero.canWant, "an invented enemy opens no sheet")
+    SlashCmdList.GRUDGELEDGER("apercu alliance")
+    assert(R.preview.faction == "Alliance" and enemies.cloth.texture:find("ToileAlliance") and hero.name:GetText() == "Grok Crânefendu")
+    gb:Hide()
+    assert(R.preview == nil, "closing the book ends the preview")
+    R.OpenGuild("enemies")
+    assert(enemies.previewNote:GetText() == "" and hero.name:GetText() == "Bad Guy")
     click(gb.tabs.guildlog)
     GL.OpenPlayerDossier = realDossier
     ticked = false

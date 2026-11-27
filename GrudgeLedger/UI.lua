@@ -4127,6 +4127,12 @@ SlashCmdList.GRUDGELEDGER = function(message)
     elseif command == "primes" or command == "bounties" then GL.OpenBounties()
     elseif command == "guildes" then GL.ShowStatistics("guilds")
     elseif command == "guide" then GL.ShowGuide()
+    elseif command == "apercu" or command == "aperçu" or command == "preview" then
+        -- The guild's enemies seen from a faction, with invented enemies (owner, 27/11).
+        local side = (reason or ""):gsub("[A-Z]", string.lower)
+        if GL.RelationsPages and GL.RelationsPages.PreviewEnemies then
+            GL.RelationsPages.PreviewEnemies(side == "alliance" and "alliance" or "horde")
+        end
     elseif command == "settings" or command == "options" then showSettings()
     elseif command == "reperage" or command == "repérage" then enableRecognition()
     elseif command == "guilde" then
@@ -4153,7 +4159,7 @@ SlashCmdList.GRUDGELEDGER = function(message)
         end
     elseif command == "" then
         if ledger and ledger:IsShown() then ledger:Hide() else GL.ShowLedger() end
-    else GL.Print(L("Commandes : /gl, /gl bilan, /gl chronique, /gl stats, /gl guildes, /gl traces, /gl + [raison], /gl - [raison], /gl ami|ennemi|auto|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl settings, /gl debug")) end
+    else GL.Print(L("Commandes : /gl, /gl bilan, /gl chronique, /gl stats, /gl guildes, /gl traces, /gl + [raison], /gl - [raison], /gl ami|ennemi|auto|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl apercu horde|alliance, /gl settings, /gl debug")) end
 end
 -- Opens the settings, on one of their pages when asked ("relations": sharing with the guild).
 function GL.ShowSettings(category)

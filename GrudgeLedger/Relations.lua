@@ -2998,6 +2998,7 @@ end
 -- The members an enemy killed, the latest first, by name: "Vous" for you, the guild's roster's
 -- name else, without the realm; those the roster cannot name are counted after (+2).
 function R.VictimNames(enemy, most)
+    if enemy.previewVictims then return enemy.previewVictims end
     local order = {}
     for member, times in pairs(enemy.victims or {}) do
         local latest = 0
@@ -3028,6 +3029,10 @@ end
 -- By the enemy's identity; else by name, for a killer the guild never saw with an identity (the
 -- bounty then gives it, and the poster opens the sheet).
 function R.EnemyBounty(enemy)
+    if enemy.preview then
+        if enemy.previewGold then return { preview = true }, enemy.previewGold end
+        return enemy.previewNotice and { preview = true } or nil, 0
+    end
     local B = GL.Bounties
     if not (B and B.OpenFor) then return nil, 0 end
     local open = enemy.target and B.OpenFor(enemy.target)
@@ -3520,6 +3525,8 @@ local function buildEnemies(host)
     page.banner:SetPoint("TOPLEFT", 4, 14)
     page.emblem = page:CreateTexture(nil, "OVERLAY")
     page.title = Panels.Text(page, 88, -17, 226, 26, true, CLOTH_IVORY)
+    page.previewNote = Panels.Text(page, 90, -46, 300, 11, false, { 1, 0.82, 0.45 })
+    UI.journalFont(page.previewNote, "GameFontHighlight", 11, true)
     page.period, page.show, page.offset = 1, 1, 0
     page.periodButton = chooser(page, ENEMY_PERIODS, function() return page.period end, function(i)
         page.period, page.offset = i, 0
@@ -3552,7 +3559,7 @@ local function enemyRecord(page, enemy)
     page.strangers = page.strangers or {}
     local stranger = page.strangers[enemy.key]
     if not stranger then
-        stranger = { key = enemy.key, guid = enemy.target, name = enemy.name, fullName = enemy.name }
+        stranger = { key = enemy.key, guid = enemy.target, name = enemy.name, fullName = enemy.name, race = enemy.race, class = enemy.class }
         page.strangers[enemy.key] = stranger
     end
     return stranger
@@ -3707,11 +3714,48 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         p.stamp:Hide()
     end
     p.target, p.enemy = enemy.target, enemy.name
-    p.canWant = enemy.target and enemy.name and not open and true or nil
+    p.canWant = enemy.target and enemy.name and not open and not enemy.preview and true or nil
     p:Show()
 end
+-- The page's preview (/gl apercu horde|alliance, owner 27/11): the page as seen from a faction,
+-- with invented enemies; nothing is saved, the posters open no sheet, closing the book ends it.
+-- A block of its own: Lua 5.1 counts the file's locals.
+do
+local PREVIEW_FOES = {
+    Horde = { { "Aldric Fendroc", "Human", "PALADIN" }, { "Brunhilde Martelfer", "Dwarf", "WARRIOR" },
+        { "Sylvaine Ombrelune", "NightElf", "DRUID" }, { "Pip Rouecliquet", "Gnome", "ROGUE" }, { "Edwin Clairval", "Human", "MAGE" } },
+    Alliance = { { "Grok Crânefendu", "Orc", "WARRIOR" }, { "Zul'jin Lamesable", "Troll", "HUNTER" },
+        { "Mère Hurlevent", "Tauren", "SHAMAN" }, { "Vexis la Blême", "Scourge", "WARLOCK" }, { "Thrak Brisetête", "Orc", "ROGUE" } },
+}
+local PREVIEW_VICTIMS = { "Célestine, Aubin, Isabeau", "Gaspard, Moonie", "Isabeau", "Aubin, Célestine", "Rotkäpp" }
+local PREVIEW_PLACES = { 1446, 1444, 1449, 1434, 1440 }
+function R.PreviewList(faction)
+    local now, list = GL.Now(), {}
+    for i, foe in ipairs(PREVIEW_FOES[faction]) do
+        local hours = ({ 2, 20, 50, 30, 600 })[i]
+        list[i] = { key = "preview:" .. i, name = foe[1], race = foe[2], class = foe[3], members = 6 - i, deaths = 14 - 2 * i,
+            kills = i == 4 and 2 or 0, last = now - hours * 3600, mapID = PREVIEW_PLACES[i], victims = {},
+            previewVictims = PREVIEW_VICTIMS[i], avenged = i == 4, preview = true,
+            previewGold = i == 1 and 2500000 or i == 3 and 500000 or nil, previewNotice = i == 2 }
+    end
+    return list
+end
+function R.PreviewEnemies(faction)
+    R.preview = faction and { faction = faction == "horde" and "Horde" or "Alliance" } or nil
+    R.OpenGuild("enemies")
+    local f = R.guildWindow
+    if f and not f.previewHooked then
+        f.previewHooked = true
+        f:HookScript("OnHide", function() R.preview = nil end)
+    end
+    R.Refresh()
+end
+end
 local function paintEnemies(page)
-    local faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string") == "Horde" and "Horde" or "Alliance"
+    local preview = R.preview
+    local faction = preview and preview.faction
+        or GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string") == "Horde" and "Horde" or "Alliance"
+    page.previewNote:SetText(preview and L("Aperçu : ennemis d’exemple, rien n’est enregistré") or "")
     page.cloth:SetTexture(WANTED .. "Toile" .. faction)
     for _, piece in ipairs(page.corners) do piece:SetTexture(WANTED .. "Coin" .. faction .. piece.corner) end
     for _, mark in ipairs(page.marks) do
@@ -3736,7 +3780,8 @@ local function paintEnemies(page)
     fit(page.title, L("Ennemis de la guilde"), 226, 26, 18, true, 0.85)
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
-    local list = sharing and R.GuildEnemies(ENEMY_PERIODS[page.period][1]) or {}
+    if preview then sharing, inGuild = true, true end
+    local list = preview and R.PreviewList(faction) or sharing and R.GuildEnemies(ENEMY_PERIODS[page.period][1]) or {}
     local show = POSTER_FILTERS[page.show][1]
     if show ~= "all" then
         local kept = {}
