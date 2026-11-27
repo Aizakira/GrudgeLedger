@@ -33,4 +33,16 @@ GL.Art = {
     GuildLogPennant = media .. "JournalGuilde\\Fanion",
     GuildLogVictory = media .. "JournalGuilde\\Victoire",
     GuildLogDeath = media .. "JournalGuilde\\Mort",
+    -- The guild's enemies as wanted posters (owner's kit, 27/11): a picture is Wanted .. its name
+    -- (ToileAlliance, PrimeGrande…). Each is a power-of-two texture stretched from its drawing:
+    -- WantedRatio gives the width over height to draw it at (tools/import_wanted_kit.py prints them).
+    Wanted = media .. "AvisRecherche\\",
+}
+GL.Art.WantedRatio = {
+    FanionAlliance = 0.753, FanionHorde = 0.844, EmblemeAlliance = 0.754, EmblemeHorde = 0.645,
+    AfficheGrande = 0.638, AfficheMoyenne = 0.755, AffichePetite = 1.014,
+    PrimeGrande = 0.621, PrimeMoyenne = 0.758, PrimePetite = 1.065,
+    CadrePortrait = 1.006, Medaillon = 0.966, Bandeau = 5.985, SceauPrime = 0.989, Tampon = 4.094,
+    Cartouche = 7.659, SeparateurEncre = 28.06, SeparateurOr = 19.363, IconeMembres = 1.685, IconeCrane = 0.913,
+    ClouLaiton = 0.953, ClouFer = 0.976,
 }

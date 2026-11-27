@@ -685,6 +685,30 @@ function QA.capture(name)
                     { actor = "Player-1-QA000002", time = at - 600000, mapID = 1, kind = "kill", target = "Player-1-QA0000E4", name = "Thazdin" },
                 }
             end
+            if name:find("%-wanted") or name:find("%-horde") then
+                -- The wanted posters (owner's kit, 27/11): seven invented killers, a bounty with gold on
+                -- the second, a notice without gold on the third, the fifth's last victim six weeks old.
+                local points = {}
+                local function deaths(target, foe, list)
+                    for i, d in ipairs(list) do
+                        points[#points + 1] = { actor = "Player-1-QA00000" .. d[1], time = at - d[2] * 3600, mapID = 1,
+                            kind = "death", target = target, name = foe }
+                    end
+                end
+                deaths("Player-1-QA0000W1", "Shmigly Wins", { { 1, 20 }, { 2, 30 }, { 3, 50 }, { 4, 70 }, { 1, 90 } })
+                deaths("Player-1-QA0000W2", "Chêne Molle", { { 1, 24 }, { 2, 60 }, { 3, 100 } })
+                deaths("Player-1-QA0000W3", "Adva Tidemand", { { 2, 40 }, { 4, 140 } })
+                deaths("Player-1-QA0000W4", "Fy Rion", { { 3, 120 } })
+                deaths("Player-1-QA0000W5", "Rogue Gank", { { 1, 1000 }, { 2, 1010 }, { 3, 1020 } })
+                deaths("Player-1-QA0000W6", "Brakka Fendroc", { { 4, 400 } })
+                deaths("Player-1-QA0000W7", "Gul’dash", { { 1, 700 } })
+                table.sort(points, function(a, b) return a.time > b.time end)
+                GL.GuildMap.Points = function() return points end
+                local orders = { ["Player-1-QA0000W2"] = { pot = { a = 2500000 } }, ["Player-1-QA0000W3"] = { pot = {} } }
+                GL.Bounties = GL.Bounties or {}
+                GL.Bounties.OpenFor = function(target) return orders[target] end
+                if name:find("%-horde") then UnitFactionGroup = function() return "Horde", "Horde" end end
+            end
         end
         if page == "members" and GL.GuildMap then
             -- Synthetic members (example names): you, two up to date (one an alt), one old, one unknown.

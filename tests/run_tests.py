@@ -70,6 +70,16 @@ for name, expected_width, expected_height, transparent in (
     ("JournalGuilde/FleuronDroit.tga", 256, 32, True), ("JournalGuilde/Fanion.tga", 32, 64, True),
     ("JournalGuilde/Victoire.tga", 64, 64, True), ("JournalGuilde/Mort.tga", 64, 64, True),
     *((f"Letters{name}.tga", 512, 256, True) for name in ("Hurlevent", "Chanteguerre", "Kaldorei", "Gnomeregan", "Karazhan", "Amani")),
+    # The guild's enemies as wanted posters (owner's kit, 27/11; tools/import_wanted_kit.py).
+    *((f"AvisRecherche/{name}.tga", 1024, 512, opaque is False) for name, opaque in (
+        ("ToileAlliance", True), ("ToileHorde", True), ("BordureAlliance", False), ("BordureHorde", False))),
+    *((f"AvisRecherche/{name}.tga", w, h, True) for name, w, h in (
+        ("FanionAlliance", 128, 256), ("FanionHorde", 128, 256), ("EmblemeAlliance", 128, 128), ("EmblemeHorde", 128, 128),
+        ("AfficheGrande", 256, 512), ("AfficheMoyenne", 256, 256), ("AffichePetite", 256, 256),
+        ("PrimeGrande", 256, 512), ("PrimeMoyenne", 256, 256), ("PrimePetite", 256, 256),
+        ("CadrePortrait", 128, 128), ("Medaillon", 64, 64), ("Bandeau", 256, 64), ("SceauPrime", 64, 64),
+        ("Tampon", 256, 64), ("Cartouche", 256, 32), ("SeparateurEncre", 256, 16), ("SeparateurOr", 256, 16),
+        ("IconeMembres", 64, 64), ("IconeCrane", 64, 64), ("ClouLaiton", 64, 64), ("ClouFer", 64, 64))),
 ):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")

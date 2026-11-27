@@ -511,9 +511,22 @@ do
     click(gb.tally[3])
     local enemies = gb.host.pages.enemies
     assert(R.page == "enemies" and enemies:IsShown() and enemies.viewCycle:GetText() == "Toujours · 1")
-    assert(enemies.rows[1].story:GetText() == "Bad Guy" and enemies.rows[1].deaths:GetText() == "4" and not enemies.rows[2]:IsShown())
-    assert(enemies.rows[1].where:GetText() == "2 membres tués · vaincu 4 fois par la guilde · Feralas, il y a 1 h", enemies.rows[1].where:GetText())
-    click(enemies.rows[1])
+    -- Wanted posters (owner's kit, 27/11): the first on the tall one, every figure as text.
+    local hero = enemies.posters[1]
+    assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "#1" and hero.title:GetText() == "Recherché" and not enemies.posters[2]:IsShown())
+    assert(hero.labelText:GetText() == "Ennemi public n°1" and hero.lines[1].words:GetText() == "2 membres tués" and hero.lines[2].words:GetText() == "4 morts")
+    assert(hero.lines[3].words:GetText() == "Feralas, il y a 1 h" and hero.lines[4].words:GetText() == "vaincu 4 fois par la guilde")
+    assert(not hero.seal:IsShown() and not hero.stamp:IsShown() and not hero.ribbon:IsShown())
+    -- The worst threats (owner, 26/11): time and harm together, his examples.
+    local now, D = GL.Now(), 86400
+    local function near(a, b) return math.abs(a - b) < 0.05 end
+    local fiveWeeks = R.Threat({ a = { now - 35 * D }, b = { now - 35 * D }, c = { now - 35 * D } })
+    assert(near(fiveWeeks, 1.89) and near(R.Threat({ a = { now - 7 * D } }), 0.79), fiveWeeks)
+    assert(fiveWeeks > R.Threat({ a = { now - 7 * D } }), "three members five weeks ago still stand out")
+    assert(R.Threat({ a = { now - 7 * D }, b = { now - 7 * D } }) > fiveWeeks, "two members last week come first")
+    assert(R.Threat({ a = { now - 90 * D }, b = { now - 90 * D } }) < 0.2, "unseen for three months: nearly nothing")
+    assert(R.Threat({ a = { now, now, now } }) < R.Threat({ a = { now }, b = { now }, c = { now } }), "different victims weigh more")
+    click(hero)
     assert(opened == "Player-1-Foe0001/Bad Guy")
     click(gb.tabs.guildlog)
     GL.OpenPlayerDossier = realDossier
