@@ -10,7 +10,8 @@ local DAY, GOLD = 86400, 10000
 local roster,addresses={},{}
 -- Members connected now, from the guild roster: a connected member speaks for itself (audit 24/11).
 local online={}
--- Messages that make no sense from one member, counted this session: told once past five.
+-- Messages in another member's name sent straight by a member (a forgery, never a catch-up
+-- answer), counted this session: told once past five.
 local oddCount,oddTold={},{}
 local ODD=ML("Grudge Ledger a ignoré plusieurs messages incohérents de %s. Rien n’en a été gardé.")
 local function odd(sender)
@@ -23,6 +24,20 @@ local function odd(sender)
 end
 B.Odd=odd
 function B.Online(id) return online[id]==true end
+-- Whether the guild roster has been read this session (a member list may be judged against it).
+function B.RosterKnown() return next(addresses)~=nil end
+-- Who wrote the bounty events kept, with the latest one each: the members whose addon spoke
+-- (the "Membres actifs" page, owner report 25/11).
+local unpackEvent
+function B.Authors()
+    local s=B.GuildScope and B.GuildScope()
+    local found={}
+    for _,raw in pairs(type(s)=="table" and type(s.events)=="table" and s.events or {}) do
+        local e=unpackEvent(raw,true)
+        if e and (not found[e.actor] or e.time>found[e.actor]) then found[e.actor]=e.time end
+    end
+    return found
+end
 -- What one member may keep in your book over the 38 days of the log, and the guild's fight counts.
 local MAX_MEMBER_EVENTS,MAX_SCORE_TARGETS,MAX_SCORE_ACTORS=600,1500,60
 local function guid(s)
@@ -45,6 +60,116 @@ local function rules(opts)
     if not quota or not groups[group] or not shares[split] or not souvenirs[media]
         or group=="solo" and split~="winner" or not plain(opts.note or "",100) then return end
     return quota,groups[group]..shares[split]..souvenirs[media]
+end
+-- A guild space read back from a damaged saved file (random test 25/11: one wrong field stopped
+-- the addon at every login). Once a session, every part the modules read is given back its shape:
+-- what has another shape is set aside in GL.db.quarantine.guild (the latest 50) and removed.
+local repaired = setmetatable({}, { __mode = "k" })
+local QUARANTINED = 50
+local function setAside(key, field, value)
+    GL.db.quarantine = type(GL.db.quarantine) == "table" and GL.db.quarantine or {}
+    local list = type(GL.db.quarantine.guild) == "table" and GL.db.quarantine.guild or {}
+    GL.db.quarantine.guild = list
+    list[#list + 1] = { space = key, field = field, value = type(value) == "table" and "table" or tostring(value):sub(1, 80), at = GL.Now() }
+    while #list > QUARANTINED do table.remove(list, 1) end
+end
+local function isTable(v) return type(v) == "table" end
+local function isString(v) return type(v) == "string" end
+local function isNumber(v) return type(v) == "number" and v == v and v > -math.huge and v < math.huge end
+local function isFlag(v) return type(v) == "boolean" end
+-- A field of t that must be a table, each entry passing check (when given): the others leave.
+local function shape(key, t, field, check)
+    local v = t[field]
+    if v == nil then return nil end
+    if type(v) ~= "table" then
+        setAside(key, field, v)
+        t[field] = nil
+        return nil
+    end
+    if check then
+        for k, item in pairs(v) do
+            if not check(item, k) then
+                setAside(key, field .. "." .. tostring(k), item)
+                v[k] = nil
+            end
+        end
+    end
+    return v
+end
+local function numberField(key, t, field, default)
+    if t[field] ~= nil and not isNumber(t[field]) then
+        setAside(key, field, t[field])
+        t[field] = default
+    end
+end
+local function repairSpace(key, s)
+    for _, field in ipairs({ "seq", "since", "directSince", "dossierSeq", "noticed" }) do numberField(key, s, field, nil) end
+    shape(key, s, "events", isString)
+    shape(key, s, "relayed", function(v) return v == true or isString(v) end)
+    shape(key, s, "directClaims")
+    shape(key, s, "scores", function(byActor)
+        if not isTable(byActor) then return false end
+        for actor, n in pairs(byActor) do
+            if not (isTable(n) and isNumber(n[1]) and isNumber(n[2])) then byActor[actor] = nil end
+        end
+        return true
+    end)
+    for _, field in ipairs({ "shareMap", "shareDeaths", "shareFights", "shareSightings", "shareSocial" }) do shape(key, s, field, isFlag) end
+    shape(key, s, "mapForgot", isNumber)
+    shape(key, s, "socialWithdrawn", isNumber)
+    shape(key, s, "places", function(list)
+        if not isTable(list) then return false end
+        -- A list keeps its strings, in order, without holes.
+        local kept = {}
+        for _, text in ipairs(list) do if isString(text) then kept[#kept + 1] = text end end
+        for i = #list, 1, -1 do list[i] = nil end
+        for k in pairs(list) do list[k] = nil end
+        for i, text in ipairs(kept) do list[i] = text end
+        return true
+    end)
+    shape(key, s, "addonMembers", function(m)
+        if not (isTable(m) and isNumber(m.at)) then return false end
+        if m.v ~= nil and not isString(m.v) then m.v = nil end
+        if m.mark ~= nil and not isString(m.mark) then m.mark = nil end
+        return true
+    end)
+    shape(key, s, "mailUncertain", isTable)
+    shape(key, s, "dossiers", function(d) return isTable(d) and isNumber(d.received) end)
+    shape(key, s, "socialReports", isTable)
+    if s.socialPublisher ~= nil and not isString(s.socialPublisher) then
+        setAside(key, "socialPublisher", s.socialPublisher)
+        s.socialPublisher = nil
+    end
+    shape(key, s, "bountyRecords", function(r)
+        if not isTable(r) then return false end
+        if not isTable(r.orders) then r.orders = {} end
+        for id, o in pairs(r.orders) do if not (isTable(o) and isNumber(o.at)) then r.orders[id] = nil end end
+        if not isNumber(r.at) then r.at = 0 end
+        if r.name ~= nil and not isString(r.name) then r.name = nil end
+        return true
+    end)
+    local j = shape(key, s, "journal")
+    if j then
+        shape(key, j, "cards", function(c, k)
+            if not (isTable(c) and isString(c.owner) and isString(c.target) and isNumber(c.time) and isString(c.key) and c.key == k) then return false end
+            if not isTable(c.opinions) then c.opinions = {} end
+            for k, o in pairs(c.opinions) do if not isTable(o) then c.opinions[k] = nil end end
+            if c.name ~= nil and not isString(c.name) then c.name = nil end
+            return true
+        end)
+        -- Their keys are card keys or player identifiers: text, never a number.
+        for _, field in ipairs({ "hidden", "secrets", "retired", "pending" }) do
+            shape(key, j, field, function(_, k) return isString(k) end)
+        end
+        -- A withdrawn card: its key "owner:target:digest", and the secret that proves it.
+        shape(key, j, "withdrawn", function(v, k) return isString(k) and k:match("^[^:]+:[^:]+:") ~= nil and isString(v) end)
+        j.cards, j.hidden, j.withdrawn, j.secrets = j.cards or {}, j.hidden or {}, j.withdrawn or {}, j.secrets or {}
+        numberField(key, j, "seq", 0)
+        j.seq = j.seq or 0
+        -- The index by target is rebuilt from the cards.
+        j.byTarget = nil
+    end
+    s.events = s.events or {}
 end
 local function scope()
     if not GL.db or not GetGuildInfo then return end
@@ -81,9 +206,21 @@ local function scope()
         return nil,"guild"
     end
     if not plain(realm,80) or realm == "" then return nil,"realm" end
-    GL.db.bountyGuilds = GL.db.bountyGuilds or {}
+    if type(GL.db.bountyGuilds) ~= "table" then
+        if GL.db.bountyGuilds ~= nil then setAside("*", "bountyGuilds", GL.db.bountyGuilds) end
+        GL.db.bountyGuilds = {}
+    end
     local key = realm.."/"..name
-    local s = GL.db.bountyGuilds[key] or {events={}, seq=0}
+    local s = GL.db.bountyGuilds[key]
+    if s ~= nil and type(s) ~= "table" then
+        setAside(key, "*", s)
+        s = nil
+    end
+    s = s or {events={}, seq=0}
+    if not repaired[s] then
+        repaired[s] = true
+        repairSpace(key, s)
+    end
     s.guildKey=key
     s.since=s.since or GL.Now()
     -- From this date, a claim must be heard from its hunter to count (audit 24/11).
@@ -91,7 +228,7 @@ local function scope()
     GL.db.bountyGuilds[key] = s
     return s, me
 end
-local function unpackEvent(raw,archiving)
+function unpackEvent(raw,archiving)
     if type(raw) ~= "string" or #raw > 250 then return end
     local f = {}
     for v in (raw..";"):gmatch("(.-);") do f[#f+1]=v end
@@ -165,7 +302,15 @@ local function earlier(a,b)
 end
 local function commitment(o)
     if next(o.paid) or next(o.arrivals) then return 3 end
-    return o.winner and 2 or o.first and 1 or 0
+    if o.winner then return 2 end
+    if o.first then return 1 end
+    -- An open bounty that other members put gold on (25/11): a publication dated a little earlier,
+    -- and backed by nobody, no longer takes its target and its pledges away. Read from the log, the
+    -- same on every client.
+    for payer in pairs(o.pot or {}) do
+        if payer~=o.owner then return 0.5 end
+    end
+    return 0
 end
 local function view(s,archiving)
     local orders,events={},{}
@@ -338,6 +483,7 @@ function B.Progress(o,hunter)
     hunter=hunter or GL.Safe(UnitGUID,"player")
     return o and not o.supersededBy and o.progress and o.progress[hunter] or 0
 end
+local HISTORY_KEPT=500
 local function remember(orders,me)
     if not guid(me) then return end
     local all=GL.db.bountyHistory or {}
@@ -376,6 +522,30 @@ local function remember(orders,me)
                 elseif w.actor==me then GL.Print(ML("Prime accomplie : %s."):format(o.name)) end
             end
         elseif history[id] and history[id].state=="superseded" then history[id]=nil end
+    end
+    -- A bounded history (25/11): a member could name you a helper on any number of made-up bounties.
+    -- A bounty with gold still to send or to receive always stays; a settled one (paid, withdrawn,
+    -- expired, replaced) leaves after six months, and past 500 the oldest settled leave first.
+    local settled={}
+    local count=0
+    for id,item in pairs(history) do
+        count=count+1
+        -- "Paid" counts as settled only once the hunter's receipt arrived: before, an old debt may
+        -- still be read from here when the guild's log has rotated.
+        local done=(item.state=="paid" and item.arrivals~=nil) or item.state=="withdrawn" or item.state=="expired"
+            or item.state=="superseded"
+        if done then
+            if (tonumber(item.at) or 0)<GL.Now()-180*DAY then
+                history[id]=nil
+                count=count-1
+            else
+                settled[#settled+1]={id=id,at=tonumber(item.at) or 0}
+            end
+        end
+    end
+    if count>HISTORY_KEPT then
+        table.sort(settled,function(a,b) return a.at<b.at or a.at==b.at and a.id<b.id end)
+        for i=1,math.min(#settled,count-HISTORY_KEPT) do history[settled[i].id]=nil end
     end
     return history
 end
@@ -856,10 +1026,35 @@ local function countMember(s,actor)
     return memberEvents.n[actor] or 0
 end
 -- Words said in your name that you never said: told once per member who passed them on.
-local forgeryTold,relayCount,ownAnsweredAt={}, {}, nil
+local forgeryTold,relayCount,ownAnsweredAt,ownDeferred={}, {}, nil, false
+local sendOwn
+local relayedCount
+local RELAYED_KEPT,RELAYED_PER_MEMBER=3000,1500
 local DENIED=ML("Un message à votre nom (%s), transmis par %s, n’est pas dans votre carnet : plantage, autre ordinateur ou invention. Ignoré.")
 local FORGED={O=ML("prime"),N=ML("prime"),A=ML("avis de recherche"),P=ML("contribution"),
     K=ML("victoire"),H=ML("victoire"),D=ML("mort"),Y=ML("paiement")}
+-- Your own events, all of them, from you: only you can say them (review 0.58.5). The newest 150 at
+-- most, in two places at most: the batch leaving now and the next one (review 0.58.10).
+sendOwn=function(s,me)
+    local now=GL.Now()
+    local own={}
+    for _,raw in pairs(s.events) do
+        local e=unpackEvent(raw,true)
+        if e and e.actor==me and (e.kind=="V" or e.time>=now-38*DAY) then own[#own+1]={at=e.time,text=raw} end
+    end
+    table.sort(own,function(x,y) return x.at>y.at end)
+    local ownBatch={}
+    for i=1,math.min(150,#own) do ownBatch[i]=own[i].text end
+    local first,second=GL.Transport.State(s,"bounty:own"),GL.Transport.State(s,"bounty:own:2")
+    local key=(first==nil and second~="queued" and "bounty:own") or (second==nil and first~="queued" and "bounty:own:2") or nil
+    -- The map relay keeps its room when it is shared and not already waiting.
+    local mapRoom=GL.GuildMap and GL.GuildMap.Enabled() and not GL.Transport.State(s,"map:relay") and 120 or 0
+    if #ownBatch==0 or not key then return end
+    ownAnsweredAt=now
+    local _,queued=GL.Transport.Pending(s)
+    while #ownBatch>math.max(0,508-queued-mapRoom) do ownBatch[#ownBatch]=nil end
+    if #ownBatch>0 then GL.Transport.SendBatch(s,ownBatch,{key=key,delay=1+math.random(0,4)}) end
+end
 local function receive(msg,sender)
     local s,me=scope()
     if not s or type(msg)~="string" or #msg>255 or GL.ContainsControlOrMarkup(msg) or not sender then return end
@@ -885,31 +1080,23 @@ local function receive(msg,sender)
         if budget.lastQ and now-budget.lastQ<10 then return end
         budget.lastQ=now
         if GL.GuildProfiles then GL.GuildProfiles.CatchUp(s,me) end
-        -- Your own events, all of them, from you: only you can say them (review 0.58.5). The newest
-        -- 150 at most.
-        local own={}
-        for _,raw in pairs(s.events) do
-            local e=unpackEvent(raw,true)
-            if e and e.actor==me and (e.kind=="V" or e.time>=now-38*DAY) then own[#own+1]={at=e.time,text=raw} end
+        -- Your own events leave once every thirty seconds at most, whoever asks: two logins close
+        -- together share the same answer (audit 24/11). A question inside that window is answered at its
+        -- end, once (owner 25/11): only you can speak for yourself, a late arrival must not miss you.
+        if ownAnsweredAt and now-ownAnsweredAt<30 then
+            if not ownDeferred and C_Timer and C_Timer.After then
+                ownDeferred=true
+                C_Timer.After(31-(now-ownAnsweredAt),function()
+                    ownDeferred=false
+                    local s2,me2=scope()
+                    if s2 then sendOwn(s2,me2) end
+                end)
+            end
+        else
+            sendOwn(s,me)
         end
-        table.sort(own,function(x,y) return x.at>y.at end)
-        local ownBatch={}
-        for i=1,math.min(150,#own) do ownBatch[i]=own[i].text end
-        -- Two places at most: the batch leaving now and the next one. A third arrival is covered by
-        -- the one already waiting (review 0.58.10).
-        local first,second=GL.Transport.State(s,"bounty:own"),GL.Transport.State(s,"bounty:own:2")
-        local key=(first==nil and second~="queued" and "bounty:own") or (second==nil and first~="queued" and "bounty:own:2") or nil
         -- The map relay keeps its room when it is shared and not already waiting.
         local mapRoom=GL.GuildMap and GL.GuildMap.Enabled() and not GL.Transport.State(s,"map:relay") and 120 or 0
-        -- Your own events leave once every thirty seconds at most, whoever asks: two logins close
-        -- together share the same answer (audit 24/11).
-        if ownAnsweredAt and now-ownAnsweredAt<30 then ownBatch={} end
-        if #ownBatch>0 and key then
-            ownAnsweredAt=now
-            local _,queued=GL.Transport.Pending(s)
-            while #ownBatch>math.max(0,508-queued-mapRoom) do ownBatch[#ownBatch]=nil end
-            if #ownBatch>0 then GL.Transport.SendBatch(s,ownBatch,{key=key,delay=1+math.random(0,4)}) end
-        end
         if GL.Transport.State(s,"bounty:relay") then
             if GL.GuildMap then GL.GuildMap.CatchUp(s,me,sender,false) end
             return
@@ -978,7 +1165,7 @@ local function receive(msg,sender)
         -- bounded (0.60.1): a forged relay cannot inflate a total beyond what a player really does.
         local most=relay and 2000 or 100000
         wins,losses=number(wins,0,most),number(losses,0,most)
-        if relay and online[actor] then odd(sender) return end
+        if relay and online[actor] then return end
         if guid(actor) and guid(target) and wins and losses and actor~=me and (relay and addresses[actor] or actor==sender) then
             if relay then GL.Transport.Cancel(s,"bounty:relay") end
             mergeScore(s,actor,target,wins,losses)
@@ -992,6 +1179,11 @@ local function receive(msg,sender)
         -- The author now says what a relay had told: it becomes theirs (counted, and a claim heard).
         local told=type(s.relayed)=="table" and s.relayed
         if not relay and e.actor==sender and told and told[e.key] then
+            if relayedCount and relayedCount.s==s then
+                local by=type(told[e.key])=="string" and told[e.key] or "?"
+                relayedCount.all=math.max(0,relayedCount.all-1)
+                relayedCount.by[by]=math.max(0,(relayedCount.by[by] or 1)-1)
+            end
             told[e.key]=nil
             if memberEvents and memberEvents.s==s then memberEvents.n[e.actor]=(memberEvents.n[e.actor] or 0)+1 end
             if e.kind=="K" or e.kind=="H" then direct(s,e.key) end
@@ -1001,7 +1193,7 @@ local function receive(msg,sender)
     -- What a member relays that is new here counts against them: 900 a session at most.
     if relay then
         relayCount[sender]=(relayCount[sender] or 0)+1
-        if relayCount[sender]>900 then odd(sender) return end
+        if relayCount[sender]>900 then return end
     end
     if not relay and e.actor~=sender then odd(sender) return end
     -- A relay is a member's word about another member (review 0.58.2). It may tell a bounty, a
@@ -1021,7 +1213,9 @@ local function receive(msg,sender)
         -- A relay speaks only of a member of the guild: never of someone made up or gone.
         if not addresses[e.actor] then return end
         -- A connected member speaks for itself: a relay in its name is refused (audit 24/11).
-        if online[e.actor] then odd(sender) return end
+        -- Silently: a catch-up answer holds the events of connected members too (owner 25/11, a
+        -- warning there would accuse an honest member).
+        if online[e.actor] then return end
     end
     -- Relays are guild testimony, never an instruction to send gold or alter personal records.
     if e.actor==me then return end
@@ -1037,12 +1231,32 @@ local function receive(msg,sender)
         local o=archive and archive[e.order]
         if not o or o.guildKey~=s.guildKey or (o.state=="paid" and o.arrivals) then return end
     end
+    if relay then
+        -- What relays may keep (25/11): relayed events stay out of the author's share, so they need
+        -- a bound of their own, kept across sessions: 1500 per member who relays, 3000 in all.
+        -- An author's own word frees the room (it adopts the event).
+        s.relayed=type(s.relayed)=="table" and s.relayed or {}
+        if not relayedCount or relayedCount.s~=s then
+            relayedCount={s=s,all=0,by={}}
+            for key,who in pairs(s.relayed) do
+                if s.events[key] then
+                    relayedCount.all=relayedCount.all+1
+                    local by=type(who)=="string" and who or "?"
+                    relayedCount.by[by]=(relayedCount.by[by] or 0)+1
+                else
+                    s.relayed[key]=nil
+                end
+            end
+        end
+        if relayedCount.all>=RELAYED_KEPT or (relayedCount.by[sender] or 0)>=RELAYED_PER_MEMBER then return end
+        relayedCount.all=relayedCount.all+1
+        relayedCount.by[sender]=(relayedCount.by[sender] or 0)+1
+    end
     openTargets=nil
     s.events[e.key]=raw
     if relay then
         -- Told by another member: not counted in the author's share of the book (audit 24/11).
-        s.relayed=type(s.relayed)=="table" and s.relayed or {}
-        s.relayed[e.key]=true
+        s.relayed[e.key]=sender
     end
     if (e.kind=="K" or e.kind=="H") and not relay then direct(s,e.key) end
     if (e.kind=="K" or e.kind=="H") and e.order:match("^([^:]+)")==me then finalize(s,me) end
@@ -1071,6 +1285,7 @@ local function refreshRoster()
             if realm then roster[name.."-"..realm]=id end
         end
     end
+    if GL.GuildMap and GL.GuildMap.RosterChanged then GL.GuildMap.RosterChanged(addresses) end
 end
 function B.IsMember(id)
     return guid(id) and addresses[id]~=nil or false
@@ -1419,7 +1634,7 @@ local function join()
             if not e or (e.kind=="V" and e.time<GL.Now()-38*DAY and not GL.db.bountyHistory[e.actor]) then s.events[k]=nil end
         end
         lastPrune=GL.Now()
-        memberEvents=nil
+        memberEvents,relayedCount=nil,nil
     end
     if s and not next(roster) then joined,openTargets=nil,nil; return end
     if s~=joined then

@@ -24,8 +24,10 @@ Depuis la 0.54.0, le carnet est tenu **par faction** : `players`, `aliases`, `gu
 | `guilds` | Avis personnel sur une guilde entière, par `royaume:nom` | `Core.lua` | Note de 2 000 octets au plus |
 | `settings` | Réglages du joueur | `Core.lua` | Valeurs validées au chargement |
 | `unassignedHonor` | Gains d'honneur sans adversaire identifié | `Core.lua` | — |
-| `quarantine` | Entrées illisibles mises de côté au lieu d'être effacées | `Core.lua` | — |
+| `quarantine` | Entrées illisibles mises de côté au lieu d'être effacées. `quarantine.guild` (0.62.1) : les 50 dernières parties d'un espace de guilde qui n'avaient plus la bonne forme, réparé une fois par session (l'espace, le champ, un aperçu de la valeur, la date) | `Core.lua`, `Bounties.lua` | — |
 | `armoryRequests` | Demandes d'import destinées au compagnon | `Core.lua` | Purgées après 7 jours |
+| `mapHideGuild` | Filtre de la carte des combats (0.62.1) : `true` quand vous n'y voulez que vos combats. Ne change rien au partage, réglé dans Réglages, Relations et JcJ | `Relations.lua` | Un booléen |
+| `guildLogSeenAt` | Date du combat le plus récent vu dans le Journal de guilde à votre dernière visite (0.62.1) : le fanion marque ceux arrivés après | `Relations.lua` | Un nombre |
 | `detectionLog` | Dernières décisions de détection et d'alerte | `Core.lua` | 200 entrées |
 | `battlegroundArchive` | Fiches retirées par le nettoyage des champs de bataille | `Core.lua` | — |
 | `battlegroundCleanupVersion` | Marqueur de la migration 2 | `Core.lua` | — |
@@ -80,6 +82,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `shareMap` | « Vision de guilde » (0.49.0), par personnage. Active depuis la 0.51.0 tant que la valeur n'est pas `false` : cochée, le personnage envoie l'endroit de ses victoires et de ses morts et garde ceux des autres | — |
 | `places` | Combats partagés, par membre : lignes `date;carte;x;y;genre;adversaire;nom` (x et y en millièmes, genre `d` mort ou `k` victoire), la plus récente d'abord. Vidé quand la case est décochée. Sert à la carte et à l'alerte « Tueur de guilde » | 150 membres, 40 lignes par membre, 38 jours |
 | `mapForgot` | Date du dernier `MX` de chaque membre : un relais plus ancien de ses combats est refusé. Effacée dès qu'il partage à nouveau | Un par membre |
+| `addonMembers` | Les membres dont l'addon a parlé (0.62.1) : date du dernier message, version, marque anonyme du joueur. Sert la page « Membres actifs ». Un membre parti de la guilde ou silencieux depuis 60 jours en sort ; 1000 au plus | Un par membre |
 | `mailUncertain` | Envoi de courrier dont l'accusé n'a pas été reçu | Un par personnage |
 | `mailReturned` | Courriers de paiement revenus déjà déclarés (`Z`), pour ne pas les déclarer deux fois (0.62.0) | Un par courrier |
 | `journal` | Fiches de guilde. Détail ci-dessous | — |
@@ -91,7 +94,7 @@ Chaque entrée de `bountyGuilds` contient les champs suivants.
 | `socialPublisher` | Le personnage du compte qui donne l'avis du compte dans cette guilde (0.62.0). Les autres personnages du compte retirent leurs témoignages, pour que la guilde ne compte pas le même avis une fois par personnage | Un |
 | `directClaims` | Clés des victoires de prime entendues de leur propre chasseur ou déclarées par vous (0.62.0). Seules elles peuvent désigner le gagnant : une victoire relayée par un autre membre ne le peut pas. Nettoyée avec les événements | Une par victoire |
 | `directSince` | Date à partir de laquelle une victoire de prime doit avoir été entendue de son chasseur, ou retenue par l'auteur de la prime, pour compter (0.62.0). Les victoires plus anciennes comptent comme avant | Une |
-| `relayed` | Clés des événements de prime reçus par relais, c'est-à-dire transmis par un autre membre (0.62.0). Ils ne comptent pas dans le quota de 600 messages du membre nommé. Si l'auteur les redit lui-même, ils redeviennent les siens. Nettoyé avec les événements. Depuis la 0.62.0, un relais au nom d'un membre connecté est refusé, pour les primes comme pour la carte | Un par événement relayé |
+| `relayed` | Clés des événements de prime reçus par relais, c'est-à-dire transmis par un autre membre (0.62.0), avec le membre qui les a transmis (0.62.1 ; `true` avant). Bornés à 1500 par membre qui relaie et 3000 en tout. Ils ne comptent pas dans le quota de 600 messages du membre nommé. Si l'auteur les redit lui-même, ils redeviennent les siens. Nettoyé avec les événements. Depuis la 0.62.0, un relais au nom d'un membre connecté est refusé pour les primes. La carte l'acceptait aussi peu en 0.62.0 et restait vide quand la guilde était en ligne : depuis la 0.62.1, elle garde les combats relayés de tous les membres de la guilde | Un par événement relayé |
 | `socialReports` | Témoignages reçus, par `auteur:cible` : solde, relation, 32 faits au plus, ou marque de retrait | 256 témoignages |
 
 Le champ `journal` contient lui-même : `cards` (fiches publiées, avec leurs avis), `hidden` (cibles masquées localement), `withdrawn` (fiches retirées et leur secret), `secrets` (secrets des fiches publiées par ce compte), `seq`, `auto` (publication automatique), `retired` (cibles à ne pas republier) et `byTarget` (index reconstruit à l'usage).

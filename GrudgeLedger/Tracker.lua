@@ -14,6 +14,8 @@ local duelPendingUntil
 local serial, honorBaseline, session = 0, nil, nil
 local worldActive = true
 local idleOpponents, idleAt, openingFeed
+-- When you last came back to life: a death soon after it is a corpse camped (owner, 25/11).
+local revivedAt
 local damageEvents = {
     SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true, SPELL_PERIODIC_DAMAGE = true,
     SPELL_BUILDING_DAMAGE = true, DAMAGE_SHIELD = true, DAMAGE_SPLIT = true, ENVIRONMENTAL_DAMAGE = true,
@@ -289,6 +291,14 @@ local function observeOpponent(f, guid, level, live)
                 f.firstHealth = math.floor(100 * (hp / max) + 0.5)
             end
             f.observerLevel = GL.Clean(GL.Safe(UnitLevel, "player"), "number")
+            -- How the fight began for you (owner, 25/11: "toujours plus d'infos"): when, on your
+            -- mount or not, in a group of how many, how long after you came back to life.
+            local now = GL.Now()
+            f.startedAt = f.startedAt or now
+            f.mounted = GL.Clean(GL.Safe(IsMounted), "boolean")
+            local members = GL.Clean(GL.Safe(GetNumGroupMembers), "number")
+            f.groupSize = members and members >= 1 and members <= 40 and math.floor(members) or 1
+            if revivedAt and now >= revivedAt and now - revivedAt <= 900 then f.sinceRevive = now - revivedAt end
         end
     end
     if not f.combatants[guid] then
@@ -306,7 +316,18 @@ local function combatSnapshot(f, identity, viaPet, credit)
     if not f or not f.combatants then return end
     local level = identity.guid and f.combatants[identity.guid]
     local snapshot = { healthPct = f.firstHealth, playerLevel = f.observerLevel, opponentLevel = level,
-        opponents = f.opponentCount, pve = f.npcPressure, pet = viaPet }
+        opponents = f.opponentCount, pve = f.npcPressure, pet = viaPet,
+        mounted = f.mounted or nil, groupSize = f.groupSize, sinceRevive = f.sinceRevive }
+    local now = GL.Now()
+    if f.startedAt and now >= f.startedAt and now - f.startedAt <= 3600 then snapshot.duration = now - f.startedAt end
+    -- What was left of the opponent at that moment, when the game shows them (a nameplate, a target).
+    local token = identity.guid and GL.Clean(GL.Safe(UnitTokenFromGUID, identity.guid), "string")
+    if token and GL.Clean(GL.Safe(UnitGUID, token), "string") == identity.guid then
+        local hp, max = GL.Clean(GL.Safe(UnitHealth, token), "number"), GL.Clean(GL.Safe(UnitHealthMax, token), "number")
+        if hp and max and max > 0 and hp >= 0 and hp <= max and max < math.huge then
+            snapshot.opponentHealthPct = math.floor(100 * hp / max + 0.5)
+        end
+    end
     local opening = f.opening
     if opening and opening.guid == identity.guid and not opening.defeated and not (credit and f.endedAt) then
         snapshot.opener, snapshot.hadGrudge, snapshot.encounterId = opening.opener, opening.hadGrudge, f.id
@@ -410,8 +431,17 @@ local function killingBlow(src, dst, name, evidence, native)
             end
             return
         end
-        if src ~= GL.Clean(GL.Safe(UnitGUID, "pet"), "string") then return end
-        evidence = "Votre familier a porté le coup fatal à ce joueur."
+        if src == GL.Clean(GL.Safe(UnitGUID, "pet"), "string") then
+            evidence = "Votre familier a porté le coup fatal à ce joueur."
+        else
+            -- A monster finished a player of YOUR fight (owner, 26/11): no other player killed them,
+            -- the victory is yours, not a helping hand. Another player's pet does not count.
+            local f = combatSession()
+            local fought = f and (f.enemies["guid:" .. dst] or (f.combatants and f.combatants[dst]))
+            local monster = (src:match("^Creature%-") or src:match("^Vehicle%-")) and not petOwners[src]
+            if not (fought and monster) then return end
+            evidence = "Achevé par un monstre pendant votre combat : aucun autre joueur ne lui a porté le coup fatal."
+        end
     end
     creditKill(identityForGUID(dst, name), "confirmed", evidence, native)
     local credit=recentCredits[dst]
@@ -448,6 +478,24 @@ local function unresolvedAttack(f)
     return f.pve or (f.unknownPets and next(f.unknownPets))
 end
 
+-- A monster on you excuses nobody (owner, 27/11): a player who hits you meanwhile still attacks you.
+-- Only a pet whose owner is unseen leaves the blow unexplained.
+local function aggressionBlocked(f)
+    return f.unknownPets and next(f.unknownPets)
+end
+
+-- No one visibly targets you (an ambush, a hidden target): the only hostile player in combat seen
+-- around you in the last two seconds is the attacker (owner, 27/11), unless a monster is on you.
+local function loneAttacker(f)
+    local now = GL.Now()
+    if (f.pveAt and now - f.pveAt <= 3) or aggressionBlocked(f) then return nil end
+    local found, count = nil, 0
+    for key, seen in pairs(f.nearby or {}) do
+        if now - seen.at <= 2 then count, found = count + 1, { [key] = seen.identity } end
+    end
+    return count == 1 and found or nil
+end
+
 local function observeHealth()
     local f = fight
     if not enabled() or not f then return end
@@ -458,15 +506,57 @@ local function observeHealth()
     local health = GL.Clean(GL.Safe(UnitHealth, "player"), "number")
     local maximum = GL.Clean(GL.Safe(UnitHealthMax, "player"), "number")
     local now = GL.Now()
-    if health and maximum and f.health and f.maxHealth == maximum and f.healthAt
-        and now - f.healthAt <= 2 and health < f.health and not unresolvedAttack(f) and not f.damageLogged then
+    local hurt = health and maximum and f.health and f.maxHealth == maximum and f.healthAt
+        and now - f.healthAt <= 2 and health < f.health
+    -- Forever can hide health in combat; the client's own "you were wounded" event says the same.
+    if not hurt and f.woundAt and now - f.woundAt <= 1 then hurt = true end
+    f.woundAt = nil
+    if hurt and not f.damageLogged then
         if not f.opening then f.idleOpponents = nil end
-        local candidates = recentAttackers(f, 2)
-        if next(candidates) and not f.pendingAggression then
-            f.pendingAggression = { candidates = candidates, at = now }
+        local candidates, lone = recentAttackers(f, 2), nil
+        if not next(candidates) then
+            candidates = loneAttacker(f)
+            lone = candidates ~= nil
+        end
+        if aggressionBlocked(f) or not candidates then
+            -- Say why nothing was written, so a missed ambush can be explained.
+            if not aggressionBlocked(f) and not (f.pveAt and now - f.pveAt <= 3) then GL.Trace("unseen") end
+        elseif not f.pendingAggression then
+            f.pendingAggression = { candidates = candidates, at = now, lone = lone }
         end
     end
     f.health, f.maxHealth, f.healthAt = health, maximum, now
+end
+
+-- A harmful effect a hostile player put on you is an attack, whatever else hits you (owner, 27/11).
+local function auraSource(index)
+    if C_UnitAuras and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
+        local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, "player", index, "HARMFUL")
+        data = ok and GL.Clean(data, "table")
+        if not data then return false end
+        return GL.Clean(data.sourceUnit, "string")
+    end
+    if type(UnitDebuff) ~= "function" then return false end
+    local ok, name, _, _, _, _, _, source = pcall(UnitDebuff, "player", index)
+    if not ok or not GL.Clean(name) then return false end
+    return GL.Clean(source, "string")
+end
+
+local function observeAuras()
+    local f = fight
+    if not enabled() or not f or deathHandled or bool(UnitIsPVP, "player") ~= true then return end
+    local faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
+    for index = 1, 40 do
+        local source = auraSource(index)
+        if source == false then break end
+        if source and bool(UnitCanAttack, "player", source) == true and bool(UnitIsPVP, source) == true then
+            local identity = GL.Identity(source, true)
+            if identity and faction and identity.faction and identity.faction ~= faction then
+                observeOpponent(f, identity.guid, identity.level, true)
+                recordAggression(f, identity, "confirmed", "Effet néfaste posé sur vous par ce joueur hostile pendant le combat.")
+            end
+        end
+    end
 end
 
 local function tryAggression()
@@ -480,10 +570,13 @@ local function tryAggression()
     local age = GL.Now() - pending.at
     if age < 1 then return end -- give explicit combat-log evidence priority
     f.pendingAggression = nil
-    if age <= 3 and not unresolvedAttack(f) and not f.damageLogged then
-        local candidates = recentAttackers(f, 2)
+    if age <= 3 and not aggressionBlocked(f) and not f.damageLogged then
+        local candidates = pending.lone and pending.candidates or recentAttackers(f, 2)
         for key, identity in pairs(pending.candidates) do
-            if candidates[key] then
+            if pending.lone then
+                recordAggression(f, identity, "confirmed",
+                    "Baisse de santé alors que ce joueur hostile était le seul adversaire en combat autour de vous ; source non confirmée.")
+            elseif candidates[key] then
                 local pet = f.petAttackers and f.petAttackers[key]
                 local evidence = pet and GL.Now() - pet.at <= 2 and "Votre santé a baissé pendant que le familier de ce joueur vous ciblait en combat."
                     or "Baisse de santé pendant que cet adversaire PvP en combat vous ciblait ; participation déduite, source de dégâts non confirmée."
@@ -538,7 +631,7 @@ function T.Observe(unit, reuseObservation)
                 f.unknownPets = f.unknownPets or {}
                 f.unknownPets[guid] = true
             else
-                f.pve = true
+                f.pve, f.pveAt = true, GL.Now()
                 if controlled == false and guid and guid:match("^Creature%-") then f.npcPressure = true end
             end
         end
@@ -553,6 +646,11 @@ function T.Observe(unit, reuseObservation)
     local faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
     if not faction or not identity.faction or faction == identity.faction then return end
     if bool(UnitIsPVP, "player") ~= true or bool(UnitIsPVP, unit) ~= true then return end
+    -- Every hostile player in combat around you, targeting you or not (see loneAttacker).
+    f.nearby = f.nearby or {}
+    if fight and engaged and bool(UnitIsDeadOrGhost, unit) == false then
+        f.nearby[identity.key] = { identity = identity, at = GL.Now() }
+    else f.nearby[identity.key] = nil end
     local enemy = f.enemies[identity.key]
     if not enemy and identity.guid and identity.alias then
         enemy = f.enemies[identity.alias]
@@ -1072,7 +1170,7 @@ function T.OnCombatLog(...)
         local identity, viaPet = attacker(src, srcName, srcFlags)
         local f = combatSession()
         if not identity and f then
-            f.pve = true
+            f.pve, f.pveAt = true, GL.Now()
             if src and src:match("^Creature%-") and hasFlag(srcFlags, COMBATLOG_OBJECT_CONTROL_NPC or 512)
                 and hostileFlags(srcFlags) and not viaPet then f.npcPressure = true end
         end
@@ -1283,6 +1381,7 @@ function T.Poll()
     end
     for _, unit in ipairs(units()) do T.Observe(unit, true) end
     observeHealth()
+    observeAuras()
     tryAggression()
     tryKills()
     local now = GL.Now()
@@ -1341,6 +1440,7 @@ function T.HandleEvent(event, ...)
         if fight then fight.endedAt = GL.Now() lastFight = fight fight = nil end
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
         if bool(UnitIsDeadOrGhost, "player") == false then
+            revivedAt = GL.Now()
             resolveDeath(true)
             deathHandled, resolvedDeath, leadLog, pendingCast = false, nil, nil, nil
             fight, lastFight, pendingDeath, idleOpponents = nil, nil, nil, nil
@@ -1352,6 +1452,14 @@ function T.HandleEvent(event, ...)
         arg = GL.Clean(arg, "string")
         if arg then plates[arg] = nil end
     elseif event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" then T.Poll()
+    elseif event == "UNIT_AURA" then
+        if GL.Clean(arg, "string") == "player" then observeAuras() end
+    elseif event == "UNIT_COMBAT" then
+        local amount = GL.Clean((select(4, ...)), "number")
+        if GL.Clean(arg, "string") == "player" and GL.Clean(second, "string") == "WOUND" and amount and amount > 0 then
+            if fight then fight.woundAt = GL.Now() end
+            T.Poll()
+        end
     elseif event == "UNIT_TARGET" or event == "UNIT_FLAGS" or event == "UNIT_HEALTH" or event == "UNIT_NAME_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
         arg = GL.Clean(arg, "string")
         if event == "UNIT_HEALTH" and arg == "player" then T.Poll() else T.Observe(arg) end
@@ -1385,6 +1493,10 @@ GL.On("READY", function()
     }
     T.nativeKillEvent = pcall(frame.RegisterEvent, frame, "PARTY_KILL")
     for _, event in ipairs(events) do pcall(frame.RegisterEvent, frame, event) end
+    for _, event in ipairs({"UNIT_AURA", "UNIT_COMBAT"}) do
+        if frame.RegisterUnitEvent then pcall(frame.RegisterUnitEvent, frame, event, "player")
+        else pcall(frame.RegisterEvent, frame, event) end
+    end
     -- Forever may reject registration even when the getter exists.
     if (C_CombatLog and C_CombatLog.GetCurrentEventInfo) or CombatLogGetCurrentEventInfo then
         openingFeed = pcall(frame.RegisterEvent, frame, "COMBAT_LOG_EVENT_UNFILTERED")

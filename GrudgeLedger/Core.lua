@@ -96,7 +96,7 @@ local traceReasons = {
     neutral = "Neutre : pas d'alerte", grouped = "Ami dans le groupe", present = "Ami déjà présent ou visibilité non confirmée",
     disabled = "Alerte désactivée", cooldown = "Délai entre alertes", priority = "Alerte plus prioritaire affichée",
     burst = "Regroupé avec l'alerte de guilde", shown = "Fenêtre affichée", protected = "Marqueur : cadre protégé",
-    indirect = "Signal indirect affiché",
+    indirect = "Signal indirect affiché", unseen = "Blessé sans adversaire visible : ciblez-le ou affichez les barres ennemies",
 }
 function GL.Trace(code, identity, unit)
     if not GL.db or not GL.Settings().detectionLog or not traceReasons[code] then return end
@@ -894,7 +894,7 @@ local function buildGuildStatistics()
         if not key then return end
         if not guilds[key] then
             guilds[key] = { key = key, name = clean, realm = server, members = 0, grudges = 0,
-                friends = 0, deaths = 0, kills = 0, aggressions = 0 }
+                friends = 0, deaths = 0, kills = 0, aggressions = 0, sides = {} }
         end
         return guilds[key]
     end
@@ -903,6 +903,9 @@ local function buildGuildStatistics()
         local guild = record.guild and not GL.IsGroupOnly(record) and get(record.guild, record.realm)
         if guild then
             guild.members = guild.members + 1
+            if record.faction == "Alliance" or record.faction == "Horde" then
+                guild.sides[record.faction] = (guild.sides[record.faction] or 0) + 1
+            end
             local relation = GL.Relation(record)
             -- A guild rule must not manufacture personal grudges/friends in its own ranking.
             if GL.RelationSource(record) ~= "guild" then
@@ -930,6 +933,10 @@ local function buildGuildStatistics()
     local result = {}
     for key, guild in pairs(guilds) do
         for _, field in pairs(deaths[key] or {}) do guild[field] = guild[field] + 1 end
+        -- The guild's side, from its known members (most of them); none when undecided.
+        local alliance, horde = guild.sides.Alliance or 0, guild.sides.Horde or 0
+        guild.faction = alliance > horde and "Alliance" or horde > alliance and "Horde" or nil
+        guild.sides = nil
         result[#result + 1] = guild
     end
     return result
@@ -1267,6 +1274,11 @@ local function combatContext(value)
         opponentLevel = integer("opponentLevel", 1, 1000), opponents = integer("opponents", 1, 10000),
         pve = GL.Clean(value.pve, "boolean") or nil, pet = GL.Clean(value.pet, "boolean") or nil,
         assist = cleanName(value.assist),
+        -- 25/11: how long it lasted, on your mount or not, your group, since your last revival, and
+        -- the opponent's health when it ended (when the game showed it).
+        duration = integer("duration", 0, 3600), mounted = GL.Clean(value.mounted, "boolean") or nil,
+        groupSize = integer("groupSize", 1, 40), sinceRevive = integer("sinceRevive", 0, 900),
+        opponentHealthPct = integer("opponentHealthPct", 0, 100),
     }
     if (value.opener == "player" or value.opener == "opponent") and cleanName(value.encounterId) then
         snapshot.opener, snapshot.encounterId = value.opener, value.encounterId

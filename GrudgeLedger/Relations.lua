@@ -242,8 +242,7 @@ local function paintDebts(page)
         countForm(#settled, "%d réglée", "%d réglées")))
 end
 
--- Rivalries: the players you fought most, one at a time, with the score and the dated thread.
-local RIVAL_STEPS = 5 -- fights shown on the thread, the latest ones
+-- Rivalries: the players you fought twice or more (two finished fights).
 function R.Rivals()
     local list = {}
     for _, record in pairs(players()) do
@@ -258,151 +257,566 @@ function R.Rivals()
     end)
     return list
 end
-local function openingShare(record)
-    local total, his = 0, 0
-    for _, e in ipairs(record.history or {}) do
-        if type(e) == "table" and e.kind == "opening" and not e.voided then
-            total = total + 1
-            his = his + (e.opener == "opponent" and 1 or 0)
+-- Rivalries (owner's brief of 25/11): five strips of parchment a page, each with the rival, what
+-- stands out between you (GL.RivalryRules), your victories and deaths, and where it last happened.
+-- A click unfolds the strip in place: you facing the rival, the score, a sentence of what turned,
+-- the debt, the last five fights from oldest to newest, the sheet and the bounty. A second click,
+-- or another strip, folds it. A search reads every name and guild before the pages.
+-- Six a page, closer together (owner, 25/11: the gaps were too wide).
+local RIVAL_PAGE = 6
+local RIVAL_STEPS = 5 -- fights shown when unfolded, the latest ones, oldest on the left
+local RIVAL_TOP, RIVAL_H, RIVAL_GAP = -60, 62, 4
+-- Unfolded: the five strips get narrow and the sheet opens under its own (page 510 high: the
+-- strips, the sheet and the gaps end at 464, above the worn bottom of the page).
+local RIVAL_SMALL, RIVAL_SMALL_GAP, RIVAL_SHEET = 36, 3, 210
+local GREEN, RED = { 0.18, 0.37, 0.20 }, { 0.55, 0.12, 0.12 }
+-- Plain score when the rules cannot read a sheet (damaged data): the page keeps going.
+local function plainAnalysis(record)
+    local kills, deaths = count(record, "kills"), count(record, "deaths")
+    return { key = record.key, kills = kills, deaths = deaths, volume = kills + deaths, debt = GL.Debt(record), eligible = true,
+        timeline = {}, chronology = {}, motifs = {}, narrative = { id = "aucune_issue_datee", params = {} }, categoryRank = 5 }
+end
+-- The analyses, kept until a sheet changes, or for ten minutes (a recent fact leaves its week).
+local rivalCache, rivalCacheAt = {}, 0
+local function analyse(record, now)
+    local signature = table.concat({ #(record.history or {}), count(record, "kills"), count(record, "deaths"),
+        count(record, "aggressions"), tostring(record.assists), GL.Debt(record) }, ":")
+    local kept = rivalCache[record.key]
+    if kept and kept.signature == signature then return kept.analysis end
+    local Rules = GL.RivalryRules
+    local ok, analysis = pcall(function() return Rules.FromRecord(record, GL, now) end)
+    if not ok or type(analysis) ~= "table" then analysis = plainAnalysis(record) end
+    analysis.record = record
+    local told, tell = pcall(GL.RivalryLines.Tell, record, analysis, now)
+    analysis.tell = told and type(tell) == "table" and tell or nil
+    rivalCache[record.key] = { signature = signature, analysis = analysis }
+    return analysis
+end
+-- Every rival, ranked by what stands out, then filtered by the search (names and guilds, any case
+-- or accents), the order kept.
+function R.RivalStories(query)
+    local now = GL.Now()
+    if now - rivalCacheAt > 600 then rivalCache, rivalCacheAt = {}, now end
+    local analyses = {}
+    for _, item in ipairs(R.Rivals()) do analyses[#analyses + 1] = analyse(item.record, now) end
+    local ok, ranked = pcall(GL.RivalryRules.Rank, analyses)
+    if not ok then ranked = analyses end
+    local folded = GL.FoldName and GL.FoldName(query or "") or ""
+    if folded == "" then return ranked end
+    local found = {}
+    for _, a in ipairs(ranked) do
+        local record = a.record
+        for _, text in ipairs({ record.fullName, record.name, record.guild }) do
+            local value = type(text) == "string" and GL.FoldName(text)
+            if value and value:find(folded, 1, true) then
+                found[#found + 1] = a
+                break
+            end
         end
     end
-    return his, total
+    return found
+end
+-- The short title of a strip, and the sentence of the unfolded sheet.
+local function motifTitle(a)
+    local n = a.narrative or {}
+    local p = n.params or {}
+    if n.id == "issue_mixte" then return L("Combat mixte") end
+    if n.id == "serie_victoires_interrompue" then
+        return p.egaliteAvantDernier and L("Égalité rompue au dernier combat") or L("Série de victoires interrompue")
+    end
+    if n.id == "serie_morts_interrompue" then return L("Série noire interrompue") end
+    if n.id == "serie_victoires" then return L("Série de victoires") end
+    if n.id == "serie_morts" then return L("Série noire") end
+    if n.id == "duel_dispute" then return L("Duel disputé") end
+    if n.id == "rencontres_jours_distincts" then return L("Rencontres répétées") end
+    if n.id == "victoire_apres_mort" then return L("Revanche prise") end
+    if n.id == "premiere_victoire_a_prendre" then return L("Première victoire à prendre") end
+    return L("Bilan")
+end
+function R.RivalSentence(a)
+    local n = a.narrative or {}
+    local p = n.params or {}
+    if n.id == "issue_mixte" then
+        return p.kind == "mort_assistance" and L("Une mort et un coup de main dans le même combat.")
+            or L("Une mort et une victoire dans le même combat.")
+    end
+    if n.id == "serie_victoires_interrompue" then
+        if p.egaliteAvantDernier then
+            return L("%d victoires vous avaient ramenés à égalité. Au dernier combat, votre rival a repris l’avantage."):format(p.count)
+        end
+        return L("%d victoires de suite, puis une mort au dernier combat."):format(p.count)
+    end
+    if n.id == "serie_morts_interrompue" then return L("%d morts de suite, puis une victoire au dernier combat."):format(p.count) end
+    if n.id == "serie_victoires" then return L("Vos %d derniers combats se sont terminés par des victoires."):format(p.count) end
+    if n.id == "serie_morts" then return L("Vos %d derniers combats se sont terminés par des morts."):format(p.count) end
+    if n.id == "duel_dispute" then return L("Le bilan reste partagé : %d victoires et %d morts."):format(p.kills, p.deaths) end
+    if n.id == "rencontres_jours_distincts" then return L("Des combats sur %d jours différents ces sept derniers jours."):format(p.days) end
+    if n.id == "victoire_apres_mort" then return L("Votre dernière victoire suit un combat perdu.") end
+    if n.id == "premiere_victoire_a_prendre" then return L("Aucune victoire face à ce rival pour l’instant : %d morts au bilan."):format(p.deaths) end
+    if n.id == "historique_incomplet" then return L("Le journal ne garde pas le détail de tous vos combats contre ce rival.") end
+    if n.id == "historique_simple" then
+        return L("Votre journal garde %s et %s face à ce rival."):format(countForm(a.kills, "%d victoire", "%d victoires"),
+            countForm(a.deaths, "%d mort", "%d morts"))
+    end
+    return L("Aucun combat détaillé dans le journal.")
+end
+-- A day and its hour: "22/11 à 21:40" (owner, 25/11: the day alone did not say when).
+local function stamp(at)
+    local hour = GL.Safe(date, "%H:%M", at)
+    return hour and L("%s à %s"):format(day(at), hour) or day(at)
+end
+local function whenWhere(a)
+    if not a.lastOutcomeAt then return "" end
+    return a.lastOutcomeZone and (stamp(a.lastOutcomeAt) .. " · " .. UI.plain(a.lastOutcomeZone)) or stamp(a.lastOutcomeAt)
+end
+-- A score in two texts, each in its own colour, around a dot: centred on x.
+local function scorePair(parent, size)
+    local pair = { kills = Panels.Text(parent, 0, 0, 140, size, true), deaths = Panels.Text(parent, 0, 0, 140, size, true), size = size }
+    GL.Safe(pair.kills.SetWordWrap, pair.kills, false)
+    GL.Safe(pair.deaths.SetWordWrap, pair.deaths, false)
+    pair.kills:SetJustifyH("RIGHT")
+    pair.deaths:SetJustifyH("LEFT")
+    -- A small drawn dot between the figures: the font's "·" sat at their top.
+    pair.dot = parent:CreateTexture(nil, "ARTWORK")
+    pair.dot:SetSize(4, 4)
+    pair.dot:SetColorTexture(0.55, 0.40, 0.20, 0.9)
+    return pair
+end
+local function placePair(pair, parent, x, y, kills, deaths, light)
+    pair.dot:ClearAllPoints()
+    pair.dot:SetPoint("CENTER", parent, "TOPLEFT", x, y - math.floor(pair.size * 0.55 + 0.5))
+    pair.kills:ClearAllPoints()
+    pair.kills:SetPoint("TOPRIGHT", parent, "TOPLEFT", x - 9, y)
+    pair.kills:SetText(kills)
+    pair.deaths:ClearAllPoints()
+    pair.deaths:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 9, y)
+    pair.deaths:SetText(deaths)
+    if light then
+        pair.kills:SetTextColor(0.56, 0.85, 0.6)
+        pair.deaths:SetTextColor(0.94, 0.48, 0.42)
+    else
+        pair.kills:SetTextColor(unpack(GREEN))
+        pair.deaths:SetTextColor(unpack(RED))
+    end
+end
+-- One step of the thread: what happened, in a word and a mark, then how.
+local function stepLook(entry)
+    local cause = entry.deathCause
+    local how = cause == "killing_blow" and L("Coup fatal") or cause == "pet_killing_blow" and L("Coup fatal de son familier")
+        or cause == "contributed" and L("Avec d’autres joueurs") or ""
+    if entry.outcome == "mort" then
+        if how == "" and entry.aggressions > 0 then how = L("Agression") end
+        return L("Mort"), RED, GL.Art.DeathSeal, how
+    elseif entry.outcome == "victoire" then
+        return L("Victoire"), GREEN, GL.Art.VictorySeal, ""
+    elseif entry.outcome == "mixte" then
+        return L("Combat mixte"), UI.theme.brass, GL.Art.Swords, how
+    elseif entry.outcome == "assistance" then
+        return L("Coup de main"), UI.theme.brass, GL.Art.Swords, ""
+    end
+    return L("Agression"), UI.theme.inkMuted, GL.Art.Swords, ""
+end
+-- The Journal's paper arrow, turned down to unfold (folded) or up to fold (unfolded).
+local function chevron(texture, open)
+    if open then
+        GL.Safe(texture.SetTexCoord, texture, 1, 0, 0, 0, 1, 1, 0, 1)
+    else
+        GL.Safe(texture.SetTexCoord, texture, 0, 1, 1, 1, 0, 0, 1, 0)
+    end
+end
+local function arrowButton(parent, onClick)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(26, 26)
+    b.art = b:CreateTexture(nil, "ARTWORK")
+    b.art:SetAllPoints()
+    b.art:SetTexture(media .. "JournalReferenceArrowRight")
+    chevron(b.art, false)
+    local hover = b:CreateTexture(nil, "HIGHLIGHT")
+    hover:SetAllPoints()
+    hover:SetColorTexture(0.91, 0.77, 0.48, 0.18)
+    b:SetScript("OnClick", onClick)
+    return b
 end
 local function buildRivals(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
-    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
-    local card = CreateFrame("Frame", nil, page)
-    page.card = card
-    card:SetPoint("TOPLEFT", X(26), -76)
-    card:SetSize(S(540), 150)
-    UI.surface(card, { 0.79, 0.66, 0.42 })
-    UI.surface(card, { 0.96, 0.91, 0.78 }, 1, 1)
-    page.you = Panels.Text(card, S(14), -18, S(150), 17, true)
-    page.yours = Panels.Text(card, S(14), -42, S(150), 12, false, UI.theme.inkMuted)
-    page.score = Panels.Text(card, S(170), -10, S(200), 30, true)
-    page.score:SetJustifyH("CENTER")
-    page.scoreCaption = Panels.Text(card, S(170), -50, S(200), 11, false, UI.theme.inkMuted)
-    page.scoreCaption:SetJustifyH("CENTER")
-    page.face = face(card, 56)
-    page.face:SetPoint("TOPRIGHT", card, "TOPRIGHT", -14, -12)
-    page.name = Panels.Text(card, S(300), -14, S(166), 15, true)
-    page.name:SetJustifyH("RIGHT")
-    GL.Safe(page.name.SetWordWrap, page.name, false)
-    page.nick = Panels.Text(card, S(300), -34, S(166), 11, false, UI.theme.red)
-    page.nick:SetJustifyH("RIGHT")
-    GL.Safe(page.nick.SetWordWrap, page.nick, false)
-    page.identity = Panels.Text(card, S(300), -50, S(166), 11, false, UI.theme.inkMuted)
-    page.identity:SetJustifyH("RIGHT")
-    GL.Safe(page.identity.SetWordWrap, page.identity, false)
-    page.bar = Panels.Bar(card, S(512))
-    page.bar:SetPoint("TOPLEFT", S(14), -84)
-    page.bar:SetHeight(10)
-    page.facts = {}
-    for i = 1, 3 do
-        local fact = Panels.Text(card, S(14) + (i - 1) * S(172), -108, S(168), 12)
-        fact:SetJustifyH(i == 1 and "LEFT" or i == 2 and "CENTER" or "RIGHT")
-        GL.Safe(fact.SetWordWrap, fact, false)
-        page.facts[i] = fact
+    page.title = Panels.Text(page, X(26), -18, S(150), 21, true)
+    -- The search, like the guild journal's, on a parchment field.
+    page.search = CreateFrame("EditBox", nil, page)
+    page.search:SetPoint("TOPLEFT", X(170), -20)
+    page.search:SetSize(S(176), 24)
+    page.search:SetAutoFocus(false)
+    page.search:SetMaxLetters(40)
+    UI.styleInput(page.search, false, true)
+    page.search:SetTextInsets(8, 6, 3, 3)
+    page.searchHint = UI.label(page.search, L("Rechercher un rival…"), nil, 8, -5, S(160))
+    page.searchHint:SetTextColor(unpack(UI.theme.muted))
+    local function apply()
+        page.query = page.search:GetText():match("^%s*(.-)%s*$")
+        page.number, page.open = 1, nil
+        R.Refresh()
     end
-    page.threadTitle = Panels.Text(page, X(26), -244, S(400), 16, true, UI.theme.red)
-    local line = page:CreateTexture(nil, "BORDER")
-    line:SetPoint("TOPLEFT", X(60), -283)
-    line:SetSize(S(472), 2)
-    line:SetColorTexture(0.52, 0.38, 0.20, 0.6)
-    page.steps = {}
-    for i = 1, RIVAL_STEPS do
-        local step = CreateFrame("Frame", nil, page)
-        step:SetPoint("TOPLEFT", X(26) + (i - 1) * S(108), -274)
-        step:SetSize(S(104), 120)
-        step.dot = step:CreateTexture(nil, "ARTWORK")
-        step.dot:SetSize(18, 18)
-        step.dot:SetPoint("TOP", step, "TOP", 0, 0)
-        step.date = centered(step, -24, S(104), 12, true)
-        step.story = centered(step, -42, S(104), 11, false, UI.theme.inkMuted)
-        step.story:SetHeight(64)
-        GL.Safe(step.story.SetWordWrap, step.story, true)
-        GL.Safe(step.story.SetJustifyV, step.story, "TOP")
-        page.steps[i] = step
-    end
-    page.empty = Panels.Text(page, X(26), -86, S(540), 13, false, UI.theme.inkMuted)
-    page.index = 1
-    page.bounty = UI.button(page, L("Poser une prime"), X(26), -464, S(150), function()
-        if page.record and page.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(page.record.guid) end
-    end, nil, true)
-    page.sheet = UI.button(page, L("Ouvrir sa fiche"), X(182), -464, S(140), function() openSheet(page.record) end, nil, true)
-    page.previous = UI.button(page, "‹", X(440), -464, S(40), function()
-        page.index = page.index - 1
+    page.search:SetScript("OnEnterPressed", function(self)
+        apply()
+        self:ClearFocus()
+    end)
+    page.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    page.search:SetScript("OnTextChanged", function(self)
+        if self:GetText():find("%S") then page.searchHint:Hide() else page.searchHint:Show() end
+        apply()
+    end)
+    page.previous = UI.button(page, "‹", X(402), -18, S(40), function()
+        page.number, page.open = page.number - 1, nil
         R.Refresh()
     end, nil, true)
-    page.next = UI.button(page, "›", X(526), -464, S(40), function()
-        page.index = page.index + 1
-        R.Refresh()
-    end, nil, true)
-    page.count = Panels.Text(page, X(480), -470, S(46), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(444), -24, S(80), 12, false, UI.theme.inkMuted)
     page.count:SetJustifyH("CENTER")
+    page.next = UI.button(page, "›", X(526), -18, S(40), function()
+        page.number, page.open = page.number + 1, nil
+        R.Refresh()
+    end, nil, true)
+    page.number = 1
+    page.strips = {}
+    for i = 1, RIVAL_PAGE do
+        local strip = CreateFrame("Button", nil, page)
+        strip:SetSize(S(548), RIVAL_H)
+        strip.paper = strip:CreateTexture(nil, "BACKGROUND")
+        strip.paper:SetAllPoints()
+        strip.paper:SetTexture(GL.Art.RivalStrip)
+        strip.face = face(strip, 44)
+        strip.name = Panels.Text(strip, 0, 0, S(300), 19, true)
+        GL.Safe(strip.name.SetWordWrap, strip.name, false)
+        -- Why this rival matters, in a line that names what happened (RivalryLines.lua).
+        strip.motif = Panels.Text(strip, 0, 0, S(300), 12, false, UI.theme.red)
+        GL.Safe(strip.motif.SetWordWrap, strip.motif, false)
+        strip.score = scorePair(strip, 17)
+        strip.when = Panels.Text(strip, 0, 0, S(150), 11, false, UI.theme.inkMuted)
+        strip.when:SetJustifyH("CENTER")
+        GL.Safe(strip.when.SetWordWrap, strip.when, false)
+        strip.rule = strip:CreateTexture(nil, "ARTWORK")
+        strip.rule:SetColorTexture(0.49, 0.32, 0.13, 0.35)
+        strip.rule:SetWidth(1)
+        local hover = strip:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetPoint("TOPLEFT", 8, -8)
+        hover:SetPoint("BOTTOMRIGHT", -8, 8)
+        hover:SetColorTexture(0.91, 0.77, 0.48, 0.12)
+        -- The Journal's paper button folds and unfolds, as a click on the strip does (owner's kit).
+        local function toggle()
+            if not strip.key then return end
+            page.open = page.open ~= strip.key and strip.key or nil
+            R.Refresh()
+        end
+        strip:SetScript("OnClick", toggle)
+        strip.fold = arrowButton(strip, toggle)
+        strip.fold:SetPoint("RIGHT", strip, "RIGHT", -16, 0)
+        page.strips[i] = strip
+    end
+    -- The unfolded sheet, one for the page: a sheet of parchment, and the band where you face your
+    -- rival, Alliance blue on your side, Horde red on theirs (owner, 25/11).
+    local sheet = CreateFrame("Frame", nil, page)
+    page.sheet = sheet
+    sheet:SetSize(S(548), RIVAL_SHEET)
+    sheet.paper = sheet:CreateTexture(nil, "BACKGROUND")
+    sheet.paper:SetAllPoints()
+    sheet.paper:SetTexture(GL.Art.RivalSheet)
+    sheet.band = sheet:CreateTexture(nil, "ARTWORK")
+    sheet.band:SetPoint("TOPLEFT", 12, -10)
+    sheet.band:SetPoint("TOPRIGHT", -12, -10)
+    sheet.band:SetHeight(66)
+    sheet.band:SetTexture(GL.Art.RivalDuel)
+    local light, pale = { 0.95, 0.9, 0.78 }, { 0.8, 0.72, 0.58 }
+    sheet.you = face(sheet, 52)
+    sheet.you:SetPoint("TOPLEFT", 24, -17)
+    sheet.youName = Panels.Text(sheet, 86, -22, S(130), 16, true, light)
+    sheet.youClass = Panels.Text(sheet, 86, -43, S(130), 11, false, pale)
+    GL.Safe(sheet.youClass.SetWordWrap, sheet.youClass, false)
+    sheet.caption = Panels.Text(sheet, S(180), -20, S(188), 11, false, UI.theme.brass)
+    sheet.caption:SetJustifyH("CENTER")
+    sheet.score = scorePair(sheet, 18)
+    sheet.rival = face(sheet, 52)
+    sheet.rival:SetPoint("TOPRIGHT", -24, -17)
+    sheet.rivalName = Panels.Text(sheet, S(548) - 86 - S(150), -22, S(150), 16, true, light)
+    sheet.rivalName:SetJustifyH("RIGHT")
+    GL.Safe(sheet.rivalName.SetWordWrap, sheet.rivalName, false)
+    sheet.rivalClass = Panels.Text(sheet, S(548) - 86 - S(150), -43, S(150), 11, false, pale)
+    sheet.rivalClass:SetJustifyH("RIGHT")
+    GL.Safe(sheet.rivalClass.SetWordWrap, sheet.rivalClass, false)
+    -- A click on the rival (name or face) opens their sheet.
+    sheet.rivalHit = CreateFrame("Button", nil, sheet)
+    sheet.rivalHit:SetPoint("TOPRIGHT", -14, -12)
+    sheet.rivalHit:SetSize(S(150) + 76, 62)
+    local glow = sheet.rivalHit:CreateTexture(nil, "HIGHLIGHT")
+    glow:SetAllPoints()
+    glow:SetColorTexture(0.91, 0.77, 0.48, 0.10)
+    sheet.rivalHit:SetScript("OnClick", function() openSheet(sheet.record) end)
+    sheet.rivalHit:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(L("Ouvrir sa fiche"))
+        GameTooltip:Show()
+    end)
+    sheet.rivalHit:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    -- What happened, then a line that pushes you; the debt on the right.
+    sheet.story = Panels.Text(sheet, 20, -84, S(330), 12, false, UI.theme.ink)
+    sheet.story.fitWidth = S(330)
+    sheet.story:SetHeight(46)
+    GL.Safe(sheet.story.SetWordWrap, sheet.story, true)
+    GL.Safe(sheet.story.SetJustifyV, sheet.story, "TOP")
+    sheet.debt = Panels.Text(sheet, S(548) - 20 - S(140), -86, S(140), 13, true)
+    sheet.debt:SetJustifyH("RIGHT")
+    local rule = sheet:CreateTexture(nil, "ARTWORK")
+    rule:SetPoint("TOPLEFT", 20, -134)
+    rule:SetPoint("TOPRIGHT", -20, -134)
+    rule:SetHeight(1)
+    rule:SetColorTexture(0.55, 0.40, 0.20, 0.35)
+    sheet.threadTitle = Panels.Text(sheet, 20, -141, S(116), 13, true)
+    sheet.threadWhen = Panels.Text(sheet, 20 + S(112), -142, S(150), 11, false, UI.theme.inkMuted)
+    GL.Safe(sheet.threadWhen.SetWordWrap, sheet.threadWhen, false)
+    sheet.fold = arrowButton(sheet, function()
+        page.open = nil
+        R.Refresh()
+    end)
+    sheet.fold:SetPoint("TOPRIGHT", -16, -137)
+    chevron(sheet.fold.art, true)
+    -- The bounty under the debt (owner, 25/11): no button left in the way of the thread.
+    sheet.bounty = UI.button(sheet, L("Poser une prime"), S(548) - 20 - S(120), -106, S(120), function()
+        if sheet.record and sheet.record.guid and GL.OpenContactBounty then GL.OpenContactBounty(sheet.record.guid) end
+    end, nil, true)
+    sheet.empty = Panels.Text(sheet, 20, -172, S(480), 12, false, UI.theme.inkMuted)
+    sheet.line = sheet:CreateTexture(nil, "BORDER")
+    sheet.line:SetHeight(1)
+    sheet.line:SetColorTexture(0.52, 0.38, 0.20, 0.55)
+    sheet.steps = {}
+    for i = 1, RIVAL_STEPS do
+        local step = CreateFrame("Frame", nil, sheet)
+        step:SetSize(S(100), 42)
+        step.mark = step:CreateTexture(nil, "ARTWORK")
+        step.mark:SetSize(22, 22)
+        step.mark:SetPoint("TOP", 0, 0)
+        step.word = centered(step, -22, S(100), 12, true)
+        step.how = centered(step, -36, S(100), 10, false, UI.theme.inkMuted)
+        GL.Safe(step.EnableMouse, step, true)
+        -- The game's own words for the fight, on hover, with its day and hour.
+        step:SetScript("OnEnter", function(self)
+            if not (self.tip and GameTooltip) then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(self.tip[1])
+            GameTooltip:AddLine(self.tip[2], 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        step:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        sheet.steps[i] = step
+    end
+    sheet:Hide()
+    page.empty = Panels.Text(page, X(26), -72, S(540), 13, false, UI.theme.inkMuted)
+    page.clear = UI.button(page, L("Effacer la recherche"), X(26), -100, S(150), function()
+        page.search:SetText("")
+        page.query, page.number, page.open = nil, 1, nil
+        R.Refresh()
+    end, nil, true)
     return page
 end
-local function paintRivals(page)
-    page.title:SetText(L("Rivalités"))
-    local rivals = R.Rivals()
-    page.index = math.max(1, math.min(page.index, #rivals))
-    local rival = rivals[page.index]
-    local record = rival and rival.record
-    page.record = record
-    for _, region in ipairs({ page.card, page.threadTitle, page.bounty, page.sheet, page.previous, page.next, page.count }) do
-        if record then region:Show() else region:Hide() end
+local function paintStrip(strip, a, small, open)
+    local record = a.record
+    strip.key = record.key
+    strip:SetHeight(small and RIVAL_SMALL or RIVAL_H)
+    local portrait = small and 30 or 50
+    strip.face:SetSize(portrait, portrait)
+    strip.face:ClearAllPoints()
+    strip.face:SetPoint("LEFT", 18, 0)
+    GL.PaintBookPortrait(strip.face, record)
+    local left = 18 + portrait + 12
+    -- The score and its date sit before the button; the name and the line take the rest.
+    local right = S(548) - 16 - 26 - 12 - S(150)
+    strip.name:ClearAllPoints()
+    strip.name:SetPoint("TOPLEFT", left, small and -4 or -9)
+    Panels.Fit(strip.name, name(record), right - left - 12, small and 14 or 19, 11, true)
+    strip.motif:ClearAllPoints()
+    strip.motif:SetPoint("TOPLEFT", left, small and -20 or -33)
+    local tell = a.tell or {}
+    Panels.Fit(strip.motif, tell.headline or motifTitle(a), right - left - 12, small and 10 or 13, 9)
+    placePair(strip.score, strip, right + S(75), small and -4 or -12, L("%d V"):format(a.kills), L("%d M"):format(a.deaths))
+    strip.when:ClearAllPoints()
+    strip.when:SetPoint("TOPLEFT", right, small and -20 or -34)
+    Panels.Fit(strip.when, whenWhere(a), S(150), 11, 8)
+    strip.rule:ClearAllPoints()
+    strip.rule:SetPoint("TOPLEFT", right - 6, small and -6 or -10)
+    strip.rule:SetHeight(small and 24 or 42)
+    strip.fold:SetSize(small and 22 or 26, small and 22 or 26)
+    chevron(strip.fold.art, open)
+    strip:Show()
+end
+-- The story's box: three lines of 12 in the sheet; 11 only if nothing else holds.
+local STORY_LINES, STORY_BOX = 3, 46
+local function letters(text)
+    -- Continuation bytes of UTF-8 are not letters.
+    return #(tostring(text):gsub("[\128-\191]", ""))
+end
+-- How many lines a text takes at a size: measured by the game when it can, otherwise counted
+-- (an average letter is half the size wide).
+local function linesOf(region, text, size, width)
+    local font = GL.Safe(region.GetFont, region)
+    if font then GL.Safe(region.SetFont, region, font, size) end
+    GL.Safe(region.SetHeight, region, 0)
+    region:SetText(text)
+    local tall = tonumber(GL.Safe(region.GetStringHeight, region)) or 0
+    if tall > 0 then return math.floor(tall / (size + 1) + 0.6) end
+    return math.ceil(letters(text) * size * 0.5 / width)
+end
+function R.FitStory(region, tell, a)
+    local base = tell.base or tell.fact or R.RivalSentence(a)
+    local push = tell.push ~= "" and tell.push or nil
+    local tries = {}
+    local function try(...)
+        local parts = {}
+        for _, part in ipairs({ ... }) do if part then parts[#parts + 1] = part end end
+        tries[#tries + 1] = table.concat(parts, " ")
     end
-    page.empty:SetText(record and "" or L("Aucune rivalité pour l’instant. Il en faut deux combats terminés contre le même joueur."))
-    page.lead:SetText(record and L("Vos adversaires les plus tenaces, un par un.") or "")
-    for _, step in ipairs(page.steps) do step:Hide() end
-    if not record then return end
-    local kills, deaths = count(record, "kills"), count(record, "deaths")
-    page.you:SetText(L("Vous"))
-    local mine = GL.Safe(UnitClass, "player")
-    page.yours:SetText(type(mine) == "string" and UI.plain(mine) or "")
-    page.score:SetText(("|cff2e5e33%d|r – |cff8b1e1e%d|r"):format(kills, deaths))
-    page.scoreCaption:SetText(L("victoires · morts"))
-    GL.PaintBookPortrait(page.face, record)
-    Panels.Fit(page.name, name(record), S(166), 15, 10, true)
-    Panels.Fit(page.nick, nickname(record), S(166), 11, 8)
+    try(base, tell.memory, push)
+    if tell.memory then try(base, push) end
+    if push then try(base, tell.memory) end
+    try(base)
+    local width = region.fitWidth or S(330)
+    for _, size in ipairs({ 12, 11 }) do
+        for _, text in ipairs(tries) do
+            if linesOf(region, text, size, width) <= STORY_LINES then
+                GL.Safe(region.SetHeight, region, STORY_BOX)
+                region.fitSize = size
+                return text, size
+            end
+        end
+    end
+    -- The base alone at 11: it always holds (a verb and two details).
+    local text = tries[#tries]
+    linesOf(region, text, 11, width)
+    GL.Safe(region.SetHeight, region, STORY_BOX)
+    region.fitSize = 11
+    return text, 11
+end
+local function paintSheet(sheet, a)
+    local record = a.record
+    sheet.record = record
+    sheet.youName:SetText(L("Vous"))
+    local me = GL.Safe(UnitName, "player")
+    local class = GL.Safe(UnitClass, "player")
+    Panels.Fit(sheet.youClass, UI.plain(type(me) == "string" and me or (type(class) == "string" and class or "")), S(130), 11, 8)
+    local guid = GL.Clean(GL.Safe(UnitGUID, "player"), "string")
+    local race, raceFile = GL.Safe(UnitRace, "player")
+    local className, classFile = GL.Safe(UnitClass, "player")
+    sheet.self = sheet.self or {}
+    local self = sheet.self
+    self.key, self.guid, self.name, self.fullName = "player", guid, me, me
+    self.race, self.raceName, self.class, self.className = raceFile, race, classFile, className
+    self.faction = GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string")
+    GL.PaintBookPortrait(sheet.you, self)
+    sheet.caption:SetText(L("Votre bilan"))
+    placePair(sheet.score, sheet, S(274), -38, countForm(a.kills, "%d victoire", "%d victoires"),
+        countForm(a.deaths, "%d mort", "%d morts"), true)
+    GL.PaintBookPortrait(sheet.rival, record)
+    Panels.Fit(sheet.rivalName, name(record), S(150), 15, 10, true)
     local identity = {}
     if record.className then identity[#identity + 1] = UI.plain(record.className) end
     if record.guild then identity[#identity + 1] = UI.plain(record.guild) end
-    Panels.Fit(page.identity, table.concat(identity, " · "), S(166), 11, 8)
-    page.bar:Set(kills, deaths)
-    local his, openings = openingShare(record)
-    page.facts[1]:SetText(openings >= 2 and L("Il ouvre le combat %d fois sur %d"):format(his, openings) or "")
-    local debt = GL.Debt(record)
-    page.facts[2]:SetText(debt > 0 and L("Il vous doit encore %d"):format(debt) or L("Comptes réglés"))
-    local fights = GL.Fights(record)
-    page.facts[3]:SetText(fights[1] and L("Dernier combat le %s"):format(day(fights[1].last or fights[1].at)) or "")
-    page.threadTitle:SetText(L("Le fil de la rivalité"))
-    local shown = math.min(RIVAL_STEPS, #fights)
-    for i = 1, shown do
-        local fight, step = fights[shown - i + 1], page.steps[i]
-        if fight.deaths > 0 then
-            step.dot:SetColorTexture(0.55, 0.12, 0.12)
-        elseif fight.kills > 0 then
-            step.dot:SetColorTexture(0.18, 0.37, 0.20)
-        else
-            step.dot:SetColorTexture(0.42, 0.29, 0.08)
-        end
-        step.date:SetText(day(fight.at))
-        local zone = fight.main and type(fight.main.zone) == "string" and fight.main.zone ~= "?" and fight.main.zone
-        step.story:SetText(GL.FightTitle(fight) .. (zone and ("\n" .. UI.plain(zone)) or ""))
-        step:Show()
+    Panels.Fit(sheet.rivalClass, table.concat(identity, " · "), S(150), 11, 8)
+    -- The fact that names what happened (or what the score tells), its reminder, then the push:
+    -- the richest that holds in the sheet's three lines, never a cut word (owner, 25/11).
+    R.FitStory(sheet.story, a.tell or {}, a)
+    local debt = a.debt or 0
+    local short = UI.plain(record.name or record.fullName or "?")
+    if debt > 0 then
+        Panels.Fit(sheet.debt, (debt == 1 and L("%s vous doit %d point") or L("%s vous doit %d points")):format(short, debt), S(132), 13, 9, true)
+        sheet.debt:SetTextColor(unpack(RED))
+    else
+        sheet.debt:SetText(L("Comptes réglés"))
+        sheet.debt:SetTextColor(unpack(GREEN))
     end
-    page.previous:SetEnabled(page.index > 1)
-    page.next:SetEnabled(page.index < #rivals)
-    page.count:SetText(("%d / %d"):format(page.index, #rivals))
+    sheet.threadTitle:SetText(L("Derniers combats"))
+    local timeline = a.timeline or {}
+    local latest = timeline[1]
+    sheet.threadWhen:SetText(latest and (stamp(latest.last) .. (latest.zone and (" · " .. UI.plain(latest.zone)) or "")) or "")
+    if GL.ContactBountyMode and GL.ContactBountyMode(record) then sheet.bounty:Show() else sheet.bounty:Hide() end
+    local shown = math.min(RIVAL_STEPS, #timeline)
+    sheet.empty:SetText(shown == 0 and L("Aucun combat détaillé dans le journal.") or "")
+    -- Oldest on the left: the latest five, turned around, spread over the sheet.
+    local span = S(548) - 40
+    local width = shown > 0 and math.floor(span / shown) or 0
+    sheet.line:ClearAllPoints()
+    sheet.line:SetPoint("TOPLEFT", 20 + width / 2, -165)
+    sheet.line:SetWidth(math.max(1, width * (shown - 1)))
+    if shown > 1 then sheet.line:Show() else sheet.line:Hide() end
+    for i, step in ipairs(sheet.steps) do
+        local entry = i <= shown and timeline[shown - i + 1]
+        if entry then
+            local word, color, mark, how = stepLook(entry)
+            step:ClearAllPoints()
+            step:SetPoint("TOPLEFT", 20 + (i - 1) * width, -154)
+            step:SetWidth(width)
+            step.mark:SetTexture(mark)
+            -- The seals are coloured already: shown as they are.
+            step.mark:SetVertexColor(1, 1, 1)
+            step.word:SetText(word)
+            step.word:SetTextColor(unpack(color))
+            Panels.Fit(step.how, how, width - 8, 10, 8)
+            local where = entry.zone and (" · " .. UI.plain(entry.zone)) or ""
+            step.tip = { stamp(entry.at) .. where, entry.title }
+            step:Show()
+        else
+            step:Hide()
+        end
+    end
+    sheet:Show()
+end
+local function paintRivals(page)
+    page.title:SetText(L("Rivalités"))
+    local all = R.RivalStories(page.query)
+    local pages = math.max(1, math.ceil(#all / RIVAL_PAGE))
+    page.number = math.max(1, math.min(page.number or 1, pages))
+    -- The strip that was open stays open while it is on this page.
+    local first = (page.number - 1) * RIVAL_PAGE
+    local openAt
+    for i = 1, RIVAL_PAGE do
+        local a = all[first + i]
+        if a and a.record.key == page.open then openAt = i end
+    end
+    if not openAt then page.open = nil end
+    local y = RIVAL_TOP
+    for i, strip in ipairs(page.strips) do
+        local a = all[first + i]
+        if a then
+            if i == openAt then
+                strip.key = a.record.key
+                strip:Hide()
+                page.sheet:ClearAllPoints()
+                page.sheet:SetPoint("TOPLEFT", X(22), y)
+                paintSheet(page.sheet, a)
+                y = y - RIVAL_SHEET - RIVAL_SMALL_GAP
+            else
+                strip:ClearAllPoints()
+                strip:SetPoint("TOPLEFT", X(22), y)
+                paintStrip(strip, a, openAt ~= nil, false)
+                y = y - (openAt and RIVAL_SMALL + RIVAL_SMALL_GAP or RIVAL_H + RIVAL_GAP)
+            end
+        else
+            strip:Hide()
+        end
+    end
+    if not openAt then page.sheet:Hide() end
+    page.bottom = y
+    local searching = page.query and page.query ~= ""
+    if #all == 0 then
+        page.empty:SetText(searching and L("Aucun rival ne correspond à « %s ».")
+            :format(UI.plain(page.query)) or L("Aucune rivalité pour l’instant. Il en faut deux combats terminés contre le même joueur."))
+    else
+        page.empty:SetText("")
+    end
+    if #all == 0 and searching then page.clear:Show() else page.clear:Hide() end
+    page.previous:SetEnabled(page.number > 1)
+    page.next:SetEnabled(page.number < pages)
+    page.count:SetText(#all > 0 and L("Page %d sur %d"):format(page.number, pages) or "")
 end
 
 -- Guild crests: the guilds that weigh in your book, hostile or friendly, six at most.
 local CRESTS = 6
-local crestColors = { enemy = { 0.35, 0.08, 0.08 }, hostile = { 0.45, 0.16, 0.10 }, warning = { 0.42, 0.29, 0.08 },
-    friend = { 0.18, 0.37, 0.20 }, neutral = { 0.23, 0.16, 0.11 } }
 function R.Guilds()
     local list = {}
     for _, row in ipairs(GL.GuildStatistics()) do
@@ -423,14 +837,106 @@ function R.Guilds()
 end
 -- "Ok Bodycount" gives "OB", "ducks" gives "D": the first letter of the first two words, whole
 -- UTF-8 letters only.
+-- Articles and small linking words are skipped (owner's kit, 26/11: "Les Corbeaux" and "La Compagnie"
+-- both gave "LC"), in the five languages, and so is an elided "l'" or "d'" before a word. A name made
+-- of such words only keeps them all.
+local LINKING = {}
+for word in ("le la les l the a an de du des d of au aux en et and el los las lo y del die der das den dem von und "
+    .. "os o as e do da dos das di"):gmatch("%S+") do LINKING[word] = true end
 function R.Initials(guild)
-    local letters = {}
+    local letters, words, kept = {}, {}, {}
     for word in tostring(guild or ""):gmatch("%S+") do
+        word = word:gsub("^[LlDd]'", ""):gsub("^[LlDd]\226\128\153", "")
+        if word ~= "" then
+            words[#words + 1] = word
+            if not LINKING[word:lower()] then kept[#kept + 1] = word end
+        end
+    end
+    for _, word in ipairs(#kept > 0 and kept or words) do
         local letter = word:match("^[%z\1-\127\194-\244][\128-\191]*")
         if letter and #letters < 2 and not letter:match("^[%p%d]$") then letters[#letters + 1] = letter:upper() end
     end
     return UI.plain(table.concat(letters))
 end
+-- A guild's crest from the armorial (owner's kit, 26/11): the crest of its side, a motif over it in
+-- some cases, and its initials in one of the six alphabets. Square, of any size.
+local function crestFrame(parent, size)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetSize(size, size)
+    f.size = size
+    f.base = f:CreateTexture(nil, "ARTWORK")
+    f.base:SetAllPoints()
+    f.motif = f:CreateTexture(nil, "ARTWORK")
+    GL.Safe(f.motif.SetDrawLayer, f.motif, "ARTWORK", 1)
+    f.motif:SetAllPoints()
+    f.shadows, f.glyphs = {}, {}
+    for i = 1, 2 do
+        f.shadows[i] = f:CreateTexture(nil, "OVERLAY")
+        f.glyphs[i] = f:CreateTexture(nil, "OVERLAY")
+        GL.Safe(f.glyphs[i].SetDrawLayer, f.glyphs[i], "OVERLAY", 2)
+    end
+    -- Initials the alphabets cannot draw (a digit, another script) are written as text.
+    f.label = Panels.Text(f, 0, -math.floor(size * 0.34), size, math.max(10, math.floor(size * 0.36)), true, UI.theme.brass)
+    f.label:SetJustifyH("CENTER")
+    GL.Safe(f.label.SetDrawLayer, f.label, "OVERLAY", 7)
+    return f
+end
+function R.PaintCrest(f, guild)
+    local H = GL.Art.GuildHeraldry
+    local key = guild.key or (tostring(guild.name or "") .. "-" .. tostring(guild.realm or ""))
+    local choice = H.Choose(key, guild.faction)
+    local crest = H.crests[choice.crest]
+    f.base:SetTexture(H.root .. crest.file)
+    f.base:SetTexCoord(0, 1, 0, 1)
+    f.base:SetVertexColor(1, 1, 1, 1)
+    if choice.pattern > 1 then
+        local col, row = choice.pattern - 1, choice.crest - 1
+        local accent = H.palettes[choice.palette].accent
+        f.motif:SetTexture(H.root .. H.fields.file)
+        f.motif:SetTexCoord(col / H.fields.columns, (col + 1) / H.fields.columns, row / H.fields.rows, (row + 1) / H.fields.rows)
+        f.motif:SetVertexColor(accent[1], accent[2], accent[3], 0.55)
+        f.motif:Show()
+    else
+        f.motif:Hide()
+    end
+    local initials = R.Initials(guild.name)
+    local placed = H.Layout(choice.crest, { choice.alphabet, choice.alphabet2 }, H.Letters(initials))
+    local k = f.size / 128
+    for i = 1, 2 do
+        local glyph, shadow, spot = f.glyphs[i], f.shadows[i], placed and placed[i]
+        if spot then
+            local alphabet = H.root .. H.alphabets[spot.alphabet].file
+            local u1, u2 = spot.col / H.columns, (spot.col + 1) / H.columns
+            local v1, v2 = spot.row / H.rows, (spot.row + 1) / H.rows
+            glyph:SetTexture(alphabet)
+            glyph:SetTexCoord(u1, u2, v1, v2)
+            glyph:SetVertexColor(1, 1, 1, 1)
+            GL.Safe(glyph.SetBlendMode, glyph, "BLEND")
+            glyph:ClearAllPoints()
+            glyph:SetPoint("TOPLEFT", spot.left * k, -spot.top * k)
+            glyph:SetSize(spot.side * k, spot.side * k)
+            glyph:Show()
+            -- The ivory banner carries a dark shadow under its letters, for contrast.
+            if crest.shadow then
+                shadow:SetTexture(alphabet)
+                shadow:SetTexCoord(u1, u2, v1, v2)
+                shadow:SetVertexColor(61 / 255, 41 / 255, 29 / 255, 0.85)
+                shadow:ClearAllPoints()
+                shadow:SetPoint("TOPLEFT", (spot.left - 2) * k, -(spot.top - 1) * k)
+                shadow:SetSize((spot.side + 4) * k, (spot.side + 4) * k)
+                shadow:Show()
+            else
+                shadow:Hide()
+            end
+        else
+            glyph:Hide()
+            shadow:Hide()
+        end
+    end
+    f.label:SetText(placed and "" or initials)
+    f.choice, f.placed = choice, placed
+end
+R.CrestFrame = crestFrame
 local function buildGuilds(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
@@ -443,16 +949,8 @@ local function buildGuilds(host)
         card:SetSize(S(266), 116)
         UI.surface(card, { 0.79, 0.66, 0.42 })
         UI.surface(card, { 0.96, 0.91, 0.78 }, 1, 1)
-        card.crestRim = card:CreateTexture(nil, "ARTWORK")
-        card.crestRim:SetPoint("TOPLEFT", S(12), -14)
-        card.crestRim:SetSize(44, 54)
-        card.crestRim:SetColorTexture(0.52, 0.38, 0.20)
-        card.crest = card:CreateTexture(nil, "OVERLAY")
-        card.crest:SetPoint("TOPLEFT", S(14), -16)
-        card.crest:SetSize(40, 50)
-        card.initials = Panels.Text(card, S(14), -28, S(40), 20, true, UI.theme.brass)
-        card.initials:SetJustifyH("CENTER")
-        GL.Safe(card.initials.SetDrawLayer, card.initials, "OVERLAY", 7)
+        card.crest = crestFrame(card, 52)
+        card.crest:SetPoint("TOPLEFT", S(9), -10)
         card.name = Panels.Text(card, S(66), -12, S(190), 15, true)
         GL.Safe(card.name.SetWordWrap, card.name, false)
         card.stance = Panels.Text(card, S(66), -33, S(190), 12, true, UI.theme.red)
@@ -477,8 +975,7 @@ local function paintGuilds(page)
         if entry then
             local row = entry.row
             Panels.Fit(card.name, UI.plain(row.name), S(190), 15, 10, true)
-            card.crest:SetColorTexture(unpack(crestColors[entry.stance] or crestColors.neutral))
-            card.initials:SetText(R.Initials(row.name))
+            R.PaintCrest(card.crest, row)
             card.stance:SetText((stances[entry.stance] or stances.neutral) .. (entry.ruled and (" · " .. L("votre règle")) or ""))
             local lines = {}
             if (row.grudges or 0) > 0 then
@@ -499,26 +996,148 @@ local function paintGuilds(page)
     page.all:SetText(#guilds > 0 and L("Tous les classements de guildes") or "")
 end
 
+-- The guild's active members (owner 25/11): who uses the addon, which version, connected or when
+-- last heard, whether they share their fights. You first, then those connected, then the others.
+local MEMBER_ROWS = 8
+local function heardSince(at)
+    local delta = math.max(0, GL.Now() - (tonumber(at) or 0))
+    if delta < 3600 then return L("il y a %d min"):format(math.max(1, math.floor(delta / 60))) end
+    if delta < 86400 then return L("il y a %d h"):format(math.floor(delta / 3600)) end
+    return L("il y a %d j"):format(math.floor(delta / 86400))
+end
+local function buildMembers(host)
+    local page = CreateFrame("Frame", nil, host)
+    page:SetAllPoints()
+    page.offset = 0
+    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
+    page.lead:SetHeight(30)
+    local band = page:CreateTexture(nil, "BORDER")
+    band:SetPoint("TOPLEFT", X(26), -84)
+    band:SetSize(S(540), 22)
+    band:SetColorTexture(0.44, 0.28, 0.13, 0.18)
+    page.columnName = Panels.Text(page, X(30), -88, S(300), 12, false, UI.theme.inkMuted)
+    page.columnSeen = Panels.Text(page, X(416), -88, S(146), 12, false, UI.theme.inkMuted)
+    page.columnSeen:SetJustifyH("RIGHT")
+    page.rows = {}
+    for i = 1, MEMBER_ROWS do
+        local row = CreateFrame("Frame", nil, page)
+        row:SetPoint("TOPLEFT", X(26), -108 - (i - 1) * 44)
+        row:SetSize(S(540), 42)
+        local rule = row:CreateTexture(nil, "BORDER")
+        rule:SetPoint("BOTTOMLEFT")
+        rule:SetPoint("BOTTOMRIGHT")
+        rule:SetHeight(1)
+        rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+        row.name = Panels.Text(row, S(6), -4, S(330), 14, true)
+        GL.Safe(row.name.SetWordWrap, row.name, false)
+        row.meta = Panels.Text(row, S(6), -23, S(390), 11, false, UI.theme.inkMuted)
+        GL.Safe(row.meta.SetWordWrap, row.meta, false)
+        row.seen = Panels.Text(row, S(396), -12, S(142), 14, true)
+        row.seen:SetJustifyH("RIGHT")
+        page.rows[i] = row
+    end
+    -- Under your own line, which is always there (owner report 25/11: it was written over it).
+    page.empty = Panels.Text(page, X(26), -164, S(540), 13, false, UI.theme.inkMuted)
+    page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
+        page.offset = math.max(0, page.offset - MEMBER_ROWS)
+        R.Refresh()
+    end, nil, true)
+    page.next = UI.button(page, "›", X(526), -464, S(40), function()
+        page.offset = page.offset + MEMBER_ROWS
+        R.Refresh()
+    end, nil, true)
+    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
+    page.count:SetJustifyH("CENTER")
+    return page
+end
+local function paintMembers(page)
+    page.title:SetText(L("Membres actifs"))
+    local list = GL.GuildMap and GL.GuildMap.Members and GL.GuildMap.Members() or {}
+    local current = 0
+    for _, m in ipairs(list) do if m.current then current = current + 1 end end
+    page.lead:SetText(#list > 0 and L("Les membres dont l’addon a parlé ces 60 derniers jours : %d à jour sur %d."):format(current, #list) or "")
+    page.columnName:SetText(L("Membre"))
+    page.columnSeen:SetText(L("Vu"))
+    -- The first name heard for each player mark: alts say whose they are.
+    local firstOfMark = {}
+    for _, m in ipairs(list) do
+        if m.mark and not firstOfMark[m.mark] then firstOfMark[m.mark] = m end
+    end
+    page.offset = math.min(page.offset, math.max(0, math.floor((#list - 1) / MEMBER_ROWS) * MEMBER_ROWS))
+    for i, row in ipairs(page.rows) do
+        local m = list[page.offset + i]
+        if m then
+            Panels.Fit(row.name, UI.plain(m.you and (m.name .. " · " .. L("Vous")) or m.name), S(330), 14, 10, true)
+            local parts = {}
+            if m.version then
+                parts[#parts + 1] = (m.current and L("Version %s · à jour") or L("Version %s · ancienne version")):format(m.version)
+            else
+                parts[#parts + 1] = L("Version inconnue (avant la 0.58)")
+            end
+            if m.shares then parts[#parts + 1] = L("partage ses combats") end
+            local main = m.mark and firstOfMark[m.mark]
+            if main and main ~= m then parts[#parts + 1] = L("même joueur que %s"):format(UI.plain(main.name)) end
+            Panels.Fit(row.meta, table.concat(parts, " · "), S(390), 11, 8)
+            row.meta:SetTextColor(unpack(m.version and not m.current and UI.theme.red or UI.theme.inkMuted))
+            row.seen:SetText(m.online and L("En ligne") or heardSince(m.at))
+            row.seen:SetTextColor(unpack(m.online and { 0.18, 0.42, 0.20 } or UI.theme.ink))
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    page.empty:SetText(#list <= 1 and L("Aucun autre membre n’a encore été entendu. Ils apparaissent dès que leur addon parle.") or "")
+    page.previous:SetEnabled(page.offset > 0)
+    page.next:SetEnabled(page.offset + MEMBER_ROWS < #list)
+    page.count:SetText(#list > 0 and L("%d à %d sur %d"):format(page.offset + 1, math.min(page.offset + MEMBER_ROWS, #list), #list) or "")
+end
+
 -- Dangerous lands: where you die, zone by zone, and to whom. A list today, the world map later.
 local LAND_ROWS = 8
-function R.Lands()
-    local zones, list = {}, {}
+-- Your deaths and victories, each fight once (owner report 25/11). A death is written in the sheet
+-- of every attacker, under one event ID: counted once per attacker, three attackers made three
+-- deaths in Tanaris for a single marker. Events without an ID stay separate. Each entry: the
+-- event, the sheet it was found in, and every sheet of the same death ("records").
+local function fights()
+    local list, byId = {}, {}
     for _, record in pairs(players()) do
         for _, e in ipairs(record.history or {}) do
-            local zone = type(e) == "table" and not e.voided and e.voidReason ~= "battleground" and type(e.zone) == "string" and e.zone
-            if zone and zone ~= "" and zone ~= "?" and (e.kind == "death" or e.kind == "kill") then
-                local entry = zones[zone]
-                if not entry then
-                    entry = { zone = zone, deaths = 0, kills = 0, killers = {} }
-                    zones[zone] = entry
-                    list[#list + 1] = entry
-                end
-                if e.kind == "death" then
-                    entry.deaths = entry.deaths + 1
-                    entry.killers[record] = (entry.killers[record] or 0) + 1
+            if type(e) == "table" and not e.voided and e.voidReason ~= "battleground" and (e.kind == "death" or e.kind == "kill") then
+                local id = e.kind == "death" and e.eventId ~= nil and tostring(e.eventId) or nil
+                local known = id and byId[id]
+                if known then
+                    known.records[#known.records + 1] = record
+                    -- The place is the one written down: any sheet of the death may carry it.
+                    if type(known.event.mapX) ~= "number" and type(e.mapX) == "number" then known.event, known.record = e, record end
                 else
-                    entry.kills = entry.kills + 1
+                    local entry = { event = e, record = record, records = { record } }
+                    list[#list + 1] = entry
+                    if id then byId[id] = entry end
                 end
+            end
+        end
+    end
+    return list
+end
+R.Fights = fights
+function R.Lands()
+    local zones, list = {}, {}
+    for _, fight in ipairs(fights()) do
+        local e = fight.event
+        local zone = type(e.zone) == "string" and e.zone
+        if zone and zone ~= "" and zone ~= "?" then
+            local entry = zones[zone]
+            if not entry then
+                entry = { zone = zone, deaths = 0, kills = 0, killers = {} }
+                zones[zone] = entry
+                list[#list + 1] = entry
+            end
+            if e.kind == "death" then
+                entry.deaths = entry.deaths + 1
+                for _, record in ipairs(fight.records) do entry.killers[record] = (entry.killers[record] or 0) + 1 end
+            else
+                entry.kills = entry.kills + 1
             end
         end
     end
@@ -552,16 +1171,21 @@ end
 --   regions              the game's own shape of each zone, lit by your share of deaths there
 --   fights               each one where it happened (kept since 0.45.0), once zones are readable
 -- Everything comes from the game's own pictures: the addon ships one small mask and no map.
-local MAP_W, MAP_H = 600, 400
-local MAP_POINTS = 80 -- fights drawn at once, the latest ones: more would be noise
+-- 555 by 370 (owner report 25/11): at 600 by 400 the line under the map fell on the worn bottom
+-- edge of the page and could not be read. Page 510 high: title and counts 70, map 370, frame 5,
+-- the line 12 + 26; the curl of the sheet starts about 32 units from its bottom.
+local MAP_W, MAP_H = 555, 370
+local MAP_POINTS = 40 -- fights drawn in one zone, the latest ones: more would be noise
 local ZOOM_MAX = 40 -- times the whole world: a zone fills the view well before
 local ZOOM_STEP = 1.3
 local CONTINENT_IN = { 1.25, 2.1 } -- zoom where the continent pictures start and finish coming in
 local DETAIL_IN = { 150, 260 } -- width of a zone on screen where its explored pieces come in
 local ZONES_KEPT = 8 -- zones whose detail stays loaded at once
-local SKULL, SWORD = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", "Interface\\CURSOR\\Attack"
+-- The marks of a fight, from the addon's one list of pictures (Art.lua).
+local SKULL, SWORD = GL.Art.Death, GL.Art.Victory
 local ARROW = "Interface\\Minimap\\MinimapArrow"
 local FEATHER = "Interface\\AddOns\\GrudgeLedger\\Media\\MapFeather"
+local fitHint -- below, with the map's caption
 local function mapInfo(id)
     local info = id and C_Map and GL.Safe(C_Map.GetMapInfo, id)
     return type(info) == "table" and info or nil
@@ -887,6 +1511,26 @@ local function locate(view)
 end
 -- What the view is looking at: the zone under its centre once zones are readable, else the
 -- continent, else the world. Counts follow.
+local function bars(text)
+    return (tostring(text or ""):gsub(" · ", "   |cffa07b44|||r   "))
+end
+-- The line under the map: "Ma position" (after "Monde" once you zoomed in), then how to move and
+-- the counts, at a size that reads (owner report 25/11: shrunk to fit, it could not be read).
+-- Without room for all of it, the counts alone.
+fitHint = function(view)
+    if not view.hintFull then return end
+    local out = view.out:IsShown()
+    view.mine:ClearAllPoints()
+    view.mine:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", out and 92 or 0, -12)
+    local room = (view.width or MAP_W) - (out and 222 or 130)
+    view.hint:SetWidth(room)
+    local font = GL.Safe(view.hint.GetFont, view.hint)
+    if font then GL.Safe(view.hint.SetFont, view.hint, font, 12) end
+    view.hint:SetText(view.hintFull)
+    local wide = tonumber(GL.Safe(view.hint.GetStringWidth, view.hint)) or 0
+    if wide > room then view.hint:SetText(view.hintShort) end
+    view.hint:SetTextColor(unpack(UI.theme.ink))
+end
 local function describe(view)
     local world, best, distance = view.world, nil, nil
     for _, zone in ipairs(world.zones) do
@@ -965,33 +1609,130 @@ local function buildMap(page)
             R.MapLayout()
         end
     end)
-    view.out = UI.button(view, L("Monde"), 0, -408, 84, function() R.MapOut() end, nil, true)
-    view.mine = UI.button(view, L("Ma position"), 90, -408, 118, function() R.MapHere() end, nil, true)
-    view.caption = Panels.Text(view, 218, -406, S(540) - 218, 12, true)
-    view.caption:SetJustifyH("RIGHT")
-    view.hint = Panels.Text(view, 218, -423, S(540) - 218, 11, false, UI.theme.inkMuted)
+    -- A brass frame around the map (the owner's kit, 25/11), its line just outside the map's edge so
+    -- that the map stops where the frame starts; the leaves of the corners reach in a little. Four
+    -- corners at their own size and four straight edges that stretch (tools/slice_map_frame.py):
+    -- stretched whole, the corners took the map's shape (owner report). It takes no click.
+    local frame = CreateFrame("Frame", nil, view)
+    view.frame = frame
+    frame:SetPoint("TOPLEFT", view.canvas, "TOPLEFT", -5.5, 7.5)
+    frame:SetPoint("BOTTOMRIGHT", view.canvas, "BOTTOMRIGHT", 6, -5)
+    GL.Safe(frame.SetFrameLevel, frame, (GL.Safe(view.canvas.GetFrameLevel, view.canvas) or 1) + 10)
+    frame.pieces = {}
+    local function piece(name, layer)
+        local t = frame:CreateTexture(nil, "OVERLAY", nil, layer)
+        t:SetTexture(GL.Art.MapFrame .. (name:gsub("^cadre%-", "")))
+        frame.pieces[name] = t
+        return t
+    end
+    local top, bottom = piece("cadre-haut", 0), piece("cadre-bas", 0)
+    top:SetPoint("TOPLEFT", 63, 0)
+    top:SetPoint("TOPRIGHT", -63, 0)
+    top:SetHeight(16)
+    bottom:SetPoint("BOTTOMLEFT", 63, 0)
+    bottom:SetPoint("BOTTOMRIGHT", -63, 0)
+    bottom:SetHeight(16)
+    local left, right = piece("cadre-gauche", 0), piece("cadre-droite", 0)
+    left:SetPoint("TOPLEFT", 0, -63)
+    left:SetPoint("BOTTOMLEFT", 0, 63)
+    left:SetWidth(16)
+    right:SetPoint("TOPRIGHT", 0, -63)
+    right:SetPoint("BOTTOMRIGHT", 0, 63)
+    right:SetWidth(16)
+    for name, at in pairs({ ["cadre-hg"] = { "TOPLEFT", -1, 1 }, ["cadre-hd"] = { "TOPRIGHT", 1, 1 },
+        ["cadre-bg"] = { "BOTTOMLEFT", -1, -1 }, ["cadre-bd"] = { "BOTTOMRIGHT", 1, -1 } }) do
+        local corner = piece(name, 1)
+        corner:SetSize(64, 64)
+        corner:SetPoint(at[1], at[2], at[3])
+    end
+    -- Under the map, one line (owner's mockup, 25/11): the buttons, then how to move and the count.
+    view.out = UI.button(view, L("Monde"), 0, 0, 84, function() R.MapOut() end, nil, true)
+    view.mine = UI.button(view, L("Ma position"), 0, 0, 118, function() R.MapHere() end, nil, true)
+    view.out:ClearAllPoints()
+    view.out:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", 0, -12)
+    view.mine:ClearAllPoints()
+    view.mine:SetPoint("TOPLEFT", view.canvas, "BOTTOMLEFT", 0, -12)
+    -- Where you look and its counts, under the page's title, as in the owner's mockup (25/11).
+    view.caption = Panels.Text(view, 0, 20, S(540), 13, true)
+    GL.Safe(view.caption.SetWordWrap, view.caption, false)
+    view.hint = Panels.Text(view, 0, 0, MAP_W - 220, 12, true)
+    view.hint:ClearAllPoints()
+    view.hint:SetPoint("TOPRIGHT", view.canvas, "BOTTOMRIGHT", 0, -17)
     view.hint:SetJustifyH("RIGHT")
+    GL.Safe(view.hint.SetWordWrap, view.hint, false)
     return view
 end
 -- The fights that kept their position, placed on this map: its own, or those of the zones it
 -- shows, moved through each zone's rectangle. The latest first.
-function R.MapPoints(id, zones)
-    local where = { [id] = false }
-    for _, zone in ipairs(zones or {}) do where[zone.mapID] = zone.rect end
-    local points = {}
-    for _, record in pairs(players()) do
-        for _, e in ipairs(record.history or {}) do
-            local rect = type(e) == "table" and where[e.mapID]
-            if rect ~= nil and not e.voided and type(e.mapX) == "number" and type(e.mapY) == "number" and type(e.time) == "number"
-                and (e.kind == "death" or e.kind == "kill" or e.kind == "assist") then
-                local x, y = e.mapX, e.mapY
-                if rect then x, y = rect.left + x * (rect.right - rect.left), rect.top + y * (rect.bottom - rect.top) end
-                points[#points + 1] = { record = record, event = e, x = x, y = y }
-            end
+-- What the map counts and what it draws come from one pass (owner report 25/11): the counts were
+-- read by zone name and the marks by map, the counts had each death once per attacker, the marks
+-- had the "coups de main" the counts left out, and only the latest 80 fights of the whole world
+-- were drawn. Now a fight belongs to the zone of its map, or, when it kept no place, to the zone
+-- of its name; it is counted there, and drawn there when it kept its place. Each zone draws its
+-- latest MAP_POINTS. The guild's fights (guild vision) are counted and drawn the same way.
+-- Returns the zones fought in (list and by map) and the marks, yours then the guild's.
+function R.MapTally(id, zones, guild)
+    local byMap, byName, where = {}, {}, { [id] = false }
+    for _, zone in ipairs(zones or {}) do
+        byMap[zone.mapID], where[zone.mapID] = zone, zone.rect
+        if type(zone.name) == "string" and byName[zone.name] == nil then byName[zone.name] = zone end
+    end
+    local tallies, tallyOf, drawn = {}, {}, {}
+    local function count(zone, kind)
+        local tally = tallyOf[zone.mapID]
+        if not tally then
+            tally = { zone = zone, deaths = 0, kills = 0, unplaced = 0 }
+            tallyOf[zone.mapID] = tally
+            tallies[#tallies + 1] = tally
+        end
+        if kind == "death" then tally.deaths = tally.deaths + 1 else tally.kills = tally.kills + 1 end
+    end
+    local function place(list, key, rect, x, y, mark)
+        if rect then x, y = rect.left + x * (rect.right - rect.left), rect.top + y * (rect.bottom - rect.top) end
+        mark.x, mark.y, mark.key = x, y, key
+        list[#list + 1] = mark
+    end
+    local own, others = {}, {}
+    for _, fight in ipairs(fights()) do
+        local e = fight.event
+        local placed = type(e.mapX) == "number" and type(e.mapY) == "number" and type(e.time) == "number"
+        local zone = byMap[e.mapID] or (type(e.zone) == "string" and byName[e.zone]) or nil
+        if zone then count(zone, e.kind) end
+        -- Counted without a mark: said in the zone's tooltip (owner report 25/11, Rive-Claire).
+        if zone and not (placed and byMap[e.mapID]) then tallyOf[zone.mapID].unplaced = tallyOf[zone.mapID].unplaced + 1 end
+        if placed and where[e.mapID] ~= nil then
+            place(own, e.mapID, where[e.mapID], e.mapX, e.mapY, { record = fight.record, event = e })
         end
     end
-    table.sort(points, function(a, b) return a.event.time > b.event.time end)
-    for i = #points, MAP_POINTS + 1, -1 do points[i] = nil end
+    for _, point in ipairs(guild or {}) do
+        local zone = byMap[point.mapID]
+        if zone and type(point.x) == "number" and type(point.y) == "number" then
+            count(zone, point.kind)
+            place(others, point.mapID, zone.rect, point.x, point.y,
+                { guild = point.actor, enemy = point.name, event = { kind = point.kind, time = point.time } })
+        end
+    end
+    -- The latest first, then MAP_POINTS a zone at most.
+    local function trim(list)
+        table.sort(list, function(a, b) return (a.event.time or 0) > (b.event.time or 0) end)
+        local per, kept = {}, {}
+        for _, mark in ipairs(list) do
+            per[mark.key] = (per[mark.key] or 0) + 1
+            if per[mark.key] <= MAP_POINTS then kept[#kept + 1] = mark end
+        end
+        return kept
+    end
+    return tallies, tallyOf, trim(own), trim(others)
+end
+-- From -1 (four deaths or more for a victory: deep red) to 1 (four victories or more for a death:
+-- strong green), 0 when even (the map's own colour). The owner's rule, 25/11.
+function R.ZoneBalance(kills, deaths)
+    kills, deaths = math.max(0, tonumber(kills) or 0), math.max(0, tonumber(deaths) or 0)
+    local ratio = (kills > 0 and deaths > 0) and kills / deaths or (kills + 1) / (deaths + 1)
+    return math.max(-1, math.min(1, math.log(ratio) / math.log(4)))
+end
+function R.MapPoints(id, zones)
+    local _, _, points = R.MapTally(id, zones)
     return points
 end
 -- Re-places everything for the current zoom and centre. Cheap: a few dozen regions at most.
@@ -1085,8 +1826,9 @@ function R.MapLayout()
         view.mine:Hide()
     end
     if zoom > 1.02 then view.out:Show() else view.out:Hide() end
+    fitHint(view)
     local title, deaths, kills = describe(view)
-    view.caption:SetText(UI.plain(title) .. " · " .. L("%d morts · %d victoires"):format(deaths, kills))
+    view.caption:SetText(bars(UI.plain(title) .. " · " .. L("%d morts · %d victoires"):format(deaths, kills)))
 end
 local function paintMap(view, byName)
     local mine = playerPlace()
@@ -1131,37 +1873,11 @@ local function paintMap(view, byName)
     view.byName = byName
     -- Fights show once an ordinary zone is about a hundred pixels wide.
     view.pointZoom = math.max(1.4, 110 / math.max(1, world.zoneWidth * view.width))
-    -- Every zone you fought in, tinted by its share of your deaths: the worst zone is bright red
-    -- whatever its count, a zone where you only won is green.
-    local tallies, shapes, worst = {}, {}, 1
+    -- Every zone you fought in, tinted by the ratio of your victories to your deaths (below).
     -- Guild vision: the fights of the members who share theirs are counted and drawn with yours.
-    local extra, guildPlaced, zoneOf = {}, {}, {}
-    for _, zone in ipairs(zones) do zoneOf[zone.mapID] = zone end
-    for _, point in ipairs(view.guildOn and GL.GuildMap and GL.GuildMap.Points() or {}) do
-        local zone = zoneOf[point.mapID]
-        if zone then
-            local more = extra[zone.mapID] or { deaths = 0, kills = 0 }
-            extra[zone.mapID] = more
-            if point.kind == "death" then more.deaths = more.deaths + 1 else more.kills = more.kills + 1 end
-            if #guildPlaced < MAP_POINTS then
-                local rect = zone.rect
-                guildPlaced[#guildPlaced + 1] = { guild = point.actor, enemy = point.name, event = { kind = point.kind, time = point.time },
-                    x = rect.left + point.x * (rect.right - rect.left), y = rect.top + point.y * (rect.bottom - rect.top) }
-            end
-        end
-    end
-    view.tallyOf = {}
-    for _, zone in ipairs(zones) do
-        local entry, more = byName[zone.name], extra[zone.mapID]
-        local deaths = (entry and entry.deaths or 0) + (more and more.deaths or 0)
-        local kills = (entry and entry.kills or 0) + (more and more.kills or 0)
-        if deaths + kills > 0 then
-            local tally = { zone = zone, deaths = deaths, kills = kills }
-            tallies[#tallies + 1] = tally
-            view.tallyOf[zone.mapID] = tally
-            worst = math.max(worst, deaths)
-        end
-    end
+    local tallies, tallyOf, ownPlaced, guildPlaced = R.MapTally(root, zones, view.guildOn and GL.GuildMap and GL.GuildMap.Points() or nil)
+    local shapes = {}
+    view.tallyOf = tallyOf
     for _, region in ipairs(view.regions) do
         region:Hide()
         if region.boost then region.boost:Hide() end
@@ -1171,7 +1887,13 @@ local function paintMap(view, byName)
         label:Hide()
     end
     for i, entry in ipairs(tallies) do
-        local share = entry.deaths / worst
+        -- The owner's rule (25/11): the colour says the ratio of victories to deaths. Even, the map
+        -- keeps its own colour; four times more on one side, the colour is full, deep red or strong
+        -- green; in between it grows with the ratio (on a log scale, so 2 to 1 is half way).
+        -- A side with nothing counts one more, so three victories without a death are full green.
+        local kills, deaths = entry.kills, entry.deaths
+        local balance = R.ZoneBalance(kills, deaths)
+        entry.balance, entry.losing = balance, balance < 0
         if entry.zone.shape then
             local n = #shapes + 1
             local region = view.regions[n] or view.canvas:CreateTexture(nil, "ARTWORK")
@@ -1183,51 +1905,74 @@ local function paintMap(view, byName)
             -- nothing. Drawn any other way they showed as black squares (owner report, 0.47.0).
             GL.Safe(region.SetDesaturated, region, true)
             GL.Safe(region.SetBlendMode, region, "ADD")
-            if entry.deaths > 0 then
+            -- Green is added to a map already green and brown: it needs a brighter tint than red to read
+            -- as clearly (owner report 25/11, a zone won 3 to 0 looked barely lit).
+            if entry.losing then
                 region:SetVertexColor(1, 0.06, 0.03)
             else
-                region:SetVertexColor(0.10, 0.75, 0.20)
+                region:SetVertexColor(0.30, 1, 0.22)
             end
             region:Show()
+            -- A second light makes the colour deep, red or green alike: added light is faint on the map
+            -- (0.51.0; green too since the owner's report of 25/11).
             local boost = region.boost or view.canvas:CreateTexture(nil, "ARTWORK")
             region.boost = boost
-            if entry.deaths > 0 then
+            if balance ~= 0 then
                 if shape.atlas and boost.SetAtlas then boost:SetAtlas(shape.atlas) else boost:SetTexture(shape.file) end
                 boost:SetTexCoord(0, shape.usedX, 0, shape.usedY)
                 GL.Safe(boost.SetDesaturated, boost, true)
                 GL.Safe(boost.SetBlendMode, boost, "ADD")
-                boost:SetVertexColor(1, 0.04, 0.02)
+                if entry.losing then boost:SetVertexColor(1, 0.04, 0.02) else boost:SetVertexColor(0.22, 0.95, 0.16) end
                 boost:Show()
             else
                 boost:Hide()
             end
-            shapes[n] = { zone = entry.zone, alpha = entry.deaths > 0 and 0.65 + 0.35 * share or 0.6, boost = 0.4 + 0.6 * share }
+            shapes[n] = { zone = entry.zone, alpha = math.abs(balance), boost = math.abs(balance) }
         end
         local label = marker(view, view.labels, i)
         label.used = true
-        label:SetSize(28, 20)
-        -- Just the number, outlined so it reads on any part of the map: your deaths in red, or, in a
-        -- zone where you only won, your victories in green. The owner found the plates ugly (0.51.0).
+        label:SetSize(30, 34)
+        -- The ratio as a small fraction (owner, 25/11): your victories in green above a thin rule,
+        -- your deaths in red below, outlined so they read on any part of the map.
         label.fill:SetColorTexture(0, 0, 0, 0)
-        if not label.outlined then
-            label.outlined = true
-            local font = GL.Safe(label.count.GetFont, label.count)
-            if font then GL.Safe(label.count.SetFont, label.count, font, 16, "OUTLINE") end
+        if not label.fraction then
+            label.fraction = true
+            label.count:SetText("")
+            local function number(y)
+                local text = label:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                local font = GL.Safe(label.count.GetFont, label.count)
+                if font then GL.Safe(text.SetFont, text, font, 12, "OUTLINE") end
+                text:SetPoint("CENTER", 0, y)
+                text:SetJustifyH("CENTER")
+                return text
+            end
+            label.kills, label.deaths = number(8), number(-8)
+            label.kills:SetTextColor(0.35, 1, 0.4)
+            label.deaths:SetTextColor(1, 0.3, 0.22)
+            label.shade = label:CreateTexture(nil, "ARTWORK")
+            label.shade:SetSize(18, 3)
+            label.shade:SetPoint("CENTER", 0, 0)
+            label.shade:SetColorTexture(0, 0, 0, 0.55)
+            label.rule = label:CreateTexture(nil, "OVERLAY")
+            label.rule:SetSize(16, 1)
+            label.rule:SetPoint("CENTER", 0, 0)
+            label.rule:SetColorTexture(0.96, 0.86, 0.62, 0.95)
         end
-        if entry.deaths > 0 then
-            label.count:SetTextColor(1, 0.22, 0.16)
-        else
-            label.count:SetTextColor(0.35, 1, 0.4)
-        end
-        label.count:SetText(tostring(entry.deaths > 0 and entry.deaths or entry.kills))
+        label.kills:SetText(tostring(kills))
+        label.deaths:SetText(tostring(deaths))
         label.zone = entry.zone.mapID
         label:SetScript("OnEnter", function(self)
-            tip(self, UI.plain(entry.zone.name), L("%d morts · %d victoires"):format(entry.deaths, entry.kills))
+            local line = L("%d morts · %d victoires"):format(entry.deaths, entry.kills)
+            if (entry.unplaced or 0) > 0 then
+                local hidden = L("Dont %d sans position : un combat d’avant la carte (0.45.0), ou dont le jeu cachait l’endroit.")
+                line = line .. "\n" .. hidden:format(entry.unplaced)
+            end
+            tip(self, UI.plain(entry.zone.name), line)
         end)
         label:SetScript("OnClick", function(self) R.MapFocus(self.zone) end)
     end
-    local points = R.MapPoints(root, zones)
-    local own = #points
+    local points, own = {}, #ownPlaced
+    for _, entry in ipairs(ownPlaced) do points[#points + 1] = entry end
     for _, entry in ipairs(guildPlaced) do points[#points + 1] = entry end
     for _, point in ipairs(view.points) do
         point.used = nil
@@ -1266,8 +2011,13 @@ local function paintMap(view, byName)
     locate(view)
     view.tallies, view.shapes, view.placed = tallies, shapes, points
     local hint = L("Molette : zoomer · glisser : se déplacer · %d combats placés"):format(own)
-    if view.guildOn then hint = hint .. " · " .. L("guilde : %d"):format(#guildPlaced) end
-    view.hint:SetText(hint)
+    local counts = hint:match("[^·]+$"):gsub("^%s+", "")
+    if view.guildOn then
+        local guild = " · " .. L("guilde : %d"):format(#guildPlaced)
+        hint, counts = hint .. guild, counts .. guild
+    end
+    view.hintFull, view.hintShort = bars(hint), bars(counts)
+    fitHint(view)
     R.MapLayout()
     return true
 end
@@ -1333,25 +2083,31 @@ local function buildLands(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
     page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
-    page.lead = Panels.Text(page, X(26), -47, S(400), 13, false, UI.theme.inkMuted)
+    page.lead = Panels.Text(page, X(26), -54, S(400), 13, false, UI.theme.inkMuted)
+    -- Under the title, the owner's separator (kit of 25/11).
+    page.rule = page:CreateTexture(nil, "ARTWORK")
+    page.rule:SetTexture(GL.Art.Separator)
+    page.rule:SetPoint("TOPLEFT", X(18), -38)
+    page.rule:SetSize(256, 16)
     page.mode = "map"
     page.map = buildMap(page)
     page.toggle = UI.button(page, "", X(446), -22, S(120), function()
         page.mode = page.mode == "map" and "list" or "map"
         R.Refresh()
     end, nil, true)
-    -- Guild vision: one box. Ticked, you see the fights of the members who ticked it and they see yours.
+    -- A filter of the map only (owner, 26/11): ticked, your fights and the guild's; unticked, yours
+    -- alone, to clear the map. Sharing with the guild is a setting, never this box.
     page.guild = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
     page.guild:SetPoint("TOPLEFT", X(286), -19)
     page.guild:SetSize(24, 24)
     page.guildLabel = Panels.Text(page, X(312), -25, S(110), 12, true)
     page.guild:SetScript("OnClick", function(self)
-        if GL.GuildMap then GL.GuildMap.Enable(self:GetChecked() and true or false) end
+        GL.db.mapHideGuild = not self:GetChecked() or nil
         R.Refresh()
     end)
     page.guild:SetScript("OnEnter", function(self)
-        tip(self, L("Vision de guilde"), L("Cochée : vous voyez sur la carte les victoires et les morts des membres qui l’ont cochée, et ils voient "
-            .. "les vôtres (la zone et l’endroit). Décochée : rien n’est envoyé, rien n’est gardé, et la guilde oublie vos combats."))
+        tip(self, L("Combats de la guilde"), L("Cochée : la carte montre vos combats et ceux de la guilde. Décochée : les vôtres seulement. "
+            .. "Ce filtre ne change rien à ce que vous partagez."))
     end)
     page.guild:SetScript("OnLeave", hideTip)
     page.rows = {}
@@ -1387,12 +2143,14 @@ end
 local function paintLands(page)
     page.title:SetText(L("Carte des combats"))
     local lands = R.Lands()
-    local guildOn, inGuild = false, false
-    if GL.GuildMap then guildOn, inGuild = GL.GuildMap.Enabled() end
+    local sharing, inGuild = false, false
+    if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
+    local shown = GL.db.mapHideGuild ~= true
+    local guildOn = sharing and shown
     page.map.guildOn = guildOn
     page.lead:SetText(guildOn and L("Vos combats et ceux de la guilde.") or #lands > 0 and L("Où vous mourez, et à cause de qui.") or "")
-    page.guildLabel:SetText(L("Vision de guilde"))
-    GL.Safe(page.guild.SetChecked, page.guild, guildOn)
+    page.guildLabel:SetText(L("Combats de la guilde"))
+    GL.Safe(page.guild.SetChecked, page.guild, shown)
     -- The map first, when the game gives its pictures. The list is one click away and is all there is
     -- on a client without them.
     local mapped = false
@@ -1402,7 +2160,10 @@ local function paintLands(page)
         mapped = paintMap(page.map, byName)
     end
     if mapped then page.map:Show() else page.map:Hide() end
-    if mapped and inGuild then
+    -- With the map, its place and counts take the lead's line.
+    if mapped then page.lead:Hide() else page.lead:Show() end
+    -- Nothing of the guild to show without sharing: the filter leaves with it.
+    if mapped and inGuild and sharing then
         page.guild:Show()
         page.guildLabel:Show()
     else
@@ -1436,8 +2197,9 @@ local RANK_ROWS = 6
 local function rankingGroups()
     local choices = GL.RankingChoices
     local groups = {}
-    for _, group in ipairs(choices.players) do
-        groups[#groups + 1] = { name = group.name, entries = group.entries }
+    for i, group in ipairs(choices.players) do
+        -- The third players' group repeats the Adversaires table (owner, 25/11): left out.
+        if i ~= 3 then groups[#groups + 1] = { name = group.name, entries = group.entries } end
     end
     local guilds = { name = L("Guildes"), entries = {}, guild = true }
     for _, group in ipairs(choices.guilds) do
@@ -1481,10 +2243,12 @@ local function buildRankings(host)
             page.group, page.choice, page.offset = i, 1, 0
             R.Refresh()
         end, true, true)
+        -- The Registre's sections choose the group now.
+        page.tabs[i]:Hide()
     end
     page.chips = {}
     for i = 1, 6 do
-        page.chips[i] = UI.button(page, "", X(26) + ((i - 1) % 3) * S(181), -116 - math.floor((i - 1) / 3) * 30, S(178), function()
+        page.chips[i] = UI.button(page, "", X(26) + ((i - 1) % 3) * S(181), -86 - math.floor((i - 1) / 3) * 30, S(178), function()
             page.choice, page.offset = i, 0
             R.Refresh()
         end, true, true)
@@ -1509,9 +2273,9 @@ local function buildRankings(host)
         row.rank = Panels.Text(row, S(0), -12, S(18), 12, false, UI.theme.inkMuted)
         row.face = face(row, 34)
         row.face:SetPoint("TOPLEFT", S(24), -4)
-        row.crest = row:CreateTexture(nil, "ARTWORK")
-        row.crest:SetPoint("TOPLEFT", S(24), -4)
-        row.crest:SetSize(34, 34)
+        -- 38 px rather than 34: a pair of letters stays readable (owner's kit, 26/11).
+        row.crest = crestFrame(row, 38)
+        row.crest:SetPoint("TOPLEFT", S(22) - 1, -2)
         row.initials = Panels.Text(row, S(24), -12, S(34), 14, true, UI.theme.brass)
         row.initials:SetJustifyH("CENTER")
         row.name = Panels.Text(row, S(60), -4, S(250), 14, true)
@@ -1576,10 +2340,11 @@ local function paintRankings(page)
                 row.face:Hide()
                 row.crest:Show()
                 local rule = GL.GetGuildRule(item.name, item.realm)
-                row.crest:SetColorTexture(unpack(crestColors[rule and rule.reaction or "neutral"] or crestColors.neutral))
-                row.initials:SetText(R.Initials(item.name))
+                R.PaintCrest(row.crest, item)
+                row.initials:SetText("")
                 Panels.Fit(row.name, UI.plain(item.name), S(250), 14, 10, true)
-                row.name:SetTextColor(unpack(UI.theme.ink))
+                -- The crest no longer says the relation: the name does, in the colour of your rule.
+                row.name:SetTextColor(unpack(rule and inks[rule.reaction] or UI.theme.ink))
                 row.meta:SetText(GL.RealmLabel(item.realm))
                 row.value:SetText(choice[1] == "rules" and (names[rule and rule.reaction] or "") or tostring(item[choice[1]] or 0))
             else
@@ -1702,7 +2467,6 @@ end
 local GUILD_ROWS = 6
 local GROUP_NAMES = 5 -- names offered in a group of the panel, after "everyone": the search finds the rest
 local PERIODS = { { 0, "Toujours" }, { 86400, "24 h" }, { 7 * 86400, "7 jours" }, { 30 * 86400, "30 jours" } }
-local VIEWS = { { "all", "Tous" }, { "death", "Morts" }, { "kill", "Victoires" }, { "mine", "Mes combats" } }
 local function elapsed(at)
     local delta = math.max(0, GL.Now() - at)
     if delta < 3600 then return L("il y a %d min"):format(math.max(1, math.floor(delta / 60))) end
@@ -1780,6 +2544,15 @@ local function openOpponent(row)
 end
 -- A wanted notice on the opponent of a line: a bounty without gold, in one click. The guild sees
 -- it in Primes and is alerted when one of its members meets that player.
+-- Under the message of a guild page while you do not share your fights: the way to the setting,
+-- where sharing is decided (owner, 26/11: never a box of a page).
+local function reshareButton(page, y)
+    local button = UI.button(page, L("Ouvrir les réglages"), X(26), y, S(200), function()
+        if GL.ShowSettings then GL.ShowSettings("relations") end
+    end)
+    button:Hide()
+    return button
+end
 local function wanted(row)
     if not (row.target and row.enemy and GL.Bounties and GL.Bounties.Post) then return end
     local id, err = GL.Bounties.Post(row.target, row.enemy, 0)
@@ -1880,16 +2653,70 @@ local function paintFilterPanel(page)
     panel.whoCaption:SetText(L("Membre : %s"):format(whoName))
     panel.foeCaption:SetText(L("Ennemi : %s"):format(foeLabel))
 end
+-- The guild's journal as a register (owner's kit, 26/11): an engraved header, the four lists as
+-- buttons side by side, then a table: when, outcome, member, opponent and place, and "…" for the
+-- actions. A pennant marks the fights come in since your last visit.
+local LOG_VIEWS = { { "all", "Tous", 52 }, { "kill", "Victoires", 82 }, { "death", "Morts", 64 }, { "mine", "Mes combats", 100 } }
+local LOG_TOP, LOG_ROW, LOG_STEP = -126, 52, 53
+local LOG_WHEN, LOG_ISSUE, LOG_MEMBER, LOG_FOE, LOG_MORE = 12, 84, 196, 352, 506
+-- The actions of a line, under its "…": the opponent's sheet, a wanted notice.
+local function buildLineMenu(page)
+    local menu = CreateFrame("Frame", nil, page)
+    menu:SetSize(S(210), 66)
+    menu:EnableMouse(true)
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:SetToplevel(true)
+    GL.Safe(menu.SetFrameLevel, menu, (GL.Safe(page.GetFrameLevel, page) or 1) + 20)
+    UI.surface(menu, UI.theme.gold)
+    UI.surface(menu, UI.theme.panel, 1)
+    menu.sheet = UI.button(menu, L("Ouvrir la fiche"), 6, -6, S(198), function()
+        menu:Hide()
+        openOpponent(menu.row)
+    end, true)
+    menu.wanted = UI.button(menu, L("Poser un avis de recherche"), 6, -36, S(198), function()
+        menu:Hide()
+        wanted(menu.row)
+    end, true)
+    menu:Hide()
+    return menu
+end
+local function toggleLineMenu(page, row)
+    local menu = page.lineMenu
+    if menu:IsShown() and menu.row == row then menu:Hide() return end
+    menu.row = row
+    local count = 0
+    for _, button in ipairs({ menu.sheet, menu.wanted }) do
+        local usable = button == menu.sheet and row.target ~= nil or button == menu.wanted and row.canWant
+        if usable then
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", 6, -6 - count * 30)
+            button:Show()
+            count = count + 1
+        else
+            button:Hide()
+        end
+    end
+    menu:SetHeight(12 + count * 30)
+    menu:ClearAllPoints()
+    menu:SetPoint("TOPRIGHT", row.more, "BOTTOMRIGHT", 0, -2)
+    menu:Show()
+    menu:Raise()
+end
 local function buildGuildJournal(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
+    -- The engraved header: its double rule runs under the title, its book on the right.
+    page.header = page:CreateTexture(nil, "ARTWORK")
+    page.header:SetTexture(GL.Art.GuildLogHeader)
+    page.header:SetPoint("TOPLEFT", X(26), -6)
+    page.header:SetSize(S(540), 58)
+    page.title = Panels.Text(page, X(26), -16, S(330), 24, true)
     page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
     page.filter, page.offset = { view = "all" }, 0
-    -- The Journal's three controls, in the same order: search, list, filters.
+    -- The Journal's controls, in the same order: search, the lists, filters.
     page.search = CreateFrame("EditBox", nil, page)
     page.search:SetPoint("TOPLEFT", X(26), -72)
-    page.search:SetSize(S(196), 26)
+    page.search:SetSize(S(146), 26)
     page.search:SetAutoFocus(false)
     page.search:SetMaxLetters(60)
     UI.styleInput(page.search, false, false)
@@ -1902,8 +2729,9 @@ local function buildGuildJournal(host)
     end
     page.search:SetScript("OnEnterPressed", applySearch)
     page.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    page.searchHint = UI.label(page.search, L("Rechercher…"), nil, 8, -5, S(180))
+    page.searchHint = UI.label(page.search, L("Membre ou adversaire…"), nil, 8, -5, S(132))
     page.searchHint:SetTextColor(unpack(UI.theme.muted))
+    GL.Safe(page.searchHint.SetWordWrap, page.searchHint, false)
     page.search:SetScript("OnTextChanged", function(self)
         if self:GetText():find("%S") then
             page.searchHint:Hide()
@@ -1915,19 +2743,22 @@ local function buildGuildJournal(host)
             end
         end
     end)
-    -- One button names the current list with its count; a click shows the next one. A list always
-    -- starts clean: the other filters are put back, as in the Journal.
-    page.viewCycle = UI.button(page, "", X(226), -72, S(196), function()
-        local following = VIEWS[1][1]
-        for i, view in ipairs(VIEWS) do
-            if view[1] == page.filter.view then following = VIEWS[i % #VIEWS + 1][1] end
-        end
-        page.filter, page.offset = { view = following }, 0
-        page.search:SetText("")
-        page.filterPanel:Hide()
-        R.Refresh()
-    end)
-    page.openFilters = UI.button(page, L("Filtres"), X(426), -72, S(140), function()
+    -- The four lists side by side (they were one button turning through them): one click each. A
+    -- list always starts clean, the other filters put back, as in the Journal.
+    page.views = {}
+    local x = 150
+    for i, view in ipairs(LOG_VIEWS) do
+        local key = view[1]
+        page.views[i] = UI.button(page, L(view[2]), X(26) + S(x), -72, S(view[3]), function()
+            page.filter, page.offset = { view = key }, 0
+            page.search:SetText("")
+            page.filterPanel:Hide()
+            R.Refresh()
+        end, true, true)
+        page.views[i].view = key
+        x = x + view[3] + 4
+    end
+    page.openFilters = UI.button(page, L("Filtres"), X(26) + S(464), -72, S(76), function()
         if page.filterPanel:IsShown() then
             page.filterPanel:Hide()
         else
@@ -1936,31 +2767,62 @@ local function buildGuildJournal(host)
             R.Refresh()
         end
     end)
+    -- The table's heads, and the rule under them.
+    page.heads = {}
+    for i, head in ipairs({ { "Quand", LOG_WHEN, 70 }, { "Issue", LOG_ISSUE, 108 }, { "Membre de la guilde", LOG_MEMBER, 152 },
+        { "Adversaire", LOG_FOE, 150 } }) do
+        page.heads[i] = Panels.Text(page, X(26) + S(head[2]), -106, S(head[3]), 13, true)
+        page.heads[i].key, page.heads[i].width = head[1], S(head[3])
+    end
+    local headRule = page:CreateTexture(nil, "BORDER")
+    headRule:SetPoint("TOPLEFT", X(26), -123)
+    headRule:SetSize(S(540), 1)
+    headRule:SetColorTexture(0.40, 0.25, 0.10, 0.55)
     page.rows = {}
     for i = 1, GUILD_ROWS do
         local row = CreateFrame("Button", nil, page)
-        row:SetPoint("TOPLEFT", X(26), -108 - (i - 1) * 56)
-        row:SetSize(S(540), 54)
+        row:SetPoint("TOPLEFT", X(26), LOG_TOP - (i - 1) * LOG_STEP)
+        row:SetSize(S(540), LOG_ROW)
         local rule = row:CreateTexture(nil, "BORDER")
         rule:SetPoint("BOTTOMLEFT")
         rule:SetPoint("BOTTOMRIGHT")
         rule:SetHeight(1)
         rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
+        local hover = row:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetAllPoints()
+        hover:SetColorTexture(0.91, 0.77, 0.48, 0.12)
+        row.pennant = row:CreateTexture(nil, "OVERLAY")
+        row.pennant:SetTexture(GL.Art.GuildLogPennant)
+        row.pennant:SetPoint("TOPLEFT", -2, -8)
+        row.pennant:SetSize(15, 32)
+        row.when = Panels.Text(row, S(LOG_WHEN), -19, S(70), 12, false, UI.theme.inkMuted)
+        GL.Safe(row.when.SetWordWrap, row.when, false)
         row.mark = row:CreateTexture(nil, "ARTWORK")
-        row.mark:SetPoint("TOPLEFT", S(2), -13)
+        row.mark:SetPoint("TOPLEFT", S(LOG_ISSUE), -15)
         row.mark:SetSize(22, 22)
-        row.story = Panels.Text(row, S(32), -7, S(340), 15, true)
-        GL.Safe(row.story.SetWordWrap, row.story, false)
-        row.where = Panels.Text(row, S(32), -29, S(340), 12, false, UI.theme.inkMuted)
+        row.issue = Panels.Text(row, S(LOG_ISSUE) + 26, -17, S(80), 15, true)
+        GL.Safe(row.issue.SetWordWrap, row.issue, false)
+        row.member = Panels.Text(row, S(LOG_MEMBER), -17, S(150), 15, true)
+        GL.Safe(row.member.SetWordWrap, row.member, false)
+        row.foe = Panels.Text(row, S(LOG_FOE), -8, S(150), 15, true)
+        GL.Safe(row.foe.SetWordWrap, row.foe, false)
+        row.where = Panels.Text(row, S(LOG_FOE), -28, S(150), 12, false, UI.theme.inkMuted)
         GL.Safe(row.where.SetWordWrap, row.where, false)
-        row.wanted = UI.button(row, L("Rechercher"), S(380), -14, S(92), function() wanted(row) end, nil, true)
-        row.sheet = UI.button(row, L("Fiche"), S(476), -14, S(64), function() openOpponent(row) end, nil, true)
+        row.more = UI.button(row, "…", S(LOG_MORE), -14, S(34), function() toggleLineMenu(page, row) end, nil, true)
         row:SetScript("OnClick", openOpponent)
         page.rows[i] = row
     end
     page.filterPanel = buildFilterPanel(page)
-    page:SetScript("OnHide", function() page.filterPanel:Hide() end)
-    page.empty = Panels.Text(page, X(26), -124, S(540), 13, false, UI.theme.inkMuted)
+    page.lineMenu = buildLineMenu(page)
+    -- Leaving the page: the panels close, and the fights shown count as seen for the pennant.
+    page:SetScript("OnHide", function()
+        page.filterPanel:Hide()
+        page.lineMenu:Hide()
+        if page.newest then GL.db.guildLogSeenAt = math.max(page.newest, tonumber(GL.db.guildLogSeenAt) or 0) end
+        page.seenBefore, page.newest = nil, nil
+    end)
+    page.empty = Panels.Text(page, X(26), -132, S(540), 13, false, UI.theme.inkMuted)
+    page.reshare = reshareButton(page, -160)
     page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
         page.offset = math.max(0, page.offset - GUILD_ROWS)
         R.Refresh()
@@ -1969,9 +2831,32 @@ local function buildGuildJournal(host)
         page.offset = page.offset + GUILD_ROWS
         R.Refresh()
     end, nil, true)
-    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
+    page.count = Panels.Text(page, X(76), -469, S(440), 13, true, UI.theme.ink)
     page.count:SetJustifyH("CENTER")
+    -- The two fleurons point at the count, about 8 units from its text, whatever its length.
+    page.fleuronLeft = page:CreateTexture(nil, "ARTWORK")
+    page.fleuronLeft:SetTexture(GL.Art.GuildLogFleuronLeft)
+    page.fleuronLeft:SetSize(105, 13)
+    page.fleuronRight = page:CreateTexture(nil, "ARTWORK")
+    page.fleuronRight:SetTexture(GL.Art.GuildLogFleuronRight)
+    page.fleuronRight:SetSize(105, 12)
     return page
+end
+local function placeFleurons(page)
+    local text = page.count:GetText() or ""
+    if text == "" then
+        page.fleuronLeft:Hide()
+        page.fleuronRight:Hide()
+        return
+    end
+    local width = GL.Clean(GL.Safe(page.count.GetStringWidth, page.count), "number") or #text * 6
+    local centre, half = X(76) + S(220), math.min(S(220), width / 2)
+    page.fleuronLeft:ClearAllPoints()
+    page.fleuronLeft:SetPoint("TOPLEFT", centre - half - 8 - 105, -472)
+    page.fleuronRight:ClearAllPoints()
+    page.fleuronRight:SetPoint("TOPLEFT", centre + half + 8, -472)
+    page.fleuronLeft:Show()
+    page.fleuronRight:Show()
 end
 local function paintGuildJournal(page)
     page.title:SetText(L("Journal de guilde"))
@@ -1979,52 +2864,53 @@ local function paintGuildJournal(page)
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
     local filter = page.filter
     local lines = sharing and R.GuildLog(filter) or {}
-    page.lead:SetText(sharing and L("Les victoires et les morts des membres qui partagent leurs combats.") or "")
-    -- The list button: its name and how many lines it holds, as in the Journal.
-    local viewName = VIEWS[1][2]
-    for _, view in ipairs(VIEWS) do
-        if view[1] == filter.view then viewName = view[2] end
-    end
-    page.viewCycle:SetText(L("%s · %d"):format(L(viewName), #lines))
-    UI.selectButton(page.viewCycle, filter.view ~= "all")
+    -- No lead sentence any more: the header and the table's heads say what the page is.
+    page.lead:SetText("")
+    for _, button in ipairs(page.views) do UI.selectButton(button, button.view == (filter.view or "all")) end
     local active = (filter.who and 1 or 0) + (filter.foe and 1 or 0) + ((filter.period or 0) > 0 and 1 or 0)
     page.openFilters:SetText(active > 0 and (L("Filtres") .. " · " .. active) or L("Filtres"))
     UI.selectButton(page.openFilters, active > 0)
-    for _, control in ipairs({ page.search, page.viewCycle, page.openFilters }) do
+    for _, control in ipairs({ page.search, page.openFilters, unpack(page.views) }) do
         if sharing then control:Show() else control:Hide() end
+    end
+    for _, head in ipairs(page.heads) do
+        Panels.Fit(head, sharing and #lines > 0 and L(head.key) or "", head.width, 13, 9, true)
     end
     if not sharing then page.filterPanel:Hide() end
     if page.filterPanel:IsShown() then paintFilterPanel(page) end
+    page.lineMenu:Hide()
     page.offset = math.min(page.offset, math.max(0, math.floor((#lines - 1) / GUILD_ROWS) * GUILD_ROWS))
-    local deaths = 0
-    for _, point in ipairs(lines) do
-        if point.kind == "death" then deaths = deaths + 1 end
+    -- The pennant: the fights come in after your last visit; nothing on a first visit.
+    if not page.seenBefore then
+        local stored = tonumber(GL.db.guildLogSeenAt)
+        page.seenBefore = stored and stored == stored and stored or math.huge
+    end
+    for _, point in ipairs(sharing and R.GuildLog({ view = "all" }) or {}) do
+        if type(point.time) == "number" and point.time > (page.newest or 0) then page.newest = point.time end
     end
     for i, row in ipairs(page.rows) do
         local point = lines[page.offset + i]
         if point then
-            local member, enemy = memberName(point), foeName(point)
             local died = point.kind == "death"
-            local story
-            if point.mine then
-                story = (died and L("Vous avez été tué par %s") or L("Vous avez tué %s")):format(enemy)
-            else
-                story = (died and L("%s a été tué par %s") or L("%s a tué %s")):format(member, enemy)
-            end
-            Panels.Fit(row.story, story, S(340), 15, 10, true)
-            if died then row.story:SetTextColor(0.55, 0.12, 0.12) else row.story:SetTextColor(0.18, 0.37, 0.20) end
-            row.mark:SetTexture(died and SKULL or SWORD)
+            local ink = died and { 0.55, 0.12, 0.12 } or { 0.18, 0.37, 0.20 }
+            Panels.Fit(row.when, elapsed(point.time), S(70), 12, 9)
+            row.mark:SetTexture(died and GL.Art.GuildLogDeath or GL.Art.GuildLogVictory)
+            Panels.Fit(row.issue, died and L("Mort") or L("Victoire"), S(80), 15, 10, true)
+            row.issue:SetTextColor(unpack(ink))
+            Panels.Fit(row.member, memberName(point), S(150), 15, 10, true)
+            Panels.Fit(row.foe, foeName(point), S(150), 15, 10, true)
             local info = mapInfo(point.mapID)
-            local zone = info and type(info.name) == "string" and UI.plain(info.name)
-            row.where:SetText(zone and (zone .. " · " .. elapsed(point.time)) or elapsed(point.time))
+            local zone = info and type(info.name) == "string" and UI.plain(info.name) or ""
+            Panels.Fit(row.where, zone, S(150), 12, 9)
+            if type(point.time) == "number" and point.time > page.seenBefore then row.pennant:Show() else row.pennant:Hide() end
             row.target, row.enemy = point.target, point.name
-            if point.target then row.sheet:Show() else row.sheet:Hide() end
             -- Wanted: only on a player known by name, and not while a notice or a bounty already runs.
             local open = point.target and GL.Bounties and GL.Bounties.OpenFor and GL.Bounties.OpenFor(point.target)
-            if point.target and point.name and not open then row.wanted:Show() else row.wanted:Hide() end
+            row.canWant = point.target ~= nil and point.name ~= nil and not open
+            if point.target or row.canWant then row.more:Show() else row.more:Hide() end
             row:Show()
         else
-            row.target, row.enemy = nil, nil
+            row.target, row.enemy, row.canWant = nil, nil, false
             row:Hide()
         end
     end
@@ -2033,12 +2919,13 @@ local function paintGuildJournal(page)
     if not inGuild then
         empty = L("Vous n’êtes dans aucune guilde : ce journal raconte les combats de la vôtre.")
     elseif not sharing then
-        empty = L("La vision de guilde est décochée. Cochez-la à gauche pour lire ce journal et y figurer.")
+        empty = L("Vous ne partagez pas vos combats avec la guilde : ce journal reste fermé. Le partage se règle dans les réglages, page Relations et JcJ.")
     elseif #lines == 0 and filtered then
         empty = L("Aucun combat ne correspond. « Effacer » dans les filtres remet tout.")
     elseif #lines == 0 then
         empty = L("Aucun combat partagé pour l’instant. Le journal se remplit quand un membre gagne ou meurt.")
     end
+    if inGuild and not sharing then page.reshare:Show() else page.reshare:Hide() end
     page.empty:SetText(empty)
     page.previous:SetEnabled(page.offset > 0)
     page.next:SetEnabled(page.offset + GUILD_ROWS < #lines)
@@ -2049,20 +2936,44 @@ local function paintGuildJournal(page)
         page.previous:Hide()
         page.next:Hide()
     end
-    page.count:SetText(#lines > 0 and L("%d combats · %d morts"):format(#lines, deaths) or "")
+    local first, last = page.offset + 1, math.min(page.offset + GUILD_ROWS, #lines)
+    page.count:SetText(#lines > 0 and L("%d–%d sur %d combats"):format(first, last, #lines) or "")
+    placeFleurons(page)
 end
 
--- The guild's enemies (0.55.0): the players who killed members of the guild, the deadliest first.
--- One line each: how many deaths, how many members, how many times the guild won, when last. The
--- Journal's list button chooses the period. A click opens the sheet; "Rechercher" posts a wanted
--- notice. Pages turn, nothing scrolls.
-local ENEMY_ROWS = 6
-local ENEMY_PERIODS = { { 0, "Toujours" }, { 30 * 86400, "30 jours" }, { 7 * 86400, "7 jours" } }
+-- The guild's enemies (0.55.0): the players who killed members of the guild, the worst threats
+-- first (R.Threat, 27/11). Each says how many deaths, how many members, how many times the guild
+-- won, when last. The Journal's list button chooses the period. A click opens the sheet;
+-- "Rechercher" posts a wanted notice. Pages turn, nothing scrolls.
+local ENEMY_PERIODS = { { 30 * 86400, "30 derniers jours" }, { 7 * 86400, "7 derniers jours" }, { 0, "Toujours" } }
+-- One killer, one key (owner, 28/11: a killer of two members split into two posters of one).
+-- Members write the same player differently: with or without the realm ("Name-Realm", "Name"),
+-- with an identity or none (never targeted). Names are compared without the realm and case; a
+-- name some report gave an identity takes that identity. Two players of the same name on two
+-- realms, both without identity, would be merged: rarer than the split, which happened.
+do
+local function baseName(name)
+    return type(name) == "string" and (name:match("^([^%-]+)") or name):lower() or nil
+end
+function R.EnemyKeys(points)
+    local byName = {}
+    for _, point in ipairs(points) do
+        local base = baseName(point.name)
+        if base and point.target then byName[base] = byName[base] or point.target end
+    end
+    return function(point)
+        local base = baseName(point.name)
+        return point.target or (base and byName[base]) or (base and "name:" .. base) or nil
+    end
+end
+end
 function R.GuildEnemies(period)
     local enemies, list = {}, {}
     local points = R.GuildLog({ view = "all", period = period or 0 })
+    -- Identities are learnt from every fight kept, not only those of the period.
+    local keyOf = R.EnemyKeys(R.GuildLog({ view = "all" }))
     for _, point in ipairs(points) do
-        local key = foeKey(point)
+        local key = point.kind == "death" and keyOf(point)
         if key and point.kind == "death" then
             local enemy = enemies[key]
             if not enemy then
@@ -2072,116 +2983,1231 @@ function R.GuildEnemies(period)
                 list[#list + 1] = enemy
             end
             enemy.deaths = enemy.deaths + 1
-            if not enemy.victims[point.actor] then
-                enemy.victims[point.actor] = true
+            -- A member who saw the killer's identity gives it, even if the first report had none;
+            -- the fullest name wins ("Name-Realm" over "Name").
+            if not enemy.target and key:sub(1, 5) ~= "name:" then enemy.target = key end
+            if point.name and (not enemy.name or #point.name > #enemy.name) then enemy.name = point.name end
+            local victim = point.actor or "?"
+            if not enemy.victims[victim] then
+                enemy.victims[victim] = {}
                 enemy.members = enemy.members + 1
             end
+            table.insert(enemy.victims[victim], point.time)
+            if point.mine then
+                enemy.mine = enemy.mine or {}
+                enemy.mine[victim] = true
+            end
+            if point.time > enemy.last then enemy.last, enemy.mapID = point.time, point.mapID end
         end
     end
     for _, point in ipairs(points) do
-        local enemy = point.kind == "kill" and enemies[foeKey(point) or ""]
-        if enemy then enemy.kills = enemy.kills + 1 end
+        local enemy = point.kind == "kill" and enemies[keyOf(point) or ""]
+        if enemy then
+            enemy.kills = enemy.kills + 1
+            enemy.avengedAt = math.max(enemy.avengedAt or 0, point.time)
+        end
+    end
+    -- Avenged: the guild killed them after their last victim (owner, 27/11: who is left to punish).
+    for _, enemy in ipairs(list) do
+        enemy.threat = R.Threat(enemy.victims)
+        enemy.avenged = (enemy.avengedAt or 0) > enemy.last
     end
     table.sort(list, function(a, b)
+        if a.threat ~= b.threat then return a.threat > b.threat end
         if a.deaths ~= b.deaths then return a.deaths > b.deaths end
         if a.last ~= b.last then return a.last > b.last end
         return a.key < b.key
     end)
     return list
 end
+-- The members an enemy killed, the latest first, by name: "Vous" for you, the guild's roster's
+-- name else, without the realm; those the roster cannot name are counted after (+2).
+function R.VictimNames(enemy, most)
+    if enemy.previewVictims then return enemy.previewVictims end
+    local order = {}
+    for member, times in pairs(enemy.victims or {}) do
+        local latest = 0
+        for _, at in ipairs(times) do latest = math.max(latest, at) end
+        order[#order + 1] = { member = member, latest = latest }
+    end
+    table.sort(order, function(a, b)
+        if a.latest ~= b.latest then return a.latest > b.latest end
+        return tostring(a.member) < tostring(b.member)
+    end)
+    local names, unnamed = {}, 0
+    for _, victim in ipairs(order) do
+        local name = enemy.mine and enemy.mine[victim.member] and L("Vous")
+            or GL.Bounties and GL.Bounties.MemberName and GL.Bounties.MemberName(victim.member)
+        if type(name) == "string" and name ~= "" and #names < most then
+            name = UI.plain(name)
+            names[#names + 1] = name:match("^[^-]+") or name
+        else
+            unnamed = unnamed + 1
+        end
+    end
+    if #names == 0 then return nil end
+    local text = table.concat(names, ", ")
+    -- A no-break space: a list that wraps never leaves "+2" alone on its line.
+    if unnamed > 0 then text = text .. "\194\160" .. L("+%d"):format(unnamed) end
+    return text
+end
+-- An enemy's open bounty or notice, and its gold (owner, 27/11: Avec une prime must show them all).
+-- By the enemy's identity; else by name, for a killer the guild never saw with an identity (the
+-- bounty then gives it, and the poster opens the sheet).
+function R.EnemyBounty(enemy)
+    if enemy.preview then
+        if enemy.previewGold then return { preview = true }, enemy.previewGold end
+        return enemy.previewNotice and { preview = true } or nil, 0
+    end
+    local B = GL.Bounties
+    if not (B and B.OpenFor) then return nil, 0 end
+    local open = enemy.target and B.OpenFor(enemy.target)
+    if not open and enemy.name and B.List then
+        local name = UI.plain(enemy.name):lower()
+        for _, o in pairs(B.List()) do
+            if (o.state == "open" or o.state == "claimed") and type(o.name) == "string" and o.name:lower() == name
+                and (o.state == "claimed" or GL.Now() <= (o.expires or 0)) then
+                open = o
+                enemy.target = enemy.target or o.target
+                break
+            end
+        end
+    end
+    return open, open and GL.BountyTotal and GL.BountyTotal(open) or 0
+end
+-- The guild's worst threats (owner, 26/11): time and harm together. Each death of a member weighs 1,
+-- halved every three weeks; the same member killed again weighs less (1, 1/2, 1/3…); and each other
+-- member killed adds half: someone who killed 3 members five weeks ago (about 1.9) still comes before
+-- someone who killed one last week (0.8), behind someone who killed 2 or 3 last week (2.4 to 4.8); a
+-- killer unseen for three months fades to nearly nothing. victims: member -> times of their deaths.
+local THREAT_HALF_LIFE = 21 * 86400
+function R.Threat(victims)
+    local now, sum, members = GL.Now(), 0, 0
+    for _, times in pairs(victims or {}) do
+        members = members + 1
+        local sorted = {}
+        for i, at in ipairs(times) do sorted[i] = at end
+        table.sort(sorted, function(a, b) return a > b end)
+        for rank, at in ipairs(sorted) do
+            sum = sum + 0.5 ^ (math.max(0, now - at) / THREAT_HALF_LIFE) / rank
+        end
+    end
+    return sum * (1 + 0.5 * math.max(0, members - 1))
+end
+-- The guild's enemies as wanted posters (owner's kit and mockup, 27/11), on your faction's tapestry
+-- spread over the whole page: the five worst threats of the page (R.Threat). The first on the tall
+-- poster, the others on smaller ones that overlap and step like papers pinned in a hurry: the size
+-- says the threat. An open bounty with gold turns its poster gold, with the prize's ribbon and seal;
+-- a notice without gold keeps the paper and shows the ribbon. A killer whose last victim is over
+-- three weeks old wears the cold-trail stamp. A click opens the sheet; a right click posts a wanted
+-- notice. Neither a text nor a 3D portrait can turn in the game: the tilt is drawn in the paper (kit
+-- v5), the writing stands straight inside the paper's printed frame (GL.Art.WantedText).
+local WANTED, RATIO, ZONE = GL.Art.Wanted, GL.Art.WantedRatio, GL.Art.WantedText
+local COLD_AFTER = 21 * 86400
+local POSTER_FILTERS = { { "all", "Toutes les affiches" }, { "bounty", "Avec une prime" }, { "plain", "Sans prime" } }
+-- The posters by rank, after the owner's mockup (28/11): the first tall on the left, the four
+-- others alike in two rows. A paper is h tall unless that makes it wider than w: a square paper is
+-- then shorter (188), a tribal one keeps its height and its rows overlap by their painted margins.
+local SIZES = {
+    { kind = "hero", h = 380, w = 300 }, { kind = "medium", h = 204, w = 184 },
+    { kind = "compact", h = 204, w = 184 }, { kind = "compact", h = 204, w = 184 }, { kind = "compact", h = 204, w = 184 },
+}
+local ENEMY_ROWS = #SIZES
+local PAPER = { hero = "Grande", medium = "Carree", compact = "Carree" }
+-- Where posters may go on the page (its 664 x 510): under the head, above the foot.
+local BOARD = { left = 6, right = 660, top = -86, bottom = -478 }
+-- The writing's sizes at full scale (a paper with little plain room gets them smaller, paintPoster);
+-- gap is the room between two figures.
+local STYLE = {
+    hero = { title = 30, name = 24, number = 22, label = 16, face = 104, medal = 58, rank = 26, icon = 22, gap = 4 },
+    medium = { title = 16, name = 16, number = 15, label = 12, face = 56, medal = 34, rank = 15, icon = 13, gap = 2 },
+    compact = { title = 16, name = 16, number = 15, label = 12, face = 56, medal = 34, rank = 15, icon = 13, gap = 2 },
+}
+local POSTER_RED, POSTER_INK, POSTER_MUTED = { 0.6, 0.09, 0.06 }, { 0.17, 0.1, 0.05 }, { 0.3, 0.2, 0.11 }
+local CLOTH_IVORY, MEDAL_IVORY = { 0.97, 0.92, 0.8 }, { 1, 0.93, 0.74 }
+local RANK_GOLD = { 1, 0.8, 0.4 }
+local STAMP_INK, AVENGED_INK = { 0.36, 0.22, 0.45 }, { 0.55, 0.1, 0.07 }
+-- Capitals for the poster's headings, accents included (string.upper leaves é alone).
+local CAPITALS = { ["à"] = "À", ["â"] = "Â", ["ä"] = "Ä", ["á"] = "Á", ["ã"] = "Ã", ["é"] = "É", ["è"] = "È", ["ê"] = "Ê",
+    ["ë"] = "Ë", ["í"] = "Í", ["î"] = "Î", ["ï"] = "Ï", ["ó"] = "Ó", ["ô"] = "Ô", ["ö"] = "Ö", ["õ"] = "Õ", ["ú"] = "Ú",
+    ["û"] = "Û", ["ü"] = "Ü", ["ç"] = "Ç", ["ñ"] = "Ñ" }
+local function capitals(text)
+    text = text:upper()
+    for small, big in pairs(CAPITALS) do text = text:gsub(small, big) end
+    return text
+end
+local function wantedTexture(parent, layer, sub, name)
+    local t = parent:CreateTexture(nil, layer, nil, sub)
+    if name then t:SetTexture(WANTED .. name) end
+    return t
+end
+-- A heading that stands out of the paper or the cloth: a dark shadow under the letters.
+local function shadowed(label, alpha)
+    GL.Safe(label.SetShadowColor, label, 0, 0, 0, alpha or 0.75)
+    GL.Safe(label.SetShadowOffset, label, 1, -1)
+end
+local function fit(label, text, width, biggest, smallest, bold, shadow, face)
+    if face then
+        -- A display font of Media\Fonts: smaller until the text fits its line.
+        GL.Safe(label.SetWordWrap, label, false)
+        label:SetText(text or "")
+        local size = biggest
+        UI.journalFont(label, "GameFontNormalLarge", size, face)
+        while size > smallest and (GL.Safe(label.GetStringWidth, label) or 0) > width do
+            size = size - 1
+            UI.journalFont(label, "GameFontNormalLarge", size, face)
+        end
+    else
+        Panels.Fit(label, text, width, biggest, smallest, bold)
+    end
+    if shadow then shadowed(label, shadow) end
+end
+-- The posters' display fonts by the faction that posts them (owner, 28/11; SIL OFL, Media\Fonts):
+-- the Horde tribal, Skranji Bold's hewn letters for its titles, names and figures; the Alliance
+-- noble, Cinzel Decorative for its titles, its names and figures in the book's bold serif (Cinzel's
+-- 1 reads as an I). The page's own title takes its faction's title face.
+R.Faces = { Horde = { title = "Skranji-Bold", name = "Skranji-Bold", number = "Skranji-Bold" },
+    Alliance = { title = "CinzelDecorative-Bold" } }
+-- A figure of the poster: its pictogram, the number in bold, the words after it. Its sizes are
+-- set when the poster is painted (figure.size).
+local function posterFigure(p, icon)
+    local figure = { iconName = icon }
+    figure.icon = wantedTexture(p, "ARTWORK", 2, icon)
+    figure.number = Panels.Text(p, 0, 0, 60, 12, true, POSTER_INK)
+    figure.words = Panels.Text(p, 0, 0, 100, 11, false, POSTER_INK)
+    return figure
+end
+-- The figures as on the owner's mockup (28/11): lines (p.rows), each with its pictogram, the
+-- pictograms one under the other, the words of one size. A number stands in its own column; a line
+-- without a number starts where the numbers are. A line keeps to itself, the words smaller down to
+-- size.least; past that they wrap on two lines, never cut. Returns where the next line would start
+-- and how wide the figures are.
+local function placeFigures(p, x, y, width)
+    local iconW, numberW = 0, 0
+    for _, figure in ipairs(p.rows) do
+        iconW = math.max(iconW, figure.icon:GetWidth())
+        if (figure.number:GetText() or "") ~= "" then
+            numberW = math.max(numberW, GL.Safe(figure.number.GetStringWidth, figure.number) or 10)
+        end
+    end
+    local numberX = x + iconW + 5
+    local wordsX = numberX + math.ceil(numberW) + (numberW > 0 and 4 or 0)
+    local function startOf(figure) return (figure.number:GetText() or "") ~= "" and wordsX or numberX end
+    -- One size for the words of every figure: the largest at which each keeps to its line.
+    local labelSize = p.rows[1].size.label
+    for _, figure in ipairs(p.rows) do
+        local room = math.max(20, x + width - startOf(figure))
+        GL.Safe(figure.words.SetWordWrap, figure.words, false)
+        UI.journalFont(figure.words, "GameFontHighlight", labelSize, figure.italic)
+        while labelSize > figure.size.least and (GL.Safe(figure.words.GetStringWidth, figure.words) or 0) > room do
+            labelSize = labelSize - 1
+            UI.journalFont(figure.words, "GameFontHighlight", labelSize, figure.italic)
+        end
+    end
+    local right = wordsX
+    for _, figure in ipairs(p.rows) do
+        local size, start = figure.size, startOf(figure)
+        local room = math.max(20, x + width - start)
+        figure.icon:ClearAllPoints()
+        figure.icon:SetPoint("CENTER", p, "TOPLEFT", x + iconW / 2, y - size.line / 2)
+        figure.number:ClearAllPoints()
+        figure.number:SetPoint("TOPLEFT", p, "TOPLEFT", numberX, y)
+        figure.number:SetWidth(math.max(10, math.ceil(numberW) + 2))
+        UI.journalFont(figure.words, "GameFontHighlight", labelSize, figure.italic)
+        local wordsW = GL.Safe(figure.words.GetStringWidth, figure.words) or 0
+        local lines = wordsW > room and 2 or 1
+        GL.Safe(figure.words.SetWordWrap, figure.words, lines > 1)
+        local step = (labelSize + 2) * size.reading
+        figure.words:ClearAllPoints()
+        figure.words:SetPoint("TOPLEFT", p, "TOPLEFT", start, y - math.max(0, (size.line - step) / 2))
+        figure.words:SetWidth(room)
+        right = math.max(right, start + math.min(room, wordsW))
+        y = y - math.max(size.line, lines * step) - size.gap
+    end
+    return y, right - x
+end
+-- The posters' layout: drawn from the enemies on the page, so it stays put while they stay, and
+-- changes when one arrives or leaves. The first keeps the left; the others follow in the order of
+-- their rank, two above and two below, each with its paper, its tilt, a nudge and its pin. A layout
+-- is kept only if every poster stays readable: no paper, medal or pin over another's writing; after
+-- eleven draws, the corners without nudges (always readable). A block of its own: Lua 5.1 counts the
+-- file's locals.
+do
+local function hashOf(text)
+    local h = 7
+    for i = 1, #text do h = (h * 31 + text:byte(i)) % 2147483647 end
+    return h
+end
+local function lot(seed)
+    local s = seed % 2147483646 + 1
+    -- The draw's high part decides (its low digits repeat in short cycles).
+    return function(n)
+        s = s * 16807 % 2147483647
+        return math.floor(s / 2147483647 * n)
+    end
+end
+local function zoneOf(spot)
+    local z = ZONE[spot.paper]
+    return { spot.x + z[1] * spot.w, spot.y - z[2] * spot.h, spot.x + spot.w * (1 - z[3]), spot.y - spot.h * (1 - z[4]) }
+end
+-- The paper itself, inside its drawn shadow and torn edge.
+local function bodyOf(spot)
+    local dx, dy = spot.w * 0.06, spot.h * 0.06
+    return { spot.x + dx, spot.y - dy, spot.x + spot.w - dx, spot.y - spot.h + dy }
+end
+local function medalOf(spot)
+    local m = STYLE[spot.kind].medal
+    local left = spot.medalSide == "right" and spot.x + spot.w + m * 0.22 - m or spot.x - m * 0.22
+    return { left, spot.y + m * 0.2, left + m, spot.y + m * 0.2 - m }
+end
+-- A forged nail (v6): about a fifth of its paper's width (owner, 27/11: bigger, fatter), its point near the paper's top middle,
+-- where the paper's turn takes it. Returns the nail's rectangle and where its point goes.
+local NAIL = GL.Art.WantedNail
+function R.NailOf(spot)
+    local a = math.rad(spot.turn or 0)
+    local d = spot.h / 2 - math.max(9, spot.h * 0.075)
+    local px = spot.x + spot.w / 2 + spot.pinX + math.sin(a) * d
+    local py = spot.y - (spot.h / 2 - math.cos(a) * d)
+    local nh = math.floor(spot.w * (spot.kind == "hero" and 0.19 or 0.17) + 0.5)
+    local nw = math.floor(nh * RATIO[spot.pin] + 0.5)
+    local left, top = px - NAIL[spot.pin][1] * nw, py + NAIL[spot.pin][2] * nh
+    return { left, top, left + nw, top - nh }, px, py
+end
+local pinOf = R.NailOf
+-- Rectangles as { left, top, right, bottom }, the page's y going down (negative).
+local function crosses(a, b) return a[1] < b[3] and b[1] < a[3] and a[4] < b[2] and b[4] < a[2] end
+local function readable(spots)
+    for i, a in ipairs(spots) do
+        for j, b in ipairs(spots) do
+            if i ~= j then
+                local zone = zoneOf(b)
+                -- A poster lies over those after it; the medals and the pins over every paper.
+                if i < j and crosses(bodyOf(a), zone) then return false end
+                if crosses(medalOf(a), zone) or crosses(pinOf(a), zone) then return false end
+            end
+        end
+    end
+    return true
+end
+-- The papers by the faction that posts (owner, 28/11): an Alliance guild posts on its peoples'
+-- papers, a Horde guild on tribal ones. "+" marks a paper of one size and no gold edition. Kept:
+-- the tribal papers whose plain middle carries a poster's writing at a readable size.
+local STYLES = {
+    Alliance = { "Humain", "ElfeNuit", "ElfeSang", "Aerien", "Roublard", "Demoniste" },
+    Horde = { "+OrcChef", "+OrcGuerre", "+TrollMarais", "+GnollMarais", "+GnollRavins", "+OgreChef", "Tauren", "MortVivant" },
+}
+local function paperOf(style, kind, bounty)
+    if style:sub(1, 1) == "+" then return "Affiche" .. style:sub(2) end
+    return (bounty and "Prime" or "Affiche") .. style .. PAPER[kind]
+end
+local function arrange(items, roll, nudge, faction)
+    local styles = STYLES[faction] or STYLES.Alliance
+    local spots, taken = {}, {}
+    for i, item in ipairs(items) do
+        local size = SIZES[i]
+        local family = hashOf(tostring(item.key)) % #styles + 1
+        while taken[family] do family = family % #styles + 1 end
+        taken[family] = true
+        local paper = paperOf(styles[family], size.kind, item.bounty)
+        local spot = { kind = size.kind, h = size.h, paper = paper, level = 20 * (ENEMY_ROWS + 1 - i), medalSide = "left" }
+        local nail = roll(4)
+        spot.pin = nail < 2 and "ClouFace" or nail == 2 and "ClouGauche" or "ClouDroite"
+        -- The paper turns one way or the other: 2 to 3 degrees for the first, 1.5 to 2.5 for the
+        -- others (small writing blurs as it turns).
+        spot.turn = (roll(2) == 0 and -1 or 1) * ((i == 1 and 2 or 1.5) + roll(3) * 0.5) * (nudge > 0 and 1 or 0.8)
+        spot.w = math.floor(size.h * RATIO[paper] + 0.5)
+        if spot.w > size.w then
+            spot.w = size.w
+            spot.h = math.floor(size.w / RATIO[paper] + 0.5)
+        end
+        spot.pinX = (roll(9) - 4) * math.floor(spot.w / 40) * nudge
+        spots[i] = spot
+    end
+    local first = spots[1]
+    if not first then return spots end
+    first.x = BOARD.left + 2 + roll(9) * nudge
+    first.y = BOARD.top - roll(9) * nudge
+    -- The others read in order (design critique, 28/11): the second and third above, the fourth and
+    -- fifth below, with even room left, between and right of each pair; the disorder is in the
+    -- tilts, the nails and a few units of nudge, not in the order.
+    local left = first.x + first.w - 10
+    for row = 0, 1 do
+        local a, b = spots[2 + 2 * row], spots[3 + 2 * row]
+        if a then
+            local room = BOARD.right - left - a.w - (b and b.w or 0)
+            local gutter = math.max(-8, math.floor(room / 3))
+            a.x = left + math.max(0, gutter) + (roll(7) - 3) * nudge
+            if b then b.x = math.min(BOARD.right - b.w, a.x + a.w + gutter + (roll(7) - 3) * nudge) end
+            for _, spot in ipairs({ a, b }) do
+                -- What the two rows leave in height is shared between them.
+                local other = spots[(row == 0 and 4 or 2) + (spot == b and 1 or 0)]
+                local spare = math.max(0, BOARD.top - BOARD.bottom - spot.h - (other and other.h or 0))
+                local dy = roll(math.floor(spare / 3) + 1) * nudge
+                spot.y = row == 0 and BOARD.top - dy or BOARD.bottom + spot.h + dy
+            end
+        end
+    end
+    return spots
+end
+function R.PosterLayout(items, faction)
+    local seed = 7
+    for _, item in ipairs(items) do seed = hashOf(seed .. "|" .. tostring(item.key)) end
+    local spots
+    for try = 1, 12 do
+        spots = arrange(items, lot(seed + try), try < 12 and 1 or 0, faction)
+        if readable(spots) then return spots, true end
+    end
+    return spots, false
+end
+R.PosterReadable = readable
+end
+local function buildPoster(page, index)
+    local kind = SIZES[index].kind
+    local style = STYLE[kind]
+    local p = CreateFrame("Frame", nil, page)
+    p:SetSize(100, 100)
+    p.kind, p.style = kind, style
+    p.paper = wantedTexture(p, "BACKGROUND", 1)
+    p.paper:SetAllPoints()
+    -- The paper lights up under the pointer: a click opens the sheet (design critique, 28/11).
+    p.glow = wantedTexture(p, "BACKGROUND", 2)
+    GL.Safe(p.glow.SetBlendMode, p.glow, "ADD")
+    p.glow:SetAlpha(0.14)
+    p.glow:Hide()
+    -- The medal and the pin stay above every paper, even where a neighbour overlaps.
+    p.badge = CreateFrame("Frame", nil, p)
+    p.badge:SetAllPoints()
+    GL.Safe(p.badge.SetFrameLevel, p.badge, (GL.Safe(page.GetFrameLevel, page) or 1) + 130)
+    p.pin = wantedTexture(p.badge, "OVERLAY", 3)
+    p.medal = wantedTexture(p.badge, "OVERLAY", 2, kind == "hero" and "MedaillonUn" or "Medaillon")
+    p.medal:SetSize(style.medal, style.medal)
+    p.rank = Panels.Text(p.badge, 0, 0, style.medal, style.rank, true, RANK_GOLD)
+    p.rank:SetDrawLayer("OVERLAY", 7)
+    p.rankHash = Panels.Text(p.badge, 0, 0, 20, math.floor(style.rank * 0.62 + 0.5), true, RANK_GOLD)
+    p.rankHash:SetDrawLayer("OVERLAY", 7)
+    p.title = Panels.Text(p, 0, 0, 100, style.title, true, POSTER_RED)
+    p.title:SetJustifyH("CENTER")
+    if kind == "hero" then
+        p.label = wantedTexture(p, "ARTWORK", 1, "Cartouche")
+        p.labelText = Panels.Text(p, 0, 0, 100, 12, true, POSTER_INK)
+        p.labelText:ClearAllPoints()
+        p.labelText:SetPoint("CENTER", p.label, "CENTER", 0, 0)
+        p.labelText:SetJustifyH("CENTER")
+        p.labelText:SetDrawLayer("OVERLAY", 7)
+    end
+    p.name = Panels.Text(p, 0, 0, 100, style.name, true, POSTER_INK)
+    p.name:SetJustifyH("CENTER")
+    local face = CreateFrame("Frame", nil, p)
+    face:SetSize(style.face, style.face)
+    face.raceIcon = face:CreateTexture(nil, "ARTWORK")
+    face.raceIcon:SetAllPoints()
+    face.classIcon = face:CreateTexture(nil, "OVERLAY")
+    face.classIcon:SetSize(math.floor(style.face / 4.5), math.floor(style.face / 4.5))
+    face.classIcon:SetPoint("BOTTOMRIGHT")
+    p.face = face
+    -- Who they killed, how many, and where the guild last met them: three lines, each its pictogram.
+    p.figures = { posterFigure(p, "IconeMembres"), posterFigure(p, "IconeCrane"), posterFigure(p, "IconeLieu") }
+    p.figures[3].italic = true
+    p.seen = p.figures[3].words
+    -- The cold-trail stamp: in the ribbon's place, or across the portrait when a ribbon is there.
+    p.stamp = CreateFrame("Frame", nil, p)
+    p.stamp:SetSize(100, 25)
+    p.stamp:SetFrameLevel(face:GetFrameLevel() + 6)
+    p.stamp.ink = wantedTexture(p.stamp, "OVERLAY", 1, "Tampon")
+    p.stamp.ink:SetAllPoints()
+    p.stamp.words = Panels.Text(p.stamp, 8, -5, 84, style.label + 1, true, STAMP_INK)
+    p.stamp.words:SetJustifyH("CENTER")
+    p.stamp.words:SetDrawLayer("OVERLAY", 7)
+    p.ribbon = wantedTexture(p, "ARTWORK", 3, "Bandeau")
+    p.prize = Panels.Text(p, 0, 0, 100, style.label + 2, true, MEDAL_IVORY)
+    p.prize:ClearAllPoints()
+    p.prize:SetPoint("CENTER", p.ribbon, "CENTER", -6, 1)
+    p.prize:SetJustifyH("CENTER")
+    p.prize:SetDrawLayer("OVERLAY", 7)
+    p.seal = wantedTexture(p, "OVERLAY", 4, "SceauPrime")
+    p.seal:SetPoint("CENTER", p.ribbon, "RIGHT", -8, 0)
+    -- The whole paper takes the clicks, the portrait included (owner, 27/11: no button): a click opens
+    -- the sheet, a right click posts a notice.
+    p.hit = CreateFrame("Button", nil, p)
+    GL.Safe(p.hit.RegisterForClicks, p.hit, "LeftButtonUp", "RightButtonUp")
+    p.hit:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then
+            if p.canWant then wanted(p) end
+        else
+            openOpponent(p)
+        end
+    end)
+    p.hit:SetScript("OnEnter", function(hit)
+        local self = p
+        if self.target then self.glow:Show() end
+        if not GameTooltip or not self.enemy then return end
+        GameTooltip:SetOwner(hit, "ANCHOR_RIGHT")
+        GameTooltip:SetText(UI.plain(self.enemy))
+        if self.where then GameTooltip:AddLine(self.where, 1, 1, 1, true) end
+        if self.deaths then GameTooltip:AddLine(self.deaths, 1, 1, 1, true) end
+        if self.kills then GameTooltip:AddLine(self.kills, 1, 1, 1, true) end
+        if self.target then GameTooltip:AddLine(L("Clic : ouvrir la fiche"), 0.8, 0.8, 0.8) end
+        if self.canWant then GameTooltip:AddLine(L("Clic droit : poser un avis de recherche"), 0.8, 0.8, 0.8) end
+        GameTooltip:Show()
+    end)
+    p.hit:SetScript("OnLeave", function(hit)
+        p.glow:Hide()
+        if GameTooltip and GameTooltip:GetOwner() == hit then GameTooltip:Hide() end
+    end)
+    -- The ribbon of a bounty opens it in Primes (owner, 28/11); over the paper's click area.
+    p.prizeHit = CreateFrame("Button", nil, p.hit)
+    p.prizeHit:SetAllPoints(p.ribbon)
+    p.prizeHit:SetScript("OnClick", function()
+        if p.bountyTarget and GL.OpenBounties then GL.OpenBounties(p.bountyTarget) end
+    end)
+    p.prizeHit:SetScript("OnEnter", function(hit)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(hit, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L("Clic : voir la prime"))
+        GameTooltip:Show()
+    end)
+    p.prizeHit:SetScript("OnLeave", function(hit) if GameTooltip and GameTooltip:GetOwner() == hit then GameTooltip:Hide() end end)
+    p.prizeHit:Hide()
+    return p
+end
+-- A poster on its spot: its paper, then everything measured from the paper's writing zone. cx moves
+-- what is centred to the middle of that zone (the frame of a tilted paper is not quite centred).
+local function placePoster(page, p, spot)
+    local style, w, h = p.style, spot.w, spot.h
+    p:ClearAllPoints()
+    p:SetPoint("TOPLEFT", page, "TOPLEFT", spot.x, spot.y)
+    p:SetSize(w, h)
+    GL.Safe(p.SetFrameLevel, p, (GL.Safe(page.GetFrameLevel, page) or 1) + spot.level)
+    -- Back to straight and to their own anchors before the layout (R.TiltPoster turned them last time).
+    for _, region in ipairs(R.PosterRegions(p)) do GL.Safe(region.SetRotation, region, 0) end
+    for _, art in ipairs({ p.face.portraitRim, p.face.raceIcon }) do
+        if art then GL.Safe(art.SetRotation, art, 0) end
+    end
+    -- A kit's gold band (R.HeadKit) takes its words at its middle, without the coin's seal.
+    local band = R.HeadKit[page.faction] and R.HeadKit[page.faction].band
+    p.band = band
+    p.ribbon:SetTexture(WANTED .. (band or "Bandeau"))
+    p.prize:ClearAllPoints()
+    p.prize:SetPoint("CENTER", p.ribbon, "CENTER", band and 0 or -6, 1)
+    p.seal:ClearAllPoints()
+    p.seal:SetPoint("CENTER", p.ribbon, "RIGHT", -8, 0)
+    if p.labelText then
+        p.labelText:ClearAllPoints()
+        p.labelText:SetPoint("CENTER", p.label, "CENTER", 0, 0)
+    end
+    p.stamp.ink:ClearAllPoints()
+    p.stamp.ink:SetAllPoints(p.stamp)
+    p.stamp.words:ClearAllPoints()
+    p.stamp.words:SetPoint("CENTER", p.stamp, "CENTER", 0, 0)
+    p.paper:SetTexture(WANTED .. spot.paper)
+    -- The paper turns in a larger square of the texture (its clear edge stretches around it): every
+    -- corner of the region shows the point of the drawing turned back by the angle.
+    local e = math.floor(math.max(w, h) * 0.05 + 0.5)
+    p.paper:ClearAllPoints()
+    p.paper:SetPoint("TOPLEFT", p, "TOPLEFT", -e, e)
+    p.paper:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", e, -e)
+    local a = math.rad(spot.turn or 0)
+    local c, s = math.cos(a), math.sin(a)
+    local coords = {}
+    for _, corner in ipairs({ { -1, -1 }, { -1, 1 }, { 1, -1 }, { 1, 1 } }) do
+        local rx, ry = corner[1] * (w / 2 + e), corner[2] * (h / 2 + e)
+        coords[#coords + 1] = 0.5 + (c * rx + s * ry) / w
+        coords[#coords + 1] = 0.5 + (-s * rx + c * ry) / h
+    end
+    GL.Safe(p.paper.SetTexCoord, p.paper, unpack(coords))
+    p.glow:SetTexture(WANTED .. spot.paper)
+    p.glow:ClearAllPoints()
+    p.glow:SetAllPoints(p.paper)
+    GL.Safe(p.glow.SetTexCoord, p.glow, unpack(coords))
+    local z = ZONE[spot.paper]
+    p.mx, p.top, p.bottom = math.floor(z[1] * w + 0.5), math.floor(z[2] * h + 0.5), math.floor(z[4] * h + 0.5)
+    p.inner = w - p.mx - math.floor(z[3] * w + 0.5)
+    -- Straight writing on a turned paper keeps off the corners the turn moves.
+    local zh = h - p.top - p.bottom
+    local ix, iy = math.ceil(zh * math.abs(s) / 4), math.ceil(p.inner * math.abs(s) / 4)
+    p.mx, p.inner, p.top, p.bottom = p.mx + ix, p.inner - 2 * ix, p.top + iy, p.bottom + iy
+    -- The heading starts under the nail's point.
+    p.top = math.max(p.top, math.floor(math.max(9, h * 0.075) + 3))
+    p.cx = math.floor(p.mx + p.inner / 2 - w / 2 + 0.5)
+    p.pin:SetTexture(WANTED .. spot.pin)
+    local nail = R.NailOf(spot)
+    p.pin:SetSize(nail[3] - nail[1], nail[2] - nail[4])
+    p.pin:ClearAllPoints()
+    p.pin:SetPoint("TOPLEFT", p, "TOPLEFT", nail[1] - spot.x, nail[2] - spot.y)
+    local m = style.medal
+    p.medal:ClearAllPoints()
+    if spot.medalSide == "right" then p.medal:SetPoint("TOPRIGHT", p, "TOPRIGHT", math.floor(m * 0.22), math.floor(m * 0.2))
+    else p.medal:SetPoint("TOPLEFT", p, "TOPLEFT", -math.floor(m * 0.22), math.floor(m * 0.2)) end
+    -- The stamp and the ribbon go by the paper's width: they sit at its foot, over its bottom margin.
+    local stampW = math.floor(math.min(w * 0.5, p.inner * 0.8))
+    p.stamp:SetSize(stampW, math.floor(stampW / RATIO.Tampon + 0.5))
+    p.stamp.words:SetWidth(stampW - 14)
+    -- Narrower on the tall poster: at full width its ribbon would outweigh the writing.
+    local ribbonW = math.floor(p.kind == "hero" and math.min(w * 0.64, p.inner) or math.min(w * 0.72, p.inner + 10))
+    -- A kit's band is lower for its length and writes between its two folded ends: wider, so the
+    -- bounty reads as large as on the red ribbon.
+    if p.band then ribbonW = math.floor(p.kind == "hero" and math.min(w * 0.78, p.inner + 12) or math.min(w * 0.92, p.inner + 30)) end
+    p.ribbon:SetSize(ribbonW, math.floor(ribbonW / RATIO[p.band or "Bandeau"] + 0.5))
+    local seal = math.floor(ribbonW / RATIO.Bandeau * 1.15 + 0.5)
+    p.seal:SetSize(seal, seal)
+    p.prize:SetWidth(ribbonW - 34)
+    -- The poster's own layers follow it when it moves above or under a neighbour: the portrait just
+    -- over the paper, the stamp over the portrait, the click area over everything.
+    local level = GL.Safe(p.GetFrameLevel, p) or 1
+    GL.Safe(p.face.SetFrameLevel, p.face, level + 1)
+    GL.Safe(p.stamp.SetFrameLevel, p.stamp, level + 8)
+    p.hit:ClearAllPoints()
+    p.hit:SetAllPoints()
+    GL.Safe(p.hit.SetFrameLevel, p.hit, level + 15)
+    GL.Safe(p.prizeHit.SetFrameLevel, p.prizeHit, level + 16)
+end
+-- The page's own pieces where a faction has them (the Alliance's integration kit, owner 28/11): the
+-- crest hung on the border's rule, a field for each choice, a divider under the head, a plaque for
+-- the ranks, a gold band for the bounties. Not the kit's large head plate (owner, 28/11). A faction
+-- without them keeps the banner, the book's dark buttons, the gold rule, the medals and the red
+-- ribbon.
+R.HeadKit = { Alliance = { crest = "EcussonAlliance", field = "ChampAlliance", rank = "RangAlliance", band = "BandeauAlliance",
+    divider = "SeparateurAlliance" } }
+-- A choice of the page's head (owner, 28/11: the addon's own look, not a style of its own): one of
+-- the book's dark buttons, as in its left column, its words on the left, the kit's gold chevron on
+-- the right; under it, the choices in the guild journal's small menu. b.field is the kit's face,
+-- over the button's own (R.HeadKit).
+local function chooser(page, options, current, choose)
+    local width = 168
+    local b = UI.button(page, "", 0, 0, width, nil, nil, false)
+    -- Without the two clear pixels around the drawing (a sixteenth of this low texture's height).
+    b.field = b:CreateTexture(nil, "ARTWORK", nil, 1)
+    b.field:SetAllPoints()
+    b.field:SetTexCoord(2 / 256, 254 / 256, 2 / 32, 30 / 32)
+    b.field:Hide()
+    b.fieldLight = b:CreateTexture(nil, "HIGHLIGHT")
+    b.fieldLight:SetAllPoints()
+    b.fieldLight:SetTexCoord(2 / 256, 254 / 256, 2 / 32, 30 / 32)
+    GL.Safe(b.fieldLight.SetBlendMode, b.fieldLight, "ADD")
+    b.fieldLight:SetAlpha(0)
+    b.caption:ClearAllPoints()
+    b.caption:SetPoint("LEFT", b, "LEFT", 12, 0)
+    b.caption:SetWidth(width - 36)
+    b.caption:SetJustifyH("LEFT")
+    b.arrow = wantedTexture(b, "OVERLAY", 1, "Chevron")
+    b.arrow:SetSize(12, math.floor(12 / RATIO.Chevron + 0.5))
+    b.arrow:SetPoint("RIGHT", b, "RIGHT", -11, -1)
+    local menu = CreateFrame("Frame", nil, page)
+    menu:SetSize(width, 12 + #options * 30)
+    menu:EnableMouse(true)
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:SetToplevel(true)
+    UI.surface(menu, UI.theme.gold)
+    UI.surface(menu, UI.theme.panel, 1)
+    menu:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -2)
+    menu.choices = {}
+    for i, option in ipairs(options) do
+        menu.choices[i] = UI.button(menu, L(option[2]), 6, -6 - (i - 1) * 30, width - 12, function()
+            menu:Hide()
+            choose(i)
+        end, true)
+    end
+    menu:Hide()
+    b.menu = menu
+    b:SetScript("OnClick", function()
+        if menu:IsShown() then menu:Hide() return end
+        for i, choice in ipairs(menu.choices) do UI.selectButton(choice, i == current()) end
+        menu:Show()
+        menu:Raise()
+    end)
+    b:HookScript("OnHide", function() menu:Hide() end)
+    return b
+end
+-- The page's border (owner, 28/11: the gold rules never met exactly, and the fourth flourish lay over
+-- the book's own ornament). One rule, drawn by one piece of the kit (the top edge, turned for the
+-- three other sides, so the four are alike), from corner to corner of a rectangle GAP inside the
+-- book's own rules; the cloth shows between the two. The flourishes have no rule of their own any
+-- more (the import cuts their stubs): each lies over the rule's corner, by the place its stubs had
+-- (GL.Art.WantedRule). At the bottom right the two rules end under the book's ornament, which holds
+-- that corner alone. BOOK_RULE: how far outside the cloth the book's rule is (measured on the
+-- render). The Horde's iron corners are drawn smaller, as on the owner's mockup.
+do
+local GAP = 11
+local BOOK_RULE = { top = 0.94, right = 0.18, bottom = 1.46, left = 0.42 }
+local CORNER = { Alliance = 70, Horde = 52 }
+local RULE = GL.Art.WantedRule
+function R.LayEnemyBorder(page, faction)
+    local c = CORNER[faction] or CORNER.Alliance
+    -- A side's piece is w thick, its rule o from its outer side; h, half the rule's own thickness,
+    -- squares the rectangle's corners.
+    local w = c * 96 / 288
+    local o, h = RULE["Bord" .. faction .. "Haut"] * w, w * 0.1
+    local l, t, r, b = GAP - BOOK_RULE.left, GAP - BOOK_RULE.top, GAP - BOOK_RULE.right, GAP - BOOK_RULE.bottom
+    local cloth = page.cloth
+    local sides = {
+        top = { "TOPLEFT", l - h, o - t, "TOPRIGHT", h - r, o - t - w },
+        bottom = { "BOTTOMLEFT", l - h, b - o + w, "BOTTOMRIGHT", h - r, b - o },
+        left = { "TOPLEFT", l - o, h - t, "BOTTOMLEFT", l - o + w, b - h },
+        right = { "TOPRIGHT", o - r - w, h - t, "BOTTOMRIGHT", o - r, b - h },
+    }
+    for side, piece in pairs(page.sides) do
+        local at = sides[side]
+        piece:SetTexture(WANTED .. "Bord" .. faction .. "Haut")
+        piece:ClearAllPoints()
+        piece:SetPoint("TOPLEFT", cloth, at[1], at[2], at[3])
+        piece:SetPoint("BOTTOMRIGHT", cloth, at[4], at[5], at[6])
+    end
+    for name, piece in pairs(page.corners) do
+        local at = RULE["Coin" .. faction .. name]
+        local x, y = at[1] * c, at[2] * c
+        piece:SetTexture(WANTED .. "Coin" .. faction .. name)
+        piece:SetSize(c, c)
+        piece:ClearAllPoints()
+        if name == "HG" then piece:SetPoint("TOPLEFT", cloth, "TOPLEFT", l - x, y - t)
+        elseif name == "HD" then piece:SetPoint("TOPLEFT", cloth, "TOPRIGHT", -r - x, y - t)
+        else piece:SetPoint("TOPLEFT", cloth, "BOTTOMLEFT", l - x, b + y) end
+    end
+end
+end
 local function buildEnemies(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
-    page.title = Panels.Text(page, X(26), -18, S(400), 21, true)
-    page.lead = Panels.Text(page, X(26), -47, S(540), 13, false, UI.theme.inkMuted)
-    page.period, page.offset = 1, 0
-    page.viewCycle = UI.button(page, "", X(26), -72, S(196), function()
-        page.period, page.offset = page.period % #ENEMY_PERIODS + 1, 0
+    -- The tapestry covers the book's whole page, its parchment and torn edges included.
+    page.cloth = page:CreateTexture(nil, "BACKGROUND", nil, -2)
+    -- Measured on the book's painting (owner, 27/11): from the divider's rule to the frame's, from the
+    -- head's rule to the foot's, so the book's gold rules stay over it and no parchment shows.
+    page.cloth:SetPoint("TOPLEFT", -20, 7)
+    page.cloth:SetPoint("BOTTOMRIGHT", 35, -12)
+    -- The border (owner, 27/11: part of the design): the kit's gold rule along the four sides and a
+    -- flourish over three of its corners; R.LayEnemyBorder places them for the faction. The top
+    -- edge's piece draws every side: as it is, upside down, or turned a quarter (its outer side
+    -- outwards), without the clear pixels at its two ends (4 of 64).
+    page.sides, page.corners = {}, {}
+    for side, coords in pairs({ top = { 0.0625, 0.9375, 0, 1 }, bottom = { 0.0625, 1, 0.0625, 0, 0.9375, 1, 0.9375, 0 },
+        left = { 0.0625, 0, 0.9375, 0, 0.0625, 1, 0.9375, 1 }, right = { 0.0625, 1, 0.9375, 1, 0.0625, 0, 0.9375, 0 } }) do
+        page.sides[side] = page:CreateTexture(nil, "BACKGROUND", nil, 0)
+        page.sides[side]:SetTexCoord(unpack(coords))
+    end
+    for _, name in ipairs({ "HG", "HD", "BG" }) do page.corners[name] = page:CreateTexture(nil, "BACKGROUND", nil, 1) end
+    -- The book's frame reaches over the page at the bottom right: its ornament drawn again over the
+    -- tapestry, cut from the book's painting (tools/import_wanted_kit.py), at its place in the book.
+    page.frameCorner = wantedTexture(page, "BACKGROUND", 2, "CadreCoinBD")
+    page.frameCorner:SetSize(64, 64)
+    page.frameCorner:SetPoint("TOPLEFT", page, "TOPLEFT", 640, -466)
+    -- The faction's arms woven into the cloth, faint, at the right where the posters leave room.
+    page.marks = {}
+    for i, at in ipairs({ { 618, -150, 78 }, { 626, -400, 66 } }) do
+        local mark = page:CreateTexture(nil, "BACKGROUND", nil, -1)
+        mark:SetPoint("CENTER", page, "TOPLEFT", at[1], at[2])
+        mark.side = at[3]
+        mark:SetAlpha(0.13)
+        page.marks[i] = mark
+    end
+    -- The head after the owner's mockup (28/11): the banner whole, hung under the top rule and clear
+    -- of the corner and of the first poster; the title large in its faction's face; the two choices
+    -- under it; a gold rule.
+    -- A kit's divider (R.HeadKit) in three pieces: its lozenge keeps its shape, its two arms stretch.
+    -- The lozenge and a little of each arm: from 0.44 to 0.56 of the drawing, in a texture with two
+    -- clear pixels around it.
+    page.divider = {}
+    for i, u in ipairs({ { 0, 0.44 }, { 0.44, 0.56 }, { 0.56, 1 } }) do
+        local piece = page:CreateTexture(nil, "ARTWORK", nil, -1)
+        piece:SetTexCoord((2 + u[1] * 508) / 512, (2 + u[2] * 508) / 512, 2 / 32, 30 / 32)
+        page.divider[i] = piece
+    end
+    page.divider[2]:SetSize(37, 14)
+    page.divider[2]:SetPoint("CENTER", page, "TOPLEFT", 330, -77)
+    page.divider[1]:SetPoint("TOPLEFT", page, "TOPLEFT", 10, -70)
+    page.divider[1]:SetPoint("BOTTOMRIGHT", page.divider[2], "BOTTOMLEFT")
+    page.divider[3]:SetPoint("TOPLEFT", page.divider[2], "TOPRIGHT")
+    page.divider[3]:SetPoint("BOTTOMRIGHT", page, "TOPLEFT", 650, -84)
+    page.banner = page:CreateTexture(nil, "ARTWORK")
+    page.title = Panels.Text(page, 150, -8, 480, 30, true, CLOTH_IVORY)
+    -- In a preview, its notice takes the legend's place at the foot.
+    page.previewNote = Panels.Text(page, 112, -491, 440, 12, false, { 1, 0.82, 0.45 })
+    UI.journalFont(page.previewNote, "GameFontHighlight", 12, true)
+    page.previewNote:SetJustifyH("CENTER")
+    page.period, page.show, page.offset = 1, 1, 0
+    page.periodButton = chooser(page, ENEMY_PERIODS, function() return page.period end, function(i)
+        page.period, page.offset = i, 0
         R.Refresh()
     end)
-    page.rows = {}
-    for i = 1, ENEMY_ROWS do
-        local row = CreateFrame("Button", nil, page)
-        row:SetPoint("TOPLEFT", X(26), -108 - (i - 1) * 56)
-        row:SetSize(S(540), 54)
-        local rule = row:CreateTexture(nil, "BORDER")
-        rule:SetPoint("BOTTOMLEFT")
-        rule:SetPoint("BOTTOMRIGHT")
-        rule:SetHeight(1)
-        rule:SetColorTexture(0.49, 0.32, 0.13, 0.32)
-        row.deaths = Panels.Text(row, S(0), -10, S(30), 20, true, { 0.55, 0.12, 0.12 })
-        row.deaths:SetJustifyH("RIGHT")
-        row.story = Panels.Text(row, S(40), -7, S(332), 15, true)
-        GL.Safe(row.story.SetWordWrap, row.story, false)
-        row.where = Panels.Text(row, S(40), -29, S(332), 12, false, UI.theme.inkMuted)
-        GL.Safe(row.where.SetWordWrap, row.where, false)
-        row.wanted = UI.button(row, L("Rechercher"), S(380), -14, S(92), function() wanted(row) end, nil, true)
-        row.sheet = UI.button(row, L("Fiche"), S(476), -14, S(64), function() openOpponent(row) end, nil, true)
-        row:SetScript("OnClick", openOpponent)
-        page.rows[i] = row
-    end
-    page.empty = Panels.Text(page, X(26), -124, S(540), 13, false, UI.theme.inkMuted)
-    page.previous = UI.button(page, "‹", X(26), -464, S(40), function()
-        page.offset = math.max(0, page.offset - ENEMY_ROWS)
+    page.showButton = chooser(page, POSTER_FILTERS, function() return page.show end, function(i)
+        page.show, page.offset = i, 0
         R.Refresh()
-    end, nil, true)
-    page.next = UI.button(page, "›", X(526), -464, S(40), function()
-        page.offset = page.offset + ENEMY_ROWS
-        R.Refresh()
-    end, nil, true)
-    page.count = Panels.Text(page, X(76), -470, S(440), 12, false, UI.theme.inkMuted)
-    page.count:SetJustifyH("CENTER")
+    end)
+    page.rule = wantedTexture(page, "ARTWORK", 1, "SeparateurOr")
+    page.posters = {}
+    for i = 1, ENEMY_ROWS do page.posters[i] = buildPoster(page, i) end
+    page.empty = Panels.Text(page, 60, -130, 544, 15, false, CLOTH_IVORY)
+    page.empty:SetJustifyH("CENTER")
+    page.reshare = reshareButton(page, -176)
+    page.reshare:ClearAllPoints()
+    page.reshare:SetPoint("TOP", page, "TOP", 0, -176)
+    -- At the foot: what the order weighs. One page (owner, 27/11): the five the guild wants most.
+    page.legend = Panels.Text(page, 112, -491, 440, 12, false, CLOTH_IVORY)
+    UI.journalFont(page.legend, "GameFontHighlight", 12, true)
+    page.legend:SetJustifyH("CENTER")
     return page
 end
+-- The record a portrait is painted from: the sheet when you know the player, else what the guild says.
+local function enemyRecord(page, enemy)
+    local record = enemy.target and GL.Get(enemy.target)
+    if record then return record end
+    page.strangers = page.strangers or {}
+    local stranger = page.strangers[enemy.key]
+    if not stranger then
+        stranger = { key = enemy.key, guid = enemy.target, name = enemy.name, fullName = enemy.name, race = enemy.race, class = enemy.class }
+        page.strangers[enemy.key] = stranger
+    end
+    return stranger
+end
+local function paintPortrait(page, p, enemy, side)
+    p.face:SetSize(side, side)
+    if not GL.PaintBookPortrait then return end
+    GL.PaintBookPortrait(p.face, enemyRecord(page, enemy))
+    -- The kit's gold frame instead of the books' one, its opening on the face.
+    local rim, pad = p.face.portraitRim, math.floor(side * 0.085 + 0.5)
+    if rim then
+        rim:SetTexture(WANTED .. "CadrePortrait")
+        rim:ClearAllPoints()
+        rim:SetPoint("TOPLEFT", p.face, "TOPLEFT", -pad, pad)
+        rim:SetPoint("BOTTOMRIGHT", p.face, "BOTTOMRIGHT", pad, -pad)
+    end
+end
+-- The figures' words, the same on every poster (design critique, 28/11: "membres distincts tués"
+-- wrapped on the tall one; "distinct" is in the legend). The second line names the victims (owner,
+-- 27/11: the grudge is personal); the deaths when the guild's roster names none of them.
+-- A small poster has room for two lines at a readable size: the number, then the names in the
+-- words' place ("3 Célestine, Aubin +1"); the tall one keeps the three.
+local function figureTexts(p, enemy)
+    local victims = R.VictimNames(enemy, p.kind == "hero" and 3 or 2)
+    local killed = enemy.members > 1 and L("membres tués") or L("membre tué")
+    if p.kind ~= "hero" then return { enemy.members, victims or killed } end
+    return { enemy.members, killed },
+        victims and { "", victims } or { enemy.deaths, enemy.deaths > 1 and L("morts infligées") or L("mort infligée") }
+end
+-- force: the scale and the portrait's side the small posters share (paintEnemies), so the four
+-- look alike. Returns the scale and the side used.
+local function paintPoster(page, p, enemy, rank, spot, open, gold, force)
+    placePoster(page, p, spot)
+    local base, h, hero = p.style, spot.h, p.kind == "hero"
+    local faces = R.Faces[page.faction] or R.Faces.Alliance
+    -- The rank's number in gold and the small # before it, the two centred together in the medal.
+    -- A kit's plaque (R.HeadKit) takes the number alone, in ivory, at its middle.
+    local plaque = R.HeadKit[page.faction] and R.HeadKit[page.faction].rank
+    local medal = plaque and (hero and 44 or 30) or base.medal
+    p.medal:SetTexture(WANTED .. (plaque or hero and "MedaillonUn" or "Medaillon"))
+    p.medal:SetSize(medal, medal)
+    p.rank:SetText(tostring(rank))
+    p.rank:SetTextColor(unpack(plaque and CLOTH_IVORY or RANK_GOLD))
+    p.rankHash:SetText(plaque and "" or "#")
+    UI.journalFont(p.rank, "GameFontNormalLarge", plaque and math.floor(medal * 0.6 + 0.5) or base.rank, faces.number)
+    UI.journalFont(p.rankHash, "GameFontNormalLarge", math.floor(base.rank * 0.62 + 0.5), faces.number)
+    shadowed(p.rank, 0.95)
+    shadowed(p.rankHash, 0.95)
+    -- Widths measured, never below the letters' own size: a font just loaded still measures nothing
+    -- (owner, 28/11: the medals of #2 to #5 showed empty).
+    local numberW = math.max(GL.Safe(p.rank.GetStringWidth, p.rank) or 0, base.rank * 0.62 * #tostring(rank))
+    local hashW = math.max(GL.Safe(p.rankHash.GetStringWidth, p.rankHash) or 0, base.rank * 0.4)
+    numberW, hashW = math.ceil(numberW) + 2, math.ceil(hashW) + 2
+    p.rank:SetWidth(numberW)
+    p.rankHash:SetWidth(hashW)
+    p.rank:SetJustifyH("LEFT")
+    p.rankHash:SetJustifyH("RIGHT")
+    local start = -math.floor((numberW + hashW) / 2 + 0.5)
+    p.rankHash:ClearAllPoints()
+    p.rankHash:SetPoint("LEFT", p.medal, "CENTER", start, math.floor(base.rank * 0.12 + 0.5))
+    p.rank:ClearAllPoints()
+    p.rank:SetPoint("LEFT", p.medal, "CENTER", start + hashW, 1)
+    if plaque then
+        p.rank:SetWidth(medal)
+        p.rank:SetJustifyH("CENTER")
+        p.rank:ClearAllPoints()
+        p.rank:SetPoint("CENTER", p.medal, "CENTER", 0, 0)
+    end
+    -- What the poster says.
+    local name = UI.plain(enemy.name or L("un joueur inconnu"))
+    local first, second = figureTexts(p, enemy)
+    -- The lines this poster shows: the skull's only on the tall one.
+    p.rows = hero and p.figures or { p.figures[1], p.figures[3] }
+    for i, figure in ipairs(p.figures) do
+        for _, piece in ipairs({ figure.icon, figure.number, figure.words }) do
+            if hero or i ~= 2 then piece:Show() else piece:Hide() end
+        end
+    end
+    local info = mapInfo(enemy.mapID)
+    p.where = info and type(info.name) == "string" and UI.plain(info.name) or nil
+    -- Where the guild last met them, and when (owner, 27/11: where to hunt them).
+    local third = { "", p.where and p.where .. " · " .. elapsed(enemy.last) or elapsed(enemy.last) }
+    p.kills = enemy.kills > 0 and L("vaincu %d fois par la guilde"):format(enemy.kills) or nil
+    p.deaths = enemy.deaths .. " " .. (enemy.deaths > 1 and L("morts infligées") or L("mort infligée"))
+    local stamped = enemy.avenged or GL.Now() - enemy.last > COLD_AFTER
+    -- At the foot, a little into the paper's bottom margin: the bounty's ribbon, or the stamp.
+    -- Half of the ribbon lies over the margin's motifs, never nearer the paper's edge than a
+    -- twentieth; the stamp, an outline of ink, keeps to the plain paper. Without either, the writing
+    -- stops at the plain zone's foot.
+    local bite = open and math.floor(p.ribbon:GetHeight() / 2) or 0
+    local foot = math.max(math.floor(h * 0.05), p.bottom - bite)
+    local floor = (open or stamped) and foot + 1 or p.bottom
+    p.ribbon:ClearAllPoints()
+    p.ribbon:SetPoint("BOTTOM", p, "BOTTOM", p.cx, foot)
+    if open then
+        p.ribbon:Show()
+        p.prize:Show()
+        -- The long words on the tall poster; the short ones where the ribbon is small.
+        local prize = gold > 0 and capitals(L(hero and "%s pour sa tête" or "Prime · %s"):format(GL.BountyMoney(gold)))
+            or capitals(L("Avis de recherche"))
+        -- Dark ink on the gold band, between its two folded ends; ivory on the red ribbon.
+        p.prize:SetTextColor(unpack(p.band and POSTER_INK or MEDAL_IVORY))
+        fit(p.prize, prize, p.band and p.ribbon:GetWidth() * 0.68 or p.ribbon:GetWidth() - 40, base.label + 2, 7, true, not p.band and 0.6)
+        floor = floor + p.ribbon:GetHeight() + 3
+        if gold > 0 and not p.band then p.seal:Show() else p.seal:Hide() end
+    else
+        p.ribbon:Hide()
+        p.prize:Hide()
+        p.seal:Hide()
+        if stamped then floor = floor + p.stamp:GetHeight() + 3 end
+    end
+    -- The writing from the top of the paper's plain zone down: title, name, the portrait, the three
+    -- figures centred under it as one block (the owner's mockup, 28/11). The portrait takes the room
+    -- left. Laid at full size first; where the portrait would get less than its least, laid again
+    -- smaller. The posters' sizes are the papers': the reading size of the books does not grow them.
+    local reading = GL.Settings and GL.Settings().readingScale or 1
+    local function sizeOf(label, fallback) return select(2, GL.Safe(label.GetFont, label)) or fallback * reading end
+    local function lay(k, down)
+        local function s(v, least) return math.max(least, math.floor(v * k / reading + 0.5)) end
+        local y = -p.top - (down or 0)
+        p.title:ClearAllPoints()
+        p.title:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx - 4, y)
+        p.title:SetWidth(p.inner + 8)
+        fit(p.title, capitals(L("Recherché")), p.inner + 8, s(base.title, 10), 9, true, 0.35, faces.title)
+        y = y - sizeOf(p.title, s(base.title, 10)) - (hero and 6 or 4)
+        if p.label then
+            if rank == 1 then
+                local labelW = p.inner + 10
+                p.label:SetSize(labelW, math.floor(labelW / RATIO.Cartouche + 0.5))
+                p.label:ClearAllPoints()
+                p.label:SetPoint("TOP", p, "TOP", p.cx, y)
+                p.label:Show()
+                p.labelText:Show()
+                p.labelText:SetWidth(labelW - 40)
+                fit(p.labelText, capitals(L("Ennemi public n°1")), labelW - 40, s(12, 8), 7, true)
+                y = y - p.label:GetHeight() - 5
+            else
+                p.label:Hide()
+                p.labelText:Hide()
+            end
+        end
+        p.name:ClearAllPoints()
+        p.name:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx - 4, y)
+        p.name:SetWidth(p.inner + 8)
+        fit(p.name, name, p.inner + 8, s(base.name, 9), 8, true, nil, faces.name)
+        -- A name too long for one line at its smallest takes two.
+        local nameLines = (GL.Safe(p.name.GetStringWidth, p.name) or 0) > p.inner + 8 and 2 or 1
+        GL.Safe(p.name.SetWordWrap, p.name, nameLines > 1)
+        y = y - nameLines * (sizeOf(p.name, s(base.name, 9)) + 1) - (hero and 8 or 3)
+        for _, figure in ipairs(p.rows) do
+            local text = figure == p.figures[1] and first or figure == p.figures[2] and second or third
+            local icon = math.max(8, math.floor(base.icon * k + 0.5))
+            local label = s(base.label, 8)
+            figure.size = { label = label, least = math.max(8, label - (hero and 2 or 1)), gap = base.gap, reading = reading,
+                line = math.max(icon, math.floor(base.number * k + 0.5)) }
+            figure.icon:SetSize(math.floor(icon * RATIO[figure.iconName] + 0.5), icon)
+            figure.number:SetText(tostring(text[1]))
+            UI.journalFont(figure.number, "GameFontNormalLarge", s(base.number, 9), faces.number)
+            figure.words:SetText(text[2])
+        end
+        local figuresEnd, usedW = placeFigures(p, p.mx, 0, p.inner)
+        local gap = hero and 10 or 4
+        local below = gap - figuresEnd
+        -- The portrait and its gold frame (a twelfth of its side all around).
+        local room = math.floor((y + (h - floor) - below) / 1.17)
+        local least = hero and 48 or 28
+        local side = math.max(least, math.min(force and force.side or math.floor(base.face * k + 0.5), room))
+        local pad = math.floor(side * 0.085 + 0.5)
+        p.face:ClearAllPoints()
+        p.face:SetPoint("TOP", p, "TOP", p.cx, y - pad)
+        paintPortrait(page, p, enemy, side)
+        local x = p.mx + math.max(0, math.floor((p.inner - usedW) / 2))
+        placeFigures(p, x, y - side - 2 * pad - gap, p.inner - (x - p.mx))
+        -- Whether it fits, and the height left under the writing.
+        return room >= least, math.max(0, math.floor((room - side) * 1.17))
+    end
+    local used, spare
+    for _, k in ipairs(force and { force.k } or { 1, 0.92, 0.85, 0.78, 0.72 }) do
+        local fits, left = lay(k)
+        used, spare = k, left
+        if fits then break end
+    end
+    -- Room left (a poster without ribbon or stamp): the writing sits in the middle of it.
+    if spare and spare > 5 then lay(used, math.floor(spare / 2)) end
+    -- The stamp: avenged first (the guild has answered), else a cold trail after three weeks. At the
+    -- foot; across the portrait's foot when a ribbon holds that place.
+    if stamped then
+        p.stamp:ClearAllPoints()
+        if open then p.stamp:SetPoint("CENTER", p.face, "BOTTOM", 0, 2)
+        else p.stamp:SetPoint("BOTTOM", p, "BOTTOM", p.cx, foot) end
+        p.stamp:Show()
+        fit(p.stamp.words, enemy.avenged and capitals(L("Vengé")) or L("Piste froide"), p.stamp:GetWidth() - 14, base.label + 1, 7, true)
+        p.stamp.words:SetTextColor(unpack(enemy.avenged and AVENGED_INK or STAMP_INK))
+        -- Avenged in red ink, its frame too; the cold trail keeps the kit's violet.
+        GL.Safe(p.stamp.ink.SetDesaturated, p.stamp.ink, enemy.avenged and true or false)
+        p.stamp.ink:SetVertexColor(unpack(enemy.avenged and { 1, 0.3, 0.24 } or { 1, 1, 1 }))
+    else
+        p.stamp:Hide()
+    end
+    p.target, p.enemy = enemy.target, enemy.name
+    p.bountyTarget = open and not enemy.preview and enemy.target or nil
+    if p.bountyTarget then p.prizeHit:Show() else p.prizeHit:Hide() end
+    -- The game places what was just anchored when it draws the next image: the writing turns then,
+    -- unless the poster was painted again meanwhile (owner, 28/11: it never turned in game).
+    p.tiltToken = (p.tiltToken or 0) + 1
+    local token = p.tiltToken
+    if not R.TiltPoster(p, spot.turn) and C_Timer and C_Timer.After then
+        C_Timer.After(0, function() if p.tiltToken == token then R.TiltPoster(p, spot.turn) end end)
+    end
+    p.canWant = enemy.target and enemy.name and not open and not enemy.preview and true or nil
+    p:Show()
+    return used, p.face:GetWidth()
+end
+-- The page's preview (/gl apercu horde|alliance, owner 27/11): the page as seen from a faction,
+-- with invented enemies; nothing is saved, the posters open no sheet, closing the book ends it.
+-- A block of its own: Lua 5.1 counts the file's locals.
+do
+local PREVIEW_FOES = {
+    Horde = { { "Aldric Fendroc", "Human", "PALADIN" }, { "Brunhilde Martelfer", "Dwarf", "WARRIOR" },
+        { "Sylvaine Ombrelune", "NightElf", "DRUID" }, { "Pip Rouecliquet", "Gnome", "ROGUE" }, { "Edwin Clairval", "Human", "MAGE" } },
+    Alliance = { { "Grok Crânefendu", "Orc", "WARRIOR" }, { "Zul'jin Lamesable", "Troll", "HUNTER" },
+        { "Mère Hurlevent", "Tauren", "SHAMAN" }, { "Vexis la Blême", "Scourge", "WARLOCK" }, { "Thrak Brisetête", "Orc", "ROGUE" } },
+}
+local PREVIEW_VICTIMS = { "Célestine, Aubin, Isabeau", "Gaspard, Moonie", "Isabeau", "Aubin, Célestine", "Rotkäpp" }
+local PREVIEW_PLACES = { 1446, 1444, 1449, 1434, 1440 }
+function R.PreviewList(faction, period)
+    local now, list = GL.Now(), {}
+    for i, foe in ipairs(PREVIEW_FOES[faction]) do
+        local hours = ({ 2, 20, 50, 30, 600 })[i]
+        -- Like the guild's own, the period's choice keeps only who killed within it.
+        if (period or 0) == 0 or hours * 3600 <= period then list[#list + 1] = {
+            key = "preview:" .. i, name = foe[1], race = foe[2], class = foe[3], members = 6 - i, deaths = 14 - 2 * i,
+            kills = i == 4 and 2 or 0, last = now - hours * 3600, mapID = PREVIEW_PLACES[i], victims = {},
+            previewVictims = PREVIEW_VICTIMS[i], avenged = i == 4, preview = true,
+            previewGold = i == 1 and 2500000 or i == 3 and 500000 or nil, previewNotice = i == 2 } end
+    end
+    return list
+end
+function R.PreviewEnemies(faction)
+    R.preview = faction and { faction = faction == "horde" and "Horde" or "Alliance" } or nil
+    R.OpenGuild("enemies")
+    local f = R.guildWindow
+    if f and not f.previewHooked then
+        f.previewHooked = true
+        f:HookScript("OnHide", function() R.preview = nil end)
+    end
+    R.Refresh()
+end
+end
+-- What turns with a poster's paper: its words, pictograms, rules, ribbon, seal, stamp, and the
+-- portrait's gold frame and painted picture (owner, 28/11: a straight frame in a tilted poster
+-- broke the parallel). The 3D model alone cannot turn: at these angles it stays inside its frame.
+function R.PosterRegions(p)
+    local regions = { p.title, p.name, p.ribbon, p.prize, p.seal, p.stamp.ink, p.stamp.words }
+    if p.label then
+        regions[#regions + 1] = p.label
+        regions[#regions + 1] = p.labelText
+    end
+    for _, figure in ipairs(p.figures) do
+        regions[#regions + 1] = figure.icon
+        regions[#regions + 1] = figure.number
+        regions[#regions + 1] = figure.words
+    end
+    return regions
+end
+-- The writing turns with the paper (owner, 27/11), where the game can turn a text (Forever can:
+-- FontString:SetRotation): every piece is moved around the poster's centre by the paper's angle and
+-- turned by it. Positions are read once, all of them, before anything moves (some hang on others).
+-- Without the game's layout (the test fixtures give every region the same centre), nothing moves.
+function R.TiltPoster(p, degrees)
+    if not degrees or degrees == 0 or not (p.title and p.title.SetRotation) then return true end
+    local cx, cy = GL.Safe(p.GetCenter, p)
+    if type(cx) ~= "number" or type(cy) ~= "number" then return false end
+    local regions, places, distinct = R.PosterRegions(p), {}, false
+    regions[#regions + 1] = p.face
+    for i, region in ipairs(regions) do
+        local x, y = GL.Safe(region.GetCenter, region)
+        if GL.Safe(region.IsShown, region) and type(x) == "number" and type(y) == "number" then
+            local w = region:GetWidth()
+            -- A line shorter than its field: the game turns the line about its own middle, not the
+            -- field's (owner's capture, 28/11: the words sat half a line off their pictogram, up or
+            -- down with the tilt's side). The field shrinks to the line, where the line is. Not a
+            -- centred line, whose middle is its field's: a field a hair too narrow shows nothing
+            -- (the tall poster's heading, owner's capture, 28/11).
+            local line = region.GetStringWidth and GL.Safe(region.GetStringWidth, region)
+            local justify = GL.Safe(region.GetJustifyH, region)
+            if type(line) == "number" and line > 0 and line + 6 < w and (justify == "LEFT" or justify == "RIGHT") then
+                local slack = (w - line - 6) / 2
+                x = x + (justify == "LEFT" and -slack or slack)
+                w = line + 6
+            end
+            places[i] = { x - cx, cy - y, w, region:GetHeight() }
+            distinct = distinct or math.abs(x - cx) > 0.5 or math.abs(y - cy) > 0.5
+        end
+    end
+    if not distinct then return false end
+    local a = math.rad(degrees)
+    local c, s = math.cos(a), math.sin(a)
+    -- The portrait's frame and picture turn on the portrait's own centre (they cover it).
+    for _, art in ipairs({ p.face.portraitRim, p.face.raceIcon }) do
+        if art then GL.Safe(art.SetRotation, art, -a) end
+    end
+    for i, region in ipairs(regions) do
+        local at = places[i]
+        if at then
+            local dx, dy = at[1], at[2]
+            region:ClearAllPoints()
+            region:SetPoint("CENTER", p, "CENTER", c * dx - s * dy, -(s * dx + c * dy))
+            if region.GetStringWidth then region:SetWidth(at[3]) else region:SetSize(at[3], at[4]) end
+            -- The paper turns clockwise for a positive angle; the game turns counter-clockwise.
+            if region ~= p.face then GL.Safe(region.SetRotation, region, -a) end
+        end
+    end
+    return true
+end
 local function paintEnemies(page)
-    page.title:SetText(L("Ennemis de la guilde"))
+    local preview = R.preview
+    local faction = preview and preview.faction
+        or GL.Clean(GL.Safe(UnitFactionGroup, "player"), "string") == "Horde" and "Horde" or "Alliance"
+    page.faction = faction
+    page.previewNote:SetText(preview and L("Aperçu : ennemis d’exemple, rien n’est enregistré") or "")
+    page.cloth:SetTexture(WANTED .. "Toile" .. faction)
+    R.LayEnemyBorder(page, faction)
+    for _, mark in ipairs(page.marks) do
+        mark:SetTexture(WANTED .. "Filigrane" .. faction)
+        mark:SetSize(math.floor(mark.side * RATIO["Filigrane" .. faction] + 0.5), mark.side)
+    end
+    local kit = R.HeadKit[faction]
+    for _, piece in ipairs(page.divider) do
+        if kit then
+            piece:SetTexture(WANTED .. kit.divider)
+            piece:Show()
+        else
+            piece:Hide()
+        end
+    end
+    -- The validated banners (owner, 28/11) carry their arms painted in. 82 high or wide at most: hung
+    -- from the border's rule, the banner ends above the posters. A kit's crest has its two straps on
+    -- that rule.
+    local banner, most = kit and kit.crest or "Fanion" .. faction, kit and 78 or 82
+    page.banner:SetTexture(WANTED .. banner)
+    local bannerH = math.min(most, math.floor(most / RATIO[banner] + 0.5))
+    local bannerW = math.floor(bannerH * RATIO[banner] + 0.5)
+    page.banner:SetSize(bannerW, bannerH)
+    page.banner:ClearAllPoints()
+    page.banner:SetPoint("TOPLEFT", page, "TOPLEFT", 58, kit and -1 or 0)
+    -- The title, the choices and the rule start after the banner.
+    page.titleX = 58 + bannerW + 14
+    local titleW = 628 - page.titleX
+    page.title:ClearAllPoints()
+    page.title:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -10)
+    page.title:SetWidth(titleW)
+    fit(page.title, L("Ennemis de la guilde"), titleW, 30, 18, true, 0.85, (R.Faces[faction] or R.Faces.Alliance).title)
+    -- A display font is read from its file when a text first takes it, and a text set before that
+    -- can stay empty (owner's capture, 28/11: no title on the page, none on the tall poster, just
+    -- after the game started): the page is painted once more, a moment after a faction's first.
+    page.warmed = page.warmed or {}
+    if not page.warmed[faction] and C_Timer and C_Timer.After then
+        page.warmed[faction] = true
+        C_Timer.After(0.4, function() if GL.Safe(page.IsVisible, page) then R.Refresh() end end)
+    end
+    local ruleW = 640 - page.titleX
+    page.rule:ClearAllPoints()
+    page.rule:SetPoint("LEFT", page, "TOPLEFT", page.titleX - 4, -79)
+    page.rule:SetSize(ruleW, math.floor(ruleW / RATIO.SeparateurOr + 0.5))
+    -- A kit's divider runs under the whole head, behind the crest's point, in the rule's place.
+    if kit then page.rule:Hide() else page.rule:Show() end
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
-    local list = sharing and R.GuildEnemies(ENEMY_PERIODS[page.period][1]) or {}
-    page.lead:SetText(sharing and L("Les joueurs qui tuent vos compagnons, les plus meurtriers d’abord.") or "")
-    page.viewCycle:SetText(L("%s · %d"):format(L(ENEMY_PERIODS[page.period][2]), #list))
-    UI.selectButton(page.viewCycle, page.period ~= 1)
-    if sharing then page.viewCycle:Show() else page.viewCycle:Hide() end
-    page.offset = math.min(page.offset, math.max(0, math.floor((#list - 1) / ENEMY_ROWS) * ENEMY_ROWS))
-    for i, row in ipairs(page.rows) do
-        local enemy = list[page.offset + i]
-        if enemy then
-            row.deaths:SetText(tostring(enemy.deaths))
-            Panels.Fit(row.story, UI.plain(enemy.name or L("un joueur inconnu")), S(332), 15, 10, true)
-            local parts = { enemy.members > 1 and L("%d membres tués"):format(enemy.members) or L("1 membre tué") }
-            if enemy.kills > 0 then parts[#parts + 1] = L("vaincu %d fois par la guilde"):format(enemy.kills) end
-            local info = mapInfo(enemy.mapID)
-            parts[#parts + 1] = (info and type(info.name) == "string" and (UI.plain(info.name) .. ", ") or "") .. elapsed(enemy.last)
-            row.where:SetText(table.concat(parts, " · "))
-            row.target, row.enemy = enemy.target, enemy.name
-            if enemy.target then row.sheet:Show() else row.sheet:Hide() end
-            local open = enemy.target and GL.Bounties and GL.Bounties.OpenFor and GL.Bounties.OpenFor(enemy.target)
-            if enemy.target and enemy.name and not open then row.wanted:Show() else row.wanted:Hide() end
-            row:Show()
-        else
-            row.target, row.enemy = nil, nil
-            row:Hide()
+    if preview then sharing, inGuild = true, true end
+    local list = preview and R.PreviewList(faction, ENEMY_PERIODS[page.period][1]) or sharing and R.GuildEnemies(ENEMY_PERIODS[page.period][1]) or {}
+    local show = POSTER_FILTERS[page.show][1]
+    if show ~= "all" then
+        local kept = {}
+        for _, enemy in ipairs(list) do
+            local _, gold = R.EnemyBounty(enemy)
+            if (show == "bounty") == (gold > 0) then kept[#kept + 1] = enemy end
         end
+        list = kept
+    end
+    -- The two choices side by side under the title; a long translation gets smaller letters, never cut.
+    for _, pair in ipairs({ { page.periodButton, L(ENEMY_PERIODS[page.period][2]) }, { page.showButton, L(POSTER_FILTERS[page.show][2]) } }) do
+        local button, size = pair[1], 13
+        -- The kit's field for a face, lit under the pointer; else the book's dark button.
+        button.bare = kit and true or nil
+        button:SetHeight(kit and 22 or 26)
+        if kit then
+            button.field:SetTexture(WANTED .. kit.field)
+            button.fieldLight:SetTexture(WANTED .. kit.field)
+            button.field:Show()
+        else
+            button.field:Hide()
+        end
+        button.fieldLight:SetAlpha(kit and 0.25 or 0)
+        button.skin:SetAlpha(kit and 0 or 1)
+        for _, cap in ipairs(button.skinCaps or {}) do cap:SetAlpha(kit and 0 or 1) end
+        -- A plain small triangle with the field, as on the kit's assembly; the gold chevron else.
+        local arrow = kit and "Triangle" or "Chevron"
+        button.arrow:SetTexture(WANTED .. arrow)
+        button.arrow:SetSize(kit and 9 or 12, math.floor((kit and 9 or 12) / RATIO[arrow] + 0.5))
+        button:SetText(pair[2])
+        UI.journalFont(button.caption, "GameFontHighlightSmall", size)
+        while size > 9 and (GL.Safe(button.caption.GetStringWidth, button.caption) or 0) > button:GetWidth() - 36 do
+            size = size - 1
+            UI.journalFont(button.caption, "GameFontHighlightSmall", size)
+        end
+    end
+    page.periodButton:ClearAllPoints()
+    page.periodButton:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -45)
+    page.showButton:ClearAllPoints()
+    page.showButton:SetPoint("TOPLEFT", page.periodButton, "TOPRIGHT", 14, 0)
+    for _, button in ipairs({ page.periodButton, page.showButton }) do
+        if sharing then button:Show() else button:Hide() end
+    end
+    page.offset = 0
+    -- The page's enemies, their bounties, then where their posters go.
+    local shown = {}
+    for i = 1, ENEMY_ROWS do
+        local enemy = list[page.offset + i]
+        if not enemy then break end
+        local open, gold = R.EnemyBounty(enemy)
+        shown[i] = { key = enemy.key, enemy = enemy, open = open, gold = gold, bounty = gold > 0 }
+    end
+    page.spots = R.PosterLayout(shown, faction)
+    local common
+    for i, p in ipairs(page.posters) do
+        local item = shown[i]
+        if item then
+            local k, side = paintPoster(page, p, item.enemy, i, page.spots[i], item.open, item.gold)
+            if i > 1 then
+                common = common or { k = k, side = side }
+                common.k, common.side = math.min(common.k, k), math.min(common.side, side)
+            end
+        else
+            p.target, p.enemy, p.canWant = nil, nil, nil
+            p:Hide()
+        end
+    end
+    -- One template for the small posters (design critique, 28/11: portraits from 29 to 46 pixels
+    -- on four posters of one rank): all at the scale and the portrait of the tightest.
+    for i = 2, #shown do
+        local item = shown[i]
+        paintPoster(page, page.posters[i], item.enemy, i, page.spots[i], item.open, item.gold, common)
     end
     local empty = ""
     if not inGuild then
         empty = L("Vous n’êtes dans aucune guilde : cette page dit qui tue les membres de la vôtre.")
     elseif not sharing then
-        empty = L("La vision de guilde est décochée. Cochez-la à gauche pour voir cette page.")
+        empty = L("Vous ne partagez pas vos combats avec la guilde : cette page reste fermée. Le partage se règle dans les réglages, page Relations et JcJ.")
     elseif #list == 0 then
         empty = L("Aucun membre de la guilde n’a été tué sur cette période.")
     end
+    if inGuild and not sharing then page.reshare:Show() else page.reshare:Hide() end
     page.empty:SetText(empty)
-    page.previous:SetEnabled(page.offset > 0)
-    page.next:SetEnabled(page.offset + ENEMY_ROWS < #list)
-    if #list > ENEMY_ROWS then
-        page.previous:Show()
-        page.next:Show()
-    else
-        page.previous:Hide()
-        page.next:Hide()
-    end
-    page.count:SetText(#list > 0 and countForm(#list, "%d ennemi", "%d ennemis") or "")
+    page.legend:SetText(not preview and #list > 0 and L("Classement : victimes distinctes, morts infligées, fraîcheur des faits") or "")
 end
 
 -- The books: the narrow format of the player sheet. Left, the entries and the key figures. Right,
@@ -2189,12 +4215,17 @@ end
 -- debts, the rivalries, the map, the rankings) and Guilde (the guild's journal, its enemies, the
 -- other guilds), each with its tab at the top.
 local TALLY_LINES = 6
+local paintSections
 local BOOKS = {
     relations = { frame = "GrudgeLedgerRelations", nav = "players",
-        entries = { { "recap", "Bilan" }, { "honor", "Tableaux détaillés" }, { "debts", "Dettes" }, { "rivals", "Rivalités" }, { "lands", "Carte" },
-            { "rankings", "Classements" } } },
+        entries = { { "recap", "Bilan", "bilan" }, { "rivals", "Rivalités", "rivalites" }, { "lands", "Carte", "carte" },
+            { "registry", "Registre", "tableaux-detailles" } },
+        -- The pages of the Registre, each a section under its entry: { page, label, rankings group }.
+        registry = { { "honor", "Adversaires" }, { "debts", "Dettes" }, { "rankings", "Menaces", 1 },
+            { "rankings", "Amis", 2 }, { "rankings", "Guildes", "guild" } } },
     guild = { frame = "GrudgeLedgerGuild", nav = "guild",
-        entries = { { "guildlog", "Journal de guilde" }, { "enemies", "Ennemis de la guilde" }, { "guilds", "Guildes" } } },
+        entries = { { "guildlog", "Journal de guilde" }, { "enemies", "Ennemis de la guilde" }, { "guilds", "Guildes" },
+            { "members", "Membres actifs" } } },
 }
 -- The detailed tables live in UI.lua, next to the statistics they read; their figures go to the key
 -- figures of the left column, repainted whenever a filter of the page changes.
@@ -2204,14 +4235,17 @@ local function buildHonor(host)
     return page
 end
 local builders = { recap = function(host) return GL.Recap.BuildPage(host) end, honor = buildHonor, debts = buildDebts, rivals = buildRivals, lands = buildLands,
-    rankings = buildRankings, guildlog = buildGuildJournal, enemies = buildEnemies, guilds = buildGuilds }
+    rankings = buildRankings, guildlog = buildGuildJournal, enemies = buildEnemies, guilds = buildGuilds, members = buildMembers }
 local painters = { recap = function(page) GL.Recap.PaintPage(page) end, honor = function() GL.PaintHonorPage() end,
     debts = paintDebts, rivals = paintRivals, lands = paintLands,
-    rankings = paintRankings, guildlog = paintGuildJournal, enemies = paintEnemies, guilds = paintGuilds }
+    rankings = paintRankings, guildlog = paintGuildJournal, enemies = paintEnemies, guilds = paintGuilds, members = paintMembers }
 local pageBook = {}
 for key, spec in pairs(BOOKS) do
     for _, entry in ipairs(spec.entries) do pageBook[entry[1]] = key end
+    for _, section in ipairs(spec.registry or {}) do pageBook[section[1]] = key end
 end
+-- The pages reached through the Registre's sections, never from an entry of their own.
+local inRegistry = { honor = true, debts = true, rankings = true }
 R.books = {}
 local function book(key)
     if R.books[key] then return R.books[key] end
@@ -2225,30 +4259,47 @@ local function book(key)
     for i, entry in ipairs(spec.entries) do
         local page = entry[1]
         local tab = UI.button(f, L(entry[2]), 38, -158 - (i - 1) * 36, 168, function()
-            R.Open(page)
+            if page == "registry" then R.Open(f.registryLast or "honor") else R.Open(page) end
         end, true)
         tab:SetHeight(30)
+        -- Each entry of Relations carries its icon (the owner's kit, 25/11): 18 units near the left
+        -- edge; the label moves right just enough to clear it.
+        if entry[3] then
+            tab.icon = tab:CreateTexture(nil, "OVERLAY")
+            tab.icon:SetTexture(GL.Art.EntryIcon .. entry[3])
+            tab.icon:SetSize(18, 18)
+            tab.icon:SetPoint("LEFT", 8, 0)
+            if tab.caption then
+                tab.caption:ClearAllPoints()
+                tab.caption:SetPoint("CENTER", 10, 0)
+                tab.caption:SetSize(168 - 48, 22)
+            end
+        end
         f.tabs[page] = tab
     end
-    -- The guild's book carries the guild vision's box under its entries: sharing your fights is what
-    -- fills its pages.
-    local figuresTop = -424
-    if key == "guild" then
-        f.vision = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-        f.vision:SetPoint("TOPLEFT", 36, -272)
-        f.vision:SetSize(24, 24)
-        f.visionLabel = Panels.Text(f, 64, -278, 142, 12, true, UI.theme.paper)
-        f.vision:SetScript("OnClick", function(self)
-            if GL.GuildMap then GL.GuildMap.Enable(self:GetChecked() and true or false) end
-            R.Refresh()
-        end)
-        f.vision:SetScript("OnEnter", function(self)
-            tip(self, L("Vision de guilde"), L("Cochée : vous voyez sur la carte les victoires et les morts des membres qui l’ont cochée, et ils voient "
-                .. "les vôtres (la zone et l’endroit). Décochée : rien n’est envoyé, rien n’est gardé, et la guilde oublie vos combats."))
-        end)
-        f.vision:SetScript("OnLeave", hideTip)
-        figuresTop = -330
+    -- The Registre's sections, under its entry, shown while one of them is open.
+    f.sections = {}
+    for j, section in ipairs(spec.registry or {}) do
+        local y = -158 - #spec.entries * 36 - (j - 1) * 27 + 4
+        local button = UI.button(f, L(section[2]), 54, y, 152, function()
+            local target = section[1]
+            if target == "rankings" then
+                local rankings = f.host.pages.rankings
+                rankings.group = section[3] == "guild" and #rankings.groups or section[3]
+                rankings.choice, rankings.offset = 1, 0
+            end
+            R.Open(target)
+        end, true)
+        button:SetHeight(24)
+        button.section = section
+        f.sections[j] = button
+        -- The first section of each page answers for it ("Dettes", "Menaces"): the old entries'
+        -- names still open their page.
+        if not f.tabs[section[1]] then f.tabs[section[1]] = button end
     end
+    -- The guild vision's box is on the map only (owner, 26/11: in the guild's book, unticking it
+    -- emptied every page of the book it sat in). Its pages offer to share again when it is off.
+    local figuresTop = key == "relations" and -444 or key == "guild" and -322 or -424
     -- The key figures, drawn like those of the player sheet's left column: a caption, then one
     -- line each, the name on the left and the number on the right. Each line opens its page.
     f.keyHeading = Panels.Text(f, 40, figuresTop, 166, 12, true, UI.theme.brass)
@@ -2279,11 +4330,48 @@ local function book(key)
         end)
         f.tally[i] = cell
     end
+    -- The map's legend, under the key figures while the map shows (owner's mockup, 25/11): what the
+    -- colours of the zones and the marks of the guild mean.
+    if key == "relations" then
+        f.legend = CreateFrame("Frame", nil, f)
+        f.legend:SetSize(166, 100)
+        f.legend.heading = Panels.Text(f.legend, 0, 0, 166, 12, true, UI.theme.brass)
+        local rule = f.legend:CreateTexture(nil, "BACKGROUND")
+        rule:SetPoint("TOPLEFT", 0, -18)
+        rule:SetSize(166, 1)
+        rule:SetColorTexture(0.55, 0.40, 0.20, 0.30)
+        f.legend.lines = {}
+        -- The marks of the map, in their colours: your skull red, your sword green, the guild's
+        -- skull yellow and sword blue (owner report 25/11: squares said nothing).
+        local kinds = { { texture = SKULL, color = { 1, 0.35, 0.3 } }, { texture = SWORD, color = { 0.5, 1, 0.5 } },
+            { texture = SKULL, color = { 1, 0.72, 0.25 } }, { texture = SWORD, color = { 0.55, 0.8, 1 } } }
+        for i, kind in ipairs(kinds) do
+            local line = CreateFrame("Frame", nil, f.legend)
+            line:SetPoint("TOPLEFT", 0, -26 - (i - 1) * 22)
+            line:SetSize(166, 20)
+            line.mark = line:CreateTexture(nil, "ARTWORK")
+            line.mark:SetTexture(kind.texture)
+            line.mark:SetSize(18, 18)
+            line.mark:SetPoint("LEFT", 0, 0)
+            line.mark:SetVertexColor(unpack(kind.color))
+            line.label = UI.label(line, "", nil, 26, -3, 140)
+            UI.journalFont(line.label, "GameFontHighlight", 12)
+            line.label:SetTextColor(unpack(UI.theme.paper))
+            f.legend.lines[i] = line
+        end
+        f.legend:Hide()
+    end
+    f.figuresTop = figuresTop
     local host = CreateFrame("Frame", nil, f)
     host:SetPoint("TOPLEFT", 240, -152)
     host:SetSize(SHEET_W, SHEET_H)
     host.pages = {}
-    for _, entry in ipairs(spec.entries) do host.pages[entry[1]] = builders[entry[1]](host) end
+    for _, entry in ipairs(spec.entries) do
+        if builders[entry[1]] then host.pages[entry[1]] = builders[entry[1]](host) end
+    end
+    for _, section in ipairs(spec.registry or {}) do
+        if not host.pages[section[1]] then host.pages[section[1]] = builders[section[1]](host) end
+    end
     f.host = host
     return f
 end
@@ -2292,7 +4380,7 @@ local function versionLine()
     local current, total = 0, 0
     if GL.GuildMap and GL.GuildMap.Versions then current, total = GL.GuildMap.Versions() end
     if total == 0 then return nil end
-    return { L("Versions à jour"), current .. "/" .. total, "guildlog" }
+    return { L("Versions à jour"), current .. "/" .. total, "members" }
 end
 -- How many players of the guild were heard with the addon this session, you included (0.61.0):
 -- three characters of the same player count once.
@@ -2300,7 +4388,7 @@ local function playersLine()
     if not (GL.GuildMap and GL.GuildMap.Players) then return nil end
     local count, characters = GL.GuildMap.Players()
     if characters <= 1 then return nil end
-    return { L("Joueurs avec l’addon"), count, "guildlog" }
+    return { L("Joueurs avec l’addon"), count, "members" }
 end
 -- The key figures of a book's left column, each with the page it opens. Relations: what is owed,
 -- the debts and the rivalries. Guilde: the guild's week, when it shares its fights.
@@ -2325,6 +4413,21 @@ function R.Tally(key)
     return { { L("Reste dû"), total, "debts" }, { L("Dettes ouvertes"), #open, "debts" },
         { L("Réglées ce mois-ci"), #settled, "debts" }, { L("Rivalités"), #R.Rivals(), "rivals" } }
 end
+-- The Registre's sections: shown while one of its pages is open, the open one lit.
+paintSections = function(f)
+    local open = inRegistry[f.page] == true
+    local rankings = f.host and f.host.pages.rankings
+    for _, button in ipairs(f.sections or {}) do
+        local section = button.section
+        local lit = section[1] == f.page
+        if lit and section[1] == "rankings" and rankings then
+            local group = section[3] == "guild" and #rankings.groups or section[3]
+            lit = rankings.group == group
+        end
+        UI.selectButton(button, lit)
+        if open then button:Show() else button:Hide() end
+    end
+end
 local function paintTally(f)
     local honor = f.page == "honor"
     local lines = honor and GL.HonorTally() or R.Tally(f.bookKey)
@@ -2344,6 +4447,42 @@ local function paintTally(f)
         end
     end
 end
+-- Where a book's left column must end, from the window's top: above the frame's lower edge (675)
+-- and the corner ornament that reaches up to 668 where the column starts (owner report, 28/11: with
+-- the guild's two lines, the legend's last one lay over the frame).
+R.ColumnFloor = -666
+local function paintLegend(f)
+    local legend = f.legend
+    if not legend then return end
+    local page = f.host and f.host.pages and f.host.pages.lands
+    local map = page and page.map
+    if f.page ~= "lands" or not map or not map:IsShown() then
+        legend:Hide()
+        return
+    end
+    local shown = 0
+    for _, cell in ipairs(f.tally) do if cell:IsShown() then shown = shown + 1 end end
+    -- Ten units under the key figures, the heading and its rule (22), then the lines: 22 apart like
+    -- the figures where the column has the room, closer where it has not (the guild's two more),
+    -- so the last one always ends above the column's floor.
+    local count = map.guildOn and #legend.lines or 2
+    local top = f.figuresTop - 20 - shown * 22 - 10
+    local step = math.max(16, math.min(22, math.floor((top - 22 - R.ColumnFloor) / count)))
+    legend:ClearAllPoints()
+    legend:SetPoint("TOPLEFT", 40, top)
+    legend.heading:SetText(L("Légende"))
+    local labels = { L("Vos morts"), L("Vos victoires"), L("Morts de la guilde"), L("Victoires de la guilde") }
+    for i, line in ipairs(legend.lines) do
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", 0, -22 - (i - 1) * step)
+        line:SetSize(166, step)
+        line.mark:SetSize(math.min(18, step - 2), math.min(18, step - 2))
+        line.label:SetText(labels[i])
+        if i <= count then line:Show() else line:Hide() end
+    end
+    legend:Show()
+end
+R.PaintLegend = paintLegend
 R.PaintTally = paintTally
 -- Opens a page in its book: Relations by default, Guilde for the guild's pages.
 function R.Open(key)
@@ -2359,6 +4498,9 @@ function R.Open(key)
         end
     end
     for tabKey, tab in pairs(f.tabs) do UI.selectButton(tab, tabKey == f.page) end
+    if f.tabs.registry then UI.selectButton(f.tabs.registry, inRegistry[f.page] == true) end
+    if inRegistry[f.page] then f.registryLast = f.page end
+    paintSections(f)
     R.page = f.page
     UI.paintStains(f, f.page)  -- each page keeps its own stains
     GL.ShowBookPage(f)
@@ -2378,21 +4520,10 @@ end
 function R.Refresh()
     for _, f in pairs(R.books) do
         if f:IsShown() and f.page then
-            if f.vision then
-                local sharing, inGuild = false, false
-                if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
-                GL.Safe(f.vision.SetChecked, f.vision, sharing)
-                f.visionLabel:SetText(L("Vision de guilde"))
-                if inGuild then
-                    f.vision:Show()
-                    f.visionLabel:Show()
-                else
-                    f.vision:Hide()
-                    f.visionLabel:Hide()
-                end
-            end
             painters[f.page](f.host.pages[f.page])
+            paintSections(f)
             paintTally(f)
+            R.PaintLegend(f)
         end
     end
 end

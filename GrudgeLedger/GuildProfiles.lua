@@ -79,17 +79,40 @@ end
 local function sendTag(s,c,e)
     emit(s,table.concat({"T",c.owner,c.target,c.digest,e.seq,e.time,e.account,e.tag,e.on and "1" or "0"},";"))
 end
+local withdrawalTold={}
 local function sendDelete(s,owner,target,secret)
     emit(s,table.concat({"D",owner,target,secret},";"))
 end
+-- The player's name as your own book knows it, when it does.
+local function knownName(target)
+    local r=GL.Get and GL.Get("guid:"..target)
+    return r and type(r.fullName)=="string" and r.fullName or nil
+end
+local function sameName(a,b) return type(a)=="string" and type(b)=="string" and a:lower()==b:lower() end
+local function backers(c)
+    local seen,n={},0
+    for _,e in pairs(c.opinions or {}) do
+        if e.account and not seen[e.account] then
+            seen[e.account]=true
+            n=n+1
+        end
+    end
+    return n
+end
+-- The card of a player (25/11): the one with the right name, then the one more accounts voted on,
+-- then the first published. The oldest alone used to win, and a card dated 1970 took any player.
 local function find(s,target)
     local j=flags(s)
-    local first
+    local name=knownName(target)
+    local best,bestRank
     for key in pairs(j.byTarget[target] or {}) do
         local c=j.cards[key]
-        if not first or newest(first,c) then first=c end
+        local rank={name and sameName(c.name,name) and 1 or 0, backers(c)}
+        local better=not best or rank[1]>bestRank[1] or rank[1]==bestRank[1] and (rank[2]>bestRank[2]
+            or rank[2]==bestRank[2] and newest(best,c))
+        if better then best,bestRank=c,rank end
     end
-    return first
+    return best
 end
 function G.ForTarget(target)
     local s=B.GuildScope()
@@ -329,7 +352,16 @@ function G.Receive(s,me,sender,raw)
         local owner,target,digest=f[2]:match("^([^:]+):([^:]+):([^:]+)$")
         if not (guid(owner) and guid(target) and hex(digest,32)) then return end
         local token=j.withdrawn[f[2]]
-        if token then sendDelete(s,owner,target,token); return end
+        if token then
+            -- A member tells a withdrawal again once every five minutes at most: a flood of questions
+            -- no longer makes every member answer each one (25/11). Hearing another member tell it is
+            -- no reason to keep quiet: a member who was away did not hear it.
+            local told=withdrawalTold[f[2]]
+            if owner~=me and told and GL.Now()-told<300 then return end
+            withdrawalTold[f[2]]=GL.Now()
+            sendDelete(s,owner,target,token)
+            return
+        end
         local c=j.cards[f[2]]
         if c then
             if c.owner==me and c.name and j.secrets[c.key] then sendCreate(s,c) end
@@ -340,6 +372,10 @@ function G.Receive(s,me,sender,raw)
         at=positive(at,GL.Now()+60)
         if not(guid(target) and hex(digest,32) and at and hex(account,16) and title(name)) then return end
         local key=cardKey(sender,target,digest)
+        -- A card that names a player you know by another name is refused (25/11).
+        local known=knownName(target)
+        -- Without blame: a player may have changed name.
+        if known and not sameName(known,name) then return end
 
         if j.withdrawn[key] then
             j.retired=j.retired or {}

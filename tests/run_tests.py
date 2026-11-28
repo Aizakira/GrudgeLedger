@@ -17,6 +17,15 @@ for filename, digest in {
     "PTSerif-Bold.ttf": "038ba7336bd7ea14f12ad155bed51a4345cac5153275d521dec3ba04021c526e",
     "PTSerif-Italic.ttf": "f57e95ff9dc85691a3b2e193f2028db36f6663939a46c0fc4f286d618b80b7ce",
     "OFL.txt": "ddf311c28ddf5a5ad9747649837346b67bed9d356789c3072bb27dbce49e514d",
+    # The posters' display fonts (owner, 27/11), upstream google/fonts, with their OFL.
+    "NewRocker-Regular.ttf": "28a499ce5b8bcf0652f8b2e25135183eaddf0c3c8c3e251259b075c71d1ef14c",
+    "CinzelDecorative-Bold.ttf": "e854e68a388aa50d742a4415c1ae5c17a617ef7956c95a70021d0a4a44f20518",
+    "GermaniaOne-Regular.ttf": "3ee3d56584bab8c9e3f59cc3360aa8a36e219dcf0a9f3c8928e3da5a19277e3f",
+    "OFL-GermaniaOne.txt": "b7574cd4c76770e5e3915d16bd93f09663bd77cb041a4ec09d824c52b540529a",
+    "Skranji-Bold.ttf": "cfe2e3847d4c4d63efb207533539933b1acaaa7ea71e8df86758c01b7de6e9ab",
+    "OFL-Skranji.txt": "ea3a629259e2df37adeb16ff728e28cc7d669fb341edde948af89dbdb64e7caa",
+    "OFL-NewRocker.txt": "3b9f1bbe33dc7c6f93cf5e010b3de066efb635c0c7f34281790e7c9f61207b43",
+    "OFL-CinzelDecorative.txt": "1e5d6660366ddcfca4f2fc10e2acfba9fa4d97d40aec80d7dbfd41d730a420ae",
 }.items():
     assert sha256((font_dir / filename).read_bytes()).hexdigest() == digest, filename
 # Owner report (0.29.0): "→" showed as an empty box in game, the bundled font has no such glyph.
@@ -50,6 +59,47 @@ for name, expected_width, expected_height, transparent in (
     ("MapFeather.tga", 64, 64, True),
     ("PreyReticle.tga", 64, 64, True),
     ("BalanceGlow.tga", 256, 128, True), ("BalanceStarRuby.tga", 64, 64, True), ("BalanceStarGold.tga", 64, 64, True),
+    # The map page's kit (owner, 25/11): the frame of the map and the six icons of the Relations entries.
+    ("RelationsCarte/cadre-hg.tga", 128, 128, True), ("RelationsCarte/cadre-hd.tga", 128, 128, True),
+    ("RelationsCarte/cadre-bg.tga", 128, 128, True), ("RelationsCarte/cadre-bd.tga", 128, 128, True),
+    ("RelationsCarte/cadre-haut.tga", 512, 32, True), ("RelationsCarte/cadre-bas.tga", 512, 32, True),
+    ("RelationsCarte/cadre-gauche.tga", 32, 256, True), ("RelationsCarte/cadre-droite.tga", 32, 256, True),
+    ("RelationsCarte/separateur-carte.tga", 512, 32, True), ("Rivalites/bande-rivalite.tga", 1024, 128, True),
+    ("Rivalites/RivalSheet.tga", 1024, 256, True), ("Rivalites/RivalDuel.tga", 1024, 128, True),
+    ("Rivalites/RivalDeath.tga", 64, 64, True), ("Rivalites/RivalVictory.tga", 64, 64, True),
+    ("RelationsCarte/bilan.tga", 64, 64, True),
+    ("RelationsCarte/tableaux-detailles.tga", 64, 64, True), ("RelationsCarte/dettes.tga", 64, 64, True),
+    ("RelationsCarte/rivalites.tga", 64, 64, True), ("RelationsCarte/carte.tga", 64, 64, True),
+    ("RelationsCarte/classements.tga", 64, 64, True),
+    # The guilds' armorial (owner's kit, 26/11): fifteen crests, their motifs, six alphabets.
+    *((f"Crest{i}.tga", 128, 128, True) for i in range(1, 16)),
+    ("GuildCrestFields.tga", 512, 1024, True),
+    # The guild's journal as a register (owner's kit, 26/11).
+    ("JournalGuilde/EnteteGravee.tga", 1024, 128, True), ("JournalGuilde/FleuronGauche.tga", 256, 32, True),
+    ("JournalGuilde/FleuronDroit.tga", 256, 32, True), ("JournalGuilde/Fanion.tga", 32, 64, True),
+    ("JournalGuilde/Victoire.tga", 64, 64, True), ("JournalGuilde/Mort.tga", 64, 64, True),
+    *((f"Letters{name}.tga", 512, 256, True) for name in ("Hurlevent", "Chanteguerre", "Kaldorei", "Gnomeregan", "Karazhan", "Amani")),
+    # The guild's enemies as wanted posters (owner's kit, 27/11; tools/import_wanted_kit.py).
+    ("AvisRecherche/ToileAlliance.tga", 1024, 512, False), ("AvisRecherche/ToileHorde.tga", 1024, 512, False),
+    *((f"AvisRecherche/{name}.tga", w, h, True) for name, w, h in (
+        *((f"Coin{faction}{corner}", 128, 128) for faction in ("Alliance", "Horde") for corner in ("HG", "HD", "BG", "BD")),
+        *((f"Bord{faction}{edge}", 64, 64) for faction in ("Alliance", "Horde") for edge in ("Haut", "Bas", "Gauche", "Droite")),
+        ("FanionAlliance", 128, 128), ("CadreCoinBD", 128, 128), ("FanionHorde", 128, 256), ("EmblemeAlliance", 128, 128), ("EmblemeHorde", 128, 128),
+        ("FiligraneAlliance", 128, 128), ("FiligraneHorde", 128, 128),
+        ("EcussonAlliance", 256, 256), ("ChampAlliance", 256, 32), ("RangAlliance", 128, 128), ("BandeauAlliance", 256, 64),
+        ("SeparateurAlliance", 512, 32), ("Triangle", 32, 32),
+        *((f"{paper}{format}{tilt}", 256, 512 if format == "Grande" else 256)
+          for paper in ("Affiche", "Prime") for format in ("Grande", "Carree") for tilt in (1, 2)),
+        # The tribal papers (v9, v10; owner, 28/11): the Horde's posters.
+        *((f"Affiche{name}", 256, 512) for name in ("OrcChef", "OrcGuerre", "TrollMarais", "GnollMarais", "GnollRavins", "OgreChef")),
+        # The v8 collection (owner, 27/11): ten families, tall and small, plain and gold.
+        *((f"{paper}{family}{format}", 256, 512 if format == "Grande" else 256) for paper in ("Affiche", "Prime")
+          for family in ("Humain", "ElfeNuit", "ElfeSang", "Aerien", "Roublard", "Demoniste", "Troll", "Orc", "Tauren", "MortVivant")
+          for format in ("Grande", "Carree")),
+        ("CadrePortrait", 128, 128), ("Medaillon", 128, 128), ("MedaillonUn", 128, 128), ("Chevron", 32, 16),
+        ("Bandeau", 256, 64), ("SceauPrime", 64, 64),
+        ("Tampon", 256, 64), ("Cartouche", 256, 32), ("SeparateurEncre", 256, 16), ("SeparateurOr", 256, 16),
+        ("IconeMembres", 64, 64), ("IconeCrane", 64, 64), ("IconeLieu", 64, 64), ("ClouFace", 64, 64), ("ClouGauche", 64, 64), ("ClouDroite", 64, 64))),
 ):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")

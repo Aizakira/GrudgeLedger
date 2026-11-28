@@ -112,7 +112,7 @@ local function updateButtonState(b)
             or (enabled and theme.paper or theme.disabledGold)))
         b.caption:SetShown(not b.arrowTextureName or hot)
         -- A page arrow keeps its look when there is no page that way; it only fades.
-        local fade = b.arrowTextureName and not enabled and 0.4 or 1
+        local fade = b.bare and 0 or b.arrowTextureName and not enabled and 0.4 or 1
         b.skin:SetAlpha(fade)
         for _, piece in ipairs(b.skinCaps or {}) do piece:SetAlpha(fade) end
         b.normalSurface:SetColorTexture(unpack(red and theme.red or b.paper and theme.paper or theme.panel))

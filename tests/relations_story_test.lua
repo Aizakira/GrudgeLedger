@@ -6,6 +6,15 @@ local I, R = GL.CharacterInsights, GL.RelationsPages
 local now = GL.Now()
 GetServerTime = function() return now end
 local function click(b) b.scripts.OnClick(b, "LeftButton") end
+-- Where each piece is put, for the tests of the left column's geometry.
+do
+    local regions = getmetatable(UIParent).__index
+    local setPoint = regions.SetPoint
+    function regions:SetPoint(point, a, b, c, d)
+        setPoint(self, point, a, b)
+        self.at = { point, a, b, c, d }
+    end
+end
 local function person(first, last, id) return GL.IdentityFromName(first, last, "Player-9-" .. id) end
 
 -- An empty book opens on the Bilan (0.55.0): every portrait says how it is earned.
@@ -71,17 +80,65 @@ assert(second.record == GL.Get(avenged) and second.strike:IsShown() and second.s
 assert(second.detail:GetText():find("^Vengé le "), second.detail:GetText())
 assert(not ledger.rows[3]:IsShown() and not ledger.previous:IsEnabled() and not ledger.next:IsEnabled())
 
--- Rivalries: the most fought first, the score, the debt and the dated thread, oldest to newest.
+-- Rivalries (owner's brief, 25/11): strips ranked by what stands out, a click unfolds the sheet.
+-- Siro: a death, then six victories; the prey: three victories; Noni: three deaths. All this week.
 click(f.tabs.rivals)
 local rivals = f.host.pages.rivals
-assert(R.page == "rivals" and rivals:IsShown() and #R.Rivals() == 3 and R.Rivals()[1].record == GL.Get(avenged))
-assert(rivals.record == GL.Get(avenged) and rivals.count:GetText() == "1 / 3" and not rivals.previous:IsEnabled())
-assert(rivals.score:GetText():find("6", 1, true) and rivals.facts[2]:GetText() == "Comptes réglés", rivals.score:GetText())
-assert(rivals.steps[1]:IsShown() and rivals.steps[1].story:GetText():find("Tanaris", 1, true), rivals.steps[1].story:GetText())
-click(rivals.next)
-assert(rivals.record == nemesis and rivals.facts[2]:GetText() == "Il vous doit encore " .. GL.Debt(nemesis) and rivals.count:GetText() == "2 / 3")
-click(rivals.next)
-assert(rivals.record == GL.Get(prey) and rivals.nick:GetText() == "« " .. I.Nickname(GL.Get(prey)) .. " »" and not rivals.next:IsEnabled())
+assert(R.page == "rivals" and rivals:IsShown() and #R.Rivals() == 3)
+local strips = rivals.strips
+assert(strips[1].key == GL.Get(avenged).key and strips[2].key == GL.Get(prey).key and strips[3].key == nemesis.key and not strips[4]:IsShown())
+-- Each strip says why it matters (RivalryLines.lua): six victories for a death, three deaths in twenty minutes.
+assert(strips[1].motif:GetText() == "6 victoires, il vous craint" and strips[3].motif:GetText() == "Vous a tué 3 fois en 20 minutes", strips[3].motif:GetText())
+assert(strips[1].score.kills:GetText() == "6 V" and strips[1].score.deaths:GetText() == "1 M" and strips[1].when:GetText():find("Tanaris", 1, true), strips[1].when:GetText())
+assert(rivals.count:GetText() == "Page 1 sur 1" and not rivals.previous:IsEnabled() and not rivals.next:IsEnabled() and not rivals.sheet:IsShown())
+-- Unfolded: you and the rival, the sentence, the debt, the latest five fights from oldest to newest.
+click(strips[1])
+local sheet = rivals.sheet
+assert(rivals.open == GL.Get(avenged).key and sheet:IsShown() and sheet.debt:GetText() == "Comptes réglés")
+-- The fact that names it, then a line that pushes: you lead, so it gloats.
+local told = sheet.story:GetText()
+assert(told:find("Siro", 1, true) and told:find("Tanaris", 1, true) and told:find("sixième", 1, true) and #told > 60 and not told:find("{", 1, true), told)
+assert(sheet.steps[5]:IsShown() and sheet.steps[5].word:GetText() == "Victoire" and sheet.threadWhen:GetText():find("Tanaris", 1, true))
+assert(sheet.youName:GetText() == "Vous" and sheet.rivalName:GetText() == "Siro Siro" and strips[2]:GetHeight() == 36)
+-- The sheet takes the strip's place: the strip itself steps aside (owner, 25/11).
+assert(not strips[1]:IsShown() and strips[2]:IsShown(), "no strip shown twice")
+-- A click on the rival opens their sheet; the bounty sits under the debt.
+assert(sheet.rivalHit and sheet.rivalHit.scripts.OnClick and sheet.fold and not sheet.open, "the name opens the sheet")
+-- You wear the same frame as your rival, with your own live head when the game shows it (owner, 25/11).
+assert(sheet.self and sheet.self.guid == UnitGUID("player") and sheet.you.portraitRim and sheet.rival.portraitRim, "the same frame for both")
+-- Edge to edge: the sheet as wide as the strips, on the same left edge.
+assert(sheet:GetWidth() == strips[1]:GetWidth(), "the sheet as wide as the strips")
+-- The band where you face your rival: Alliance blue on your side, Horde red on theirs, whatever
+-- your faction (owner, 25/11), and never turned around.
+do
+    local nativeFaction = UnitFactionGroup
+    for _, side in ipairs({ "Alliance", "Horde", "Neutral" }) do
+        UnitFactionGroup = function() return side end
+        R.Refresh()
+        assert(sheet.band.texture == GL.Art.RivalDuel and (not sheet.band.texCoord or table.concat(sheet.band.texCoord, ",") == "0,1,0,1"), side)
+    end
+    UnitFactionGroup = nativeFaction
+end
+-- The strips and the sheet stay above the worn bottom of the page (the last 32 of its 510 units).
+assert(rivals.bottom >= -478, "the unfolded page ends at " .. rivals.bottom)
+click(strips[3])
+assert(rivals.open == nemesis.key and sheet.debt:GetText() == ("Noni vous doit %d points"):format(GL.Debt(nemesis)), sheet.debt:GetText())
+assert(sheet.story:GetText():find("20 minutes", 1, true) and sheet.steps[1].word:GetText() == "Mort", sheet.story:GetText())
+assert(sheet.steps[1].mark.texture == GL.Art.DeathSeal, "the seal of the kit, from the one list of pictures")
+assert(sheet.steps[3]:IsShown() and not sheet.steps[4]:IsShown(), "three fights, three steps")
+click(sheet.fold)
+assert(not rivals.open and not sheet:IsShown() and strips[1]:GetHeight() == 62 and strips[3]:IsShown(), "the arrow folds it")
+-- The search reads every name and guild, any case or accents; nothing found offers to clear it.
+local function search(text)
+    rivals.search:SetText(text)
+    rivals.search.scripts.OnTextChanged(rivals.search)
+end
+search("NONI")
+assert(strips[1].key == nemesis.key and not strips[2]:IsShown())
+search("zzz")
+assert(not strips[1]:IsShown() and rivals.empty:GetText():find("zzz", 1, true) and rivals.clear:IsShown())
+click(rivals.clear)
+assert(strips[3]:IsShown() and not rivals.clear:IsShown() and rivals.search:GetText() == "")
 
 -- Dangerous lands: one line per zone, deaths first, with who killed you there.
 click(f.tabs.lands)
@@ -105,7 +162,14 @@ known = R.Guilds()
 assert(known[1].stance == "enemy" and known[1].ruled)
 R.Refresh()
 assert(crests.cards[1]:IsShown() and crests.cards[1].stance:GetText() == "En guerre · votre règle", crests.cards[1].stance:GetText())
-assert(crests.cards[1].initials:GetText() == "OB" and R.Initials("ducks") == "D" and R.Initials("Éclats d’Ombre") == "ÉD", R.Initials("Éclats d’Ombre"))
+local drawn = crests.cards[1].crest.placed
+assert(drawn and drawn[1].letter == "O" and drawn[2].letter == "B" and R.Initials("ducks") == "D", "the crest draws OB")
+-- Articles, linking words and elisions are skipped, in every language; a name of such words keeps them.
+for name, initials in pairs({ ["Éclats d’Ombre"] = "ÉO", ["Les Corbeaux de la Dernière Nuit"] = "CD", ["La Compagnie du Lys"] = "CL",
+    ["Les Veilleurs de l'Aube"] = "VA", ["The Order of Dawn"] = "OD", ["Los Hijos del Sol"] = "HS", ["Die Wächter"] = "W",
+    ["Os Lobos"] = "L", ["The A"] = "TA" }) do
+    assert(R.Initials(name) == initials, name .. " gives " .. R.Initials(name))
+end
 -- A stranger grouped with three times nine days ago is not "your companion"; a friend grouped with is.
 GL.Remember(person("Valf", "Gank", "0010"))
 GL.RecordGroup(person("Valf", "Gank", "0010"), "g1", "Tanaris")
@@ -120,21 +184,35 @@ GL.SetReaction(person("Valf", "Gank", "0010"), "friend")
 _, companion = GL.Titles()
 assert(companion == GL.Get(person("Valf", "Gank", "0010")).key, "a friend you grouped with is")
 
--- "Classements" is the sixth page of the same book (0.44.0): four tabs, the lists of the tab as
--- chips, the same figures as the old window, a click opens the sheet.
-click(f.tabs.rankings)
+-- The Registre (owner, 25/11): one entry for the detailed tables, the debts and the rankings, its
+-- five sections under it while one is open. Four entries in the menu.
+assert(f.tabs.registry and #f.sections == 5 and not f.tabs.rankings.icon, "the Registre and its five sections")
+click(f.tabs.registry)
+-- It opens on the section left last (here the debts, read above).
+assert(R.page == "debts" and f.tabs.registry.active and f.sections[1]:IsShown() and f.sections[2].active, "the Registre opens where it was left")
+click(f.tabs.rivals)
+assert(not f.sections[1]:IsShown(), "the sections leave with the Registre")
+-- "Menaces": the rankings on their first group; the lists of the group as chips, a click opens the sheet.
+click(f.sections[3])
 local rankings = f.host.pages.rankings
-assert(R.page == "rankings" and rankings:IsShown() and f.tabs.rankings.active and #rankings.groups == 4)
+assert(R.page == "rankings" and rankings:IsShown() and f.tabs.registry.active and f.sections[3].active and #rankings.groups == 3)
 assert(rankings.title:GetText() == "Rancunes les plus fortes" and rankings.tabs[1].active and rankings.chips[4]:IsShown() and not rankings.chips[5]:IsShown())
 assert(rankings.rows[1].item.record == nemesis and rankings.rows[1].value:GetText() == "−" .. GL.Debt(nemesis), rankings.rows[1].value:GetText())
 assert(rankings.rows[1].meta:GetText():find(I.Nickname(nemesis), 1, true), rankings.rows[1].meta:GetText())
-click(rankings.tabs[3])
-click(rankings.chips[2])
-assert(rankings.title:GetText() == "Adversaires les plus vaincus" and rankings.rows[1].item.record == GL.Get(avenged) and rankings.rows[1].value:GetText() == "6")
+-- "Amis": the second group. The old "Combats" group repeated the Adversaires table: it left.
+click(f.sections[4])
+assert(rankings.group == 2 and f.sections[4].active and not f.sections[3].active)
+for _, group in ipairs(rankings.groups) do
+    for _, entry in ipairs(group.entries) do assert(entry[2] ~= "Adversaires les plus vaincus", "no repeat of the Adversaires") end
+end
 -- The crests lead to the guild tab; a guild line shows its initials and your rule.
 click(g.tabs.guilds)
 click(crests.cards[1])
-assert(R.page == "rankings" and rankings.tabs[4].active and rankings.rows[1].item.name == "Ok Bodycount" and rankings.rows[1].initials:GetText() == "OB")
+assert(R.page == "rankings" and rankings.group == 3 and f.sections[5].active and rankings.rows[1].item.name == "Ok Bodycount"
+    and rankings.rows[1].crest.placed and rankings.rows[1].crest.placed[2].letter == "B" and rankings.rows[1].initials:GetText() == "")
+-- The crest no longer tells the relation: the guild's name does, in the colour of your rule.
+local nameColor, enemyInk = { rankings.rows[1].name:GetTextColor() }, GL.RelationInks.enemy
+assert(not enemyInk or math.abs(nameColor[1] - enemyInk[1]) < 0.01, "the name in the colour of the rule")
 click(rankings.chips[6])
 assert(rankings.title:GetText() == "Mes règles de guilde" and rankings.rows[1].value:GetText() == "Ennemi", rankings.rows[1].value:GetText())
 assert(#GL.errors == 0, (GL.errors[1] or {}).text)
@@ -223,10 +301,54 @@ do
     -- One region for the zone you fought in, in the game's shape, added to the map like the game
     -- does (never a black square); the worst zone is bright red. Zones of every continent, no total.
     assert(#view.tallies == 1 and view.tallies[1].zone.name == "Tanaris" and #view.shapes == 1 and view.regions[1]:IsShown())
-    assert(view.shapes[1].zone.shape.file == 9001 and view.shapes[1].alpha > 0.9 and view.regions[1].blendMode == "ADD")
-    assert(view.regions[1].vertex[1] > 0.8 and view.labels[1].count:GetText() == tostring(R.Lands()[1].deaths))
+    -- The owner's rule (25/11): the colour follows the ratio of victories to deaths, none when even,
+    -- full at four to one. Here 9 victories for 6 deaths: a light green, and the fraction 9 over 6.
+    local lit = math.log(9 / 6) / math.log(4)
+    assert(view.shapes[1].zone.shape.file == 9001 and math.abs(view.shapes[1].alpha - lit) < 0.001 and view.regions[1].blendMode == "ADD")
+    assert(view.regions[1].vertex[2] > 0.5 and view.labels[1].kills:GetText() == "9" and view.labels[1].deaths:GetText() == "6")
     assert(math.abs(view.tallies[1].zone.rect.left - 0.26) < 0.001 and math.abs(view.shapes[1].zone.shape.width - 0.088) < 0.001)
-    assert(view.caption:GetText():find("^Azeroth · "), view.caption:GetText())
+    assert(view.caption:GetText():find("^Azeroth "), view.caption:GetText())
+    -- The owner's kit (25/11): a brass frame over the map, an icon on each entry, the legend under
+    -- the key figures while the map shows, the counts under the title.
+    assert(view.frame and view.frame.pieces["cadre-hg"] and f.tabs.lands.icon and f.tabs.recap.icon and f.legend:IsShown(), "map kit")
+    assert(f.legend.heading:GetText() == "Légende" and f.legend.lines[1]:IsShown() and not f.legend.lines[3]:IsShown())
+    -- The left column never goes under the book's frame (owner report, 28/11: with the guild's fights
+    -- on, the legend's fourth line lay over the frame). Each piece's foot is read from where it was
+    -- put: the entries, the key figures, the legend's lines.
+    local function columnFoot(book)
+        local foot = 0
+        local function low(piece, from)
+            if piece:IsShown() then foot = math.min(foot, (from or 0) + piece.at[3] - piece:GetHeight()) end
+        end
+        for _, tab in pairs(book.tabs) do low(tab) end
+        for _, cell in ipairs(book.tally) do low(cell) end
+        if book.legend and book.legend:IsShown() then
+            for _, line in ipairs(book.legend.lines) do low(line, book.legend.at[3]) end
+        end
+        return foot
+    end
+    assert(columnFoot(f) >= R.ColumnFloor, "legend, your own fights: " .. columnFoot(f))
+    local realEnabled = GL.GuildMap.Enabled
+    GL.GuildMap.Enabled = function() return true, true end
+    R.Refresh()
+    assert(view.guildOn and f.legend.lines[4]:IsShown() and f.legend.lines[4].label:GetText() == "Victoires de la guilde")
+    assert(columnFoot(f) >= R.ColumnFloor, "legend with the guild's two lines: " .. columnFoot(f))
+    -- The four lines keep apart, each with room for its words (12 units of letters).
+    assert(f.legend.lines[3].at[3] - f.legend.lines[4].at[3] >= 16 and f.legend.lines[4]:GetHeight() >= 16)
+    GL.GuildMap.Enabled = realEnabled
+    R.Refresh()
+    assert(not f.legend.lines[3]:IsShown())
+    -- Every page of the book, the Registre's sections open or not.
+    for _, key in ipairs({ "recap", "rivals", "honor", "debts", "rankings", "lands" }) do
+        R.Open(key)
+        assert(columnFoot(f) >= R.ColumnFloor, key .. ": " .. columnFoot(f))
+    end
+    assert(not landsPage.lead:IsShown() and view.caption:GetText():find("6 morts", 1, true))
+    -- The line under the map stays on the sound part of the sheet (owner report 25/11: it fell on the
+    -- worn bottom edge, about the last 32 units of the 510-unit page): map top 70, map, 12, buttons 26.
+    assert(70 + view.height + 12 + 26 <= 510 - 30, "the bottom line is above the sheet's curl: " .. view.height)
+    assert(view.hint.color and view.hint.color[1] < 0.3 and view.hint.font[2] == 12, "the hint reads: dark ink, 12")
+    assert(landsPage.rule.texture and landsPage.rule.texture:find("separateur-carte", 1, true), "the owner's separator")
     -- Zoomed out the fights are hidden; they are placed through the zone's rectangle on the world.
     assert(#view.placed == 1 and view.placed[1].event == event and not view.points[1]:IsShown() and not next(view.live))
     assert(math.abs(view.placed[1].x - (0.26 + 0.512 * 0.08)) < 0.001 and math.abs(view.placed[1].y - (0.56 + 0.288 * 0.12)) < 0.001)
@@ -240,7 +362,7 @@ do
     view.canvas.scripts.OnUpdate(view.canvas, 0.02)
     assert(view.goal and view.zoom > 1 / 0.6 and view.zoom < view.goal.zoom, view.zoom)
     settle()
-    assert(not view.goal and math.abs(view.zoom - 1.3 / 0.6) < 0.001 and math.abs(view.cx - 0.3) < 0.001)
+    assert(not view.goal and math.abs(view.zoom - 1.3 / 0.6) < 0.001 and math.abs(view.cx - 0.3) < 0.01, view.zoom .. " " .. view.cx)
     for _ = 1, 2 do
         wheel(view.canvas, 1)
         settle()
@@ -266,7 +388,7 @@ do
     click(view.labels[1])
     settle()
     assert(math.abs(view.zoom - 0.85 / 0.12) < 0.001 and math.abs(view.cx - 0.3) < 0.001 and math.abs(view.cy - 0.62) < 0.001, view.zoom)
-    assert(view.caption:GetText():find("^Tanaris · "), view.caption:GetText())
+    assert(view.caption:GetText():find("^Tanaris "), view.caption:GetText())
     assert(view.live[1446].textures[1].alpha == 1 and view.out:IsShown())
     -- "Monde" backs out to the whole world; "Ma position" returns to your zone.
     assert(R.MapOut() == true)
@@ -275,7 +397,7 @@ do
     assert(not view.live[1446].textures[1]:IsShown() and continent.art.hidden, "detail and continents step back")
     click(view.mine)
     settle()
-    assert(view.zoom > 7 and view.caption:GetText():find("^Tanaris · "))
+    assert(view.zoom > 7 and view.caption:GetText():find("^Tanaris "))
     -- Only finished fights are drawn: an attack without an outcome was a brown square (owner report).
     event.kind = "aggression"
     assert(#R.MapPoints(947, view.world.zones) == 0)
@@ -285,8 +407,8 @@ do
     R.MapOut()
     settle()
     assert(view.world.art.textures[1].vertex[1] < 0.5 and view.labels[1].fill.color[4] == 0, "no plate under the number")
-    assert(view.labels[1].count.color[1] == 1 and view.labels[1].count.color[2] < 0.3 and view.labels[1].count.font[3] == "OUTLINE")
-    assert(view.regions[1].boost:IsShown() and view.regions[1].boost.blendMode == "ADD", "the deadliest zone is lit twice")
+    assert(view.labels[1].kills.color[2] == 1 and view.labels[1].deaths.color[1] == 1 and view.labels[1].kills.font[3] == "OUTLINE")
+    assert(view.regions[1].boost:IsShown() and view.regions[1].boost.vertex[2] > 0.9, "a won zone is lit twice, green, like a lost one in red")
     -- Guild vision (0.49.0): one box on the page; the guild's fights are counted and drawn with yours.
     local realEnabled, realPoints, realEnable = GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable
     local ticked = false
@@ -299,16 +421,23 @@ do
             { actor = "Player-1-Mate0002", time = 1700000100, mapID = 99999, x = 0.2, y = 0.4, kind = "death" } }
     end
     R.Refresh()
-    assert(landsPage.guild:IsShown() and not landsPage.guild:GetChecked() and #view.tallies == 1 and #view.placed == 1)
-    landsPage.guild:SetChecked(true)
-    landsPage.guild.scripts.OnClick(landsPage.guild)
-    assert(ticked == true and landsPage.guild:GetChecked() and landsPage.lead:GetText() == "Vos combats et ceux de la guilde.")
+    -- Not sharing (a setting): nothing of the guild, and no filter to offer.
+    assert(not landsPage.guild:IsShown() and #view.tallies == 1 and #view.placed == 1)
+    ticked = true
+    R.Refresh()
+    -- Sharing: the box is a filter of the map only (owner, 26/11), ticked by default.
+    assert(landsPage.guild:IsShown() and landsPage.guild:GetChecked() and landsPage.lead:GetText() == "Vos combats et ceux de la guilde.")
     assert(#view.tallies == 2 and view.tallyOf[1444].deaths == 1 and view.tallyOf[1444].kills == 1, #view.tallies)
     assert(#view.placed == 3 and view.placed[2].guild == "Player-1-Mate0001" and view.hint:GetText():find("guilde : 2", 1, true), view.hint:GetText())
     assert(math.abs(view.placed[2].x - (0.1 + 0.2 * 0.4)) < 0.001, "placed through the zone's rectangle; an unknown map is left out")
     landsPage.guild:SetChecked(false)
     landsPage.guild.scripts.OnClick(landsPage.guild)
-    assert(#view.tallies == 1 and #view.placed == 1)
+    assert(#view.tallies == 1 and #view.placed == 1 and ticked == true and GL.db.mapHideGuild == true, "yours only, still sharing")
+    landsPage.guild:SetChecked(true)
+    landsPage.guild.scripts.OnClick(landsPage.guild)
+    assert(#view.tallies == 2 and GL.db.mapHideGuild == nil)
+    ticked = false
+    R.Refresh()
     -- The guild's journal (0.51.0): one line a fight, yours included, a click opens the opponent's sheet.
     ticked = true
     GL.GuildMap.Points = function(withMine)
@@ -323,17 +452,28 @@ do
     end
     local gb = R.OpenGuild("guildlog")
     local log = gb.host.pages.guildlog
-    assert(log:IsShown() and log.title:GetText() == "Journal de guilde" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
-    assert(log.rows[2].story:GetText() == "Un membre de la guilde a tué Bad Guy" and log.rows[2].where:GetText() == "Feralas · il y a 2 h")
-    assert(log.rows[6]:IsShown() and log.count:GetText() == "9 combats · 5 morts" and log.next:IsEnabled() and not log.previous:IsEnabled())
-    -- The Journal's three controls: search, the list button with its count, "Filtres".
-    assert(log.viewCycle:GetText() == "Tous · 9" and log.openFilters:GetText() == "Filtres" and not log.filterPanel:IsShown())
+    -- The register (owner's kit, 26/11): when, outcome, member, opponent and place, one fight a line.
+    local function line(i) local r = log.rows[i] return table.concat({ r.when:GetText(), r.issue:GetText(), r.member:GetText(), r.foe:GetText(), r.where:GetText() }, " | ") end
+    assert(log:IsShown() and log.title:GetText() == "Journal de guilde" and line(1) == "il y a 1 h | Mort | Vous | Bad Guy | Feralas", line(1))
+    assert(line(2) == "il y a 2 h | Victoire | Un membre de la guilde | Bad Guy | Feralas", line(2))
+    assert(log.heads[1]:GetText() == "Quand" and log.heads[3]:GetText() == "Membre de la guilde" and log.heads[4]:GetText() == "Adversaire")
+    assert(log.rows[6]:IsShown() and log.count:GetText() == "1–6 sur 9 combats" and log.next:IsEnabled() and not log.previous:IsEnabled())
+    assert(log.fleuronLeft:IsShown() and log.fleuronRight:IsShown(), "the count between its fleurons")
+    -- The controls: search, the four lists side by side (Tous lit), "Filtres".
+    assert(log.views[1].active and not log.views[2].active and log.openFilters:GetText() == "Filtres" and not log.filterPanel:IsShown())
+    -- A first visit marks nothing new.
+    assert(not log.rows[1].pennant:IsShown(), "no pennant on a first visit")
     local opened
     local realDossier = GL.OpenPlayerDossier
     GL.OpenPlayerDossier = function(id, _, known) opened = id .. "/" .. tostring(known) end
     click(log.rows[2])
     assert(opened == "Player-1-Foe0001/Bad Guy", opened)
-    -- "Rechercher": a wanted notice without gold, in one click; the button leaves once one runs.
+    -- "…": the sheet and a wanted notice without gold; the notice leaves once one runs.
+    opened = nil
+    click(log.rows[2].more)
+    assert(log.lineMenu:IsShown() and log.lineMenu.sheet:IsShown() and log.lineMenu.wanted:IsShown())
+    click(log.lineMenu.sheet)
+    assert(opened == "Player-1-Foe0001/Bad Guy" and not log.lineMenu:IsShown(), tostring(opened))
     local posted
     local realPost, realOpen = GL.Bounties.Post, GL.Bounties.OpenFor
     GL.Bounties.Post = function(target, known, copper)
@@ -341,29 +481,33 @@ do
         return "order-1"
     end
     GL.Bounties.OpenFor = function(target) return posted and target == "Player-1-Foe0001" and { state = "open" } or nil end
-    assert(log.rows[2].wanted:IsShown())
-    click(log.rows[2].wanted)
-    assert(posted == "Player-1-Foe0001/Bad Guy/0" and not log.rows[2].wanted:IsShown(), posted)
+    click(log.rows[2].more)
+    click(log.lineMenu.wanted)
+    assert(posted == "Player-1-Foe0001/Bad Guy/0" and not log.rows[2].canWant, posted)
+    click(log.rows[2].more)
+    assert(log.lineMenu.sheet:IsShown() and not log.lineMenu.wanted:IsShown(), "no second notice")
+    click(log.rows[2].more)
+    assert(not log.lineMenu:IsShown(), "a second click closes the menu")
     GL.Bounties.Post, GL.Bounties.OpenFor = realPost, realOpen
     click(log.next)
-    assert(log.rows[3].story:GetText() == "Un membre de la guilde a été tué par un joueur inconnu" and not log.rows[3].sheet:IsShown())
-    assert(not log.rows[3].wanted:IsShown() and not log.rows[4]:IsShown() and not log.next:IsEnabled())
-    -- The list button: Tous, Morts, Victoires, Mes combats, each with its count; a new list starts clean.
-    click(log.viewCycle)
-    assert(log.viewCycle:GetText() == "Morts · 5" and log.count:GetText() == "5 combats · 5 morts" and log.offset == 0)
-    click(log.viewCycle)
-    assert(log.viewCycle:GetText() == "Victoires · 4")
-    click(log.viewCycle)
-    assert(log.viewCycle:GetText() == "Mes combats · 1" and log.rows[1].story:GetText() == "Vous avez été tué par Bad Guy")
-    click(log.viewCycle)
-    assert(log.viewCycle:GetText() == "Tous · 9")
+    assert(log.rows[3].foe:GetText() == "un joueur inconnu" and not log.rows[3].more:IsShown(), "nothing to do on an unknown opponent")
+    assert(not log.rows[4]:IsShown() and not log.next:IsEnabled() and log.count:GetText() == "7–9 sur 9 combats", log.count:GetText())
+    -- The four lists, each one click away; a new list starts clean.
+    click(log.views[3])
+    assert(log.views[3].active and log.count:GetText() == "1–5 sur 5 combats" and log.offset == 0, log.count:GetText())
+    click(log.views[2])
+    assert(log.count:GetText() == "1–4 sur 4 combats")
+    click(log.views[4])
+    assert(log.count:GetText() == "1–1 sur 1 combats" and log.rows[1].member:GetText() == "Vous")
+    click(log.views[1])
+    assert(log.views[1].active and log.count:GetText() == "1–6 sur 9 combats")
     -- The search finds a member or an opponent by part of the name.
     log.search:SetText("bad")
     log.search.scripts.OnEnterPressed(log.search)
-    assert(log.count:GetText() == "8 combats · 4 morts", log.count:GetText())
+    assert(log.count:GetText() == "1–6 sur 8 combats", log.count:GetText())
     log.search:SetText("")
     log.search.scripts.OnTextChanged(log.search)
-    assert(log.count:GetText() == "9 combats · 5 morts")
+    assert(log.count:GetText() == "1–6 sur 9 combats")
     -- "Filtres" opens the Journal's panel: period, member, enemy; the button counts what is chosen.
     click(log.openFilters)
     local panel = log.filterPanel
@@ -371,36 +515,193 @@ do
     assert(panel.who[1]:GetText() == "Tous les membres" and panel.who[2]:GetText() == "Vous · 1" and panel.who[3]:GetText() == "Un membre de l… · 8")
     assert(panel.foe[2]:GetText() == "Bad Guy · 8" and not panel.foe[3]:IsShown(), "an unnamed opponent is not offered")
     click(panel.who[3])
-    assert(panel:IsShown() and log.count:GetText() == "8 combats · 4 morts" and log.openFilters:GetText() == "Filtres · 1")
+    assert(panel:IsShown() and log.count:GetText() == "1–6 sur 8 combats" and log.openFilters:GetText() == "Filtres · 1")
     assert(panel.whoCaption:GetText() == "Membre : Un membre de la guilde")
     click(panel.periods[3])
     assert(panel.periodCaption:GetText() == "Période : 7 jours" and log.openFilters:GetText() == "Filtres · 2")
     click(panel.foe[2])
-    assert(log.count:GetText() == "7 combats · 3 morts" and log.openFilters:GetText() == "Filtres · 3")
+    assert(log.count:GetText() == "1–6 sur 7 combats" and log.openFilters:GetText() == "Filtres · 3")
     -- Nothing left: the page says how to get everything back, and "Effacer" does it.
     log.filter.who = "Player-1-Nobody01"
     R.Refresh()
     assert(not log.rows[1]:IsShown() and log.empty:GetText():find("Effacer", 1, true))
     click(panel.clear)
-    assert(log.count:GetText() == "9 combats · 5 morts" and log.openFilters:GetText() == "Filtres" and log.viewCycle:GetText() == "Tous · 9")
+    assert(log.count:GetText() == "1–6 sur 9 combats" and log.openFilters:GetText() == "Filtres" and log.views[1].active)
     click(panel.close)
     assert(not panel:IsShown())
+    -- The pennant: leaving the page counts its fights as seen; a fight come in after is marked.
+    log.scripts.OnHide(log)
+    assert(GL.db.guildLogSeenAt == GL.Now() - 3600, tostring(GL.db.guildLogSeenAt))
+    local earlier = GL.GuildMap.Points
+    GL.GuildMap.Points = function(withMine)
+        local list = earlier(withMine)
+        table.insert(list, 1, { actor = "Player-1-Mate0002", time = GL.Now() - 60, mapID = 1444, kind = "kill", target = "Player-1-Foe0002", name = "New Guy" })
+        return list
+    end
+    R.Refresh()
+    assert(log.rows[1].pennant:IsShown() and log.rows[1].foe:GetText() == "New Guy" and not log.rows[2].pennant:IsShown(), "only the new fight")
+    GL.GuildMap.Points = earlier
+    log.scripts.OnHide(log)
+    R.Refresh()
     -- The guild's book (0.55.0): the guild vision's box, the guild's week as key figures, and the
     -- guild's enemies, the deadliest first.
-    assert(gb.vision:IsShown() and gb.vision:GetChecked() and gb.keyHeading:GetText() == "Chiffres clés")
+    -- The box is on the map only now (owner, 26/11): the guild's book has none.
+    assert(gb.vision == nil and gb.keyHeading:GetText() == "Chiffres clés" and not log.reshare:IsShown())
     assert(gb.tally[1].label:GetText() == "Morts · 7 j" and gb.tally[1].value:GetText() == "5" and gb.tally[4].value:GetText() == "2")
     click(gb.tally[3])
     local enemies = gb.host.pages.enemies
-    assert(R.page == "enemies" and enemies:IsShown() and enemies.viewCycle:GetText() == "Toujours · 1")
-    assert(enemies.rows[1].story:GetText() == "Bad Guy" and enemies.rows[1].deaths:GetText() == "4" and not enemies.rows[2]:IsShown())
-    assert(enemies.rows[1].where:GetText() == "2 membres tués · vaincu 4 fois par la guilde · Feralas, il y a 1 h", enemies.rows[1].where:GetText())
-    click(enemies.rows[1])
+    -- The mockup's two lists (owner, 27/11): the last 30 days and every poster at first.
+    assert(R.page == "enemies" and enemies:IsShown() and enemies.periodButton:GetText() == "30 derniers jours")
+    assert(enemies.showButton:GetText() == "Toutes les affiches")
+    -- Wanted posters (owner's kit, 27/11): the first on the tall one, every figure as text.
+    local hero = enemies.posters[1]
+    assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "1" and hero.rankHash:GetText() == "" and hero.title:GetText() == "RECHERCHÉ" and not enemies.posters[2]:IsShown())
+    assert(hero.labelText:GetText() == "ENNEMI PUBLIC N°1" and hero.figures[1].number:GetText() == "2" and hero.figures[1].words:GetText() == "membres tués")
+    -- A hunting board (owner, 27/11): the victims by name (you, then one the roster cannot name), where
+    -- and when the guild last met them; the deaths in the tooltip; not avenged (his last kill is later).
+    assert(hero.figures[2].number:GetText() == "" and hero.figures[2].words:GetText() == "Vous\194\160+1", hero.figures[2].words:GetText())
+    assert(hero.seen:GetText() == "Feralas · il y a 1 h" and hero.figures[3].number:GetText() == "", hero.seen:GetText())
+    assert(hero.where == "Feralas" and hero.kills == "vaincu 4 fois par la guilde" and hero.deaths == "4 morts infligées", hero.deaths)
+    assert(not hero.seal:IsShown() and not hero.stamp:IsShown() and not hero.ribbon:IsShown())
+    -- One killer, one poster (owner, 28/11): you saw his identity and realm, a member only his name;
+    -- he killed two members and comes first, over a killer of one.
+    do
+        local savedPoints = GL.GuildMap.Points
+        local at = GL.Now()
+        GL.GuildMap.Points = function()
+            return {
+                { actor = "Player-1-Me000001", mine = true, time = at - 600, mapID = 1444, kind = "death", target = "Player-1-0000CCCC", name = "Gankeur-Forever" },
+                { actor = "Player-1-Mate0001", time = at - 86400, mapID = 1444, kind = "death", name = "gankeur" },
+                { actor = "Player-1-Mate0002", time = at - 3000, mapID = 1444, kind = "death", target = "Player-1-0000DDDD", name = "Autre" },
+            }
+        end
+        local list = R.GuildEnemies(30 * 86400)
+        assert(#list == 2 and list[1].target == "Player-1-0000CCCC" and list[1].members == 2 and list[1].deaths == 2, #list)
+        assert(list[1].name == "Gankeur-Forever" and list[2].name == "Autre")
+        GL.GuildMap.Points = savedPoints
+    end
+    local enemy = R.GuildEnemies(0)[1]
+    assert(enemy.avenged == false and enemy.avengedAt < enemy.last)
+    enemy.avengedAt = enemy.last + 60
+    assert(R.VictimNames(enemy, 1) == "Vous\194\160+1" and R.VictimNames({ victims = {} }, 3) == nil)
+    -- A killer the guild never saw with an identity keeps the bounty posted on their name (owner, 27/11:
+    -- Avec une prime shows them all), and takes the bounty's identity to open the sheet.
+    local savedBounties, savedTotal = GL.Bounties, GL.BountyTotal
+    GL.Bounties = { OpenFor = function() return nil end, List = function()
+        return { a = { state = "open", name = "Lone Killer", target = "Player-1-0000AAAA", expires = GL.Now() + 100 },
+            b = { state = "open", name = "Other", target = "Player-1-0000BBBB", expires = GL.Now() + 100 } }
+    end }
+    GL.BountyTotal = function() return 5000 end
+    local stranger = { name = "Lone Killer" }
+    local open, gold = R.EnemyBounty(stranger)
+    assert(open and open.target == "Player-1-0000AAAA" and gold == 5000 and stranger.target == "Player-1-0000AAAA")
+    assert(R.EnemyBounty({ name = "Nobody" }) == nil)
+    GL.Bounties, GL.BountyTotal = savedBounties, savedTotal
+    -- The posters' layout (owner, 27/11): drawn from who is on the page, the same while they stay,
+    -- another when one arrives; never over another's writing, never off the board.
+    local function items(n, bountyAt)
+        local out = {}
+        for i = 1, n do out[i] = { key = "Enemy" .. i .. "-Realm", bounty = i == bountyAt } end
+        return out
+    end
+    local function same(a, b)
+        for i = 1, #a do
+            if a[i].x ~= b[i].x or a[i].y ~= b[i].y or a[i].paper ~= b[i].paper then return false end
+        end
+        return #a == #b
+    end
+    local changed, draws = 0, 0
+    for n = 1, 5 do
+        for bountyAt = 0, n do
+            local spots, drawn = R.PosterLayout(items(n, bountyAt))
+            assert(#spots == n and R.PosterReadable(spots) and same(spots, R.PosterLayout(items(n, bountyAt))))
+            if drawn then draws = draws + 1 end
+            for i, spot in ipairs(spots) do
+                assert(spot.x >= 0 and spot.x + spot.w <= 664 and spot.y <= -60 and spot.y - spot.h >= -480, spot.paper)
+                -- A gold paper only on a bounty; the papers of one size have no gold edition.
+                assert(spot.paper:find("^Affiche") or (bountyAt == i and spot.paper:find("^Prime")), spot.paper)
+                assert(GL.Art.WantedRatio[spot.paper] and GL.Art.WantedText[spot.paper], spot.paper)
+                assert(spot.w <= (i == 1 and 300 or 184), spot.paper)
+            end
+            assert(GL.Art.WantedRatio[spots[1].paper] < 0.9, "the first poster is a tall paper")
+            -- The papers go by the faction that posts (owner, 28/11): tribal ones for a Horde guild,
+            -- never the Alliance's peoples'; and the other way round.
+            local horde = R.PosterLayout(items(n, bountyAt), "Horde")
+            assert(#horde == n and same(horde, R.PosterLayout(items(n, bountyAt), "Horde")))
+            for i, spot in ipairs(horde) do
+                assert(not spot.paper:find("Humain") and not spot.paper:find("Elfe") and not spot.paper:find("Nain"), spot.paper)
+                assert(not spots[i].paper:find("Orc") and not spots[i].paper:find("Troll") and not spots[i].paper:find("Gnoll"), spots[i].paper)
+                assert(spot.x >= 0 and spot.x + spot.w <= 664 and spot.y <= -60 and spot.y - spot.h >= -480, spot.paper)
+            end
+        end
+        local more = items(5)
+        more[n].key = "Newcomer-Realm"
+        if not same(R.PosterLayout(items(5)), R.PosterLayout(more)) then changed = changed + 1 end
+    end
+    assert(changed >= 4 and draws >= 18, "a newcomer moves the posters, and most draws are kept")
+    -- The lists open under their button; a choice closes the menu and repaints the posters.
+    click(enemies.periodButton)
+    assert(enemies.periodButton.menu:IsShown())
+    click(enemies.periodButton.menu.choices[3])
+    assert(not enemies.periodButton.menu:IsShown() and enemies.periodButton:GetText() == "Toujours" and hero:IsShown())
+    click(enemies.showButton)
+    click(enemies.showButton.menu.choices[2])
+    assert(enemies.showButton:GetText() == "Avec une prime" and not hero:IsShown(), "no bounty on him")
+    click(enemies.showButton)
+    click(enemies.showButton.menu.choices[1])
+    assert(hero:IsShown())
+    -- The worst threats (owner, 26/11): time and harm together, his examples.
+    local now, D = GL.Now(), 86400
+    local function near(a, b) return math.abs(a - b) < 0.05 end
+    local fiveWeeks = R.Threat({ a = { now - 35 * D }, b = { now - 35 * D }, c = { now - 35 * D } })
+    assert(near(fiveWeeks, 1.89) and near(R.Threat({ a = { now - 7 * D } }), 0.79), fiveWeeks)
+    assert(fiveWeeks > R.Threat({ a = { now - 7 * D } }), "three members five weeks ago still stand out")
+    assert(R.Threat({ a = { now - 7 * D }, b = { now - 7 * D } }) > fiveWeeks, "two members last week come first")
+    assert(R.Threat({ a = { now - 90 * D }, b = { now - 90 * D } }) < 0.2, "unseen for three months: nearly nothing")
+    assert(R.Threat({ a = { now, now, now } }) < R.Threat({ a = { now }, b = { now }, c = { now } }), "different victims weigh more")
+    click(hero.hit)
     assert(opened == "Player-1-Foe0001/Bad Guy")
+    -- The preview from the Horde (owner, 27/11: no Horde character, no guild): invented enemies on
+    -- the Horde's tapestry, a bounty, a notice, an avenged one; their posters open nothing; closing
+    -- the book ends it.
+    opened = nil
+    SlashCmdList.GRUDGELEDGER("apercu horde")
+    assert(R.preview and R.preview.faction == "Horde" and enemies:IsShown())
+    assert(enemies.previewNote:GetText():find("Aperçu", 1, true) and enemies.cloth.texture:find("ToileHorde"))
+    assert(enemies.posters[5]:IsShown() and hero.name:GetText() == "Aldric Fendroc" and hero.ribbon:IsShown())
+    -- The Horde has no kit for its head: the banner, the book's buttons, the gold medals and their #.
+    assert(not enemies.divider[1]:IsShown() and enemies.rule:IsShown() and not enemies.periodButton.field:IsShown() and not enemies.periodButton.bare)
+    assert(hero.ribbon.texture:find("Bandeau$") and hero.seal:IsShown())
+    assert(enemies.banner.texture:find("FanionHorde") and hero.medal.texture:find("MedaillonUn") and hero.rankHash:GetText() == "#")
+    assert(enemies.posters[4].stamp:IsShown() and enemies.posters[4].stamp.words:GetText() == "VENGÉ")
+    click(hero.hit)
+    assert(opened == nil and not hero.canWant, "an invented enemy opens no sheet")
+    SlashCmdList.GRUDGELEDGER("apercu alliance")
+    assert(R.preview.faction == "Alliance" and enemies.cloth.texture:find("ToileAlliance") and hero.name:GetText() == "Grok Crânefendu")
+    -- The Alliance's integration kit (owner, 28/11): the crest, the choices' fields, the divider under
+    -- the head, the ranks' plaque with the number alone, the bounty's gold band without the coin.
+    assert(enemies.divider[1]:IsShown() and enemies.divider[3]:IsShown() and enemies.banner.texture:find("EcussonAlliance"))
+    assert(hero.ribbon:IsShown() and hero.ribbon.texture:find("BandeauAlliance") and not hero.seal:IsShown())
+    -- The border: one rule a side, a flourish on three corners, none over the book's own ornament.
+    assert(enemies.sides.left.texture:find("BordAllianceHaut") and enemies.corners.BG.texture:find("CoinAllianceBG") and not enemies.corners.BD)
+    assert(enemies.periodButton.field:IsShown() and enemies.periodButton.bare and not enemies.rule:IsShown())
+    assert(hero.medal.texture:find("RangAlliance") and hero.rankHash:GetText() == "" and hero.rank:GetText() == "1")
+    gb:Hide()
+    assert(R.preview == nil, "closing the book ends the preview")
+    R.OpenGuild("enemies")
+    assert(enemies.previewNote:GetText() == "" and hero.name:GetText() == "Bad Guy")
     click(gb.tabs.guildlog)
     GL.OpenPlayerDossier = realDossier
     ticked = false
     R.Refresh()
-    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("décochée", 1, true))
+    assert(not log.rows[1]:IsShown() and log.empty:GetText():find("réglages", 1, true) and log.reshare:IsShown())
+    -- The way to the setting (owner, 26/11: sharing is a setting, never a box of a page).
+    local askedPage
+    local realShow = GL.ShowSettings
+    GL.ShowSettings = function(category) askedPage = category end
+    click(log.reshare)
+    assert(askedPage == "relations" and ticked == false, tostring(askedPage))
+    GL.ShowSettings = realShow
     click(f.tabs.lands)
     GL.GuildMap.Enabled, GL.GuildMap.Points, GL.GuildMap.Enable = realEnabled, realPoints, realEnable
     -- "Voir la liste" gives the list back; a client without map pictures only has the list.

@@ -251,13 +251,11 @@ local function ensureMarker(plate)
     local level = GL.Safe(plate.GetFrameLevel, plate) or 0
     local tpLevel = plate.TPFrame and GL.Safe(plate.TPFrame.GetFrameLevel, plate.TPFrame) or 0
     frame:SetFrameLevel(math.max(level, tpLevel) + 20)
-    local bg = frame:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0.025, 0.025, 0.025, 0.95)
+    -- The relation icons are round cut-out medallions: no backing square behind them (owner, 27/11:
+    -- the dark square around the icon on a name plate looked like a bug).
     local icon = frame:CreateTexture(nil, "OVERLAY")
     icon:SetVertexColor(1, 1, 1)
-    icon:SetPoint("TOPLEFT", 2, -2)
-    icon:SetPoint("BOTTOMRIGHT", -2, 2)
+    icon:SetAllPoints()
     local marker = { frame = frame, icon = icon }
     markers[plate] = marker
     return marker

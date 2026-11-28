@@ -495,6 +495,8 @@ function GL.EngravingFor(record)
     return data.names[foldName(record.lastZone) or ""] or data.names[foldName(record.lastEncounterZone) or ""]
 end
 GL.PaintBookPortrait = identityIcons
+-- The same folding for every search of names (the Rivalités search, 25/11).
+GL.FoldName = foldName
 GL.VisiblePortraitUnit = portraitUnit
 local function stamp(t) return date("%d/%m/%Y %H:%M", t or GL.Now()) end
 local frenchNumbers = not GetLocale or GetLocale() == "frFR"
@@ -2450,10 +2452,15 @@ local function renderDetail()
             -- Against you: red, with ruby stars. For you (or ahead, 0.61.2): a deep gold that stays
             -- readable on the parchment, with gold stars. Even: plain ink, no light.
             local text = ahead and ("+" .. raw) or (score > 0 and ("+" .. score) or tostring(score))
+            -- A positive score only ever comes from friendly gestures (victories cannot make a
+            -- friend): it is the friend's green (owner, 26/11); the gold stays for being ahead.
             if score < 0 then
                 local c = inkColors.enemy
                 ledger.paintBalance(text, c[1], c[2], c[3], "ruby")
-            elseif ahead or score > 0 then
+            elseif score > 0 then
+                local c = inkColors.friend
+                ledger.paintBalance(text, c[1], c[2], c[3], "friend")
+            elseif ahead then
                 ledger.paintBalance(text, 0.72, 0.50, 0.06, "gold")
             else
                 ledger.paintBalance(text, theme.ink[1], theme.ink[2], theme.ink[3], nil)
@@ -2801,8 +2808,22 @@ showSettings = function()
         settingText(p, L("Champs de bataille et arènes"), 356, 606, 548, 17)
         settingText(p, L("Enregistrement et alertes en pause. Vos notes et vos choix manuels restent accessibles et prioritaires."), 356, 635, 548, 13, theme.inkMuted)
         f.shareGuild = settingText(p, "", 356, 461, 541, 16)
+        -- One box for all of it (owner, 26/11): your scores for the bounties, and your fights with their
+        -- place in the guild's journal and on its map. Sharing is a setting, never a box of a page.
         f.shareFights = check("relations", nil, L("Partager mes victoires et morts avec ma guilde"), 489, nil, nil,
-            function(value) GL.Bounties.ShareFights(value); f:SyncControls() end)
+            function(value)
+                GL.Bounties.ShareFights(value)
+                if GL.GuildMap then GL.GuildMap.Enable(value) end
+                f:SyncControls()
+                if GL.RelationsPages and GL.RelationsPages.Refresh then GL.RelationsPages.Refresh() end
+            end)
+        f.shareFights:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(L("Vos victoires et vos morts, avec leur lieu, dans le Journal de guilde et sur la carte des membres, et vos scores pour les primes. "
+                .. "Décochée : rien n’est envoyé, et vous ne voyez plus les combats des autres."), 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        f.shareFights:SetScript("OnLeave", function() GameTooltip:Hide() end)
         f.shareDeaths = check("relations", nil, L("Signaler mes morts pour les primes automatiques"), 520, nil, nil,
             function(value) GL.Bounties.ShareDeaths(value); f:SyncControls() end)
         f.shareSocial = check("relations", nil, L("Partager mes faits datés et mon avis de guilde"), 551, nil, nil,
@@ -2855,7 +2876,9 @@ showSettings = function()
             local guild = GL.Safe(GetGuildInfo, "player")
             local fights, deaths
             if GL.Bounties and GL.Bounties.Sharing then fights, deaths = GL.Bounties.Sharing() end
-            self.shareFights:SetChecked(fights == true); self.shareDeaths:SetChecked(deaths == true)
+            -- Ticked only while both are on: an older save may have switched off only the map's part.
+            local mapped = not GL.GuildMap or GL.GuildMap.Enabled() == true
+            self.shareFights:SetChecked(fights == true and mapped); self.shareDeaths:SetChecked(deaths == true)
             self.shareFights:SetEnabled(guild ~= nil and GL.Bounties ~= nil); self.shareDeaths:SetEnabled(guild ~= nil and GL.Bounties ~= nil)
             self.shareSocial:SetChecked(GL.SharedDossiers and GL.SharedDossiers.SharingSocial() or false)
             self.shareSocial:SetEnabled(guild ~= nil and GL.SharedDossiers ~= nil)
@@ -3435,8 +3458,9 @@ local function buildLedger()
         light.glow:SetPoint("CENTER", f.balance, "LEFT", width / 2, 4)
         light.glow:SetSize(width + 64, 46)
         light.glow:SetVertexColor(r, g, b)
-        light.kind, light.glowAlpha = kind, kind == "ruby" and 0.16 or 0.22
-        local art = media .. (kind == "ruby" and "BalanceStarRuby" or "BalanceStarGold")
+        light.kind, light.glowAlpha = kind, kind == "ruby" and 0.16 or kind == "friend" and 0.26 or 0.22
+        -- A friend's balance gives off little green hearts, the "Ami" heart (owner, 26/11).
+        local art = media .. (kind == "ruby" and "BalanceStarRuby" or kind == "friend" and relationIcons.friend or "BalanceStarGold")
         light.width = width
         for _, star in ipairs(light.stars) do
             star:SetTexture(art)
@@ -4103,6 +4127,12 @@ SlashCmdList.GRUDGELEDGER = function(message)
     elseif command == "primes" or command == "bounties" then GL.OpenBounties()
     elseif command == "guildes" then GL.ShowStatistics("guilds")
     elseif command == "guide" then GL.ShowGuide()
+    elseif command == "apercu" or command == "aperçu" or command == "preview" then
+        -- The guild's enemies seen from a faction, with invented enemies (owner, 27/11).
+        local side = (reason or ""):gsub("[A-Z]", string.lower)
+        if GL.RelationsPages and GL.RelationsPages.PreviewEnemies then
+            GL.RelationsPages.PreviewEnemies(side == "alliance" and "alliance" or "horde")
+        end
     elseif command == "settings" or command == "options" then showSettings()
     elseif command == "reperage" or command == "repérage" then enableRecognition()
     elseif command == "guilde" then
@@ -4129,5 +4159,10 @@ SlashCmdList.GRUDGELEDGER = function(message)
         end
     elseif command == "" then
         if ledger and ledger:IsShown() then ledger:Hide() else GL.ShowLedger() end
-    else GL.Print(L("Commandes : /gl, /gl bilan, /gl chronique, /gl stats, /gl guildes, /gl traces, /gl + [raison], /gl - [raison], /gl ami|ennemi|auto|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl settings, /gl debug")) end
+    else GL.Print(L("Commandes : /gl, /gl bilan, /gl chronique, /gl stats, /gl guildes, /gl traces, /gl + [raison], /gl - [raison], /gl ami|ennemi|auto|mefiance, /gl note [texte], /gl guilde [ami|ennemi|mefiance|neutre], /gl reperage, /gl apercu horde|alliance, /gl settings, /gl debug")) end
+end
+-- Opens the settings, on one of their pages when asked ("relations": sharing with the guild).
+function GL.ShowSettings(category)
+    showSettings()
+    if category and settingsWindow and settingsWindow.SelectCategory then settingsWindow:SelectCategory(category) end
 end

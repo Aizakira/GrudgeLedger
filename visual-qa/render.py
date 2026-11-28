@@ -53,8 +53,10 @@ def font(size, face=None):
 @lru_cache(maxsize=32)
 def font_path(face):
     name = (face or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
-    if name.startswith("ptserif-"):
-        return ADDON / "Media" / "Fonts" / face.replace("\\", "/").rsplit("/", 1)[-1]
+    # Every font the addon bundles (PT Serif, Spectral, the posters' display fonts) is drawn as itself.
+    bundled = ADDON / "Media" / "Fonts" / face.replace("\\", "/").rsplit("/", 1)[-1] if face else None
+    if bundled and bundled.is_file():
+        return bundled
     candidates = {"frizqt__.ttf": ("FRIZQT__.TTF", "georgia.ttf"),
                   "morpheus.ttf": ("MORPHEUS.TTF", "georgia.ttf"),
                   "arialn.ttf": ("ARIALN.TTF", "arial.ttf")}
@@ -261,6 +263,7 @@ def render(name, frames, root):
         (name.startswith("minimap") and minimap_button and lay.descendant(r["id"], minimap_button))) and lay.visible(r["id"])]
     regions.sort(key=lambda r: (lay.framelevel(r["id"]) + (.5 if r["kind"] == "EditBox" else 0), layers.get(r.get("layer"), -1), r.get("sublevel",0), r["id"]))
     issues = []
+    book_root = lay.frames[root].get("name") in ("GrudgeLedgerRelations", "GrudgeLedgerGuild")
     for r in regions:
         x, y, w, h = lay.resolve(r["id"])
         if w <= 0 or h <= 0 or r["kind"] == "Mask": continue
@@ -283,6 +286,16 @@ def render(name, frames, root):
             if coords and len(coords) == 4:
                 left, right, top, bottom = coords
                 tex = tex.crop((round(left*tex.width), round(top*tex.height), round(right*tex.width), round(bottom*tex.height)))
+            elif coords and len(coords) == 8 and any(abs(v * 64 - round(v * 64)) > 1e-6 for v in coords):
+                # Any other turn (the posters' papers, 27/11): each pixel of the region shows the point of
+                # the texture its corners' coordinates give, like the game; outside the texture, clear
+                # (the game stretches the texture's clear edge there).
+                ul, ll, ur = coords[0:2], coords[2:4], coords[4:6]
+                W, H = max(1, round(w)), max(1, round(h))
+                tw, th = tex.width, tex.height
+                data = ((ur[0] - ul[0]) * tw / W, (ll[0] - ul[0]) * tw / H, ul[0] * tw,
+                        (ur[1] - ul[1]) * th / W, (ll[1] - ul[1]) * th / H, ul[1] * th)
+                tex = tex.transform((W, H), Image.Transform.AFFINE, data, resample=Image.Resampling.BICUBIC)
             elif coords and len(coords) == 8:
                 # UL, LL, UR, LR corners: quarter turns and mirrors of an atlas cell (book stains).
                 xs, ys = coords[0::2], coords[1::2]
@@ -393,6 +406,10 @@ def render(name, frames, root):
             book=str(r.get("texture") or "").endswith(("JournalReferenceBook","JournalReferenceSheetBook"))
             if not scroll_ancestor and not book and (xx<rb[0]-4 or yy<rb[1]-4 or xx+ww>rb[0]+rb[2]+4 or yy+hh>rb[1]+rb[3]+4):
                 issues.append({"kind":"outside_window","id":r["id"],"text":r.get("text","")[:100],"bounds":[xx-rb[0],yy-rb[1],ww,hh]})
+            # In the two books, no writing over the frame's lower edge (owner report, 28/11: the map's
+            # legend ran over it): the frame starts 675 units under the window's top.
+            if book_root and r["kind"] == "FontString" and r.get("text") and yy+hh > rb[1]+676:
+                issues.append({"kind":"text_over_book_frame","id":r["id"],"text":r["text"][:100],"bottom":round(yy+hh-rb[1],1)})
             if r["kind"] == "FontString" and r.get("parent") and lay.frames[r["parent"]]["kind"] == "Button":
                 px,py,pw,ph=lay.resolve(r["parent"])
                 if yy+hh>py+ph+2:
@@ -472,7 +489,7 @@ def main():
     # The addon alone: no Armory archive, no studio photo. The state every user starts from.
     views += ["dossier-fresh", "dossier-fresh-gear", "dossier-read", "dossier-read-gear", "dossier-read-talents"]
     views += ["relations-overview", "relations-debts", "relations-overview-empty", "relations-debts-empty",
-              "relations-rivals", "relations-guilds", "relations-lands", "relations-rankings", "relations-guildlog", "relations-guildlog-filters", "recap-1", "recap-2", "recap-3", "recap-4", "recap-5", "recap-6", "recap-7", "recap-8", "recap-9", "recap-1-copy", "relations-enemies"]
+              "relations-rivals", "relations-rivals-open", "relations-guilds", "relations-lands", "relations-rankings", "relations-guildlog", "relations-guildlog-filters", "recap-1", "recap-2", "recap-3", "recap-4", "recap-5", "recap-6", "recap-7", "recap-8", "recap-9", "recap-1-copy", "relations-enemies", "relations-enemies-wanted", "relations-enemies-horde", "relations-members"]
     views += ["journal-filters", "journal-tags", "journal-tags-all", "journal-tags-all-compact-largeprint-small", "guild-profiles"]
     views += ["journal-reference", "journal-reference-transparent"]
     views += ["journal-reference-hover-open", "journal-reference-hover-enemy", "journal-reference-hover-filter",

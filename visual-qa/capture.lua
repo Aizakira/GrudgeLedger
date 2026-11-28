@@ -685,13 +685,95 @@ function QA.capture(name)
                     { actor = "Player-1-QA000002", time = at - 600000, mapID = 1, kind = "kill", target = "Player-1-QA0000E4", name = "Thazdin" },
                 }
             end
+            if name:find("%-wanted") or name:find("%-horde") then
+                -- The wanted posters (owner's kit, 27/11): seven invented killers, a bounty with gold on
+                -- the second, a notice without gold on the third, the fifth's last victim six weeks old.
+                local points = {}
+                local function deaths(target, foe, list)
+                    for i, d in ipairs(list) do
+                        points[#points + 1] = { actor = "Player-1-QA00000" .. d[1], time = at - d[2] * 3600, mapID = 1444,
+                            kind = "death", target = target, name = foe }
+                    end
+                end
+                -- Fy Rion was avenged: the guild killed him after his last victim (owner, 27/11).
+                points[#points + 1] = { actor = "Player-1-QA000002", time = at - 60 * 3600, mapID = 1444, kind = "kill",
+                    target = "Player-1-QA0000W4", name = "Fy Rion" }
+                deaths("Player-1-QA0000W1", "Shmigly Wins", { { 1, 20 }, { 2, 30 }, { 3, 50 }, { 4, 70 }, { 1, 90 } })
+                deaths("Player-1-QA0000W2", "Chêne Molle", { { 1, 24 }, { 2, 60 }, { 3, 100 } })
+                deaths("Player-1-QA0000W3", "Adva Tidemand", { { 2, 40 }, { 4, 140 } })
+                deaths("Player-1-QA0000W4", "Fy Rion", { { 3, 120 } })
+                deaths("Player-1-QA0000W5", "Rogue Gank", { { 1, 1000 }, { 2, 1010 }, { 3, 1020 } })
+                deaths("Player-1-QA0000W6", "Brakka Fendroc", { { 4, 400 } })
+                deaths("Player-1-QA0000W7", "Gul’dash", { { 1, 700 } })
+                table.sort(points, function(a, b) return a.time > b.time end)
+                GL.GuildMap.Points = function() return points end
+                local orders = { ["Player-1-QA0000W2"] = { pot = { a = 2500000 } }, ["Player-1-QA0000W3"] = { pot = {} } }
+                -- The Horde's view also puts a bounty on the first: the tall poster with its ribbon.
+                if name:find("%-horde") then orders["Player-1-QA0000W1"] = { pot = { a = 2500000 } } end
+                GL.Bounties = GL.Bounties or {}
+                GL.Bounties.OpenFor = function(target) return orders[target] end
+                -- The victims' names, as the guild's roster gives them (invented names).
+                local roster = { ["Player-1-QA000001"] = "Célestine-Exemple", ["Player-1-QA000002"] = "Aubin",
+                    ["Player-1-QA000003"] = "Isabeau", ["Player-1-QA000004"] = "Gaspard" }
+                GL.Bounties.MemberName = function(id) return roster[id] end
+                -- Where the guild met them: a zone the renderer can name.
+                C_Map = C_Map or {}
+                local mapInfo = C_Map.GetMapInfo
+                C_Map.GetMapInfo = function(id) if id == 1444 then return { name = "Féralas" } end return mapInfo and mapInfo(id) end
+            end
+            -- The faction of the page's tapestry, put back for the next views.
+            GL.qaFaction = GL.qaFaction or UnitFactionGroup
+            UnitFactionGroup = name:find("%-horde") and function() return "Horde", "Horde" end or GL.qaFaction
+        end
+        if page == "members" and GL.GuildMap then
+            -- Synthetic members (example names): you, two up to date (one an alt), one old, one unknown.
+            local at = GL.Now()
+            GL.GuildMap.Members = function()
+                return {
+                    { id = "Player-1-QA000000", name = "Testeur Exemple", version = "0.62.1", current = true, online = true, at = at, shares = true, mark = "a1", you = true },
+                    { id = "Player-1-QA000001", name = "Célestine Longuebrise", version = "0.62.1", current = true, online = true, at = at, shares = true, mark = "b2" },
+                    { id = "Player-1-QA000002", name = "Aubin Clairval", version = "0.62.1", current = true, online = false, at = at - 7200, shares = false, mark = "b2" },
+                    { id = "Player-1-QA000003", name = "Isabeau Clairfeuille", version = "0.58.11", current = false, online = false, at = at - 3 * 86400, shares = true, mark = "c3" },
+                    { id = "Player-1-QA000004", name = "Gaspard Rougelune", online = false, at = at - 12 * 86400, shares = false },
+                }
+            end
+        end
+        if page == "rivals" then
+            -- Six example rivals (invented names), fought this week, as the journal writes them.
+            local at = GL.Now()
+            local KB = "Dégâts létaux explicitement attribués à ce joueur."
+            local WITH = "Participation à l’attaque ayant causé votre mort."
+            local function rival(id, first, last, class, guild, facts, zone)
+                local record = GL.Remember(GL.IdentityFromName(first, last, "Player-1-QARIV" .. id))
+                record.className, record.guild, record.history = class, guild, {}
+                record.pvp.kills, record.pvp.deaths, record.pvp.aggressions = 0, 0, 0
+                for i, f in ipairs(facts) do
+                    local e = { kind = f[1], time = at - f[2], confidence = "confirmed", eventId = "qa-rival-" .. id .. "-" .. i, zone = zone }
+                    if f[1] == "death" then e.evidence, e.killingBlow = f[3] or KB, (f[3] or KB) == KB end
+                    record.history[#record.history + 1] = e
+                    local field = ({ kill = "kills", death = "deaths", aggression = "aggressions" })[f[1]]
+                    record.pvp[field] = record.pvp[field] + 1
+                end
+            end
+            rival("01", "Nhaya", "Forever", "Chasseresse", "Savages Forever", { { "aggression", 9000 }, { "death", 8990, WITH },
+                { "aggression", 7000 }, { "death", 6990 }, { "kill", 5000 }, { "kill", 3000 }, { "aggression", 1000 }, { "death", 990 } }, "Azshara")
+            rival("02", "Keral", "Brumepin", "Mage", "Les Trois Lunes", { { "kill", 90000 }, { "death", 89960 } }, "Les Hinterlands")
+            rival("03", "Orvek", "le Gris", "Guerrier", "Lames d’Automne", { { "kill", 160000 }, { "death", 150000 }, { "kill", 140000 },
+                { "death", 130000 }, { "kill", 120000 }, { "death", 110000 } }, "Tanaris")
+            rival("04", "Rokhan", "Silex", "Chaman", nil, { { "kill", 3 * 86400 }, { "death", 2 * 86400 }, { "kill", 100000 } }, "Féralas")
+            rival("05", "Vela", "Sombrelame", "Voleuse", "Braise et Bruyère", { { "death", 120000 }, { "death", 115000 } }, "Azshara")
+            rival("06", "Maëlys", "Cendrelac", "Prêtresse", nil, { { "kill", 40 * 86400 }, { "death", 39 * 86400 } }, "Gangrebois")
         end
         GL.ShowRelations(page)
+        if name == "relations-rivals-open" then
+            local rivals = GrudgeLedgerRelations.host.pages.rivals
+            rivals.strips[1].scripts.OnClick(rivals.strips[1], "LeftButton")
+        end
         if name == "relations-guildlog-filters" then
             local log = GrudgeLedgerGuild.host.pages.guildlog
             log.openFilters.scripts.OnClick(log.openFilters, "LeftButton")
         end
-        if page == "guildlog" or page == "enemies" or page == "guilds" then return GrudgeLedgerGuild end
+        if page == "guildlog" or page == "enemies" or page == "guilds" or page == "members" then return GrudgeLedgerGuild end
         return GrudgeLedgerRelations
     elseif name:find("^statistics") or name:find("^guild%-") then
         if name:find("%-small") then UIParent:SetSize(1024, 600) end

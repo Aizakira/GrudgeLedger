@@ -8,6 +8,7 @@ local function fixture(saved, formats)
     function IsInInstance() return instanceType ~= "none", instanceType end
     C_DeathRecap, C_NamePlate, C_CombatLog = nil, nil, nil
     C_TooltipInfo, Enum, UnitTokenFromGUID, UnitNameFromGUID, UnitPlayerControlled, GetTime = nil, nil, nil, nil, nil, nil
+    C_UnitAuras, UnitDebuff = nil, nil
     unitData = { player = { guid = "Player-1-self", name = "Testeur", surname = "Exemple", dead = false, isPlayer = true, health = 1000, maxHealth = 1000 } }
     local function unit(token)
         if unitData[token] then return unitData[token] end
@@ -303,6 +304,27 @@ test("a groupmate who avenges your death wins the same fight", function()
     local fights = GL.Fights(record)
     assert(#fights == 1 and fights[1].main.kind == "death" and fights[1].aggressions == 1)
     IsInGroup = nil
+end)
+
+-- Owner report (26/11): a player of your fight finished by a monster was not counted.
+test("a monster finishing a player you fought is your victory, not a helping hand", function()
+    local e = start(opponent("mob-finish"))
+    cle("SPELL_DAMAGE", unitData.player, e, -1, 0, 64)
+    local mob = { guid = "Creature-0-1-1-1-4321-0000AA", name = "Basilic", surname = "Peau-de-verre" }
+    cle("SPELL_DAMAGE", mob, e, 50, 0, 64)
+    local record = GL.Get("guid:" .. e.guid)
+    local kill = record and record.history[#record.history]
+    assert(record and record.pvp.kills == 1 and kill.kind == "kill", "the victory is counted")
+    assert(kill.evidence:find("monstre", 1, true), kill.evidence)
+    cle("SPELL_DAMAGE", mob, opponent("never-touched"), 50, 0, 64)
+    assert(total("kills") == 1, "a monster's kill of a player you never fought is not yours")
+    local otherPet = { guid = "Pet-0-1-1-1-99-0000BB", name = "Loup", surname = "Gris" }
+    local e2 = opponent("pet-finish")
+    unitData.nameplate1 = e2
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    cle("SPELL_DAMAGE", unitData.player, e2, -1, 0, 64)
+    cle("SPELL_DAMAGE", otherPet, e2, 50, 0, 64)
+    assert(total("kills") == 1, "another player's pet is not a monster")
 end)
 
 test("confirmed kill requires personal source and player victim", function()
@@ -927,14 +949,98 @@ test("explicit friendly or different hostile damage cancels health guesses", fun
     assert(GL.Get(GL.Identity("target")) == nil)
 end)
 
-test("observed NPC pressure or max health change blocks health inference", function()
+test("a max health change blocks health inference", function()
     start()
-    unitData.mouseover = { hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
-    now = now + 1 unitData.player.health = 900 T.Poll()
-    now = now + 1 T.Poll() assert(count() == 0)
-    T.HandleEvent("PLAYER_ENTERING_WORLD") unitData.mouseover = nil start()
     now = now + 1 unitData.player.health = 800 unitData.player.maxHealth = 800 T.Poll()
     now = now + 1 T.Poll() assert(count() == 0)
+end)
+
+test("a monster on you excuses no player who targets you while you lose health", function()
+    start()
+    unitData.mouseover = { guid = "Creature-1-wolf", hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 1 and GL.Relation(GL.Get(GL.Identity("target"))) == "enemy")
+end)
+
+local function traced(code)
+    for _, line in ipairs(GL.db.detectionLog or {}) do if line.code == code then return true end end
+end
+
+test("the only hostile player in combat around you is the attacker, even without targeting you", function()
+    local e = start()
+    e.target = nil -- an ambush: his target is hidden or elsewhere
+    unitData.target = nil
+    unitData.nameplate1 = e T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 1, "the lone hostile player is written")
+    local record = GL.Get("guid:" .. e.guid)
+    assert(record and GL.Relation(record) == "enemy" and record.fullName == e.name .. " " .. e.surname)
+    -- Two of them, or a monster on you: nobody can be singled out, and the trace says why.
+    fixture() local a = opponent("first") a.target = nil start(a)
+    unitData.nameplate1 = opponent("second") unitData.nameplate1.target = nil
+    T.HandleEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 0 and traced("unseen"))
+    fixture() local b = opponent("first") b.target = nil start(b)
+    unitData.mouseover = { guid = "Creature-1-wolf", hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 0 and not traced("unseen"), "an ordinary mob fight writes no trace")
+    -- A player out of combat nearby is no suspect.
+    fixture() local c = opponent("first") c.target, c.combat = nil, false start(c)
+    now = now + 1 unitData.player.health = 900 T.Poll()
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 0)
+end)
+
+test("a harmful effect from a hostile player is an aggression even with a monster on you", function()
+    start()
+    unitData.mouseover = { guid = "Creature-1-wolf", hostile = true, combat = true, target = "player", isPlayer = false, dead = false }
+    local auras = {}
+    C_UnitAuras = { GetAuraDataByIndex = function(token, index, filter)
+        assert(token == "player" and filter == "HARMFUL")
+        return auras[index]
+    end }
+    auras[1] = { name = "Morsure", sourceUnit = "mouseover" }
+    now = now + 1 T.HandleEvent("UNIT_AURA", "player")
+    assert(total("aggressions") == 0, "a monster's effect accuses nobody")
+    auras[2] = { name = "Poison", sourceUnit = "target" }
+    T.HandleEvent("UNIT_AURA", "player")
+    T.HandleEvent("UNIT_AURA", "player")
+    assert(total("aggressions") == 1 and GL.Relation(GL.Get(GL.Identity("target"))) == "enemy")
+    local proof
+    for _, entry in ipairs(GL.Get(GL.Identity("target")).history) do
+        if entry.kind == "aggression" then proof = entry.evidence end
+    end
+    assert(proof and proof:find("Effet néfaste", 1, true))
+    -- A hidden source, an unflagged or same-faction caster prove nothing.
+    fixture() start()
+    C_UnitAuras = { GetAuraDataByIndex = function(_, index) return index == 1 and { sourceUnit = secret } or nil end }
+    T.HandleEvent("UNIT_AURA", "player") assert(total("aggressions") == 0)
+    unitData.target.flagged = false
+    C_UnitAuras = { GetAuraDataByIndex = function(_, index) return index == 1 and { sourceUnit = "target" } or nil end }
+    T.HandleEvent("UNIT_AURA", "player") assert(total("aggressions") == 0)
+    unitData.target.flagged, unitData.target.faction = nil, "Alliance"
+    T.HandleEvent("UNIT_AURA", "player") assert(total("aggressions") == 0)
+    -- The older client API gives the caster as its seventh value.
+    fixture() start()
+    UnitDebuff = function(_, index) if index == 1 then return "Poison", nil, 1, nil, 10, 20, "target" end end
+    T.HandleEvent("UNIT_AURA", "player") assert(total("aggressions") == 1)
+end)
+
+test("the client's wound event stands in for hidden health", function()
+    start()
+    unitData.player.health = secret T.Poll()
+    now = now + 1 T.HandleEvent("UNIT_COMBAT", "player", "WOUND", "", secret, 1)
+    now = now + 1 T.Poll() assert(total("aggressions") == 0, "a hidden amount proves nothing")
+    T.HandleEvent("UNIT_COMBAT", "player", "HEAL", "", 120, 1)
+    now = now + 1 T.Poll() assert(total("aggressions") == 0)
+    T.HandleEvent("UNIT_COMBAT", "player", "WOUND", "", 120, 1)
+    now = now + 1 T.Poll()
+    assert(total("aggressions") == 1)
 end)
 
 test("secret health and non-combat opponent cannot trigger inferred aggression", function()
