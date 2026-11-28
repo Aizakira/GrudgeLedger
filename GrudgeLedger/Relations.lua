@@ -3915,8 +3915,10 @@ local function paintEnemies(page)
     end
     page.banner:SetTexture(WANTED .. "Fanion" .. faction)
     -- The validated banners (owner, 28/11) carry their arms painted in: no emblem laid over them.
-    local bannerW = math.floor(104 * RATIO["Fanion" .. faction] + 0.5)
-    page.banner:SetSize(bannerW, 104)
+    -- 104 high, never wider than 96 (the Alliance's patinated banner, 28/11, is wider than high).
+    local bannerH = math.min(104, math.floor(96 / RATIO["Fanion" .. faction] + 0.5))
+    local bannerW = math.floor(bannerH * RATIO["Fanion" .. faction] + 0.5)
+    page.banner:SetSize(bannerW, bannerH)
     -- The title and the choices start after the banner.
     page.titleX = 44 + bannerW + 16
     page.title:ClearAllPoints()

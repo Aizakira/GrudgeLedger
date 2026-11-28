@@ -40,7 +40,7 @@ OUT = ROOT / "GrudgeLedger" / "Media" / "AvisRecherche"
 ASSETS = {
     # The banners the owner validated (28/11), their arms painted in: Alliance blue with the gold lion,
     # the Horde's torn red war rag with the black sign.
-    "FanionAlliance": ("out:bannieres-factions-retenues/alliance-validee.png", 128, 256),
+    "FanionAlliance": ("out:alliance-entete-patine/alliance-patinee.png", 128, 128),
     "FanionHorde": ("out:bannieres-factions-retenues/horde-validee.png", 128, 256),
     "EmblemeAlliance": ("v2:factions/alliance-emblem.png", 128, 128),
     "EmblemeHorde": ("factions/horde-emblem.png", 128, 128),

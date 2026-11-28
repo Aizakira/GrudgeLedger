@@ -39,7 +39,7 @@ GL.Art = {
     Wanted = media .. "AvisRecherche\\",
 }
 GL.Art.WantedRatio = {
-    FanionAlliance = 0.649, FanionHorde = 0.805, EmblemeAlliance = 0.754, EmblemeHorde = 0.641,
+    FanionAlliance = 1.102, FanionHorde = 0.805, EmblemeAlliance = 0.754, EmblemeHorde = 0.641,
     FiligraneAlliance = 0.76, FiligraneHorde = 0.641,
     AfficheGrande1 = 0.665, AfficheGrande2 = 0.695, AfficheCarree1 = 0.982, AfficheCarree2 = 0.96,
     PrimeGrande1 = 0.667, PrimeGrande2 = 0.706, PrimeCarree1 = 0.991, PrimeCarree2 = 0.963,
