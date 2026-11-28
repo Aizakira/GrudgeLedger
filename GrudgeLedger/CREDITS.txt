@@ -43,6 +43,9 @@ their titles, names and figures. The unmodified files in Media/Fonts are distrib
 the SIL Open Font License 1.1, with their licenses in Media/Fonts/OFL-GermaniaOne.txt,
 Media/Fonts/OFL-NewRocker.txt and Media/Fonts/OFL-CinzelDecorative.txt.
 https://github.com/google/fonts/tree/main/ofl/germaniaone
+Skranji Bold (Font Diner) gives the Horde's posters and page their hewn titles, names and
+figures; unmodified, SIL Open Font License 1.1, license in Media/Fonts/OFL-Skranji.txt.
+https://github.com/google/fonts/tree/main/ofl/skranji
 https://github.com/google/fonts/tree/main/ofl/newrocker
 https://github.com/google/fonts/tree/main/ofl/cinzeldecorative
 

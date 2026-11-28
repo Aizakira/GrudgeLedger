@@ -3047,7 +3047,8 @@ function R.VictimNames(enemy, most)
     end
     if #names == 0 then return nil end
     local text = table.concat(names, ", ")
-    if unnamed > 0 then text = text .. " " .. L("+%d"):format(unnamed) end
+    -- A no-break space: a list that wraps never leaves "+2" alone on its line.
+    if unnamed > 0 then text = text .. "94p" .. L("+%d"):format(unnamed) end
     return text
 end
 -- An enemy's open bounty or notice, and its gold (owner, 27/11: Avec une prime must show them all).
@@ -3105,21 +3106,22 @@ local WANTED, RATIO, ZONE = GL.Art.Wanted, GL.Art.WantedRatio, GL.Art.WantedText
 local COLD_AFTER = 21 * 86400
 local POSTER_FILTERS = { { "all", "Toutes les affiches" }, { "bounty", "Avec une prime" }, { "plain", "Sans prime" } }
 -- The posters by rank, after the owner's mockup (28/11): the first tall on the left, the four
--- others nearly alike in two rows, a little smaller as the threat falls.
+-- others nearly alike in two rows, a little smaller as the threat falls. A paper is h tall unless
+-- that makes it wider than w: a square paper is then shorter.
 local SIZES = {
-    { kind = "hero", h = 372 }, { kind = "medium", h = 190 },
-    { kind = "compact", h = 186 }, { kind = "compact", h = 184 }, { kind = "compact", h = 182 },
+    { kind = "hero", h = 380, w = 300 }, { kind = "medium", h = 200, w = 184 },
+    { kind = "compact", h = 198, w = 184 }, { kind = "compact", h = 196, w = 184 }, { kind = "compact", h = 194, w = 184 },
 }
 local ENEMY_ROWS = #SIZES
 local PAPER = { hero = "Grande", medium = "Carree", compact = "Carree" }
--- The v8 collection's families (owner, 27/11): each enemy keeps its own, never twice on the page.
-local FAMILIES = { "Humain", "ElfeNuit", "ElfeSang", "Aerien", "Roublard", "Demoniste", "Troll", "Orc", "Tauren", "MortVivant" }
 -- Where posters may go on the page (its 664 x 510): under the head, above the foot.
-local BOARD = { left = 6, right = 660, top = -98, bottom = -478 }
+local BOARD = { left = 6, right = 660, top = -86, bottom = -478 }
+-- The writing's sizes at full scale (a paper with little plain room gets them smaller, paintPoster);
+-- gap is the room between two figures.
 local STYLE = {
-    hero = { title = 32, name = 22, number = 22, label = 14, seen = 15, face = 124, medal = 58, rank = 26, icon = 24 },
-    medium = { title = 15, name = 13, number = 13, label = 11, seen = 10, face = 50, medal = 40, rank = 18, icon = 12 },
-    compact = { title = 15, name = 13, number = 13, label = 11, seen = 10, face = 50, medal = 38, rank = 17, icon = 12 },
+    hero = { title = 30, name = 21, number = 20, label = 14, seen = 14, face = 120, medal = 58, rank = 26, icon = 22, gap = 5 },
+    medium = { title = 15, name = 13, number = 13, label = 11, seen = 10, face = 60, medal = 40, rank = 18, icon = 12, gap = 2 },
+    compact = { title = 15, name = 13, number = 13, label = 11, seen = 10, face = 60, medal = 38, rank = 17, icon = 12, gap = 2 },
 }
 local POSTER_RED, POSTER_INK, POSTER_MUTED = { 0.6, 0.09, 0.06 }, { 0.17, 0.1, 0.05 }, { 0.3, 0.2, 0.11 }
 local CLOTH_IVORY, CLOTH_SOFT, MEDAL_IVORY = { 0.97, 0.92, 0.8 }, { 0.86, 0.8, 0.68 }, { 1, 0.93, 0.74 }
@@ -3160,59 +3162,61 @@ local function fit(label, text, width, biggest, smallest, bold, shadow, face)
     end
     if shadow then shadowed(label, shadow) end
 end
--- The posters' display fonts by the faction that posts them (owner, 27/11; SIL OFL, Media\Fonts):
--- the Horde wild, Germania One's hewn capitals for its titles and figures, New Rocker's for its names;
--- the Alliance noble, Cinzel Decorative for its titles and figures, its names in the book's serif.
--- The page's own title takes its faction's title face.
-R.Faces = { Horde = { title = "GermaniaOne-Regular", name = "NewRocker-Regular", number = "GermaniaOne-Regular" },
+-- The posters' display fonts by the faction that posts them (owner, 28/11; SIL OFL, Media\Fonts):
+-- the Horde tribal, Skranji Bold's hewn letters for its titles, names and figures; the Alliance
+-- noble, Cinzel Decorative for its titles and figures, its names in the book's serif. The page's
+-- own title takes its faction's title face.
+R.Faces = { Horde = { title = "Skranji-Bold", name = "Skranji-Bold", number = "Skranji-Bold" },
     Alliance = { title = "CinzelDecorative-Bold", number = "CinzelDecorative-Bold" } }
--- A figure of the poster: its pictogram, the number in bold, the words after it (they may wrap).
-local function posterFigure(p, icon, size)
-    local figure = { size = size }
+-- A figure of the poster: its pictogram, the number in bold, the words after it. Its sizes are
+-- set when the poster is painted (figure.size).
+local function posterFigure(p, icon)
+    local figure = { iconName = icon }
     figure.icon = wantedTexture(p, "ARTWORK", 2, icon)
-    figure.icon:SetSize(math.floor(size.icon * RATIO[icon] + 0.5), size.icon)
-    figure.number = Panels.Text(p, 0, 0, 60, size.number, true, POSTER_INK)
-    figure.words = Panels.Text(p, 0, 0, 100, size.label, false, POSTER_INK)
+    figure.number = Panels.Text(p, 0, 0, 60, 12, true, POSTER_INK)
+    figure.words = Panels.Text(p, 0, 0, 100, 11, false, POSTER_INK)
     return figure
 end
 -- The figures in three columns (owner, 27/11): the pictograms one under the other, the numbers
--- after them, the words all starting at the same place.
+-- after them, the words all starting at the same place, all of one size. A figure keeps to one
+-- line, the words smaller down to size.least; past that they wrap on two lines, never cut. Returns where the next
+-- line would start and how wide the figures are.
 local function placeFigures(p, x, y, width)
     local iconW, numberW = 0, 0
     for _, figure in ipairs(p.figures) do
         iconW = math.max(iconW, figure.icon:GetWidth())
-        numberW = math.max(numberW, GL.Safe(figure.number.GetStringWidth, figure.number) or 10)
+        if (figure.number:GetText() or "") ~= "" then
+            numberW = math.max(numberW, GL.Safe(figure.number.GetStringWidth, figure.number) or 10)
+        end
     end
-    local wordsX = x + iconW + 4 + math.ceil(numberW) + 4
-    local right = wordsX
+    local wordsX = x + iconW + 4 + math.ceil(numberW) + (numberW > 0 and 4 or 0)
+    local right, room = wordsX, math.max(20, x + width - wordsX)
+    -- One size for the words of every figure: the largest at which each keeps to its line.
+    local labelSize = p.figures[1].size.label
     for _, figure in ipairs(p.figures) do
-        local size = figure.size
-        figure.icon:ClearAllPoints()
-        figure.icon:SetPoint("CENTER", p, "TOPLEFT", x + iconW / 2, y - size.number / 2 - 1)
-        figure.number:ClearAllPoints()
-        figure.number:SetPoint("TOPLEFT", p, "TOPLEFT", x + iconW + 4, y)
-        local room = math.max(20, x + width - wordsX)
-        -- The words may wrap on the tall poster, never cut: their longest word decides their size. On
-        -- the others a row keeps to one line (the owner's mockup, 28/11): the whole row decides.
-        local text, longest = figure.words:GetText() or "", ""
-        for word in text:gmatch("%S+") do if #word > #longest then longest = word end end
-        if p.kind ~= "hero" then longest = text end
-        GL.Safe(figure.words.SetWordWrap, figure.words, p.kind == "hero")
-        local labelSize = size.label
+        GL.Safe(figure.words.SetWordWrap, figure.words, false)
         UI.journalFont(figure.words, "GameFontHighlight", labelSize)
-        figure.words:SetText(longest)
-        while labelSize > (p.kind == "hero" and 8 or 9) and (GL.Safe(figure.words.GetStringWidth, figure.words) or 0) > room do
+        while labelSize > figure.size.least and (GL.Safe(figure.words.GetStringWidth, figure.words) or 0) > room do
             labelSize = labelSize - 1
             UI.journalFont(figure.words, "GameFontHighlight", labelSize)
         end
-        figure.words:SetText(text)
-        figure.words:ClearAllPoints()
-        figure.words:SetPoint("TOPLEFT", p, "TOPLEFT", wordsX, y - (size.number - labelSize) + 1)
-        figure.words:SetWidth(room)
+    end
+    for _, figure in ipairs(p.figures) do
+        local size = figure.size
+        figure.icon:ClearAllPoints()
+        figure.icon:SetPoint("CENTER", p, "TOPLEFT", x + iconW / 2, y - size.line / 2)
+        figure.number:ClearAllPoints()
+        figure.number:SetPoint("TOPLEFT", p, "TOPLEFT", x + iconW + 4, y)
+        UI.journalFont(figure.words, "GameFontHighlight", labelSize)
         local wordsW = GL.Safe(figure.words.GetStringWidth, figure.words) or 0
-        local lines = p.kind == "hero" and wordsW > room and 2 or 1
+        local lines = wordsW > room and 2 or 1
+        GL.Safe(figure.words.SetWordWrap, figure.words, lines > 1)
+        local step = (labelSize + 2) * size.reading
+        figure.words:ClearAllPoints()
+        figure.words:SetPoint("TOPLEFT", p, "TOPLEFT", wordsX, y - math.max(0, (size.line - step) / 2))
+        figure.words:SetWidth(room)
         right = math.max(right, wordsX + math.min(room, wordsW))
-        y = y - math.max(size.number, lines * (labelSize + 2) + (size.number - labelSize)) - (p.kind == "hero" and 5 or 2)
+        y = y - math.max(size.line, lines * step) - size.gap
     end
     return y, right - x
 end
@@ -3279,7 +3283,19 @@ local function readable(spots)
     end
     return true
 end
-local function arrange(items, roll, nudge)
+-- The papers by the faction that posts (owner, 28/11): an Alliance guild posts on its peoples'
+-- papers, a Horde guild on tribal ones. "+" marks a paper of one size and no gold edition. Kept:
+-- the tribal papers whose plain middle carries a poster's writing at a readable size.
+local STYLES = {
+    Alliance = { "Humain", "ElfeNuit", "ElfeSang", "Aerien", "Roublard", "Demoniste" },
+    Horde = { "+OrcChef", "+OrcGuerre", "+TrollMarais", "+GnollMarais", "+GnollRavins", "+OgreChef", "Tauren", "MortVivant" },
+}
+local function paperOf(style, kind, bounty)
+    if style:sub(1, 1) == "+" then return "Affiche" .. style:sub(2) end
+    return (bounty and "Prime" or "Affiche") .. style .. PAPER[kind]
+end
+local function arrange(items, roll, nudge, faction)
+    local styles = STYLES[faction] or STYLES.Alliance
     local corners = { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }
     for i = #corners, 2, -1 do
         local j = roll(i) + 1
@@ -3288,10 +3304,10 @@ local function arrange(items, roll, nudge)
     local spots, left, taken = {}, BOARD.left, {}
     for i, item in ipairs(items) do
         local size = SIZES[i]
-        local family = hashOf(tostring(item.key)) % #FAMILIES + 1
-        while taken[family] do family = family % #FAMILIES + 1 end
+        local family = hashOf(tostring(item.key)) % #styles + 1
+        while taken[family] do family = family % #styles + 1 end
         taken[family] = true
-        local paper = (item.bounty and "Prime" or "Affiche") .. FAMILIES[family] .. PAPER[size.kind]
+        local paper = paperOf(styles[family], size.kind, item.bounty)
         local spot = { kind = size.kind, h = size.h, paper = paper, level = 20 * (ENEMY_ROWS + 1 - i),
             medalSide = "left" }
         local nail = roll(4)
@@ -3299,6 +3315,10 @@ local function arrange(items, roll, nudge)
         -- The paper turns 2 to 3.5 degrees, one way or the other.
         spot.turn = (roll(2) == 0 and -1 or 1) * (2 + roll(4) * 0.5) * (nudge > 0 and 1 or 0.8)
         spot.w = math.floor(size.h * RATIO[paper] + 0.5)
+        if spot.w > size.w then
+            spot.w = size.w
+            spot.h = math.floor(size.w / RATIO[paper] + 0.5)
+        end
         spot.pinX = (roll(9) - 4) * math.floor(spot.w / 40) * nudge
         spot.corner = corners[i - 1]
         spots[i] = spot
@@ -3325,12 +3345,12 @@ local function arrange(items, roll, nudge)
     end
     return spots
 end
-function R.PosterLayout(items)
+function R.PosterLayout(items, faction)
     local seed = 7
     for _, item in ipairs(items) do seed = hashOf(seed .. "|" .. tostring(item.key)) end
     local spots
     for try = 1, 12 do
-        spots = arrange(items, lot(seed + try), try < 12 and 1 or 0)
+        spots = arrange(items, lot(seed + try), try < 12 and 1 or 0, faction)
         if readable(spots) then return spots, true end
     end
     return spots, false
@@ -3376,7 +3396,7 @@ local function buildPoster(page, index)
     face.classIcon:SetSize(math.floor(style.face / 4.5), math.floor(style.face / 4.5))
     face.classIcon:SetPoint("BOTTOMRIGHT")
     p.face = face
-    p.figures = { posterFigure(p, "IconeMembres", style), posterFigure(p, "IconeCrane", style) }
+    p.figures = { posterFigure(p, "IconeMembres"), posterFigure(p, "IconeCrane") }
     p.rule = wantedTexture(p, "ARTWORK", 1, "SeparateurEncre")
     p.seen = Panels.Text(p, 0, 0, p.inner, style.seen, false, POSTER_MUTED)
     UI.journalFont(p.seen, "GameFontHighlight", style.seen, true)
@@ -3461,7 +3481,7 @@ local function placePoster(page, p, spot)
     p.stamp.ink:ClearAllPoints()
     p.stamp.ink:SetAllPoints(p.stamp)
     p.stamp.words:ClearAllPoints()
-    p.stamp.words:SetPoint("TOPLEFT", p.stamp, "TOPLEFT", 8, -5)
+    p.stamp.words:SetPoint("CENTER", p.stamp, "CENTER", 0, 0)
     p.paper:SetTexture(WANTED .. spot.paper)
     -- The paper turns in a larger square of the texture (its clear edge stretches around it): every
     -- corner of the region shows the point of the drawing turned back by the angle.
@@ -3497,26 +3517,15 @@ local function placePoster(page, p, spot)
     p.medal:ClearAllPoints()
     if spot.medalSide == "right" then p.medal:SetPoint("TOPRIGHT", p, "TOPRIGHT", math.floor(m * 0.22), math.floor(m * 0.2))
     else p.medal:SetPoint("TOPLEFT", p, "TOPLEFT", -math.floor(m * 0.22), math.floor(m * 0.2)) end
-    p.title:ClearAllPoints()
-    p.title:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx - 4, -p.top)
-    p.title:SetWidth(p.inner + 8)
-    local y = -p.top - style.title - (p.kind == "hero" and 8 or 3)
-    if p.label then
-        p.label:SetSize(p.inner + 10, math.floor((p.inner + 10) / RATIO.Cartouche + 0.5))
-        p.label:ClearAllPoints()
-        p.label:SetPoint("TOP", p, "TOP", p.cx, y)
-        p.labelText:SetWidth(p.inner - 30)
-        p.labelY = y
-    end
-    p.nameY = y
-    p.stamp:SetSize(math.floor(p.inner * 0.72), math.floor(p.inner * 0.72 / RATIO.Tampon + 0.5))
-    p.stamp.words:SetWidth(p.stamp:GetWidth() - 16)
-    -- The ribbon spills over the frame on the tall poster; on the others it keeps inside the paper.
-    local ribbonW = p.kind == "hero" and p.inner + 18 or math.floor(p.inner * 0.86 + 0.5)
+    -- The stamp and the ribbon go by the paper's width: they sit at its foot, over its bottom margin.
+    local stampW = math.floor(math.min(w * 0.5, p.inner * 0.8))
+    p.stamp:SetSize(stampW, math.floor(stampW / RATIO.Tampon + 0.5))
+    p.stamp.words:SetWidth(stampW - 14)
+    local ribbonW = math.floor(math.min(w * 0.82, p.inner + 30))
     p.ribbon:SetSize(ribbonW, math.floor(ribbonW / RATIO.Bandeau + 0.5))
     local seal = math.floor(p.ribbon:GetHeight() * 1.15 + 0.5)
     p.seal:SetSize(seal, seal)
-    p.prize:SetWidth(p.inner - 30)
+    p.prize:SetWidth(ribbonW - 34)
     -- The poster's own layers follow it when it moves above or under a neighbour: the portrait just
     -- over the paper, the stamp over the portrait, the click area over everything.
     local level = GL.Safe(p.GetFrameLevel, p) or 1
@@ -3527,42 +3536,19 @@ local function placePoster(page, p, spot)
     GL.Safe(p.hit.SetFrameLevel, p.hit, level + 15)
     GL.Safe(p.prizeHit.SetFrameLevel, p.prizeHit, level + 16)
 end
--- A choice of the page's head (owner, 27/11: discreet, not a big button): its words in ivory
--- italics and the kit's gold chevron in a fine gold outline; under it, the choices in the guild
--- journal's small menu. As wide as its words (paintEnemies sets it).
+-- A choice of the page's head (owner, 28/11: the addon's own look, not a style of its own): one of
+-- the book's dark buttons, as in its left column, its words on the left, the kit's gold chevron on
+-- the right; under it, the choices in the guild journal's small menu.
 local function chooser(page, options, current, choose)
-    local b = CreateFrame("Button", nil, page)
-    b:SetSize(120, 24)
-    b.caption = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    b:SetFontString(b.caption)
+    local width = 168
+    local b = UI.button(page, "", 0, 0, width, nil, nil, false)
     b.caption:ClearAllPoints()
-    b.caption:SetPoint("LEFT", b, "LEFT", 10, 0)
-    b.caption:SetTextColor(unpack(CLOTH_IVORY))
-    UI.journalFont(b.caption, "GameFontHighlightSmall", 13)
-    shadowed(b.caption, 0.8)
+    b.caption:SetPoint("LEFT", b, "LEFT", 12, 0)
+    b.caption:SetWidth(width - 36)
+    b.caption:SetJustifyH("LEFT")
     b.arrow = wantedTexture(b, "OVERLAY", 1, "Chevron")
-    b.arrow:SetSize(11, math.floor(11 / RATIO.Chevron + 0.5))
-    b.arrow:SetPoint("RIGHT", b, "RIGHT", -9, -1)
-    -- After the mockup (owner, 28/11): a dark box, a gold rule around it and a darker one inside.
-    b.ground = b:CreateTexture(nil, "BACKGROUND")
-    b.ground:SetAllPoints()
-    b.ground:SetColorTexture(0.07, 0.05, 0.04, 0.88)
-    b.edges = {}
-    for depth, color in ipairs({ { 0.8, 0.62, 0.3, 1 }, { 0.2, 0.13, 0.06, 1 } }) do
-        local d = depth - 1
-        for _, line in ipairs({ { "TOPLEFT", d, -d, "TOPRIGHT", -d, -d, "height" }, { "BOTTOMLEFT", d, d, "BOTTOMRIGHT", -d, d, "height" },
-            { "TOPLEFT", d, -d, "BOTTOMLEFT", d, d, "width" }, { "TOPRIGHT", -d, -d, "BOTTOMRIGHT", -d, d, "width" } }) do
-            local edge = b:CreateTexture(nil, "BORDER")
-            edge:SetColorTexture(unpack(color))
-            edge:SetPoint(line[1], b, line[1], line[2], line[3])
-            edge:SetPoint(line[4], b, line[4], line[5], line[6])
-            if line[7] == "height" then edge:SetHeight(1) else edge:SetWidth(1) end
-            b.edges[#b.edges + 1] = edge
-        end
-    end
-    b:SetScript("OnEnter", function() b.caption:SetTextColor(1, 0.82, 0.45) end)
-    b:SetScript("OnLeave", function() b.caption:SetTextColor(unpack(CLOTH_IVORY)) end)
-    local width = 184
+    b.arrow:SetSize(12, math.floor(12 / RATIO.Chevron + 0.5))
+    b.arrow:SetPoint("RIGHT", b, "RIGHT", -11, -1)
     local menu = CreateFrame("Frame", nil, page)
     menu:SetSize(width, 12 + #options * 30)
     menu:EnableMouse(true)
@@ -3570,7 +3556,7 @@ local function chooser(page, options, current, choose)
     menu:SetToplevel(true)
     UI.surface(menu, UI.theme.gold)
     UI.surface(menu, UI.theme.panel, 1)
-    menu:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -4)
+    menu:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -2)
     menu.choices = {}
     for i, option in ipairs(options) do
         menu.choices[i] = UI.button(menu, L(option[2]), 6, -6 - (i - 1) * 30, width - 12, function()
@@ -3589,6 +3575,42 @@ local function chooser(page, options, current, choose)
     b:HookScript("OnHide", function() menu:Hide() end)
     return b
 end
+-- The page's border (owner, 28/11: one gold rule a side, the flourishes on it): the kit's rule runs
+-- inside its pieces, further in for the Horde's; the border stands out from the cloth by as much, so
+-- that rule lies on the book's own. RULE_AT: the rule's middle in the kit's 96-pixel edge, from the
+-- piece's outer side. BOOK_RULE: how far outside the cloth the book's rule is (measured on the
+-- render). The Horde's iron corners are drawn smaller, as on the owner's mockup.
+do
+local RULE_AT = { Alliance = { top = 42, right = 41, bottom = 44, left = 40 }, Horde = { top = 57, right = 57.5, bottom = 59.5, left = 57.5 } }
+local BOOK_RULE = { top = 0.94, right = 0.18, bottom = 1.46, left = 0.42 }
+local CORNER = { Alliance = 70, Horde = 52 }
+local EDGES = {
+    Haut = function(c, r) return "TOPLEFT", c, 0, "TOPRIGHT", -c, -r end,
+    -- The bottom and right rules run on under the frame's own ornament, so no gap shows there.
+    Bas = function(c, r) return "BOTTOMLEFT", c, r, "BOTTOMRIGHT", -24, 0 end,
+    Gauche = function(c, r) return "TOPLEFT", 0, -c, "BOTTOMLEFT", r, c end,
+    Droite = function(c, r) return "TOPRIGHT", -r, -c, "BOTTOMRIGHT", 0, 24 end,
+}
+function R.LayEnemyBorder(page, faction)
+    local corner, at = CORNER[faction] or CORNER.Alliance, RULE_AT[faction] or RULE_AT.Alliance
+    local rule = corner * 96 / 288
+    local function out(side) return at[side] * corner / 288 + BOOK_RULE[side] end
+    page.border:ClearAllPoints()
+    page.border:SetPoint("TOPLEFT", page.cloth, "TOPLEFT", -out("left"), out("top"))
+    page.border:SetPoint("BOTTOMRIGHT", page.cloth, "BOTTOMRIGHT", out("right"), -out("bottom"))
+    for _, piece in ipairs(page.corners) do
+        if piece.edge then
+            local from, x1, y1, to, x2, y2 = EDGES[piece.edge](corner, rule)
+            piece:ClearAllPoints()
+            piece:SetPoint("TOPLEFT", page.border, from, x1, y1)
+            piece:SetPoint("BOTTOMRIGHT", page.border, to, x2, y2)
+        else
+            piece:SetSize(corner, corner)
+        end
+        piece:SetTexture(WANTED .. piece.corner:format(faction))
+    end
+end
+end
 local function buildEnemies(host)
     local page = CreateFrame("Frame", nil, host)
     page:SetAllPoints()
@@ -3599,32 +3621,18 @@ local function buildEnemies(host)
     page.cloth:SetPoint("TOPLEFT", -20, 7)
     page.cloth:SetPoint("BOTTOMRIGHT", 35, -12)
     -- The border (owner, 27/11: part of the design): four flourishes in the corners and the kit's
-    -- gold rules linking them along the sides, at the kit's proportions (a corner of 288, a rule 96
-    -- wide). The frame's own ornament stays over the bottom right one; the bottom and right rules run
-    -- on under it, so no gap shows where it hides the flourish.
+    -- gold rules linking them along the sides; R.LayEnemyBorder places them for the faction.
     page.corners = {}
-    local corner, rule = 70, math.floor(70 * 96 / 288 + 0.5)
-    -- The kit's rule runs 10 units inside its pieces' edge: the border stands 10 units out from the
-    -- cloth (11 at the top, 12 at the bottom), so its rule lies on the book's own gold rule and the flourishes join it
-    -- (owner, 28/11: two parallel rules on every side, measured on the render).
     page.border = CreateFrame("Frame", nil, page)
-    page.border:SetPoint("TOPLEFT", page.cloth, "TOPLEFT", -10, 11)
-    page.border:SetPoint("BOTTOMRIGHT", page.cloth, "BOTTOMRIGHT", 10, -12)
     for i, at in ipairs({ { "TOPLEFT", "HG" }, { "TOPRIGHT", "HD" }, { "BOTTOMLEFT", "BG" }, { "BOTTOMRIGHT", "BD" } }) do
         local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
-        piece:SetSize(corner, corner)
         piece:SetPoint(at[1], page.border, at[1], 0, 0)
         piece.corner = "Coin%s" .. at[2]
         page.corners[i] = piece
     end
-    for _, at in ipairs({ { "Haut", "TOPLEFT", corner, 0, "TOPRIGHT", -corner, -rule },
-        { "Bas", "BOTTOMLEFT", corner, rule, "BOTTOMRIGHT", -24, 0 },
-        { "Gauche", "TOPLEFT", 0, -corner, "BOTTOMLEFT", rule, corner },
-        { "Droite", "TOPRIGHT", -rule, -corner, "BOTTOMRIGHT", 0, 24 } }) do
+    for _, edge in ipairs({ "Haut", "Bas", "Gauche", "Droite" }) do
         local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
-        piece:SetPoint("TOPLEFT", page.border, at[2], at[3], at[4])
-        piece:SetPoint("BOTTOMRIGHT", page.border, at[5], at[6], at[7])
-        piece.corner = "Bord%s" .. at[1]
+        piece.corner, piece.edge = "Bord%s" .. edge, edge
         page.corners[#page.corners + 1] = piece
     end
     -- The book's frame reaches over the page at the bottom right: its ornament drawn again over the
@@ -3641,13 +3649,16 @@ local function buildEnemies(host)
         mark:SetAlpha(0.13)
         page.marks[i] = mark
     end
-    -- The head after the owner's mockup (28/11): the banner large and whole, clear of the corner's
-    -- flourish; the title large in its faction's face; the two choices under it; a gold rule.
+    -- The head after the owner's mockup (28/11): the banner whole, hung under the top rule and clear
+    -- of the corner and of the first poster; the title large in its faction's face; the two choices
+    -- under it; a gold rule.
     page.banner = page:CreateTexture(nil, "ARTWORK")
-    page.banner:SetPoint("TOPLEFT", 44, 12)
-    page.title = Panels.Text(page, 140, -12, 480, 32, true, CLOTH_IVORY)
-    page.previewNote = Panels.Text(page, 16, -490, 170, 11, false, { 1, 0.82, 0.45 })
-    UI.journalFont(page.previewNote, "GameFontHighlight", 11, true)
+    page.banner:SetPoint("TOPLEFT", 58, 6)
+    page.title = Panels.Text(page, 150, -8, 480, 30, true, CLOTH_IVORY)
+    -- In a preview, its notice takes the legend's place at the foot.
+    page.previewNote = Panels.Text(page, 112, -491, 440, 12, false, { 1, 0.82, 0.45 })
+    UI.journalFont(page.previewNote, "GameFontHighlight", 12, true)
+    page.previewNote:SetJustifyH("CENTER")
     page.period, page.show, page.offset = 1, 1, 0
     page.periodButton = chooser(page, ENEMY_PERIODS, function() return page.period end, function(i)
         page.period, page.offset = i, 0
@@ -3658,8 +3669,6 @@ local function buildEnemies(host)
         R.Refresh()
     end)
     page.rule = wantedTexture(page, "ARTWORK", 1, "SeparateurOr")
-    page.rule:SetSize(520, math.floor(520 / RATIO.SeparateurOr + 0.5))
-    page.rule:SetPoint("CENTER", page, "TOPLEFT", 380, -90)
     page.posters = {}
     for i = 1, ENEMY_ROWS do page.posters[i] = buildPoster(page, i) end
     page.empty = Panels.Text(page, 60, -130, 544, 15, false, CLOTH_IVORY)
@@ -3668,7 +3677,7 @@ local function buildEnemies(host)
     page.reshare:ClearAllPoints()
     page.reshare:SetPoint("TOP", page, "TOP", 0, -176)
     -- At the foot: what the order weighs. One page (owner, 27/11): the five the guild wants most.
-    page.legend = Panels.Text(page, 112, -490, 440, 12, false, CLOTH_SOFT)
+    page.legend = Panels.Text(page, 112, -491, 440, 12, false, CLOTH_SOFT)
     UI.journalFont(page.legend, "GameFontHighlight", 12, true)
     page.legend:SetJustifyH("CENTER")
     return page
@@ -3712,19 +3721,19 @@ local function figureTexts(p, enemy, open)
 end
 local function paintPoster(page, p, enemy, rank, spot, open, gold)
     placePoster(page, p, spot)
-    local style, h = p.style, spot.h
+    local base, h, hero = p.style, spot.h, p.kind == "hero"
+    local faces = R.Faces[page.faction] or R.Faces.Alliance
     -- The rank's number in gold and the small # before it, the two centred together in the medal.
     p.rank:SetText(tostring(rank))
     p.rankHash:SetText("#")
-    local rankFace = (R.Faces[page.faction] or R.Faces.Alliance).number
-    UI.journalFont(p.rank, "GameFontNormalLarge", style.rank, rankFace)
-    UI.journalFont(p.rankHash, "GameFontNormalLarge", math.floor(style.rank * 0.62 + 0.5), rankFace)
+    UI.journalFont(p.rank, "GameFontNormalLarge", base.rank, faces.number)
+    UI.journalFont(p.rankHash, "GameFontNormalLarge", math.floor(base.rank * 0.62 + 0.5), faces.number)
     shadowed(p.rank, 0.95)
     shadowed(p.rankHash, 0.95)
     -- Widths measured, never below the letters' own size: a font just loaded still measures nothing
     -- (owner, 28/11: the medals of #2 to #5 showed empty).
-    local numberW = math.max(GL.Safe(p.rank.GetStringWidth, p.rank) or 0, style.rank * 0.62 * #tostring(rank))
-    local hashW = math.max(GL.Safe(p.rankHash.GetStringWidth, p.rankHash) or 0, style.rank * 0.4)
+    local numberW = math.max(GL.Safe(p.rank.GetStringWidth, p.rank) or 0, base.rank * 0.62 * #tostring(rank))
+    local hashW = math.max(GL.Safe(p.rankHash.GetStringWidth, p.rankHash) or 0, base.rank * 0.4)
     numberW, hashW = math.ceil(numberW) + 2, math.ceil(hashW) + 2
     p.rank:SetWidth(numberW)
     p.rankHash:SetWidth(hashW)
@@ -3732,100 +3741,136 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     p.rankHash:SetJustifyH("RIGHT")
     local start = -math.floor((numberW + hashW) / 2 + 0.5)
     p.rankHash:ClearAllPoints()
-    p.rankHash:SetPoint("LEFT", p.medal, "CENTER", start, math.floor(style.rank * 0.12 + 0.5))
+    p.rankHash:SetPoint("LEFT", p.medal, "CENTER", start, math.floor(base.rank * 0.12 + 0.5))
     p.rank:ClearAllPoints()
     p.rank:SetPoint("LEFT", p.medal, "CENTER", start + hashW, 1)
-    local faces = R.Faces[page.faction] or R.Faces.Alliance
-    fit(p.title, capitals(L("Recherché")), p.inner + 8, style.title, 10, true, 0.35, faces.title)
-    if p.label then
-        if rank == 1 then
-            p.label:Show()
-            p.labelText:Show()
-            fit(p.labelText, capitals(L("Ennemi public n°1")), p.inner - 30, 12, 7, true)
-        else
-            p.label:Hide()
-            p.labelText:Hide()
-        end
-    end
-    -- The name under the title, or under the hero's label when it shows.
-    local nameY = p.nameY - (p.label and rank == 1 and p.label:GetHeight() + 5 or 0)
-    p.name:ClearAllPoints()
-    p.name:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx - 4, nameY)
-    p.name:SetWidth(p.inner + 8)
-    local hero = p.kind == "hero"
-    p.faceTop = nameY - style.name - (hero and 6 or 2)
-    fit(p.name, UI.plain(enemy.name or L("un joueur inconnu")), p.inner + 8, style.name, 8, true, nil, faces.name)
-    -- A name too long for one line takes two: what is under it moves down a line.
-    local nameSize = select(2, GL.Safe(p.name.GetFont, p.name)) or style.name
-    local extra = (GL.Safe(p.name.GetStringWidth, p.name) or 0) > p.inner + 8 and math.floor(nameSize + 2) or 0
-    -- From the bottom up: the ribbon, then the date and the figures.
-    -- On the small posters the ribbon and the stamp bite into the paper's bottom margin (the mockup's).
-    local foot = hero and p.bottom or p.bottom - 8
-    local floor = hero and p.bottom + 8 or foot + 2
+    -- What the poster says.
+    local name = UI.plain(enemy.name or L("un joueur inconnu"))
+    local first, second = figureTexts(p, enemy, open)
+    local info = mapInfo(enemy.mapID)
+    p.where = info and type(info.name) == "string" and UI.plain(info.name) or nil
+    -- Where the guild last met them, and when (owner, 27/11: where to hunt them).
+    local seen = p.where and L("Vu à %s, %s"):format(p.where, elapsed(enemy.last)) or L("Vu %s"):format(elapsed(enemy.last))
+    p.kills = enemy.kills > 0 and L("vaincu %d fois par la guilde"):format(enemy.kills) or nil
+    p.deaths = enemy.deaths .. " " .. (enemy.deaths > 1 and L("morts infligées") or L("mort infligée"))
+    local stamped = enemy.avenged or GL.Now() - enemy.last > COLD_AFTER
+    -- At the foot, a little into the paper's bottom margin: the bounty's ribbon, or the stamp.
+    -- Half of the ribbon lies over the margin's motifs, never nearer the paper's edge than a
+    -- twentieth; the stamp, an outline of ink, keeps to the plain paper. Without either, the writing
+    -- stops at the plain zone's foot.
+    local bite = open and math.floor(p.ribbon:GetHeight() / 2) or 0
+    local foot = math.max(math.floor(h * 0.05), p.bottom - bite)
+    local floor = (open or stamped) and foot + 1 or p.bottom
     p.ribbon:ClearAllPoints()
     p.ribbon:SetPoint("BOTTOM", p, "BOTTOM", p.cx, foot)
     if open then
         p.ribbon:Show()
         p.prize:Show()
         local prize = gold > 0 and capitals(L("%s pour sa tête"):format(GL.BountyMoney(gold))) or capitals(L("Avis de recherche"))
-        fit(p.prize, prize, p.inner - 34, style.label + 2, 7, true, 0.6)
-        floor = floor + p.ribbon:GetHeight() + 4
+        fit(p.prize, prize, p.ribbon:GetWidth() - 40, base.label + 2, 7, true, 0.6)
+        floor = floor + p.ribbon:GetHeight() + 3
         if gold > 0 then p.seal:Show() else p.seal:Hide() end
     else
         p.ribbon:Hide()
         p.prize:Hide()
         p.seal:Hide()
+        if stamped then floor = floor + p.stamp:GetHeight() + 3 end
     end
-    local stamped = enemy.avenged or GL.Now() - enemy.last > COLD_AFTER
-    if stamped and not open then floor = floor + p.stamp:GetHeight() + (hero and 4 or 2) end
-    local first, second = figureTexts(p, enemy, open)
-    for i, figure in ipairs(p.figures) do
-        local text = i == 1 and first or second
-        figure.number:SetText(tostring(text[1]))
-        UI.journalFont(figure.number, "GameFontNormalLarge", style.number, faces.number)
-        figure.words:SetText(text[2])
-        UI.journalFont(figure.words, "GameFontHighlight", style.label)
-    end
-    local info = mapInfo(enemy.mapID)
-    p.where = info and type(info.name) == "string" and UI.plain(info.name) or nil
-    -- Where the guild last met them, and when (owner, 27/11: where to hunt them).
-    p.seen:SetText(p.where and L("Vu à %s, %s"):format(p.where, elapsed(enemy.last)) or L("Vu %s"):format(elapsed(enemy.last)))
-    p.kills = enemy.kills > 0 and L("vaincu %d fois par la guilde"):format(enemy.kills) or nil
-    p.deaths = enemy.deaths .. " " .. (enemy.deaths > 1 and L("morts infligées") or L("mort infligée"))
-    local top = p.faceTop - extra
-    -- Every poster after the owner's mockup (28/11): title, name, the portrait in the middle, then
-    -- the rows centred under it and the date; the portrait takes the room they leave (measured
-    -- first: their words may wrap).
-    local below, usedW = placeFigures(p, p.mx, 0, p.inner)
-    below = hero and 10 - below + 5 + style.seen + 4 or 4 - below + 1 + style.seen
-    local side = math.max(hero and 60 or 30, math.min(style.face, math.floor(top - (hero and 4 or 2) + (h - floor) - below)))
-    p.face:ClearAllPoints()
-    p.face:SetPoint("TOP", p, "TOP", p.cx, top - (hero and 4 or 2))
-    paintPortrait(page, p, enemy, side)
-    local x = p.mx + math.max(0, math.floor((p.inner - usedW) / 2))
-    local y = placeFigures(p, x, top - 4 - side - (hero and 10 or 4), p.inner - (x - p.mx))
-    -- The ink rule under the figures on the tall poster only; the small ones keep their room.
-    p.rule:SetSize(math.floor(p.inner * 0.8), math.floor(p.inner * 0.8 / RATIO.SeparateurEncre + 0.5) + 2)
-    p.rule:ClearAllPoints()
-    p.rule:SetPoint("TOP", p, "TOP", p.cx, y + 3)
-    if hero then p.rule:Show() else p.rule:Hide() end
-    p.seen:ClearAllPoints()
-    p.seen:SetPoint("TOP", p, "TOP", p.cx, y - (hero and 5 or 1))
-    p.seen:SetWidth(p.inner)
-    p.seen:SetJustifyH("CENTER")
-    local seenSize = style.seen
-    UI.journalFont(p.seen, "GameFontHighlight", seenSize, true)
-    while seenSize > 8 and (GL.Safe(p.seen.GetStringWidth, p.seen) or 0) > p.inner do
-        seenSize = seenSize - 1
+    -- The writing from the top of the paper's plain zone down: title, name, the portrait, the
+    -- figures centred under it, the date (the owner's mockup, 28/11). The portrait takes the room
+    -- left. Laid at full size first; where the portrait would get less than its least, laid again
+    -- smaller. The posters' sizes are the papers': the reading size of the books does not grow them.
+    local reading = GL.Settings and GL.Settings().readingScale or 1
+    local function sizeOf(label, fallback) return select(2, GL.Safe(label.GetFont, label)) or fallback * reading end
+    local function lay(k)
+        local function s(v, least) return math.max(least, math.floor(v * k / reading + 0.5)) end
+        local y = -p.top
+        p.title:ClearAllPoints()
+        p.title:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx - 4, y)
+        p.title:SetWidth(p.inner + 8)
+        fit(p.title, capitals(L("Recherché")), p.inner + 8, s(base.title, 10), 9, true, 0.35, faces.title)
+        y = y - sizeOf(p.title, s(base.title, 10)) - (hero and 6 or 3)
+        if p.label then
+            if rank == 1 then
+                local labelW = p.inner + 10
+                p.label:SetSize(labelW, math.floor(labelW / RATIO.Cartouche + 0.5))
+                p.label:ClearAllPoints()
+                p.label:SetPoint("TOP", p, "TOP", p.cx, y)
+                p.label:Show()
+                p.labelText:Show()
+                p.labelText:SetWidth(labelW - 40)
+                fit(p.labelText, capitals(L("Ennemi public n°1")), labelW - 40, s(12, 8), 7, true)
+                y = y - p.label:GetHeight() - 5
+            else
+                p.label:Hide()
+                p.labelText:Hide()
+            end
+        end
+        p.name:ClearAllPoints()
+        p.name:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx - 4, y)
+        p.name:SetWidth(p.inner + 8)
+        fit(p.name, name, p.inner + 8, s(base.name, 9), 8, true, nil, faces.name)
+        -- A name too long for one line at its smallest takes two.
+        local nameLines = (GL.Safe(p.name.GetStringWidth, p.name) or 0) > p.inner + 8 and 2 or 1
+        GL.Safe(p.name.SetWordWrap, p.name, nameLines > 1)
+        y = y - nameLines * (sizeOf(p.name, s(base.name, 9)) + 1) - (hero and 6 or 2)
+        for i, figure in ipairs(p.figures) do
+            local text = i == 1 and first or second
+            local icon = math.max(8, math.floor(base.icon * k + 0.5))
+            local label = s(base.label, 8)
+            figure.size = { label = label, least = math.max(8, label - 3), gap = base.gap, reading = reading,
+                line = math.max(icon, math.floor(base.number * k + 0.5)) }
+            figure.icon:SetSize(math.floor(icon * RATIO[figure.iconName] + 0.5), icon)
+            figure.number:SetText(tostring(text[1]))
+            UI.journalFont(figure.number, "GameFontNormalLarge", s(base.number, 9), faces.number)
+            figure.words:SetText(text[2])
+        end
+        local figuresEnd, usedW = placeFigures(p, p.mx, 0, p.inner)
+        -- The date on one line, smaller until it fits; a long place takes two lines, never cut.
+        local seenSize = s(base.seen, 8)
+        p.seen:SetText(seen)
+        GL.Safe(p.seen.SetWordWrap, p.seen, false)
         UI.journalFont(p.seen, "GameFontHighlight", seenSize, true)
+        while seenSize > 8 and (GL.Safe(p.seen.GetStringWidth, p.seen) or 0) > p.inner do
+            seenSize = seenSize - 1
+            UI.journalFont(p.seen, "GameFontHighlight", seenSize, true)
+        end
+        local seenLines = (GL.Safe(p.seen.GetStringWidth, p.seen) or 0) > p.inner and 2 or 1
+        GL.Safe(p.seen.SetWordWrap, p.seen, seenLines > 1)
+        local gap, seenGap = hero and 10 or 3, hero and 7 or 1
+        local below = gap - figuresEnd + seenGap + seenLines * (seenSize * reading + 2)
+        -- The portrait and its gold frame (a twelfth of its side all around).
+        local room = math.floor((y + (h - floor) - below) / 1.17)
+        local least = hero and 56 or 28
+        local side = math.max(least, math.min(math.floor(base.face * k + 0.5), room))
+        local pad = math.floor(side * 0.085 + 0.5)
+        p.face:ClearAllPoints()
+        p.face:SetPoint("TOP", p, "TOP", p.cx, y - pad)
+        paintPortrait(page, p, enemy, side)
+        local x = p.mx + math.max(0, math.floor((p.inner - usedW) / 2))
+        local nextY = placeFigures(p, x, y - side - 2 * pad - gap, p.inner - (x - p.mx))
+        -- The ink rule under the figures on the tall poster only; the small ones keep their room.
+        p.rule:SetSize(math.floor(p.inner * 0.8), math.floor(p.inner * 0.8 / RATIO.SeparateurEncre + 0.5) + 2)
+        p.rule:ClearAllPoints()
+        p.rule:SetPoint("TOP", p, "TOP", p.cx, nextY + 3)
+        if hero then p.rule:Show() else p.rule:Hide() end
+        p.seen:ClearAllPoints()
+        p.seen:SetPoint("TOP", p, "TOP", p.cx, nextY - seenGap + (hero and 0 or 1))
+        p.seen:SetWidth(p.inner)
+        p.seen:SetJustifyH("CENTER")
+        return room >= least
     end
-    -- The stamp: avenged first (the guild has answered), else a cold trail after three weeks.
+    for _, k in ipairs({ 1, 0.92, 0.85, 0.78, 0.72 }) do
+        if lay(k) then break end
+    end
+    -- The stamp: avenged first (the guild has answered), else a cold trail after three weeks. At the
+    -- foot; across the portrait's foot when a ribbon holds that place.
     if stamped then
         p.stamp:ClearAllPoints()
-        if open then p.stamp:SetPoint("CENTER", p.face, "BOTTOM", 0, 4)
-        else p.stamp:SetPoint("BOTTOM", p, "BOTTOM", p.cx, hero and p.bottom + 2 or p.bottom - 6) end
+        if open then p.stamp:SetPoint("CENTER", p.face, "BOTTOM", 0, 2)
+        else p.stamp:SetPoint("BOTTOM", p, "BOTTOM", p.cx, foot) end
         p.stamp:Show()
-        fit(p.stamp.words, enemy.avenged and capitals(L("Vengé")) or L("Piste froide"), p.stamp:GetWidth() - 16, style.label + 1, 7, true)
+        fit(p.stamp.words, enemy.avenged and capitals(L("Vengé")) or L("Piste froide"), p.stamp:GetWidth() - 14, base.label + 1, 7, true)
         p.stamp.words:SetTextColor(unpack(enemy.avenged and AVENGED_INK or STAMP_INK))
     else
         p.stamp:Hide()
@@ -3939,23 +3984,27 @@ local function paintEnemies(page)
     page.faction = faction
     page.previewNote:SetText(preview and L("Aperçu : ennemis d’exemple, rien n’est enregistré") or "")
     page.cloth:SetTexture(WANTED .. "Toile" .. faction)
-    for _, piece in ipairs(page.corners) do piece:SetTexture(WANTED .. piece.corner:format(faction)) end
+    R.LayEnemyBorder(page, faction)
     for _, mark in ipairs(page.marks) do
         mark:SetTexture(WANTED .. "Filigrane" .. faction)
         mark:SetSize(math.floor(mark.side * RATIO["Filigrane" .. faction] + 0.5), mark.side)
     end
     page.banner:SetTexture(WANTED .. "Fanion" .. faction)
-    -- The validated banners (owner, 28/11) carry their arms painted in: no emblem laid over them.
-    -- 104 high, never wider than 96 (the Alliance's patinated banner, 28/11, is wider than high).
-    local bannerH = math.min(104, math.floor(96 / RATIO["Fanion" .. faction] + 0.5))
+    -- The validated banners (owner, 28/11) carry their arms painted in. 88 high or wide at most: the
+    -- banner ends above the posters.
+    local bannerH = math.min(88, math.floor(88 / RATIO["Fanion" .. faction] + 0.5))
     local bannerW = math.floor(bannerH * RATIO["Fanion" .. faction] + 0.5)
     page.banner:SetSize(bannerW, bannerH)
-    -- The title and the choices start after the banner.
-    page.titleX = 44 + bannerW + 16
+    -- The title, the choices and the rule start after the banner.
+    page.titleX = 58 + bannerW + 14
     page.title:ClearAllPoints()
-    page.title:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -12)
+    page.title:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -8)
     page.title:SetWidth(640 - page.titleX)
-    fit(page.title, L("Ennemis de la guilde"), 640 - page.titleX, 32, 18, true, 0.85, (R.Faces[faction] or R.Faces.Alliance).title)
+    fit(page.title, L("Ennemis de la guilde"), 640 - page.titleX, 30, 18, true, 0.85, (R.Faces[faction] or R.Faces.Alliance).title)
+    local ruleW = 640 - page.titleX
+    page.rule:ClearAllPoints()
+    page.rule:SetPoint("LEFT", page, "TOPLEFT", page.titleX - 4, -79)
+    page.rule:SetSize(ruleW, math.floor(ruleW / RATIO.SeparateurOr + 0.5))
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
     if preview then sharing, inGuild = true, true end
@@ -3969,16 +4018,20 @@ local function paintEnemies(page)
         end
         list = kept
     end
-    -- The two choices as wide as their words, side by side left of the corner's flourish.
-    for _, pair in ipairs({ { page.showButton, L(POSTER_FILTERS[page.show][2]) }, { page.periodButton, L(ENEMY_PERIODS[page.period][2]) } }) do
-        local button = pair[1]
+    -- The two choices side by side under the title; a long translation gets smaller letters, never cut.
+    for _, pair in ipairs({ { page.periodButton, L(ENEMY_PERIODS[page.period][2]) }, { page.showButton, L(POSTER_FILTERS[page.show][2]) } }) do
+        local button, size = pair[1], 13
         button:SetText(pair[2])
-        button:SetWidth(math.max(128, math.ceil(GL.Safe(button.caption.GetStringWidth, button.caption) or 100) + 44))
+        UI.journalFont(button.caption, "GameFontHighlightSmall", size)
+        while size > 9 and (GL.Safe(button.caption.GetStringWidth, button.caption) or 0) > button:GetWidth() - 36 do
+            size = size - 1
+            UI.journalFont(button.caption, "GameFontHighlightSmall", size)
+        end
     end
     page.periodButton:ClearAllPoints()
-    page.periodButton:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX + 8, -56)
+    page.periodButton:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -44)
     page.showButton:ClearAllPoints()
-    page.showButton:SetPoint("TOPLEFT", page.periodButton, "TOPRIGHT", 30, 0)
+    page.showButton:SetPoint("TOPLEFT", page.periodButton, "TOPRIGHT", 14, 0)
     for _, button in ipairs({ page.periodButton, page.showButton }) do
         if sharing then button:Show() else button:Hide() end
     end
@@ -3991,7 +4044,7 @@ local function paintEnemies(page)
         local open, gold = R.EnemyBounty(enemy)
         shown[i] = { key = enemy.key, enemy = enemy, open = open, gold = gold, bounty = gold > 0 }
     end
-    page.spots = R.PosterLayout(shown)
+    page.spots = R.PosterLayout(shown, faction)
     for i, p in ipairs(page.posters) do
         local item = shown[i]
         if item then paintPoster(page, p, item.enemy, page.offset + i, page.spots[i], item.open, item.gold)
@@ -4010,7 +4063,7 @@ local function paintEnemies(page)
     end
     if inGuild and not sharing then page.reshare:Show() else page.reshare:Hide() end
     page.empty:SetText(empty)
-    page.legend:SetText(#list > 0 and L("Victimes distinctes · Morts infligées · Fraîcheur des faits") or "")
+    page.legend:SetText(not preview and #list > 0 and L("Victimes distinctes · Morts infligées · Fraîcheur des faits") or "")
 end
 
 -- The books: the narrow format of the player sheet. Left, the entries and the key figures. Right,

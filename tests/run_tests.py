@@ -22,6 +22,8 @@ for filename, digest in {
     "CinzelDecorative-Bold.ttf": "e854e68a388aa50d742a4415c1ae5c17a617ef7956c95a70021d0a4a44f20518",
     "GermaniaOne-Regular.ttf": "3ee3d56584bab8c9e3f59cc3360aa8a36e219dcf0a9f3c8928e3da5a19277e3f",
     "OFL-GermaniaOne.txt": "b7574cd4c76770e5e3915d16bd93f09663bd77cb041a4ec09d824c52b540529a",
+    "Skranji-Bold.ttf": "cfe2e3847d4c4d63efb207533539933b1acaaa7ea71e8df86758c01b7de6e9ab",
+    "OFL-Skranji.txt": "ea3a629259e2df37adeb16ff728e28cc7d669fb341edde948af89dbdb64e7caa",
     "OFL-NewRocker.txt": "3b9f1bbe33dc7c6f93cf5e010b3de066efb635c0c7f34281790e7c9f61207b43",
     "OFL-CinzelDecorative.txt": "1e5d6660366ddcfca4f2fc10e2acfba9fa4d97d40aec80d7dbfd41d730a420ae",
 }.items():
@@ -86,6 +88,8 @@ for name, expected_width, expected_height, transparent in (
         ("FiligraneAlliance", 128, 128), ("FiligraneHorde", 128, 128),
         *((f"{paper}{format}{tilt}", 256, 512 if format == "Grande" else 256)
           for paper in ("Affiche", "Prime") for format in ("Grande", "Carree") for tilt in (1, 2)),
+        # The tribal papers (v9, v10; owner, 28/11): the Horde's posters.
+        *((f"Affiche{name}", 256, 512) for name in ("OrcChef", "OrcGuerre", "TrollMarais", "GnollMarais", "GnollRavins", "OgreChef")),
         # The v8 collection (owner, 27/11): ten families, tall and small, plain and gold.
         *((f"{paper}{family}{format}", 256, 512 if format == "Grande" else 256) for paper in ("Affiche", "Prime")
           for family in ("Humain", "ElfeNuit", "ElfeSang", "Aerien", "Roublard", "Demoniste", "Troll", "Orc", "Tauren", "MortVivant")

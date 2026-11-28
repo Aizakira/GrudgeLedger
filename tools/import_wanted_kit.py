@@ -1,6 +1,11 @@
 """Imports the owner's wanted-poster kit for Ennemis de la guilde (v6, 27/11).
 
-Usage: python tools/import_wanted_kit.py PATH_TO/kit-ennemis-guilde-v6 [PATH_TO/collection-affiches-v8]
+Usage: python tools/import_wanted_kit.py PATH_TO/kit-ennemis-guilde-v6 [PATH_TO/collection-affiches-v8
+       [PATH_TO/propositions-...-v9 PATH_TO/propositions-...-v10]]
+
+The tribal papers (v9 and v10, owner 28/11: the Horde's posters) come
+in one size and without a gold edition; their writing zone is the largest plain rectangle around
+their centre, clear of the painted motifs (plain_zone).
 
 The v8 collection (owner, 27/11) gives ten families of papers, each a tall one for the first poster
 and a small one for the others, plain and gold (a bounty): Affiche<Family><Grande|Carree> and
@@ -248,7 +253,75 @@ def collection(folder):
         print(f"    {name} = {ratios[name]}, -- zone {{ {', '.join(str(v) for v in zones[name])} }}")
 
 
+# Tribal papers kept: those whose plain middle can carry a poster (the others are too painted over).
+# With each, how far its writing may run over the motifs (plain_zone's grow): over the thin tips of
+# slashes and spots, hardly over a solid printed frame or an emblem.
+TRIBAL = {"orc-chef": ("OrcChef", 1), "orc-guerre": ("OrcGuerre", 4), "troll-marais": ("TrollMarais", 4),
+          "gnoll-marais": ("GnollMarais", 4), "gnoll-ravins": ("GnollRavins", 4), "ogre-chef": ("OgreChef", 4)}
+
+
+def plain_zone(image, grid=128, grow=4):
+    """The margins (left, top, right, bottom, fractions of the cropped drawing) of the largest plain
+    rectangle that holds the paper's centre: paper-coloured, opaque, clear of the painted motifs.
+    The writing may run over the motifs' thin tips, as on the owner's mockups: the plain area grows
+    by `grow` cells of the grid (3 % of the width), without leaving the paper."""
+    from PIL import ImageFilter
+    crop = image.crop(image.getchannel("A").getbbox())
+    gw, gh = grid, round(grid * crop.height / crop.width)
+    small = crop.resize((gw, gh), Image.LANCZOS)
+    lab, alpha = small.convert("RGB").convert("LAB").load(), small.getchannel("A").load()
+    middle = [lab[x, y] for y in range(int(gh * .4), int(gh * .6)) for x in range(int(gw * .4), int(gw * .6))]
+    paper = [sorted(c[i] for c in middle)[len(middle) // 2] for i in range(3)]
+    mask, body = Image.new("L", (gw, gh), 0), Image.new("L", (gw, gh), 0)
+    px, inside = mask.load(), body.load()
+    for y in range(gh):
+        for x in range(gw):
+            l, a, b = lab[x, y]
+            plain = alpha[x, y] >= 245 and abs(l - paper[0]) < 46 and abs(a - paper[1]) < 11 and abs(b - paper[2]) < 15
+            px[x, y] = 255 if plain else 0
+            inside[x, y] = 255 if alpha[x, y] >= 245 else 0
+    # Specks of crease or grain are not motifs.
+    mask = mask.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(3))
+    if grow:
+        mask = mask.filter(ImageFilter.MaxFilter(2 * grow + 1))
+    body = body.filter(ImageFilter.MinFilter(9))
+    px, inside = mask.load(), body.load()
+    cx, cy, best, heights = gw // 2, gh // 2, None, [0] * gw
+    for y in range(gh):
+        for x in range(gw):
+            heights[x] = heights[x] + 1 if px[x, y] and inside[x, y] else 0
+        for x in range(gw):
+            h, left = heights[x], x
+            while left >= 0 and heights[left] > 0:
+                h = min(h, heights[left])
+                w, top = x - left + 1, y - h + 1
+                if left <= cx <= x and top <= cy <= y:
+                    # Wide and tall both matter: the smaller side counts double.
+                    score = w * h * min(w / gw, h / gh)
+                    if not best or score > best[0]:
+                        best = (score, left, top, x + 1, y + 1)
+                left -= 1
+    _, left, top, right, bottom = best
+    return (round(left / gw + 0.012, 3), round(top / gh + 0.012, 3), round(1 - right / gw + 0.012, 3), round(1 - bottom / gh + 0.012, 3))
+
+
+def tribal(folders):
+    print("-- tribal papers")
+    for folder in folders:
+        for stem, (name, grow) in TRIBAL.items():
+            path = Path(folder) / (stem + ".png")
+            if not path.is_file():
+                continue
+            image = clean(Image.open(path).convert("RGBA"))
+            zone = plain_zone(image, grow=grow)
+            image = image.crop(image.getchannel("A").getbbox())
+            write_tga(OUT / f"Affiche{name}.tga", fitted(image, 256, 512))
+            print(f"    Affiche{name} = {round(image.width / image.height, 3)}, -- zone {{ {', '.join(str(v) for v in zone)} }}")
+
+
 if __name__ == "__main__":
     main(sys.argv[1])
     if len(sys.argv) > 2:
         collection(sys.argv[2])
+    if len(sys.argv) > 3:
+        tribal(sys.argv[3:])

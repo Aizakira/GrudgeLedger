@@ -519,7 +519,7 @@ do
     assert(hero.labelText:GetText() == "ENNEMI PUBLIC N°1" and hero.figures[1].number:GetText() == "2" and hero.figures[1].words:GetText() == "membres distincts tués")
     -- A hunting board (owner, 27/11): the victims by name (you, then one the roster cannot name), where
     -- and when the guild last met them; the deaths in the tooltip; not avenged (his last kill is later).
-    assert(hero.figures[2].number:GetText() == "" and hero.figures[2].words:GetText() == "Vous +1", hero.figures[2].words:GetText())
+    assert(hero.figures[2].number:GetText() == "" and hero.figures[2].words:GetText() == "Vous94p+1", hero.figures[2].words:GetText())
     assert(hero.seen:GetText() == "Vu à Feralas, il y a 1 h", hero.seen:GetText())
     assert(hero.where == "Feralas" and hero.kills == "vaincu 4 fois par la guilde" and hero.deaths == "4 morts infligées", hero.deaths)
     assert(not hero.seal:IsShown() and not hero.stamp:IsShown() and not hero.ribbon:IsShown())
@@ -543,7 +543,7 @@ do
     local enemy = R.GuildEnemies(0)[1]
     assert(enemy.avenged == false and enemy.avengedAt < enemy.last)
     enemy.avengedAt = enemy.last + 60
-    assert(R.VictimNames(enemy, 1) == "Vous +1" and R.VictimNames({ victims = {} }, 3) == nil)
+    assert(R.VictimNames(enemy, 1) == "Vous94p+1" and R.VictimNames({ victims = {} }, 3) == nil)
     -- A killer the guild never saw with an identity keeps the bounty posted on their name (owner, 27/11:
     -- Avec une prime shows them all), and takes the bounty's identity to open the sheet.
     local savedBounties, savedTotal = GL.Bounties, GL.BountyTotal
@@ -578,9 +578,21 @@ do
             if drawn then draws = draws + 1 end
             for i, spot in ipairs(spots) do
                 assert(spot.x >= 0 and spot.x + spot.w <= 664 and spot.y <= -60 and spot.y - spot.h >= -480, spot.paper)
-                assert(spot.paper:find(bountyAt == i and "^Prime" or "^Affiche"), spot.paper)
+                -- A gold paper only on a bounty; the papers of one size have no gold edition.
+                assert(spot.paper:find("^Affiche") or (bountyAt == i and spot.paper:find("^Prime")), spot.paper)
+                assert(GL.Art.WantedRatio[spot.paper] and GL.Art.WantedText[spot.paper], spot.paper)
+                assert(spot.w <= (i == 1 and 300 or 184), spot.paper)
             end
-            assert(spots[1].paper:find("Grande") and (n < 2 or spots[2].paper:find("Carree")))
+            assert(GL.Art.WantedRatio[spots[1].paper] < 0.9, "the first poster is a tall paper")
+            -- The papers go by the faction that posts (owner, 28/11): tribal ones for a Horde guild,
+            -- never the Alliance's peoples'; and the other way round.
+            local horde = R.PosterLayout(items(n, bountyAt), "Horde")
+            assert(#horde == n and same(horde, R.PosterLayout(items(n, bountyAt), "Horde")))
+            for i, spot in ipairs(horde) do
+                assert(not spot.paper:find("Humain") and not spot.paper:find("Elfe") and not spot.paper:find("Nain"), spot.paper)
+                assert(not spots[i].paper:find("Orc") and not spots[i].paper:find("Troll") and not spots[i].paper:find("Gnoll"), spots[i].paper)
+                assert(spot.x >= 0 and spot.x + spot.w <= 664 and spot.y <= -60 and spot.y - spot.h >= -480, spot.paper)
+            end
         end
         local more = items(5)
         more[n].key = "Newcomer-Realm"

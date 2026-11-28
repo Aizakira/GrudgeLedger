@@ -57,6 +57,10 @@ GL.Art.WantedRatio = {
     PrimeHumainCarree = 0.885, PrimeHumainGrande = 0.664, PrimeMortVivantCarree = 0.989, PrimeMortVivantGrande = 0.663,
     PrimeOrcCarree = 0.98, PrimeOrcGrande = 0.662, PrimeRoublardCarree = 0.97, PrimeRoublardGrande = 0.647,
     PrimeTaurenCarree = 0.99, PrimeTaurenGrande = 0.658, PrimeTrollCarree = 0.964, PrimeTrollGrande = 0.664,
+    -- The tribal papers (v9, v10; owner, 28/11): one size, no gold edition.
+    AfficheOrcChef = 0.786, AfficheOrcGuerre = 0.801,
+    AfficheTrollMarais = 0.801, AfficheGnollMarais = 0.8,
+    AfficheGnollRavins = 0.812, AfficheOgreChef = 0.834,
 }
 -- The forged nails (v6) are drawn in perspective: where the point enters the paper, in fractions of
 -- the drawing from its top left. A banner may give its arms' place (left, top, right, bottom): the
@@ -91,4 +95,8 @@ GL.Art.WantedText = {
     PrimeRoublardCarree = { 0.108, 0.129, 0.119, 0.11 }, PrimeRoublardGrande = { 0.127, 0.119, 0.131, 0.084 },
     PrimeTaurenCarree = { 0.107, 0.148, 0.103, 0.099 }, PrimeTaurenGrande = { 0.116, 0.107, 0.116, 0.085 },
     PrimeTrollCarree = { 0.122, 0.121, 0.115, 0.107 }, PrimeTrollGrande = { 0.145, 0.134, 0.114, 0.083 },
+    -- Tribal papers: the largest plain rectangle around their centre, clear of the painted motifs.
+    AfficheOrcChef = { 0.145, 0.202, 0.168, 0.11 }, AfficheOrcGuerre = { 0.176, 0.181, 0.114, 0.093 },
+    AfficheTrollMarais = { 0.184, 0.181, 0.129, 0.118 }, AfficheGnollMarais = { 0.106, 0.168, 0.121, 0.131 },
+    AfficheGnollRavins = { 0.106, 0.158, 0.137, 0.126 }, AfficheOgreChef = { 0.168, 0.155, 0.184, 0.181 },
 }

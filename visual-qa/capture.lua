@@ -708,6 +708,8 @@ function QA.capture(name)
                 table.sort(points, function(a, b) return a.time > b.time end)
                 GL.GuildMap.Points = function() return points end
                 local orders = { ["Player-1-QA0000W2"] = { pot = { a = 2500000 } }, ["Player-1-QA0000W3"] = { pot = {} } }
+                -- The Horde's view also puts a bounty on the first: the tall poster with its ribbon.
+                if name:find("%-horde") then orders["Player-1-QA0000W1"] = { pot = { a = 2500000 } } end
                 GL.Bounties = GL.Bounties or {}
                 GL.Bounties.OpenFor = function(target) return orders[target] end
                 -- The victims' names, as the guild's roster gives them (invented names).
