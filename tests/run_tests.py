@@ -97,7 +97,7 @@ for name, expected_width, expected_height, transparent in (
         ("CadrePortrait", 128, 128), ("Medaillon", 128, 128), ("MedaillonUn", 128, 128), ("Chevron", 32, 16),
         ("Bandeau", 256, 64), ("SceauPrime", 64, 64),
         ("Tampon", 256, 64), ("Cartouche", 256, 32), ("SeparateurEncre", 256, 16), ("SeparateurOr", 256, 16),
-        ("IconeMembres", 64, 64), ("IconeCrane", 64, 64), ("ClouFace", 64, 64), ("ClouGauche", 64, 64), ("ClouDroite", 64, 64))),
+        ("IconeMembres", 64, 64), ("IconeCrane", 64, 64), ("IconeLieu", 64, 64), ("ClouFace", 64, 64), ("ClouGauche", 64, 64), ("ClouDroite", 64, 64))),
 ):
     texture = (addon / "Media" / name).read_bytes()
     width = int.from_bytes(texture[12:14], "little")

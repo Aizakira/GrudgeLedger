@@ -3048,7 +3048,7 @@ function R.VictimNames(enemy, most)
     if #names == 0 then return nil end
     local text = table.concat(names, ", ")
     -- A no-break space: a list that wraps never leaves "+2" alone on its line.
-    if unnamed > 0 then text = text .. "94p" .. L("+%d"):format(unnamed) end
+    if unnamed > 0 then text = text .. "\194\160" .. L("+%d"):format(unnamed) end
     return text
 end
 -- An enemy's open bounty or notice, and its gold (owner, 27/11: Avec une prime must show them all).
@@ -3106,11 +3106,11 @@ local WANTED, RATIO, ZONE = GL.Art.Wanted, GL.Art.WantedRatio, GL.Art.WantedText
 local COLD_AFTER = 21 * 86400
 local POSTER_FILTERS = { { "all", "Toutes les affiches" }, { "bounty", "Avec une prime" }, { "plain", "Sans prime" } }
 -- The posters by rank, after the owner's mockup (28/11): the first tall on the left, the four
--- others nearly alike in two rows, a little smaller as the threat falls. A paper is h tall unless
--- that makes it wider than w: a square paper is then shorter.
+-- others alike in two rows. A paper is h tall unless that makes it wider than w: a square paper is
+-- then shorter (188), a tribal one keeps its height and its rows overlap by their painted margins.
 local SIZES = {
-    { kind = "hero", h = 380, w = 300 }, { kind = "medium", h = 200, w = 184 },
-    { kind = "compact", h = 198, w = 184 }, { kind = "compact", h = 196, w = 184 }, { kind = "compact", h = 194, w = 184 },
+    { kind = "hero", h = 380, w = 300 }, { kind = "medium", h = 204, w = 184 },
+    { kind = "compact", h = 204, w = 184 }, { kind = "compact", h = 204, w = 184 }, { kind = "compact", h = 204, w = 184 },
 }
 local ENEMY_ROWS = #SIZES
 local PAPER = { hero = "Grande", medium = "Carree", compact = "Carree" }
@@ -3119,12 +3119,12 @@ local BOARD = { left = 6, right = 660, top = -86, bottom = -478 }
 -- The writing's sizes at full scale (a paper with little plain room gets them smaller, paintPoster);
 -- gap is the room between two figures.
 local STYLE = {
-    hero = { title = 30, name = 21, number = 20, label = 14, seen = 14, face = 120, medal = 58, rank = 26, icon = 22, gap = 5 },
-    medium = { title = 15, name = 13, number = 13, label = 11, seen = 10, face = 60, medal = 40, rank = 18, icon = 12, gap = 2 },
-    compact = { title = 15, name = 13, number = 13, label = 11, seen = 10, face = 60, medal = 38, rank = 17, icon = 12, gap = 2 },
+    hero = { title = 32, name = 24, number = 22, label = 16, face = 104, medal = 58, rank = 26, icon = 22, gap = 4 },
+    medium = { title = 16, name = 16, number = 15, label = 12, face = 56, medal = 34, rank = 15, icon = 13, gap = 2 },
+    compact = { title = 16, name = 16, number = 15, label = 12, face = 56, medal = 34, rank = 15, icon = 13, gap = 2 },
 }
 local POSTER_RED, POSTER_INK, POSTER_MUTED = { 0.6, 0.09, 0.06 }, { 0.17, 0.1, 0.05 }, { 0.3, 0.2, 0.11 }
-local CLOTH_IVORY, CLOTH_SOFT, MEDAL_IVORY = { 0.97, 0.92, 0.8 }, { 0.86, 0.8, 0.68 }, { 1, 0.93, 0.74 }
+local CLOTH_IVORY, MEDAL_IVORY = { 0.97, 0.92, 0.8 }, { 1, 0.93, 0.74 }
 local RANK_GOLD = { 1, 0.8, 0.4 }
 local STAMP_INK, AVENGED_INK = { 0.36, 0.22, 0.45 }, { 0.55, 0.1, 0.07 }
 -- Capitals for the poster's headings, accents included (string.upper leaves é alone).
@@ -3164,10 +3164,10 @@ local function fit(label, text, width, biggest, smallest, bold, shadow, face)
 end
 -- The posters' display fonts by the faction that posts them (owner, 28/11; SIL OFL, Media\Fonts):
 -- the Horde tribal, Skranji Bold's hewn letters for its titles, names and figures; the Alliance
--- noble, Cinzel Decorative for its titles and figures, its names in the book's serif. The page's
--- own title takes its faction's title face.
+-- noble, Cinzel Decorative for its titles, its names and figures in the book's bold serif (Cinzel's
+-- 1 reads as an I). The page's own title takes its faction's title face.
 R.Faces = { Horde = { title = "Skranji-Bold", name = "Skranji-Bold", number = "Skranji-Bold" },
-    Alliance = { title = "CinzelDecorative-Bold", number = "CinzelDecorative-Bold" } }
+    Alliance = { title = "CinzelDecorative-Bold" } }
 -- A figure of the poster: its pictogram, the number in bold, the words after it. Its sizes are
 -- set when the poster is painted (figure.size).
 local function posterFigure(p, icon)
@@ -3177,52 +3177,58 @@ local function posterFigure(p, icon)
     figure.words = Panels.Text(p, 0, 0, 100, 11, false, POSTER_INK)
     return figure
 end
--- The figures in three columns (owner, 27/11): the pictograms one under the other, the numbers
--- after them, the words all starting at the same place, all of one size. A figure keeps to one
--- line, the words smaller down to size.least; past that they wrap on two lines, never cut. Returns where the next
--- line would start and how wide the figures are.
+-- The figures as on the owner's mockup (28/11): lines (p.rows), each with its pictogram, the
+-- pictograms one under the other, the words of one size. A number stands in its own column; a line
+-- without a number starts where the numbers are. A line keeps to itself, the words smaller down to
+-- size.least; past that they wrap on two lines, never cut. Returns where the next line would start
+-- and how wide the figures are.
 local function placeFigures(p, x, y, width)
     local iconW, numberW = 0, 0
-    for _, figure in ipairs(p.figures) do
+    for _, figure in ipairs(p.rows) do
         iconW = math.max(iconW, figure.icon:GetWidth())
         if (figure.number:GetText() or "") ~= "" then
             numberW = math.max(numberW, GL.Safe(figure.number.GetStringWidth, figure.number) or 10)
         end
     end
-    local wordsX = x + iconW + 4 + math.ceil(numberW) + (numberW > 0 and 4 or 0)
-    local right, room = wordsX, math.max(20, x + width - wordsX)
+    local numberX = x + iconW + 5
+    local wordsX = numberX + math.ceil(numberW) + (numberW > 0 and 4 or 0)
+    local function startOf(figure) return (figure.number:GetText() or "") ~= "" and wordsX or numberX end
     -- One size for the words of every figure: the largest at which each keeps to its line.
-    local labelSize = p.figures[1].size.label
-    for _, figure in ipairs(p.figures) do
+    local labelSize = p.rows[1].size.label
+    for _, figure in ipairs(p.rows) do
+        local room = math.max(20, x + width - startOf(figure))
         GL.Safe(figure.words.SetWordWrap, figure.words, false)
-        UI.journalFont(figure.words, "GameFontHighlight", labelSize)
+        UI.journalFont(figure.words, "GameFontHighlight", labelSize, figure.italic)
         while labelSize > figure.size.least and (GL.Safe(figure.words.GetStringWidth, figure.words) or 0) > room do
             labelSize = labelSize - 1
-            UI.journalFont(figure.words, "GameFontHighlight", labelSize)
+            UI.journalFont(figure.words, "GameFontHighlight", labelSize, figure.italic)
         end
     end
-    for _, figure in ipairs(p.figures) do
-        local size = figure.size
+    local right = wordsX
+    for _, figure in ipairs(p.rows) do
+        local size, start = figure.size, startOf(figure)
+        local room = math.max(20, x + width - start)
         figure.icon:ClearAllPoints()
         figure.icon:SetPoint("CENTER", p, "TOPLEFT", x + iconW / 2, y - size.line / 2)
         figure.number:ClearAllPoints()
-        figure.number:SetPoint("TOPLEFT", p, "TOPLEFT", x + iconW + 4, y)
-        UI.journalFont(figure.words, "GameFontHighlight", labelSize)
+        figure.number:SetPoint("TOPLEFT", p, "TOPLEFT", numberX, y)
+        figure.number:SetWidth(math.max(10, math.ceil(numberW) + 2))
+        UI.journalFont(figure.words, "GameFontHighlight", labelSize, figure.italic)
         local wordsW = GL.Safe(figure.words.GetStringWidth, figure.words) or 0
         local lines = wordsW > room and 2 or 1
         GL.Safe(figure.words.SetWordWrap, figure.words, lines > 1)
         local step = (labelSize + 2) * size.reading
         figure.words:ClearAllPoints()
-        figure.words:SetPoint("TOPLEFT", p, "TOPLEFT", wordsX, y - math.max(0, (size.line - step) / 2))
+        figure.words:SetPoint("TOPLEFT", p, "TOPLEFT", start, y - math.max(0, (size.line - step) / 2))
         figure.words:SetWidth(room)
-        right = math.max(right, wordsX + math.min(room, wordsW))
+        right = math.max(right, start + math.min(room, wordsW))
         y = y - math.max(size.line, lines * step) - size.gap
     end
     return y, right - x
 end
 -- The posters' layout: drawn from the enemies on the page, so it stays put while they stay, and
--- changes when one arrives or leaves. The first keeps the left; the others take, in an order drawn by
--- lot, the four corners of the rest of the board, each with its tilt, a nudge and its pin. A layout
+-- changes when one arrives or leaves. The first keeps the left; the others follow in the order of
+-- their rank, two above and two below, each with its paper, its tilt, a nudge and its pin. A layout
 -- is kept only if every poster stays readable: no paper, medal or pin over another's writing; after
 -- eleven draws, the corners without nudges (always readable). A block of its own: Lua 5.1 counts the
 -- file's locals.
@@ -3262,7 +3268,7 @@ function R.NailOf(spot)
     local d = spot.h / 2 - math.max(9, spot.h * 0.075)
     local px = spot.x + spot.w / 2 + spot.pinX + math.sin(a) * d
     local py = spot.y - (spot.h / 2 - math.cos(a) * d)
-    local nh = math.floor(spot.w * 0.19 + 0.5)
+    local nh = math.floor(spot.w * (spot.kind == "hero" and 0.19 or 0.17) + 0.5)
     local nw = math.floor(nh * RATIO[spot.pin] + 0.5)
     local left, top = px - NAIL[spot.pin][1] * nw, py + NAIL[spot.pin][2] * nh
     return { left, top, left + nw, top - nh }, px, py
@@ -3296,51 +3302,49 @@ local function paperOf(style, kind, bounty)
 end
 local function arrange(items, roll, nudge, faction)
     local styles = STYLES[faction] or STYLES.Alliance
-    local corners = { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }
-    for i = #corners, 2, -1 do
-        local j = roll(i) + 1
-        corners[i], corners[j] = corners[j], corners[i]
-    end
-    local spots, left, taken = {}, BOARD.left, {}
+    local spots, taken = {}, {}
     for i, item in ipairs(items) do
         local size = SIZES[i]
         local family = hashOf(tostring(item.key)) % #styles + 1
         while taken[family] do family = family % #styles + 1 end
         taken[family] = true
         local paper = paperOf(styles[family], size.kind, item.bounty)
-        local spot = { kind = size.kind, h = size.h, paper = paper, level = 20 * (ENEMY_ROWS + 1 - i),
-            medalSide = "left" }
+        local spot = { kind = size.kind, h = size.h, paper = paper, level = 20 * (ENEMY_ROWS + 1 - i), medalSide = "left" }
         local nail = roll(4)
         spot.pin = nail < 2 and "ClouFace" or nail == 2 and "ClouGauche" or "ClouDroite"
-        -- The paper turns 2 to 3.5 degrees, one way or the other.
-        spot.turn = (roll(2) == 0 and -1 or 1) * (2 + roll(4) * 0.5) * (nudge > 0 and 1 or 0.8)
+        -- The paper turns one way or the other: 2 to 3 degrees for the first, 1.5 to 2.5 for the
+        -- others (small writing blurs as it turns).
+        spot.turn = (roll(2) == 0 and -1 or 1) * ((i == 1 and 2 or 1.5) + roll(3) * 0.5) * (nudge > 0 and 1 or 0.8)
         spot.w = math.floor(size.h * RATIO[paper] + 0.5)
         if spot.w > size.w then
             spot.w = size.w
             spot.h = math.floor(size.w / RATIO[paper] + 0.5)
         end
         spot.pinX = (roll(9) - 4) * math.floor(spot.w / 40) * nudge
-        spot.corner = corners[i - 1]
         spots[i] = spot
     end
-    -- How much each column of the right has to spare in height: its posters spread over it.
-    local spare = { [0] = BOARD.top - BOARD.bottom, [1] = BOARD.top - BOARD.bottom }
-    for i = 2, #spots do spare[spots[i].corner[1]] = spare[spots[i].corner[1]] - spots[i].h end
-    for i, spot in ipairs(spots) do
-        if i == 1 then
-            spot.x = BOARD.left + 2 + roll(13) * nudge
-            spot.y = BOARD.top - roll(11) * nudge
-            -- The rest of the board starts under the first poster's right margin.
-            left = spot.x + spot.w - 16
-        else
-            local column, row = spot.corner[1], spot.corner[2]
-            local dx = roll(17) * nudge
-            -- A nudge up or down only where the column has room to spare: a poster pushed into the
-            -- one above would put its nail on that one's writing.
-            local dy = roll(math.max(3, math.floor(math.max(0, spare[column]) / 2) + 3)) * nudge
-            spot.x = column == 0 and left + dx or BOARD.right - spot.w - dx
-            spot.y = row == 0 and BOARD.top - dy or BOARD.bottom + spot.h + dy
-            spot.medalSide = column == 1 and "right" or "left"
+    local first = spots[1]
+    if not first then return spots end
+    first.x = BOARD.left + 2 + roll(9) * nudge
+    first.y = BOARD.top - roll(9) * nudge
+    -- The others read in order (design critique, 28/11): the second and third above, the fourth and
+    -- fifth below, with even room left, between and right of each pair; the disorder is in the
+    -- tilts, the nails and a few units of nudge, not in the order.
+    local left = first.x + first.w - 10
+    for row = 0, 1 do
+        local a, b = spots[2 + 2 * row], spots[3 + 2 * row]
+        if a then
+            local room = BOARD.right - left - a.w - (b and b.w or 0)
+            local gutter = math.max(-8, math.floor(room / 3))
+            a.x = left + math.max(0, gutter) + (roll(7) - 3) * nudge
+            if b then b.x = math.min(BOARD.right - b.w, a.x + a.w + gutter + (roll(7) - 3) * nudge) end
+            for _, spot in ipairs({ a, b }) do
+                -- What the two rows leave in height is shared between them.
+                local other = spots[(row == 0 and 4 or 2) + (spot == b and 1 or 0)]
+                local spare = math.max(0, BOARD.top - BOARD.bottom - spot.h - (other and other.h or 0))
+                local dy = roll(math.floor(spare / 3) + 1) * nudge
+                spot.y = row == 0 and BOARD.top - dy or BOARD.bottom + spot.h + dy
+            end
         end
     end
     return spots
@@ -3365,6 +3369,11 @@ local function buildPoster(page, index)
     p.kind, p.style = kind, style
     p.paper = wantedTexture(p, "BACKGROUND", 1)
     p.paper:SetAllPoints()
+    -- The paper lights up under the pointer: a click opens the sheet (design critique, 28/11).
+    p.glow = wantedTexture(p, "BACKGROUND", 2)
+    GL.Safe(p.glow.SetBlendMode, p.glow, "ADD")
+    p.glow:SetAlpha(0.14)
+    p.glow:Hide()
     -- The medal and the pin stay above every paper, even where a neighbour overlaps.
     p.badge = CreateFrame("Frame", nil, p)
     p.badge:SetAllPoints()
@@ -3396,10 +3405,10 @@ local function buildPoster(page, index)
     face.classIcon:SetSize(math.floor(style.face / 4.5), math.floor(style.face / 4.5))
     face.classIcon:SetPoint("BOTTOMRIGHT")
     p.face = face
-    p.figures = { posterFigure(p, "IconeMembres"), posterFigure(p, "IconeCrane") }
-    p.rule = wantedTexture(p, "ARTWORK", 1, "SeparateurEncre")
-    p.seen = Panels.Text(p, 0, 0, p.inner, style.seen, false, POSTER_MUTED)
-    UI.journalFont(p.seen, "GameFontHighlight", style.seen, true)
+    -- Who they killed, how many, and where the guild last met them: three lines, each its pictogram.
+    p.figures = { posterFigure(p, "IconeMembres"), posterFigure(p, "IconeCrane"), posterFigure(p, "IconeLieu") }
+    p.figures[3].italic = true
+    p.seen = p.figures[3].words
     -- The cold-trail stamp: in the ribbon's place, or across the portrait when a ribbon is there.
     p.stamp = CreateFrame("Frame", nil, p)
     p.stamp:SetSize(100, 25)
@@ -3430,6 +3439,7 @@ local function buildPoster(page, index)
     end)
     p.hit:SetScript("OnEnter", function(hit)
         local self = p
+        if self.target then self.glow:Show() end
         if not GameTooltip or not self.enemy then return end
         GameTooltip:SetOwner(hit, "ANCHOR_RIGHT")
         GameTooltip:SetText(UI.plain(self.enemy))
@@ -3440,7 +3450,10 @@ local function buildPoster(page, index)
         if self.canWant then GameTooltip:AddLine(L("Clic droit : poser un avis de recherche"), 0.8, 0.8, 0.8) end
         GameTooltip:Show()
     end)
-    p.hit:SetScript("OnLeave", function(hit) if GameTooltip and GameTooltip:GetOwner() == hit then GameTooltip:Hide() end end)
+    p.hit:SetScript("OnLeave", function(hit)
+        p.glow:Hide()
+        if GameTooltip and GameTooltip:GetOwner() == hit then GameTooltip:Hide() end
+    end)
     -- The ribbon of a bounty opens it in Primes (owner, 28/11); over the paper's click area.
     p.prizeHit = CreateFrame("Button", nil, p.hit)
     p.prizeHit:SetAllPoints(p.ribbon)
@@ -3498,6 +3511,10 @@ local function placePoster(page, p, spot)
         coords[#coords + 1] = 0.5 + (-s * rx + c * ry) / h
     end
     GL.Safe(p.paper.SetTexCoord, p.paper, unpack(coords))
+    p.glow:SetTexture(WANTED .. spot.paper)
+    p.glow:ClearAllPoints()
+    p.glow:SetAllPoints(p.paper)
+    GL.Safe(p.glow.SetTexCoord, p.glow, unpack(coords))
     local z = ZONE[spot.paper]
     p.mx, p.top, p.bottom = math.floor(z[1] * w + 0.5), math.floor(z[2] * h + 0.5), math.floor(z[4] * h + 0.5)
     p.inner = w - p.mx - math.floor(z[3] * w + 0.5)
@@ -3506,7 +3523,7 @@ local function placePoster(page, p, spot)
     local ix, iy = math.ceil(zh * math.abs(s) / 4), math.ceil(p.inner * math.abs(s) / 4)
     p.mx, p.inner, p.top, p.bottom = p.mx + ix, p.inner - 2 * ix, p.top + iy, p.bottom + iy
     -- The heading starts under the nail's point.
-    p.top = math.max(p.top, math.floor(math.max(9, h * 0.075) + 8))
+    p.top = math.max(p.top, math.floor(math.max(9, h * 0.075) + 3))
     p.cx = math.floor(p.mx + p.inner / 2 - w / 2 + 0.5)
     p.pin:SetTexture(WANTED .. spot.pin)
     local nail = R.NailOf(spot)
@@ -3521,7 +3538,8 @@ local function placePoster(page, p, spot)
     local stampW = math.floor(math.min(w * 0.5, p.inner * 0.8))
     p.stamp:SetSize(stampW, math.floor(stampW / RATIO.Tampon + 0.5))
     p.stamp.words:SetWidth(stampW - 14)
-    local ribbonW = math.floor(math.min(w * 0.82, p.inner + 30))
+    -- Narrower on the tall poster: at full width its ribbon would outweigh the writing.
+    local ribbonW = math.floor(p.kind == "hero" and math.min(w * 0.64, p.inner) or math.min(w * 0.72, p.inner + 10))
     p.ribbon:SetSize(ribbonW, math.floor(ribbonW / RATIO.Bandeau + 0.5))
     local seal = math.floor(p.ribbon:GetHeight() * 1.15 + 0.5)
     p.seal:SetSize(seal, seal)
@@ -3677,7 +3695,7 @@ local function buildEnemies(host)
     page.reshare:ClearAllPoints()
     page.reshare:SetPoint("TOP", page, "TOP", 0, -176)
     -- At the foot: what the order weighs. One page (owner, 27/11): the five the guild wants most.
-    page.legend = Panels.Text(page, 112, -491, 440, 12, false, CLOTH_SOFT)
+    page.legend = Panels.Text(page, 112, -491, 440, 12, false, CLOTH_IVORY)
     UI.journalFont(page.legend, "GameFontHighlight", 12, true)
     page.legend:SetJustifyH("CENTER")
     return page
@@ -3707,19 +3725,21 @@ local function paintPortrait(page, p, enemy, side)
         rim:SetPoint("BOTTOMRIGHT", p.face, "BOTTOMRIGHT", pad, -pad)
     end
 end
--- The figures' words: the long ones on the tall poster, the short ones on the others.
--- The second line names the victims (owner, 27/11: the grudge is personal); the deaths when the
--- guild's roster names none of them.
-local function figureTexts(p, enemy, open)
+-- The figures' words, the same on every poster (design critique, 28/11: "membres distincts tués"
+-- wrapped on the tall one; "distinct" is in the legend). The second line names the victims (owner,
+-- 27/11: the grudge is personal); the deaths when the guild's roster names none of them.
+-- A small poster has room for two lines at a readable size: the number, then the names in the
+-- words' place ("3 Célestine, Aubin +1"); the tall one keeps the three.
+local function figureTexts(p, enemy)
     local victims = R.VictimNames(enemy, p.kind == "hero" and 3 or 2)
-    if p.kind == "hero" then
-        return { enemy.members, enemy.members > 1 and L("membres distincts tués") or L("membre tué") },
-            victims and { "", victims } or { enemy.deaths, enemy.deaths > 1 and L("morts infligées") or L("mort infligée") }
-    end
-    return { enemy.members, enemy.members > 1 and L("membres tués") or L("membre tué") },
-        victims and { "", victims } or { enemy.deaths, enemy.deaths > 1 and L("morts") or L("mort") }
+    local killed = enemy.members > 1 and L("membres tués") or L("membre tué")
+    if p.kind ~= "hero" then return { enemy.members, victims or killed } end
+    return { enemy.members, killed },
+        victims and { "", victims } or { enemy.deaths, enemy.deaths > 1 and L("morts infligées") or L("mort infligée") }
 end
-local function paintPoster(page, p, enemy, rank, spot, open, gold)
+-- force: the scale and the portrait's side the small posters share (paintEnemies), so the four
+-- look alike. Returns the scale and the side used.
+local function paintPoster(page, p, enemy, rank, spot, open, gold, force)
     placePoster(page, p, spot)
     local base, h, hero = p.style, spot.h, p.kind == "hero"
     local faces = R.Faces[page.faction] or R.Faces.Alliance
@@ -3746,11 +3766,18 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     p.rank:SetPoint("LEFT", p.medal, "CENTER", start + hashW, 1)
     -- What the poster says.
     local name = UI.plain(enemy.name or L("un joueur inconnu"))
-    local first, second = figureTexts(p, enemy, open)
+    local first, second = figureTexts(p, enemy)
+    -- The lines this poster shows: the skull's only on the tall one.
+    p.rows = hero and p.figures or { p.figures[1], p.figures[3] }
+    for i, figure in ipairs(p.figures) do
+        for _, piece in ipairs({ figure.icon, figure.number, figure.words }) do
+            if hero or i ~= 2 then piece:Show() else piece:Hide() end
+        end
+    end
     local info = mapInfo(enemy.mapID)
     p.where = info and type(info.name) == "string" and UI.plain(info.name) or nil
     -- Where the guild last met them, and when (owner, 27/11: where to hunt them).
-    local seen = p.where and L("Vu à %s, %s"):format(p.where, elapsed(enemy.last)) or L("Vu %s"):format(elapsed(enemy.last))
+    local third = { "", p.where and p.where .. " · " .. elapsed(enemy.last) or elapsed(enemy.last) }
     p.kills = enemy.kills > 0 and L("vaincu %d fois par la guilde"):format(enemy.kills) or nil
     p.deaths = enemy.deaths .. " " .. (enemy.deaths > 1 and L("morts infligées") or L("mort infligée"))
     local stamped = enemy.avenged or GL.Now() - enemy.last > COLD_AFTER
@@ -3766,7 +3793,9 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     if open then
         p.ribbon:Show()
         p.prize:Show()
-        local prize = gold > 0 and capitals(L("%s pour sa tête"):format(GL.BountyMoney(gold))) or capitals(L("Avis de recherche"))
+        -- The long words on the tall poster; the short ones where the ribbon is small.
+        local prize = gold > 0 and capitals(L(hero and "%s pour sa tête" or "Prime · %s"):format(GL.BountyMoney(gold)))
+            or capitals(L("Avis de recherche"))
         fit(p.prize, prize, p.ribbon:GetWidth() - 40, base.label + 2, 7, true, 0.6)
         floor = floor + p.ribbon:GetHeight() + 3
         if gold > 0 then p.seal:Show() else p.seal:Hide() end
@@ -3776,20 +3805,20 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         p.seal:Hide()
         if stamped then floor = floor + p.stamp:GetHeight() + 3 end
     end
-    -- The writing from the top of the paper's plain zone down: title, name, the portrait, the
-    -- figures centred under it, the date (the owner's mockup, 28/11). The portrait takes the room
+    -- The writing from the top of the paper's plain zone down: title, name, the portrait, the three
+    -- figures centred under it as one block (the owner's mockup, 28/11). The portrait takes the room
     -- left. Laid at full size first; where the portrait would get less than its least, laid again
     -- smaller. The posters' sizes are the papers': the reading size of the books does not grow them.
     local reading = GL.Settings and GL.Settings().readingScale or 1
     local function sizeOf(label, fallback) return select(2, GL.Safe(label.GetFont, label)) or fallback * reading end
-    local function lay(k)
+    local function lay(k, down)
         local function s(v, least) return math.max(least, math.floor(v * k / reading + 0.5)) end
-        local y = -p.top
+        local y = -p.top - (down or 0)
         p.title:ClearAllPoints()
         p.title:SetPoint("TOPLEFT", p, "TOPLEFT", p.mx - 4, y)
         p.title:SetWidth(p.inner + 8)
         fit(p.title, capitals(L("Recherché")), p.inner + 8, s(base.title, 10), 9, true, 0.35, faces.title)
-        y = y - sizeOf(p.title, s(base.title, 10)) - (hero and 6 or 3)
+        y = y - sizeOf(p.title, s(base.title, 10)) - (hero and 6 or 4)
         if p.label then
             if rank == 1 then
                 local labelW = p.inner + 10
@@ -3813,12 +3842,12 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         -- A name too long for one line at its smallest takes two.
         local nameLines = (GL.Safe(p.name.GetStringWidth, p.name) or 0) > p.inner + 8 and 2 or 1
         GL.Safe(p.name.SetWordWrap, p.name, nameLines > 1)
-        y = y - nameLines * (sizeOf(p.name, s(base.name, 9)) + 1) - (hero and 6 or 2)
-        for i, figure in ipairs(p.figures) do
-            local text = i == 1 and first or second
+        y = y - nameLines * (sizeOf(p.name, s(base.name, 9)) + 1) - (hero and 8 or 3)
+        for _, figure in ipairs(p.rows) do
+            local text = figure == p.figures[1] and first or figure == p.figures[2] and second or third
             local icon = math.max(8, math.floor(base.icon * k + 0.5))
             local label = s(base.label, 8)
-            figure.size = { label = label, least = math.max(8, label - 3), gap = base.gap, reading = reading,
+            figure.size = { label = label, least = math.max(8, label - (hero and 2 or 1)), gap = base.gap, reading = reading,
                 line = math.max(icon, math.floor(base.number * k + 0.5)) }
             figure.icon:SetSize(math.floor(icon * RATIO[figure.iconName] + 0.5), icon)
             figure.number:SetText(tostring(text[1]))
@@ -3826,43 +3855,29 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
             figure.words:SetText(text[2])
         end
         local figuresEnd, usedW = placeFigures(p, p.mx, 0, p.inner)
-        -- The date on one line, smaller until it fits; a long place takes two lines, never cut.
-        local seenSize = s(base.seen, 8)
-        p.seen:SetText(seen)
-        GL.Safe(p.seen.SetWordWrap, p.seen, false)
-        UI.journalFont(p.seen, "GameFontHighlight", seenSize, true)
-        while seenSize > 8 and (GL.Safe(p.seen.GetStringWidth, p.seen) or 0) > p.inner do
-            seenSize = seenSize - 1
-            UI.journalFont(p.seen, "GameFontHighlight", seenSize, true)
-        end
-        local seenLines = (GL.Safe(p.seen.GetStringWidth, p.seen) or 0) > p.inner and 2 or 1
-        GL.Safe(p.seen.SetWordWrap, p.seen, seenLines > 1)
-        local gap, seenGap = hero and 10 or 3, hero and 7 or 1
-        local below = gap - figuresEnd + seenGap + seenLines * (seenSize * reading + 2)
+        local gap = hero and 10 or 4
+        local below = gap - figuresEnd
         -- The portrait and its gold frame (a twelfth of its side all around).
         local room = math.floor((y + (h - floor) - below) / 1.17)
-        local least = hero and 56 or 28
-        local side = math.max(least, math.min(math.floor(base.face * k + 0.5), room))
+        local least = hero and 48 or 28
+        local side = math.max(least, math.min(force and force.side or math.floor(base.face * k + 0.5), room))
         local pad = math.floor(side * 0.085 + 0.5)
         p.face:ClearAllPoints()
         p.face:SetPoint("TOP", p, "TOP", p.cx, y - pad)
         paintPortrait(page, p, enemy, side)
         local x = p.mx + math.max(0, math.floor((p.inner - usedW) / 2))
-        local nextY = placeFigures(p, x, y - side - 2 * pad - gap, p.inner - (x - p.mx))
-        -- The ink rule under the figures on the tall poster only; the small ones keep their room.
-        p.rule:SetSize(math.floor(p.inner * 0.8), math.floor(p.inner * 0.8 / RATIO.SeparateurEncre + 0.5) + 2)
-        p.rule:ClearAllPoints()
-        p.rule:SetPoint("TOP", p, "TOP", p.cx, nextY + 3)
-        if hero then p.rule:Show() else p.rule:Hide() end
-        p.seen:ClearAllPoints()
-        p.seen:SetPoint("TOP", p, "TOP", p.cx, nextY - seenGap + (hero and 0 or 1))
-        p.seen:SetWidth(p.inner)
-        p.seen:SetJustifyH("CENTER")
-        return room >= least
+        placeFigures(p, x, y - side - 2 * pad - gap, p.inner - (x - p.mx))
+        -- Whether it fits, and the height left under the writing.
+        return room >= least, math.max(0, math.floor((room - side) * 1.17))
     end
-    for _, k in ipairs({ 1, 0.92, 0.85, 0.78, 0.72 }) do
-        if lay(k) then break end
+    local used, spare
+    for _, k in ipairs(force and { force.k } or { 1, 0.92, 0.85, 0.78, 0.72 }) do
+        local fits, left = lay(k)
+        used, spare = k, left
+        if fits then break end
     end
+    -- Room left (a poster without ribbon or stamp): the writing sits in the middle of it.
+    if spare and spare > 5 then lay(used, math.floor(spare / 2)) end
     -- The stamp: avenged first (the guild has answered), else a cold trail after three weeks. At the
     -- foot; across the portrait's foot when a ribbon holds that place.
     if stamped then
@@ -3872,6 +3887,9 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
         p.stamp:Show()
         fit(p.stamp.words, enemy.avenged and capitals(L("Vengé")) or L("Piste froide"), p.stamp:GetWidth() - 14, base.label + 1, 7, true)
         p.stamp.words:SetTextColor(unpack(enemy.avenged and AVENGED_INK or STAMP_INK))
+        -- Avenged in red ink, its frame too; the cold trail keeps the kit's violet.
+        GL.Safe(p.stamp.ink.SetDesaturated, p.stamp.ink, enemy.avenged and true or false)
+        p.stamp.ink:SetVertexColor(unpack(enemy.avenged and { 1, 0.3, 0.24 } or { 1, 1, 1 }))
     else
         p.stamp:Hide()
     end
@@ -3887,6 +3905,7 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold)
     end
     p.canWant = enemy.target and enemy.name and not open and not enemy.preview and true or nil
     p:Show()
+    return used, p.face:GetWidth()
 end
 -- The page's preview (/gl apercu horde|alliance, owner 27/11): the page as seen from a faction,
 -- with invented enemies; nothing is saved, the posters open no sheet, closing the book ends it.
@@ -3928,7 +3947,7 @@ end
 -- portrait's gold frame and painted picture (owner, 28/11: a straight frame in a tilted poster
 -- broke the parallel). The 3D model alone cannot turn: at these angles it stays inside its frame.
 function R.PosterRegions(p)
-    local regions = { p.title, p.name, p.seen, p.rule, p.ribbon, p.prize, p.seal, p.stamp.ink, p.stamp.words }
+    local regions = { p.title, p.name, p.ribbon, p.prize, p.seal, p.stamp.ink, p.stamp.words }
     if p.label then
         regions[#regions + 1] = p.label
         regions[#regions + 1] = p.labelText
@@ -3953,7 +3972,18 @@ function R.TiltPoster(p, degrees)
     for i, region in ipairs(regions) do
         local x, y = GL.Safe(region.GetCenter, region)
         if GL.Safe(region.IsShown, region) and type(x) == "number" and type(y) == "number" then
-            places[i] = { x - cx, cy - y, region:GetWidth(), region:GetHeight() }
+            local w = region:GetWidth()
+            -- A line shorter than its field: the game turns the line about its own middle, not the
+            -- field's (owner's capture, 28/11: the words sat half a line off their pictogram, up or
+            -- down with the tilt's side). The field shrinks to the line, where the line is.
+            local line = region.GetStringWidth and GL.Safe(region.GetStringWidth, region)
+            if type(line) == "number" and line > 0 and line + 2 < w then
+                local justify = GL.Safe(region.GetJustifyH, region)
+                local slack = (w - line - 2) / 2
+                x = x + (justify == "LEFT" and -slack or justify == "RIGHT" and slack or 0)
+                w = line + 2
+            end
+            places[i] = { x - cx, cy - y, w, region:GetHeight() }
             distinct = distinct or math.abs(x - cx) > 0.5 or math.abs(y - cy) > 0.5
         end
     end
@@ -4045,13 +4075,25 @@ local function paintEnemies(page)
         shown[i] = { key = enemy.key, enemy = enemy, open = open, gold = gold, bounty = gold > 0 }
     end
     page.spots = R.PosterLayout(shown, faction)
+    local common
     for i, p in ipairs(page.posters) do
         local item = shown[i]
-        if item then paintPoster(page, p, item.enemy, page.offset + i, page.spots[i], item.open, item.gold)
+        if item then
+            local k, side = paintPoster(page, p, item.enemy, i, page.spots[i], item.open, item.gold)
+            if i > 1 then
+                common = common or { k = k, side = side }
+                common.k, common.side = math.min(common.k, k), math.min(common.side, side)
+            end
         else
             p.target, p.enemy, p.canWant = nil, nil, nil
             p:Hide()
         end
+    end
+    -- One template for the small posters (design critique, 28/11: portraits from 29 to 46 pixels
+    -- on four posters of one rank): all at the scale and the portrait of the tightest.
+    for i = 2, #shown do
+        local item = shown[i]
+        paintPoster(page, page.posters[i], item.enemy, i, page.spots[i], item.open, item.gold, common)
     end
     local empty = ""
     if not inGuild then
@@ -4063,7 +4105,7 @@ local function paintEnemies(page)
     end
     if inGuild and not sharing then page.reshare:Show() else page.reshare:Hide() end
     page.empty:SetText(empty)
-    page.legend:SetText(not preview and #list > 0 and L("Victimes distinctes · Morts infligées · Fraîcheur des faits") or "")
+    page.legend:SetText(not preview and #list > 0 and L("Classement : victimes distinctes, morts infligées, fraîcheur des faits") or "")
 end
 
 -- The books: the narrow format of the player sheet. Left, the entries and the key figures. Right,

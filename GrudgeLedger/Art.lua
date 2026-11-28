@@ -44,7 +44,7 @@ GL.Art.WantedRatio = {
     AfficheGrande1 = 0.665, AfficheGrande2 = 0.695, AfficheCarree1 = 0.982, AfficheCarree2 = 0.96,
     PrimeGrande1 = 0.667, PrimeGrande2 = 0.706, PrimeCarree1 = 0.991, PrimeCarree2 = 0.963,
     CadrePortrait = 1.006, Medaillon = 0.989, MedaillonUn = 0.975, Bandeau = 5.066, SceauPrime = 0.989, Tampon = 4.094,
-    Cartouche = 7.659, SeparateurEncre = 28.06, SeparateurOr = 19.363, IconeMembres = 1.685, IconeCrane = 0.913,
+    Cartouche = 7.659, SeparateurEncre = 28.06, SeparateurOr = 19.363, IconeMembres = 1.685, IconeCrane = 0.913, IconeLieu = 0.637,
     ClouFace = 0.725, ClouGauche = 1.011, ClouDroite = 0.73, Chevron = 1.667,
     -- The v8 collection (owner, 27/11): ten families, a tall paper and a small one, plain and gold.
     AfficheAerienCarree = 1.024, AfficheAerienGrande = 0.674, AfficheDemonisteCarree = 0.989, AfficheDemonisteGrande = 0.642,

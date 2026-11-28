@@ -141,6 +141,24 @@ def frame_corner():
     return piece
 
 
+def place_icon():
+    """The third figure's pictogram (owner's mockup, 28/11: place and date as a line with its pin, like
+    the two others). The kit has none: a plain map pin in the ink of the kit's skull."""
+    from PIL import ImageDraw
+    skull = Image.open(OUT / "IconeCrane.tga").convert("RGBA")
+    inks = sorted(px[:3] for px in skull.getdata() if px[3] > 250)
+    ink = inks[len(inks) // 2]
+    size = 512
+    pin = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(pin)
+    draw.ellipse([116, 40, 396, 320], fill=ink + (255,))
+    draw.polygon([(134, 236), (378, 236), (256, 480)], fill=ink + (255,))
+    draw.ellipse([200, 124, 312, 236], fill=(0, 0, 0, 0))
+    pin = pin.crop(pin.getchannel("A").getbbox())
+    write_tga(OUT / "IconeLieu.tga", fitted(pin, 64, 64))
+    return round(pin.width / pin.height, 3)
+
+
 def inner_frame(image):
     """The inside of the paper's printed frame: on the paper's middle lines, the last dark row or
     column (the frame's rule) seen from each edge."""
@@ -216,6 +234,7 @@ def main(kit):
         image = image.crop(box)
         ratios[name] = round(image.width / image.height, 3)
         write_tga(OUT / (name + ".tga"), fitted(image, width, height))
+    ratios["IconeLieu"] = place_icon()
     print("GL.Art.WantedRatio = {")
     for name, ratio in ratios.items():
         print(f"    {name} = {ratio},")
