@@ -515,7 +515,7 @@ do
     assert(enemies.showButton:GetText() == "Toutes les affiches")
     -- Wanted posters (owner's kit, 27/11): the first on the tall one, every figure as text.
     local hero = enemies.posters[1]
-    assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "1" and hero.rankHash:GetText() == "#" and hero.title:GetText() == "RECHERCHÉ" and not enemies.posters[2]:IsShown())
+    assert(hero.name:GetText() == "Bad Guy" and hero.rank:GetText() == "1" and hero.rankHash:GetText() == "" and hero.title:GetText() == "RECHERCHÉ" and not enemies.posters[2]:IsShown())
     assert(hero.labelText:GetText() == "ENNEMI PUBLIC N°1" and hero.figures[1].number:GetText() == "2" and hero.figures[1].words:GetText() == "membres tués")
     -- A hunting board (owner, 27/11): the victims by name (you, then one the roster cannot name), where
     -- and when the guild last met them; the deaths in the tooltip; not avenged (his last kill is later).
@@ -629,11 +629,19 @@ do
     assert(R.preview and R.preview.faction == "Horde" and enemies:IsShown())
     assert(enemies.previewNote:GetText():find("Aperçu", 1, true) and enemies.cloth.texture:find("ToileHorde"))
     assert(enemies.posters[5]:IsShown() and hero.name:GetText() == "Aldric Fendroc" and hero.ribbon:IsShown())
+    -- The Horde has no kit for its head: the banner, the book's buttons, the gold medals and their #.
+    assert(not enemies.plate[1]:IsShown() and not enemies.periodButton.field:IsShown() and not enemies.periodButton.bare)
+    assert(enemies.banner.texture:find("FanionHorde") and hero.medal.texture:find("MedaillonUn") and hero.rankHash:GetText() == "#")
     assert(enemies.posters[4].stamp:IsShown() and enemies.posters[4].stamp.words:GetText() == "VENGÉ")
     click(hero.hit)
     assert(opened == nil and not hero.canWant, "an invented enemy opens no sheet")
     SlashCmdList.GRUDGELEDGER("apercu alliance")
     assert(R.preview.faction == "Alliance" and enemies.cloth.texture:find("ToileAlliance") and hero.name:GetText() == "Grok Crânefendu")
+    -- The Alliance's integration kit (owner, 28/11): the plate under the title and the choices, the
+    -- crest, the choices' fields, the ranks' plaque with the number alone.
+    assert(enemies.plate[1]:IsShown() and enemies.plate[3]:IsShown() and enemies.banner.texture:find("EcussonAlliance"))
+    assert(enemies.periodButton.field:IsShown() and enemies.periodButton.bare and not enemies.rule:IsShown())
+    assert(hero.medal.texture:find("RangAlliance") and hero.rankHash:GetText() == "" and hero.rank:GetText() == "1")
     gb:Hide()
     assert(R.preview == nil, "closing the book ends the preview")
     R.OpenGuild("enemies")

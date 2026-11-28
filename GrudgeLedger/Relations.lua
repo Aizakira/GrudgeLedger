@@ -3554,12 +3554,28 @@ local function placePoster(page, p, spot)
     GL.Safe(p.hit.SetFrameLevel, p.hit, level + 15)
     GL.Safe(p.prizeHit.SetFrameLevel, p.prizeHit, level + 16)
 end
+-- The head's own pieces where a faction has them (the Alliance's integration kit, owner 28/11): a
+-- bronze plate that holds the title and the two choices, the crest hung on its upper edge, a field
+-- for each choice, a plaque for the ranks. A faction without them keeps the banner, the book's dark
+-- buttons and the gold medals.
+R.HeadKit = { Alliance = { plate = "SupportAlliance", crest = "EcussonAlliance", field = "ChampAlliance", rank = "RangAlliance" } }
 -- A choice of the page's head (owner, 28/11: the addon's own look, not a style of its own): one of
 -- the book's dark buttons, as in its left column, its words on the left, the kit's gold chevron on
--- the right; under it, the choices in the guild journal's small menu.
+-- the right; under it, the choices in the guild journal's small menu. b.field is the kit's face,
+-- over the button's own (R.HeadKit).
 local function chooser(page, options, current, choose)
     local width = 168
     local b = UI.button(page, "", 0, 0, width, nil, nil, false)
+    -- Without the two clear pixels around the drawing (a sixteenth of this low texture's height).
+    b.field = b:CreateTexture(nil, "ARTWORK", nil, 1)
+    b.field:SetAllPoints()
+    b.field:SetTexCoord(2 / 256, 254 / 256, 2 / 32, 30 / 32)
+    b.field:Hide()
+    b.fieldLight = b:CreateTexture(nil, "HIGHLIGHT")
+    b.fieldLight:SetAllPoints()
+    b.fieldLight:SetTexCoord(2 / 256, 254 / 256, 2 / 32, 30 / 32)
+    GL.Safe(b.fieldLight.SetBlendMode, b.fieldLight, "ADD")
+    b.fieldLight:SetAlpha(0)
     b.caption:ClearAllPoints()
     b.caption:SetPoint("LEFT", b, "LEFT", 12, 0)
     b.caption:SetWidth(width - 36)
@@ -3682,8 +3698,22 @@ local function buildEnemies(host)
     -- The head after the owner's mockup (28/11): the banner whole, hung under the top rule and clear
     -- of the corner and of the first poster; the title large in its faction's face; the two choices
     -- under it; a gold rule.
+    -- The kit's plate (R.HeadKit): its two ends keep their shape, its middle stretches. 200 of the
+    -- drawing's 2130 pixels to an end, in a texture with two clear pixels around the drawing.
+    page.plate = {}
+    local capU, capW = (2 + 200 / 2130 * 508) / 512, 39
+    for i, u in ipairs({ { 0, capU }, { capU, 1 - capU }, { 1 - capU, 1 } }) do
+        local piece = page:CreateTexture(nil, "BACKGROUND", nil, 1)
+        piece:SetTexCoord(u[1], u[2], 2 / 128, 126 / 128)
+        page.plate[i] = piece
+    end
+    page.plate[1]:SetPoint("TOPLEFT", page, "TOPLEFT", 50, -6)
+    page.plate[1]:SetSize(capW, 73)
+    page.plate[3]:SetPoint("TOPRIGHT", page, "TOPLEFT", 632, -6)
+    page.plate[3]:SetSize(capW, 73)
+    page.plate[2]:SetPoint("TOPLEFT", page.plate[1], "TOPRIGHT")
+    page.plate[2]:SetPoint("BOTTOMRIGHT", page.plate[3], "BOTTOMLEFT")
     page.banner = page:CreateTexture(nil, "ARTWORK")
-    page.banner:SetPoint("TOPLEFT", 58, 3)
     page.title = Panels.Text(page, 150, -8, 480, 30, true, CLOTH_IVORY)
     -- In a preview, its notice takes the legend's place at the foot.
     page.previewNote = Panels.Text(page, 112, -491, 440, 12, false, { 1, 0.82, 0.45 })
@@ -3756,9 +3786,15 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold, force)
     local base, h, hero = p.style, spot.h, p.kind == "hero"
     local faces = R.Faces[page.faction] or R.Faces.Alliance
     -- The rank's number in gold and the small # before it, the two centred together in the medal.
+    -- A kit's plaque (R.HeadKit) takes the number alone, in ivory, at its middle.
+    local plaque = R.HeadKit[page.faction] and R.HeadKit[page.faction].rank
+    local medal = plaque and (hero and 44 or 30) or base.medal
+    p.medal:SetTexture(WANTED .. (plaque or hero and "MedaillonUn" or "Medaillon"))
+    p.medal:SetSize(medal, medal)
     p.rank:SetText(tostring(rank))
-    p.rankHash:SetText("#")
-    UI.journalFont(p.rank, "GameFontNormalLarge", base.rank, faces.number)
+    p.rank:SetTextColor(unpack(plaque and CLOTH_IVORY or RANK_GOLD))
+    p.rankHash:SetText(plaque and "" or "#")
+    UI.journalFont(p.rank, "GameFontNormalLarge", plaque and math.floor(medal * 0.6 + 0.5) or base.rank, faces.number)
     UI.journalFont(p.rankHash, "GameFontNormalLarge", math.floor(base.rank * 0.62 + 0.5), faces.number)
     shadowed(p.rank, 0.95)
     shadowed(p.rankHash, 0.95)
@@ -3776,6 +3812,12 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold, force)
     p.rankHash:SetPoint("LEFT", p.medal, "CENTER", start, math.floor(base.rank * 0.12 + 0.5))
     p.rank:ClearAllPoints()
     p.rank:SetPoint("LEFT", p.medal, "CENTER", start + hashW, 1)
+    if plaque then
+        p.rank:SetWidth(medal)
+        p.rank:SetJustifyH("CENTER")
+        p.rank:ClearAllPoints()
+        p.rank:SetPoint("CENTER", p.medal, "CENTER", 0, 0)
+    end
     -- What the poster says.
     local name = UI.plain(enemy.name or L("un joueur inconnu"))
     local first, second = figureTexts(p, enemy)
@@ -4033,18 +4075,34 @@ local function paintEnemies(page)
         mark:SetTexture(WANTED .. "Filigrane" .. faction)
         mark:SetSize(math.floor(mark.side * RATIO["Filigrane" .. faction] + 0.5), mark.side)
     end
-    page.banner:SetTexture(WANTED .. "Fanion" .. faction)
+    local kit = R.HeadKit[faction]
+    for _, piece in ipairs(page.plate) do
+        if kit then
+            piece:SetTexture(WANTED .. kit.plate)
+            piece:Show()
+        else
+            piece:Hide()
+        end
+    end
     -- The validated banners (owner, 28/11) carry their arms painted in. 85 high or wide at most: hung
-    -- from the border's rule, the banner ends above the posters.
-    local bannerH = math.min(85, math.floor(85 / RATIO["Fanion" .. faction] + 0.5))
-    local bannerW = math.floor(bannerH * RATIO["Fanion" .. faction] + 0.5)
+    -- from the border's rule, the banner ends above the posters. A kit's crest is shorter, its two
+    -- straps on the plate's upper edge.
+    local banner, most = kit and kit.crest or "Fanion" .. faction, kit and 76 or 85
+    page.banner:SetTexture(WANTED .. banner)
+    local bannerH = math.min(most, math.floor(most / RATIO[banner] + 0.5))
+    local bannerW = math.floor(bannerH * RATIO[banner] + 0.5)
     page.banner:SetSize(bannerW, bannerH)
-    -- The title, the choices and the rule start after the banner.
-    page.titleX = 58 + bannerW + 14
+    page.banner:ClearAllPoints()
+    -- A crest leaves the plate's end to be seen.
+    local bannerX = kit and 64 or 58
+    page.banner:SetPoint("TOPLEFT", page, "TOPLEFT", bannerX, kit and -1 or 3)
+    -- The title, the choices and the rule start after the banner; on a plate, inside it.
+    page.titleX = bannerX + bannerW + (kit and 12 or 14)
+    local titleW = (kit and 620 or 640) - page.titleX
     page.title:ClearAllPoints()
-    page.title:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -8)
-    page.title:SetWidth(640 - page.titleX)
-    fit(page.title, L("Ennemis de la guilde"), 640 - page.titleX, 30, 18, true, 0.85, (R.Faces[faction] or R.Faces.Alliance).title)
+    page.title:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, kit and -13 or -8)
+    page.title:SetWidth(titleW)
+    fit(page.title, L("Ennemis de la guilde"), titleW, kit and 26 or 30, 18, true, 0.85, (R.Faces[faction] or R.Faces.Alliance).title)
     -- A display font is read from its file when a text first takes it, and a text set before that
     -- can stay empty (owner's capture, 28/11: no title on the page, none on the tall poster, just
     -- after the game started): the page is painted once more, a moment after a faction's first.
@@ -4057,6 +4115,8 @@ local function paintEnemies(page)
     page.rule:ClearAllPoints()
     page.rule:SetPoint("LEFT", page, "TOPLEFT", page.titleX - 4, -79)
     page.rule:SetSize(ruleW, math.floor(ruleW / RATIO.SeparateurOr + 0.5))
+    -- The plate's lower edge parts the head from the posters: no rule under it.
+    if kit then page.rule:Hide() else page.rule:Show() end
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
     if preview then sharing, inGuild = true, true end
@@ -4073,6 +4133,19 @@ local function paintEnemies(page)
     -- The two choices side by side under the title; a long translation gets smaller letters, never cut.
     for _, pair in ipairs({ { page.periodButton, L(ENEMY_PERIODS[page.period][2]) }, { page.showButton, L(POSTER_FILTERS[page.show][2]) } }) do
         local button, size = pair[1], 13
+        -- The kit's field for a face, lit under the pointer; else the book's dark button.
+        button.bare = kit and true or nil
+        button:SetHeight(kit and 22 or 26)
+        if kit then
+            button.field:SetTexture(WANTED .. kit.field)
+            button.fieldLight:SetTexture(WANTED .. kit.field)
+            button.field:Show()
+        else
+            button.field:Hide()
+        end
+        button.fieldLight:SetAlpha(kit and 0.25 or 0)
+        button.skin:SetAlpha(kit and 0 or 1)
+        for _, cap in ipairs(button.skinCaps or {}) do cap:SetAlpha(kit and 0 or 1) end
         button:SetText(pair[2])
         UI.journalFont(button.caption, "GameFontHighlightSmall", size)
         while size > 9 and (GL.Safe(button.caption.GetStringWidth, button.caption) or 0) > button:GetWidth() - 36 do
@@ -4081,7 +4154,7 @@ local function paintEnemies(page)
         end
     end
     page.periodButton:ClearAllPoints()
-    page.periodButton:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -44)
+    page.periodButton:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, kit and -47 or -44)
     page.showButton:ClearAllPoints()
     page.showButton:SetPoint("TOPLEFT", page.periodButton, "TOPRIGHT", 14, 0)
     for _, button in ipairs({ page.periodButton, page.showButton }) do

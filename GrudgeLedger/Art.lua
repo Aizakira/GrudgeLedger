@@ -46,6 +46,9 @@ GL.Art.WantedRatio = {
     CadrePortrait = 1.006, Medaillon = 0.989, MedaillonUn = 0.975, Bandeau = 5.066, SceauPrime = 0.989, Tampon = 4.094,
     Cartouche = 7.659, SeparateurEncre = 28.06, SeparateurOr = 19.363, IconeMembres = 1.685, IconeCrane = 0.913, IconeLieu = 0.637,
     ClouFace = 0.725, ClouGauche = 1.011, ClouDroite = 0.73, Chevron = 1.667,
+    -- The Alliance's integration kit (owner, 28/11): the head's plate, its crest, the choices' field,
+    -- the ranks' plaque.
+    SupportAlliance = 5.635, EcussonAlliance = 0.927, ChampAlliance = 8.05, RangAlliance = 1.01,
     -- The v8 collection (owner, 27/11): ten families, a tall paper and a small one, plain and gold.
     AfficheAerienCarree = 1.024, AfficheAerienGrande = 0.674, AfficheDemonisteCarree = 0.989, AfficheDemonisteGrande = 0.642,
     AfficheElfeNuitCarree = 0.992, AfficheElfeNuitGrande = 0.666, AfficheElfeSangCarree = 0.974, AfficheElfeSangGrande = 0.658,

@@ -86,6 +86,7 @@ for name, expected_width, expected_height, transparent in (
         *((f"Bord{faction}{edge}", 64, 64) for faction in ("Alliance", "Horde") for edge in ("Haut", "Bas", "Gauche", "Droite")),
         ("FanionAlliance", 128, 128), ("CadreCoinBD", 128, 128), ("FanionHorde", 128, 256), ("EmblemeAlliance", 128, 128), ("EmblemeHorde", 128, 128),
         ("FiligraneAlliance", 128, 128), ("FiligraneHorde", 128, 128),
+        ("SupportAlliance", 512, 128), ("EcussonAlliance", 256, 256), ("ChampAlliance", 256, 32), ("RangAlliance", 128, 128),
         *((f"{paper}{format}{tilt}", 256, 512 if format == "Grande" else 256)
           for paper in ("Affiche", "Prime") for format in ("Grande", "Carree") for tilt in (1, 2)),
         # The tribal papers (v9, v10; owner, 28/11): the Horde's posters.

@@ -1,7 +1,12 @@
 """Imports the owner's wanted-poster kit for Ennemis de la guilde (v6, 27/11).
 
 Usage: python tools/import_wanted_kit.py PATH_TO/kit-ennemis-guilde-v6 [PATH_TO/collection-affiches-v8
-       [PATH_TO/propositions-...-v9 PATH_TO/propositions-...-v10]]
+       [PATH_TO/propositions-...-v9 PATH_TO/propositions-...-v10 PATH_TO/kit-integration-alliance-v1]]
+
+The Alliance's integration kit (owner, 28/11) replaces the Alliance's cloth by a calm one and gives
+its head a plate, a crest hung on it, a field for the two choices and a plaque for the ranks. Its
+gold ribbon and its divider are left out: the ribbon is lost on the parchment (dark brown on gold on
+ochre), the divider repeats the plate's lower edge.
 
 The tribal papers (v9 and v10, owner 28/11: the Horde's posters) come
 in one size and without a gold edition; their writing zone is the largest plain rectangle around
@@ -338,9 +343,31 @@ def tribal(folders):
             print(f"    Affiche{name} = {round(image.width / image.height, 3)}, -- zone {{ {', '.join(str(v) for v in zone)} }}")
 
 
+# The integration kit's pieces: media name: (kit file, width, height).
+INTEGRATION = {"SupportAlliance": ("support-entete.png", 512, 128), "EcussonAlliance": ("ecusson-alliance.png", 256, 256),
+               "ChampAlliance": ("cadre-filtre.png", 256, 32), "RangAlliance": ("repere-rang.png", 128, 128)}
+
+
+def integration(folder):
+    folder = Path(folder)
+    # The kit's cloth carries its own soft light: taken as it is.
+    cloth = Image.open(folder / "fond-panneau.png").convert("RGBA").resize((1024, 512), Image.LANCZOS)
+    cloth.putalpha(255)
+    write_tga(OUT / "ToileAlliance.tga", cloth)
+    print("-- The Alliance's integration kit")
+    for name, (source, width, height) in INTEGRATION.items():
+        image = clean(Image.open(folder / source).convert("RGBA"))
+        image = image.crop(image.getchannel("A").getbbox())
+        print(f"    {name} = {round(image.width / image.height, 3)},")
+        write_tga(OUT / (name + ".tga"), fitted(image, width, height))
+
+
 if __name__ == "__main__":
     main(sys.argv[1])
     if len(sys.argv) > 2:
         collection(sys.argv[2])
     if len(sys.argv) > 3:
-        tribal(sys.argv[3:])
+        tribal([folder for folder in sys.argv[3:] if "kit-integration" not in Path(folder).name])
+        for folder in sys.argv[3:]:
+            if "kit-integration" in Path(folder).name:
+                integration(folder)
