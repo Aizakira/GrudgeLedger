@@ -2946,11 +2946,34 @@ end
 -- won, when last. The Journal's list button chooses the period. A click opens the sheet;
 -- "Rechercher" posts a wanted notice. Pages turn, nothing scrolls.
 local ENEMY_PERIODS = { { 30 * 86400, "30 derniers jours" }, { 7 * 86400, "7 derniers jours" }, { 0, "Toujours" } }
+-- One killer, one key (owner, 28/11: a killer of two members split into two posters of one).
+-- Members write the same player differently: with or without the realm ("Name-Realm", "Name"),
+-- with an identity or none (never targeted). Names are compared without the realm and case; a
+-- name some report gave an identity takes that identity. Two players of the same name on two
+-- realms, both without identity, would be merged: rarer than the split, which happened.
+do
+local function baseName(name)
+    return type(name) == "string" and (name:match("^([^%-]+)") or name):lower() or nil
+end
+function R.EnemyKeys(points)
+    local byName = {}
+    for _, point in ipairs(points) do
+        local base = baseName(point.name)
+        if base and point.target then byName[base] = byName[base] or point.target end
+    end
+    return function(point)
+        local base = baseName(point.name)
+        return point.target or (base and byName[base]) or (base and "name:" .. base) or nil
+    end
+end
+end
 function R.GuildEnemies(period)
     local enemies, list = {}, {}
     local points = R.GuildLog({ view = "all", period = period or 0 })
+    -- Identities are learnt from every fight kept, not only those of the period.
+    local keyOf = R.EnemyKeys(R.GuildLog({ view = "all" }))
     for _, point in ipairs(points) do
-        local key = foeKey(point)
+        local key = point.kind == "death" and keyOf(point)
         if key and point.kind == "death" then
             local enemy = enemies[key]
             if not enemy then
@@ -2960,8 +2983,10 @@ function R.GuildEnemies(period)
                 list[#list + 1] = enemy
             end
             enemy.deaths = enemy.deaths + 1
-            -- A member who saw the killer's identity gives it, even if the first report had none.
-            if not enemy.target and point.target then enemy.target = point.target end
+            -- A member who saw the killer's identity gives it, even if the first report had none;
+            -- the fullest name wins ("Name-Realm" over "Name").
+            if not enemy.target and key:sub(1, 5) ~= "name:" then enemy.target = key end
+            if point.name and (not enemy.name or #point.name > #enemy.name) then enemy.name = point.name end
             local victim = point.actor or "?"
             if not enemy.victims[victim] then
                 enemy.victims[victim] = {}
@@ -2976,7 +3001,7 @@ function R.GuildEnemies(period)
         end
     end
     for _, point in ipairs(points) do
-        local enemy = point.kind == "kill" and enemies[foeKey(point) or ""]
+        local enemy = point.kind == "kill" and enemies[keyOf(point) or ""]
         if enemy then
             enemy.kills = enemy.kills + 1
             enemy.avengedAt = math.max(enemy.avengedAt or 0, point.time)
@@ -3579,10 +3604,16 @@ local function buildEnemies(host)
     -- on under it, so no gap shows where it hides the flourish.
     page.corners = {}
     local corner, rule = 70, math.floor(70 * 96 / 288 + 0.5)
+    -- The kit's rule runs 10 units inside its pieces' edge: the border stands 10 units out from the
+    -- cloth (11 at the top, 12 at the bottom), so its rule lies on the book's own gold rule and the flourishes join it
+    -- (owner, 28/11: two parallel rules on every side, measured on the render).
+    page.border = CreateFrame("Frame", nil, page)
+    page.border:SetPoint("TOPLEFT", page.cloth, "TOPLEFT", -10, 11)
+    page.border:SetPoint("BOTTOMRIGHT", page.cloth, "BOTTOMRIGHT", 10, -12)
     for i, at in ipairs({ { "TOPLEFT", "HG" }, { "TOPRIGHT", "HD" }, { "BOTTOMLEFT", "BG" }, { "BOTTOMRIGHT", "BD" } }) do
         local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
         piece:SetSize(corner, corner)
-        piece:SetPoint(at[1], page.cloth, at[1], 0, 0)
+        piece:SetPoint(at[1], page.border, at[1], 0, 0)
         piece.corner = "Coin%s" .. at[2]
         page.corners[i] = piece
     end
@@ -3591,8 +3622,8 @@ local function buildEnemies(host)
         { "Gauche", "TOPLEFT", 0, -corner, "BOTTOMLEFT", rule, corner },
         { "Droite", "TOPRIGHT", -rule, -corner, "BOTTOMRIGHT", 0, 24 } }) do
         local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
-        piece:SetPoint("TOPLEFT", page.cloth, at[2], at[3], at[4])
-        piece:SetPoint("BOTTOMRIGHT", page.cloth, at[5], at[6], at[7])
+        piece:SetPoint("TOPLEFT", page.border, at[2], at[3], at[4])
+        piece:SetPoint("BOTTOMRIGHT", page.border, at[5], at[6], at[7])
         piece.corner = "Bord%s" .. at[1]
         page.corners[#page.corners + 1] = piece
     end

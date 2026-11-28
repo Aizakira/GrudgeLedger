@@ -523,6 +523,23 @@ do
     assert(hero.seen:GetText() == "Vu à Feralas, il y a 1 h", hero.seen:GetText())
     assert(hero.where == "Feralas" and hero.kills == "vaincu 4 fois par la guilde" and hero.deaths == "4 morts infligées", hero.deaths)
     assert(not hero.seal:IsShown() and not hero.stamp:IsShown() and not hero.ribbon:IsShown())
+    -- One killer, one poster (owner, 28/11): you saw his identity and realm, a member only his name;
+    -- he killed two members and comes first, over a killer of one.
+    do
+        local savedPoints = GL.GuildMap.Points
+        local at = GL.Now()
+        GL.GuildMap.Points = function()
+            return {
+                { actor = "Player-1-Me000001", mine = true, time = at - 600, mapID = 1444, kind = "death", target = "Player-1-0000CCCC", name = "Gankeur-Forever" },
+                { actor = "Player-1-Mate0001", time = at - 86400, mapID = 1444, kind = "death", name = "gankeur" },
+                { actor = "Player-1-Mate0002", time = at - 3000, mapID = 1444, kind = "death", target = "Player-1-0000DDDD", name = "Autre" },
+            }
+        end
+        local list = R.GuildEnemies(30 * 86400)
+        assert(#list == 2 and list[1].target == "Player-1-0000CCCC" and list[1].members == 2 and list[1].deaths == 2, #list)
+        assert(list[1].name == "Gankeur-Forever" and list[2].name == "Autre")
+        GL.GuildMap.Points = savedPoints
+    end
     local enemy = R.GuildEnemies(0)[1]
     assert(enemy.avenged == false and enemy.avengedAt < enemy.last)
     enemy.avengedAt = enemy.last + 60
