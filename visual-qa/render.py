@@ -263,6 +263,7 @@ def render(name, frames, root):
         (name.startswith("minimap") and minimap_button and lay.descendant(r["id"], minimap_button))) and lay.visible(r["id"])]
     regions.sort(key=lambda r: (lay.framelevel(r["id"]) + (.5 if r["kind"] == "EditBox" else 0), layers.get(r.get("layer"), -1), r.get("sublevel",0), r["id"]))
     issues = []
+    book_root = lay.frames[root].get("name") in ("GrudgeLedgerRelations", "GrudgeLedgerGuild")
     for r in regions:
         x, y, w, h = lay.resolve(r["id"])
         if w <= 0 or h <= 0 or r["kind"] == "Mask": continue
@@ -405,6 +406,10 @@ def render(name, frames, root):
             book=str(r.get("texture") or "").endswith(("JournalReferenceBook","JournalReferenceSheetBook"))
             if not scroll_ancestor and not book and (xx<rb[0]-4 or yy<rb[1]-4 or xx+ww>rb[0]+rb[2]+4 or yy+hh>rb[1]+rb[3]+4):
                 issues.append({"kind":"outside_window","id":r["id"],"text":r.get("text","")[:100],"bounds":[xx-rb[0],yy-rb[1],ww,hh]})
+            # In the two books, no writing over the frame's lower edge (owner report, 28/11: the map's
+            # legend ran over it): the frame starts 675 units under the window's top.
+            if book_root and r["kind"] == "FontString" and r.get("text") and yy+hh > rb[1]+676:
+                issues.append({"kind":"text_over_book_frame","id":r["id"],"text":r["text"][:100],"bottom":round(yy+hh-rb[1],1)})
             if r["kind"] == "FontString" and r.get("parent") and lay.frames[r["parent"]]["kind"] == "Button":
                 px,py,pw,ph=lay.resolve(r["parent"])
                 if yy+hh>py+ph+2:

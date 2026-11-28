@@ -4447,6 +4447,10 @@ local function paintTally(f)
         end
     end
 end
+-- Where a book's left column must end, from the window's top: above the frame's lower edge (675)
+-- and the corner ornament that reaches up to 668 where the column starts (owner report, 28/11: with
+-- the guild's two lines, the legend's last one lay over the frame).
+R.ColumnFloor = -666
 local function paintLegend(f)
     local legend = f.legend
     if not legend then return end
@@ -4458,13 +4462,23 @@ local function paintLegend(f)
     end
     local shown = 0
     for _, cell in ipairs(f.tally) do if cell:IsShown() then shown = shown + 1 end end
+    -- Ten units under the key figures, the heading and its rule (22), then the lines: 22 apart like
+    -- the figures where the column has the room, closer where it has not (the guild's two more),
+    -- so the last one always ends above the column's floor.
+    local count = map.guildOn and #legend.lines or 2
+    local top = f.figuresTop - 20 - shown * 22 - 10
+    local step = math.max(16, math.min(22, math.floor((top - 22 - R.ColumnFloor) / count)))
     legend:ClearAllPoints()
-    legend:SetPoint("TOPLEFT", 40, f.figuresTop - 20 - shown * 22 - 22)
+    legend:SetPoint("TOPLEFT", 40, top)
     legend.heading:SetText(L("Légende"))
     local labels = { L("Vos morts"), L("Vos victoires"), L("Morts de la guilde"), L("Victoires de la guilde") }
     for i, line in ipairs(legend.lines) do
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", 0, -22 - (i - 1) * step)
+        line:SetSize(166, step)
+        line.mark:SetSize(math.min(18, step - 2), math.min(18, step - 2))
         line.label:SetText(labels[i])
-        if i <= 2 or map.guildOn then line:Show() else line:Hide() end
+        if i <= count then line:Show() else line:Hide() end
     end
     legend:Show()
 end

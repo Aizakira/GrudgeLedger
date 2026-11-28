@@ -6,6 +6,15 @@ local I, R = GL.CharacterInsights, GL.RelationsPages
 local now = GL.Now()
 GetServerTime = function() return now end
 local function click(b) b.scripts.OnClick(b, "LeftButton") end
+-- Where each piece is put, for the tests of the left column's geometry.
+do
+    local regions = getmetatable(UIParent).__index
+    local setPoint = regions.SetPoint
+    function regions:SetPoint(point, a, b, c, d)
+        setPoint(self, point, a, b)
+        self.at = { point, a, b, c, d }
+    end
+end
 local function person(first, last, id) return GL.IdentityFromName(first, last, "Player-9-" .. id) end
 
 -- An empty book opens on the Bilan (0.55.0): every portrait says how it is earned.
@@ -303,6 +312,37 @@ do
     -- the key figures while the map shows, the counts under the title.
     assert(view.frame and view.frame.pieces["cadre-hg"] and f.tabs.lands.icon and f.tabs.recap.icon and f.legend:IsShown(), "map kit")
     assert(f.legend.heading:GetText() == "Légende" and f.legend.lines[1]:IsShown() and not f.legend.lines[3]:IsShown())
+    -- The left column never goes under the book's frame (owner report, 28/11: with the guild's fights
+    -- on, the legend's fourth line lay over the frame). Each piece's foot is read from where it was
+    -- put: the entries, the key figures, the legend's lines.
+    local function columnFoot(book)
+        local foot = 0
+        local function low(piece, from)
+            if piece:IsShown() then foot = math.min(foot, (from or 0) + piece.at[3] - piece:GetHeight()) end
+        end
+        for _, tab in pairs(book.tabs) do low(tab) end
+        for _, cell in ipairs(book.tally) do low(cell) end
+        if book.legend and book.legend:IsShown() then
+            for _, line in ipairs(book.legend.lines) do low(line, book.legend.at[3]) end
+        end
+        return foot
+    end
+    assert(columnFoot(f) >= R.ColumnFloor, "legend, your own fights: " .. columnFoot(f))
+    local realEnabled = GL.GuildMap.Enabled
+    GL.GuildMap.Enabled = function() return true, true end
+    R.Refresh()
+    assert(view.guildOn and f.legend.lines[4]:IsShown() and f.legend.lines[4].label:GetText() == "Victoires de la guilde")
+    assert(columnFoot(f) >= R.ColumnFloor, "legend with the guild's two lines: " .. columnFoot(f))
+    -- The four lines keep apart, each with room for its words (12 units of letters).
+    assert(f.legend.lines[3].at[3] - f.legend.lines[4].at[3] >= 16 and f.legend.lines[4]:GetHeight() >= 16)
+    GL.GuildMap.Enabled = realEnabled
+    R.Refresh()
+    assert(not f.legend.lines[3]:IsShown())
+    -- Every page of the book, the Registre's sections open or not.
+    for _, key in ipairs({ "recap", "rivals", "honor", "debts", "rankings", "lands" }) do
+        R.Open(key)
+        assert(columnFoot(f) >= R.ColumnFloor, key .. ": " .. columnFoot(f))
+    end
     assert(not landsPage.lead:IsShown() and view.caption:GetText():find("6 morts", 1, true))
     -- The line under the map stays on the sound part of the sheet (owner report 25/11: it fell on the
     -- worn bottom edge, about the last 32 units of the 510-unit page): map top 70, map, 12, buttons 26.
