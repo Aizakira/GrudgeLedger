@@ -630,16 +630,20 @@ do
     assert(enemies.previewNote:GetText():find("Aperçu", 1, true) and enemies.cloth.texture:find("ToileHorde"))
     assert(enemies.posters[5]:IsShown() and hero.name:GetText() == "Aldric Fendroc" and hero.ribbon:IsShown())
     -- The Horde has no kit for its head: the banner, the book's buttons, the gold medals and their #.
-    assert(not enemies.plate[1]:IsShown() and not enemies.periodButton.field:IsShown() and not enemies.periodButton.bare)
+    assert(not enemies.divider[1]:IsShown() and enemies.rule:IsShown() and not enemies.periodButton.field:IsShown() and not enemies.periodButton.bare)
+    assert(hero.ribbon.texture:find("Bandeau$") and hero.seal:IsShown())
     assert(enemies.banner.texture:find("FanionHorde") and hero.medal.texture:find("MedaillonUn") and hero.rankHash:GetText() == "#")
     assert(enemies.posters[4].stamp:IsShown() and enemies.posters[4].stamp.words:GetText() == "VENGÉ")
     click(hero.hit)
     assert(opened == nil and not hero.canWant, "an invented enemy opens no sheet")
     SlashCmdList.GRUDGELEDGER("apercu alliance")
     assert(R.preview.faction == "Alliance" and enemies.cloth.texture:find("ToileAlliance") and hero.name:GetText() == "Grok Crânefendu")
-    -- The Alliance's integration kit (owner, 28/11): the plate under the title and the choices, the
-    -- crest, the choices' fields, the ranks' plaque with the number alone.
-    assert(enemies.plate[1]:IsShown() and enemies.plate[3]:IsShown() and enemies.banner.texture:find("EcussonAlliance"))
+    -- The Alliance's integration kit (owner, 28/11): the crest, the choices' fields, the divider under
+    -- the head, the ranks' plaque with the number alone, the bounty's gold band without the coin.
+    assert(enemies.divider[1]:IsShown() and enemies.divider[3]:IsShown() and enemies.banner.texture:find("EcussonAlliance"))
+    assert(hero.ribbon:IsShown() and hero.ribbon.texture:find("BandeauAlliance") and not hero.seal:IsShown())
+    -- The border: one rule a side, a flourish on three corners, none over the book's own ornament.
+    assert(enemies.sides.left.texture:find("BordAllianceHaut") and enemies.corners.BG.texture:find("CoinAllianceBG") and not enemies.corners.BD)
     assert(enemies.periodButton.field:IsShown() and enemies.periodButton.bare and not enemies.rule:IsShown())
     assert(hero.medal.texture:find("RangAlliance") and hero.rankHash:GetText() == "" and hero.rank:GetText() == "1")
     gb:Hide()

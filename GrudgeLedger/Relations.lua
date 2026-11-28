@@ -3483,8 +3483,12 @@ local function placePoster(page, p, spot)
     for _, art in ipairs({ p.face.portraitRim, p.face.raceIcon }) do
         if art then GL.Safe(art.SetRotation, art, 0) end
     end
+    -- A kit's gold band (R.HeadKit) takes its words at its middle, without the coin's seal.
+    local band = R.HeadKit[page.faction] and R.HeadKit[page.faction].band
+    p.band = band
+    p.ribbon:SetTexture(WANTED .. (band or "Bandeau"))
     p.prize:ClearAllPoints()
-    p.prize:SetPoint("CENTER", p.ribbon, "CENTER", -6, 1)
+    p.prize:SetPoint("CENTER", p.ribbon, "CENTER", band and 0 or -6, 1)
     p.seal:ClearAllPoints()
     p.seal:SetPoint("CENTER", p.ribbon, "RIGHT", -8, 0)
     if p.labelText then
@@ -3540,8 +3544,11 @@ local function placePoster(page, p, spot)
     p.stamp.words:SetWidth(stampW - 14)
     -- Narrower on the tall poster: at full width its ribbon would outweigh the writing.
     local ribbonW = math.floor(p.kind == "hero" and math.min(w * 0.64, p.inner) or math.min(w * 0.72, p.inner + 10))
-    p.ribbon:SetSize(ribbonW, math.floor(ribbonW / RATIO.Bandeau + 0.5))
-    local seal = math.floor(p.ribbon:GetHeight() * 1.15 + 0.5)
+    -- A kit's band is lower for its length and writes between its two folded ends: wider, so the
+    -- bounty reads as large as on the red ribbon.
+    if p.band then ribbonW = math.floor(p.kind == "hero" and math.min(w * 0.78, p.inner + 12) or math.min(w * 0.92, p.inner + 30)) end
+    p.ribbon:SetSize(ribbonW, math.floor(ribbonW / RATIO[p.band or "Bandeau"] + 0.5))
+    local seal = math.floor(ribbonW / RATIO.Bandeau * 1.15 + 0.5)
     p.seal:SetSize(seal, seal)
     p.prize:SetWidth(ribbonW - 34)
     -- The poster's own layers follow it when it moves above or under a neighbour: the portrait just
@@ -3554,11 +3561,13 @@ local function placePoster(page, p, spot)
     GL.Safe(p.hit.SetFrameLevel, p.hit, level + 15)
     GL.Safe(p.prizeHit.SetFrameLevel, p.prizeHit, level + 16)
 end
--- The head's own pieces where a faction has them (the Alliance's integration kit, owner 28/11): a
--- bronze plate that holds the title and the two choices, the crest hung on its upper edge, a field
--- for each choice, a plaque for the ranks. A faction without them keeps the banner, the book's dark
--- buttons and the gold medals.
-R.HeadKit = { Alliance = { plate = "SupportAlliance", crest = "EcussonAlliance", field = "ChampAlliance", rank = "RangAlliance" } }
+-- The page's own pieces where a faction has them (the Alliance's integration kit, owner 28/11): the
+-- crest hung on the border's rule, a field for each choice, a divider under the head, a plaque for
+-- the ranks, a gold band for the bounties. Not the kit's large head plate (owner, 28/11). A faction
+-- without them keeps the banner, the book's dark buttons, the gold rule, the medals and the red
+-- ribbon.
+R.HeadKit = { Alliance = { crest = "EcussonAlliance", field = "ChampAlliance", rank = "RangAlliance", band = "BandeauAlliance",
+    divider = "SeparateurAlliance" } }
 -- A choice of the page's head (owner, 28/11: the addon's own look, not a style of its own): one of
 -- the book's dark buttons, as in its left column, its words on the left, the kit's gold chevron on
 -- the right; under it, the choices in the guild journal's small menu. b.field is the kit's face,
@@ -3609,44 +3618,49 @@ local function chooser(page, options, current, choose)
     b:HookScript("OnHide", function() menu:Hide() end)
     return b
 end
--- The page's border, as on the kit's assembly (owner, 28/11: the gold rules that link the flourishes
--- were still wrong; laid on the book's own rules they could not be told from them, thin on the left,
--- lost in the thick frame on the right and at the foot): a frame of its own inside the cloth, its
--- gold rule INSET from the book's on the four sides alike (the book's frame is thicker at the right
--- and the foot, hence a unit or two of difference), the cloth showing between the two, the
--- flourishes on its corners. RULE_AT: the rule's middle in the kit's 96-pixel edge, from the piece's
--- outer side. BOOK_RULE: how far outside the cloth the book's rule is (measured on the render). The
--- Horde's iron corners are drawn smaller, as on the owner's mockup.
+-- The page's border (owner, 28/11: the gold rules never met exactly, and the fourth flourish lay over
+-- the book's own ornament). One rule, drawn by one piece of the kit (the top edge, turned for the
+-- three other sides, so the four are alike), from corner to corner of a rectangle GAP inside the
+-- book's own rules; the cloth shows between the two. The flourishes have no rule of their own any
+-- more (the import cuts their stubs): each lies over the rule's corner, by the place its stubs had
+-- (GL.Art.WantedRule). At the bottom right the two rules end under the book's ornament, which holds
+-- that corner alone. BOOK_RULE: how far outside the cloth the book's rule is (measured on the
+-- render). The Horde's iron corners are drawn smaller, as on the owner's mockup.
 do
-local INSET = { top = 8, right = 7, bottom = 10, left = 8 }
-local RULE_AT = { Alliance = { top = 42, right = 41, bottom = 44, left = 40 }, Horde = { top = 57, right = 57.5, bottom = 59.5, left = 57.5 } }
+local GAP = 11
 local BOOK_RULE = { top = 0.94, right = 0.18, bottom = 1.46, left = 0.42 }
 local CORNER = { Alliance = 70, Horde = 52 }
-local EDGES = {
-    Haut = function(c, r) return "TOPLEFT", c, 0, "TOPRIGHT", -c, -r end,
-    -- The bottom and right rules meet under the book's own ornament, which holds that corner.
-    Bas = function(c, r) return "BOTTOMLEFT", c, r, "BOTTOMRIGHT", 0, 0 end,
-    Gauche = function(c, r) return "TOPLEFT", 0, -c, "BOTTOMLEFT", r, c end,
-    Droite = function(c, r) return "TOPRIGHT", -r, -c, "BOTTOMRIGHT", 0, 0 end,
-}
+local RULE = GL.Art.WantedRule
 function R.LayEnemyBorder(page, faction)
-    local corner, at = CORNER[faction] or CORNER.Alliance, RULE_AT[faction] or RULE_AT.Alliance
-    local rule = corner * 96 / 288
-    local function out(side) return at[side] * corner / 288 + BOOK_RULE[side] - INSET[side] end
-    page.border:ClearAllPoints()
-    page.border:SetPoint("TOPLEFT", page.cloth, "TOPLEFT", -out("left"), out("top"))
-    page.border:SetPoint("BOTTOMRIGHT", page.cloth, "BOTTOMRIGHT", out("right"), -out("bottom"))
-    for _, piece in ipairs(page.corners) do
-        if piece.edge then
-            -- Two units under each corner's own rule: no seam between the pieces.
-            local from, x1, y1, to, x2, y2 = EDGES[piece.edge](corner - 2, rule)
-            piece:ClearAllPoints()
-            piece:SetPoint("TOPLEFT", page.border, from, x1, y1)
-            piece:SetPoint("BOTTOMRIGHT", page.border, to, x2, y2)
-        else
-            piece:SetSize(corner, corner)
-        end
-        piece:SetTexture(WANTED .. piece.corner:format(faction))
+    local c = CORNER[faction] or CORNER.Alliance
+    -- A side's piece is w thick, its rule o from its outer side; h, half the rule's own thickness,
+    -- squares the rectangle's corners.
+    local w = c * 96 / 288
+    local o, h = RULE["Bord" .. faction .. "Haut"] * w, w * 0.1
+    local l, t, r, b = GAP - BOOK_RULE.left, GAP - BOOK_RULE.top, GAP - BOOK_RULE.right, GAP - BOOK_RULE.bottom
+    local cloth = page.cloth
+    local sides = {
+        top = { "TOPLEFT", l - h, o - t, "TOPRIGHT", h - r, o - t - w },
+        bottom = { "BOTTOMLEFT", l - h, b - o + w, "BOTTOMRIGHT", h - r, b - o },
+        left = { "TOPLEFT", l - o, h - t, "BOTTOMLEFT", l - o + w, b - h },
+        right = { "TOPRIGHT", o - r - w, h - t, "BOTTOMRIGHT", o - r, b - h },
+    }
+    for side, piece in pairs(page.sides) do
+        local at = sides[side]
+        piece:SetTexture(WANTED .. "Bord" .. faction .. "Haut")
+        piece:ClearAllPoints()
+        piece:SetPoint("TOPLEFT", cloth, at[1], at[2], at[3])
+        piece:SetPoint("BOTTOMRIGHT", cloth, at[4], at[5], at[6])
+    end
+    for name, piece in pairs(page.corners) do
+        local at = RULE["Coin" .. faction .. name]
+        local x, y = at[1] * c, at[2] * c
+        piece:SetTexture(WANTED .. "Coin" .. faction .. name)
+        piece:SetSize(c, c)
+        piece:ClearAllPoints()
+        if name == "HG" then piece:SetPoint("TOPLEFT", cloth, "TOPLEFT", l - x, y - t)
+        elseif name == "HD" then piece:SetPoint("TOPLEFT", cloth, "TOPRIGHT", -r - x, y - t)
+        else piece:SetPoint("TOPLEFT", cloth, "BOTTOMLEFT", l - x, b + y) end
     end
 end
 end
@@ -3659,28 +3673,17 @@ local function buildEnemies(host)
     -- head's rule to the foot's, so the book's gold rules stay over it and no parchment shows.
     page.cloth:SetPoint("TOPLEFT", -20, 7)
     page.cloth:SetPoint("BOTTOMRIGHT", 35, -12)
-    -- The border (owner, 27/11: part of the design): flourishes in the corners and the kit's gold
-    -- rules linking them along the four sides; R.LayEnemyBorder places them for the faction.
-    page.corners = {}
-    page.border = CreateFrame("Frame", nil, page)
-    for i, at in ipairs({ { "TOPLEFT", "HG" }, { "TOPRIGHT", "HD" }, { "BOTTOMLEFT", "BG" }, { "BOTTOMRIGHT", "BD" } }) do
-        local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
-        piece:SetPoint(at[1], page.border, at[1], 0, 0)
-        piece.corner = "Coin%s" .. at[2]
-        page.corners[i] = piece
+    -- The border (owner, 27/11: part of the design): the kit's gold rule along the four sides and a
+    -- flourish over three of its corners; R.LayEnemyBorder places them for the faction. The top
+    -- edge's piece draws every side: as it is, upside down, or turned a quarter (its outer side
+    -- outwards), without the clear pixels at its two ends (4 of 64).
+    page.sides, page.corners = {}, {}
+    for side, coords in pairs({ top = { 0.0625, 0.9375, 0, 1 }, bottom = { 0.0625, 1, 0.0625, 0, 0.9375, 1, 0.9375, 0 },
+        left = { 0.0625, 0, 0.9375, 0, 0.0625, 1, 0.9375, 1 }, right = { 0.0625, 1, 0.9375, 1, 0.0625, 0, 0.9375, 0 } }) do
+        page.sides[side] = page:CreateTexture(nil, "BACKGROUND", nil, 0)
+        page.sides[side]:SetTexCoord(unpack(coords))
     end
-    for _, edge in ipairs({ "Haut", "Bas", "Gauche", "Droite" }) do
-        local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
-        piece.corner, piece.edge = "Bord%s" .. edge, edge
-        -- The kit's edges end in clear pixels: stretched over a whole side, they left a gap in the
-        -- rule before each corner (owner, 28/11). Cut off, 4 of 64 at each end.
-        if edge == "Haut" or edge == "Bas" then
-            piece:SetTexCoord(0.0625, 0.9375, 0, 1)
-        else
-            piece:SetTexCoord(0, 1, 0.0625, 0.9375)
-        end
-        page.corners[#page.corners + 1] = piece
-    end
+    for _, name in ipairs({ "HG", "HD", "BG" }) do page.corners[name] = page:CreateTexture(nil, "BACKGROUND", nil, 1) end
     -- The book's frame reaches over the page at the bottom right: its ornament drawn again over the
     -- tapestry, cut from the book's painting (tools/import_wanted_kit.py), at its place in the book.
     page.frameCorner = wantedTexture(page, "BACKGROUND", 2, "CadreCoinBD")
@@ -3698,21 +3701,21 @@ local function buildEnemies(host)
     -- The head after the owner's mockup (28/11): the banner whole, hung under the top rule and clear
     -- of the corner and of the first poster; the title large in its faction's face; the two choices
     -- under it; a gold rule.
-    -- The kit's plate (R.HeadKit): its two ends keep their shape, its middle stretches. 200 of the
-    -- drawing's 2130 pixels to an end, in a texture with two clear pixels around the drawing.
-    page.plate = {}
-    local capU, capW = (2 + 200 / 2130 * 508) / 512, 39
-    for i, u in ipairs({ { 0, capU }, { capU, 1 - capU }, { 1 - capU, 1 } }) do
-        local piece = page:CreateTexture(nil, "BACKGROUND", nil, 1)
-        piece:SetTexCoord(u[1], u[2], 2 / 128, 126 / 128)
-        page.plate[i] = piece
+    -- A kit's divider (R.HeadKit) in three pieces: its lozenge keeps its shape, its two arms stretch.
+    -- The lozenge and a little of each arm: from 0.44 to 0.56 of the drawing, in a texture with two
+    -- clear pixels around it.
+    page.divider = {}
+    for i, u in ipairs({ { 0, 0.44 }, { 0.44, 0.56 }, { 0.56, 1 } }) do
+        local piece = page:CreateTexture(nil, "ARTWORK", nil, -1)
+        piece:SetTexCoord((2 + u[1] * 508) / 512, (2 + u[2] * 508) / 512, 2 / 32, 30 / 32)
+        page.divider[i] = piece
     end
-    page.plate[1]:SetPoint("TOPLEFT", page, "TOPLEFT", 50, -6)
-    page.plate[1]:SetSize(capW, 73)
-    page.plate[3]:SetPoint("TOPRIGHT", page, "TOPLEFT", 632, -6)
-    page.plate[3]:SetSize(capW, 73)
-    page.plate[2]:SetPoint("TOPLEFT", page.plate[1], "TOPRIGHT")
-    page.plate[2]:SetPoint("BOTTOMRIGHT", page.plate[3], "BOTTOMLEFT")
+    page.divider[2]:SetSize(37, 14)
+    page.divider[2]:SetPoint("CENTER", page, "TOPLEFT", 330, -77)
+    page.divider[1]:SetPoint("TOPLEFT", page, "TOPLEFT", 10, -70)
+    page.divider[1]:SetPoint("BOTTOMRIGHT", page.divider[2], "BOTTOMLEFT")
+    page.divider[3]:SetPoint("TOPLEFT", page.divider[2], "TOPRIGHT")
+    page.divider[3]:SetPoint("BOTTOMRIGHT", page, "TOPLEFT", 650, -84)
     page.banner = page:CreateTexture(nil, "ARTWORK")
     page.title = Panels.Text(page, 150, -8, 480, 30, true, CLOTH_IVORY)
     -- In a preview, its notice takes the legend's place at the foot.
@@ -3850,9 +3853,11 @@ local function paintPoster(page, p, enemy, rank, spot, open, gold, force)
         -- The long words on the tall poster; the short ones where the ribbon is small.
         local prize = gold > 0 and capitals(L(hero and "%s pour sa tête" or "Prime · %s"):format(GL.BountyMoney(gold)))
             or capitals(L("Avis de recherche"))
-        fit(p.prize, prize, p.ribbon:GetWidth() - 40, base.label + 2, 7, true, 0.6)
+        -- Dark ink on the gold band, between its two folded ends; ivory on the red ribbon.
+        p.prize:SetTextColor(unpack(p.band and POSTER_INK or MEDAL_IVORY))
+        fit(p.prize, prize, p.band and p.ribbon:GetWidth() * 0.68 or p.ribbon:GetWidth() - 40, base.label + 2, 7, true, not p.band and 0.6)
         floor = floor + p.ribbon:GetHeight() + 3
-        if gold > 0 then p.seal:Show() else p.seal:Hide() end
+        if gold > 0 and not p.band then p.seal:Show() else p.seal:Hide() end
     else
         p.ribbon:Hide()
         p.prize:Hide()
@@ -4076,33 +4081,31 @@ local function paintEnemies(page)
         mark:SetSize(math.floor(mark.side * RATIO["Filigrane" .. faction] + 0.5), mark.side)
     end
     local kit = R.HeadKit[faction]
-    for _, piece in ipairs(page.plate) do
+    for _, piece in ipairs(page.divider) do
         if kit then
-            piece:SetTexture(WANTED .. kit.plate)
+            piece:SetTexture(WANTED .. kit.divider)
             piece:Show()
         else
             piece:Hide()
         end
     end
-    -- The validated banners (owner, 28/11) carry their arms painted in. 85 high or wide at most: hung
-    -- from the border's rule, the banner ends above the posters. A kit's crest is shorter, its two
-    -- straps on the plate's upper edge.
-    local banner, most = kit and kit.crest or "Fanion" .. faction, kit and 76 or 85
+    -- The validated banners (owner, 28/11) carry their arms painted in. 82 high or wide at most: hung
+    -- from the border's rule, the banner ends above the posters. A kit's crest has its two straps on
+    -- that rule.
+    local banner, most = kit and kit.crest or "Fanion" .. faction, kit and 78 or 82
     page.banner:SetTexture(WANTED .. banner)
     local bannerH = math.min(most, math.floor(most / RATIO[banner] + 0.5))
     local bannerW = math.floor(bannerH * RATIO[banner] + 0.5)
     page.banner:SetSize(bannerW, bannerH)
     page.banner:ClearAllPoints()
-    -- A crest leaves the plate's end to be seen.
-    local bannerX = kit and 64 or 58
-    page.banner:SetPoint("TOPLEFT", page, "TOPLEFT", bannerX, kit and -1 or 3)
-    -- The title, the choices and the rule start after the banner; on a plate, inside it.
-    page.titleX = bannerX + bannerW + (kit and 12 or 14)
-    local titleW = (kit and 620 or 640) - page.titleX
+    page.banner:SetPoint("TOPLEFT", page, "TOPLEFT", 58, kit and -1 or 0)
+    -- The title, the choices and the rule start after the banner.
+    page.titleX = 58 + bannerW + 14
+    local titleW = 628 - page.titleX
     page.title:ClearAllPoints()
-    page.title:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, kit and -13 or -8)
+    page.title:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -10)
     page.title:SetWidth(titleW)
-    fit(page.title, L("Ennemis de la guilde"), titleW, kit and 26 or 30, 18, true, 0.85, (R.Faces[faction] or R.Faces.Alliance).title)
+    fit(page.title, L("Ennemis de la guilde"), titleW, 30, 18, true, 0.85, (R.Faces[faction] or R.Faces.Alliance).title)
     -- A display font is read from its file when a text first takes it, and a text set before that
     -- can stay empty (owner's capture, 28/11: no title on the page, none on the tall poster, just
     -- after the game started): the page is painted once more, a moment after a faction's first.
@@ -4115,7 +4118,7 @@ local function paintEnemies(page)
     page.rule:ClearAllPoints()
     page.rule:SetPoint("LEFT", page, "TOPLEFT", page.titleX - 4, -79)
     page.rule:SetSize(ruleW, math.floor(ruleW / RATIO.SeparateurOr + 0.5))
-    -- The plate's lower edge parts the head from the posters: no rule under it.
+    -- A kit's divider runs under the whole head, behind the crest's point, in the rule's place.
     if kit then page.rule:Hide() else page.rule:Show() end
     local sharing, inGuild = false, false
     if GL.GuildMap then sharing, inGuild = GL.GuildMap.Enabled() end
@@ -4146,6 +4149,10 @@ local function paintEnemies(page)
         button.fieldLight:SetAlpha(kit and 0.25 or 0)
         button.skin:SetAlpha(kit and 0 or 1)
         for _, cap in ipairs(button.skinCaps or {}) do cap:SetAlpha(kit and 0 or 1) end
+        -- A plain small triangle with the field, as on the kit's assembly; the gold chevron else.
+        local arrow = kit and "Triangle" or "Chevron"
+        button.arrow:SetTexture(WANTED .. arrow)
+        button.arrow:SetSize(kit and 9 or 12, math.floor((kit and 9 or 12) / RATIO[arrow] + 0.5))
         button:SetText(pair[2])
         UI.journalFont(button.caption, "GameFontHighlightSmall", size)
         while size > 9 and (GL.Safe(button.caption.GetStringWidth, button.caption) or 0) > button:GetWidth() - 36 do
@@ -4154,7 +4161,7 @@ local function paintEnemies(page)
         end
     end
     page.periodButton:ClearAllPoints()
-    page.periodButton:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, kit and -47 or -44)
+    page.periodButton:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -45)
     page.showButton:ClearAllPoints()
     page.showButton:SetPoint("TOPLEFT", page.periodButton, "TOPRIGHT", 14, 0)
     for _, button in ipairs({ page.periodButton, page.showButton }) do

@@ -4,9 +4,12 @@ Usage: python tools/import_wanted_kit.py PATH_TO/kit-ennemis-guilde-v6 [PATH_TO/
        [PATH_TO/propositions-...-v9 PATH_TO/propositions-...-v10 PATH_TO/kit-integration-alliance-v1]]
 
 The Alliance's integration kit (owner, 28/11) replaces the Alliance's cloth by a calm one and gives
-its head a plate, a crest hung on it, a field for the two choices and a plaque for the ranks. Its
-gold ribbon and its divider are left out: the ribbon is lost on the parchment (dark brown on gold on
-ochre), the divider repeats the plate's lower edge.
+its head a crest, a field for the two choices, a divider, a plaque for the ranks and a gold band for
+the bounties. Its large head plate is left out (owner, 28/11).
+
+The border's rule (owner, 28/11: the corners' rule stubs never met the sides' rule exactly): each
+corner loses its two stubs, so the sides' rule alone is drawn, under the flourishes; the place the
+stubs had is printed (GL.Art.WantedRule), the addon lays each flourish by it.
 
 The tribal papers (v9 and v10, owner 28/11: the Horde's posters) come
 in one size and without a gold edition; their writing zone is the largest plain rectangle around
@@ -102,6 +105,48 @@ def fitted(image, width, height):
     out = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     out.alpha_composite(inner, (PAD, PAD))
     return clean(out)
+
+
+def trim_corner(image, part):
+    """A corner of the border without its two rule stubs. Returns the image and where the stubs' rule
+    ran: x of the vertical one, y of the horizontal one, in fractions of the texture from its top left."""
+    alpha = image.getchannel("A")
+    a = alpha.load()
+    w, h = image.size
+    out = image.copy()
+    pixels = out.load()
+
+    def stub(across, along, get, clear):
+        """Lines of the texture from the side the stub leaves by, while they hold nothing but it."""
+        band, centre, weight, seen = None, 0.0, 0.0, 0
+        for i in along:
+            marks = [j for j in range(across) if get(i, j) > 128]
+            if not marks:
+                if band:
+                    break
+                continue
+            if band is None:
+                band = (marks[0] - 2, marks[-1] + 2)
+            if marks[0] < band[0] or marks[-1] > band[1]:
+                break
+            if seen < 8:
+                for j in range(across):
+                    centre += (j + 0.5) * get(i, j)
+                    weight += get(i, j)
+                seen += 1
+            for j in range(across):
+                clear(i, j)
+        return centre / weight / across
+
+    def clear_column(x, y):
+        pixels[x, y] = (0, 0, 0, 0)
+
+    # The horizontal stub leaves by the side away from the corner; the vertical one likewise.
+    columns = range(w - 1, -1, -1) if part in ("HG", "BG") else range(w)
+    rows = range(h - 1, -1, -1) if part in ("HG", "HD") else range(h)
+    y = stub(h, columns, lambda x, yy: a[x, yy], clear_column)
+    x = stub(w, rows, lambda yy, xx: a[xx, yy], lambda yy, xx: clear_column(xx, yy))
+    return out, (round(x, 4), round(y, 4))
 
 
 def lit(cloth):
@@ -206,7 +251,7 @@ def main(kit):
     OUT.mkdir(parents=True, exist_ok=True)
     kit = Path(kit)
     manifest = {a["file"]: a for a in json.loads((kit / "manifest.json").read_text(encoding="utf-8"))["assets"]}
-    ratios, zones, marks = {}, {}, {}
+    ratios, zones, marks, rules = {}, {}, {}, {}
     for side, faction in (("alliance", "Alliance"), ("horde", "Horde")):
         cloth = Image.open(kit / f"backgrounds/{side}-cloth.png").convert("RGBA").resize((1024, 512), Image.LANCZOS)
         write_tga(OUT / f"Toile{faction}.tga", lit(cloth))
@@ -238,7 +283,15 @@ def main(kit):
                            round((right - box[0]) / w, 3), round((bottom - box[1]) / h, 3))
         image = image.crop(box)
         ratios[name] = round(image.width / image.height, 3)
-        write_tga(OUT / (name + ".tga"), fitted(image, width, height))
+        texture = fitted(image, width, height)
+        if name.startswith("Coin"):
+            texture, rules[name] = trim_corner(texture, name[-2:])
+        elif name.startswith("Bord") and name.endswith("Haut"):
+            # The rule's middle across the top edge, from its outer side: the four sides use this piece.
+            alpha = texture.getchannel("A").load()
+            total = sum(alpha[x, y] for x in range(8, width - 8) for y in range(height))
+            rules[name] = round(sum((y + 0.5) * alpha[x, y] for x in range(8, width - 8) for y in range(height)) / total / height, 4)
+        write_tga(OUT / (name + ".tga"), texture)
     ratios["IconeLieu"] = place_icon()
     print("GL.Art.WantedRatio = {")
     for name, ratio in ratios.items():
@@ -247,6 +300,10 @@ def main(kit):
     print("GL.Art.WantedText = {")
     for name, zone in zones.items():
         print(f"    {name} = {{ {', '.join(str(v) for v in zone)} }},")
+    print("}")
+    print("GL.Art.WantedRule = {")
+    for name, rule in rules.items():
+        print(f"    {name} = {rule if isinstance(rule, float) else '{ %s, %s }' % rule},")
     print("}")
     print("-- Nails: where the point enters the paper; banner: the lion's place (left, top, right, bottom)")
     for name, mark in marks.items():
@@ -344,8 +401,9 @@ def tribal(folders):
 
 
 # The integration kit's pieces: media name: (kit file, width, height).
-INTEGRATION = {"SupportAlliance": ("support-entete.png", 512, 128), "EcussonAlliance": ("ecusson-alliance.png", 256, 256),
-               "ChampAlliance": ("cadre-filtre.png", 256, 32), "RangAlliance": ("repere-rang.png", 128, 128)}
+INTEGRATION = {"EcussonAlliance": ("ecusson-alliance.png", 256, 256), "ChampAlliance": ("cadre-filtre.png", 256, 32),
+               "RangAlliance": ("repere-rang.png", 128, 128), "BandeauAlliance": ("cartouche-prime-or.png", 256, 64),
+               "SeparateurAlliance": ("separateur.png", 512, 32)}
 
 
 def integration(folder):
@@ -360,6 +418,11 @@ def integration(folder):
         image = image.crop(image.getchannel("A").getbbox())
         print(f"    {name} = {round(image.width / image.height, 3)},")
         write_tga(OUT / (name + ".tga"), fitted(image, width, height))
+    # The choices' arrow as on the kit's assembly: a small plain triangle in the kit's ivory.
+    from PIL import ImageDraw
+    arrow = Image.new("RGBA", (240, 160), (0, 0, 0, 0))
+    ImageDraw.Draw(arrow).polygon([(0, 0), (240, 0), (120, 160)], fill=(232, 219, 194, 255))
+    write_tga(OUT / "Triangle.tga", fitted(arrow, 32, 32))
 
 
 if __name__ == "__main__":

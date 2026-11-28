@@ -46,9 +46,10 @@ GL.Art.WantedRatio = {
     CadrePortrait = 1.006, Medaillon = 0.989, MedaillonUn = 0.975, Bandeau = 5.066, SceauPrime = 0.989, Tampon = 4.094,
     Cartouche = 7.659, SeparateurEncre = 28.06, SeparateurOr = 19.363, IconeMembres = 1.685, IconeCrane = 0.913, IconeLieu = 0.637,
     ClouFace = 0.725, ClouGauche = 1.011, ClouDroite = 0.73, Chevron = 1.667,
-    -- The Alliance's integration kit (owner, 28/11): the head's plate, its crest, the choices' field,
-    -- the ranks' plaque.
-    SupportAlliance = 5.635, EcussonAlliance = 0.927, ChampAlliance = 8.05, RangAlliance = 1.01,
+    -- The Alliance's integration kit (owner, 28/11): the crest, the choices' field and their arrow,
+    -- the ranks' plaque, the bounties' gold band, the divider.
+    EcussonAlliance = 0.927, ChampAlliance = 8.05, RangAlliance = 1.01, BandeauAlliance = 6.812, SeparateurAlliance = 22.276,
+    Triangle = 1.5,
     -- The v8 collection (owner, 27/11): ten families, a tall paper and a small one, plain and gold.
     AfficheAerienCarree = 1.024, AfficheAerienGrande = 0.674, AfficheDemonisteCarree = 0.989, AfficheDemonisteGrande = 0.642,
     AfficheElfeNuitCarree = 0.992, AfficheElfeNuitGrande = 0.666, AfficheElfeSangCarree = 0.974, AfficheElfeSangGrande = 0.658,
@@ -64,6 +65,14 @@ GL.Art.WantedRatio = {
     AfficheOrcChef = 0.786, AfficheOrcGuerre = 0.801,
     AfficheTrollMarais = 0.801, AfficheGnollMarais = 0.8,
     AfficheGnollRavins = 0.812, AfficheOgreChef = 0.834,
+}
+-- The border's rule (tools/import_wanted_kit.py prints them): its middle across the top edge's
+-- piece, from the outer side; and for each corner, where the rule's own corner is under the flourish
+-- (x, y in fractions of the piece from its top left).
+GL.Art.WantedRule = {
+    BordAllianceHaut = 0.443, BordHordeHaut = 0.5902,
+    CoinAllianceHG = { 0.1507, 0.1574 }, CoinAllianceHD = { 0.8484, 0.1575 }, CoinAllianceBG = { 0.1507, 0.8368 },
+    CoinHordeHG = { 0.209, 0.2079 }, CoinHordeHD = { 0.792, 0.2079 }, CoinHordeBG = { 0.2091, 0.7856 },
 }
 -- The forged nails (v6) are drawn in perspective: where the point enters the paper, in fractions of
 -- the drawing from its top left. A banner may give its arms' place (left, top, right, bottom): the
