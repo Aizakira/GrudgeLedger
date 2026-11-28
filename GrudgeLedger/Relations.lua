@@ -3119,7 +3119,7 @@ local BOARD = { left = 6, right = 660, top = -86, bottom = -478 }
 -- The writing's sizes at full scale (a paper with little plain room gets them smaller, paintPoster);
 -- gap is the room between two figures.
 local STYLE = {
-    hero = { title = 32, name = 24, number = 22, label = 16, face = 104, medal = 58, rank = 26, icon = 22, gap = 4 },
+    hero = { title = 30, name = 24, number = 22, label = 16, face = 104, medal = 58, rank = 26, icon = 22, gap = 4 },
     medium = { title = 16, name = 16, number = 15, label = 12, face = 56, medal = 34, rank = 15, icon = 13, gap = 2 },
     compact = { title = 16, name = 16, number = 15, label = 12, face = 56, medal = 34, rank = 15, icon = 13, gap = 2 },
 }
@@ -3593,32 +3593,37 @@ local function chooser(page, options, current, choose)
     b:HookScript("OnHide", function() menu:Hide() end)
     return b
 end
--- The page's border (owner, 28/11: one gold rule a side, the flourishes on it): the kit's rule runs
--- inside its pieces, further in for the Horde's; the border stands out from the cloth by as much, so
--- that rule lies on the book's own. RULE_AT: the rule's middle in the kit's 96-pixel edge, from the
--- piece's outer side. BOOK_RULE: how far outside the cloth the book's rule is (measured on the
--- render). The Horde's iron corners are drawn smaller, as on the owner's mockup.
+-- The page's border, as on the kit's assembly (owner, 28/11: the gold rules that link the flourishes
+-- were still wrong; laid on the book's own rules they could not be told from them, thin on the left,
+-- lost in the thick frame on the right and at the foot): a frame of its own inside the cloth, its
+-- gold rule INSET from the book's on the four sides alike (the book's frame is thicker at the right
+-- and the foot, hence a unit or two of difference), the cloth showing between the two, the
+-- flourishes on its corners. RULE_AT: the rule's middle in the kit's 96-pixel edge, from the piece's
+-- outer side. BOOK_RULE: how far outside the cloth the book's rule is (measured on the render). The
+-- Horde's iron corners are drawn smaller, as on the owner's mockup.
 do
+local INSET = { top = 8, right = 7, bottom = 10, left = 8 }
 local RULE_AT = { Alliance = { top = 42, right = 41, bottom = 44, left = 40 }, Horde = { top = 57, right = 57.5, bottom = 59.5, left = 57.5 } }
 local BOOK_RULE = { top = 0.94, right = 0.18, bottom = 1.46, left = 0.42 }
 local CORNER = { Alliance = 70, Horde = 52 }
 local EDGES = {
     Haut = function(c, r) return "TOPLEFT", c, 0, "TOPRIGHT", -c, -r end,
-    -- The bottom and right rules run on under the frame's own ornament, so no gap shows there.
-    Bas = function(c, r) return "BOTTOMLEFT", c, r, "BOTTOMRIGHT", -24, 0 end,
+    -- The bottom and right rules meet under the book's own ornament, which holds that corner.
+    Bas = function(c, r) return "BOTTOMLEFT", c, r, "BOTTOMRIGHT", 0, 0 end,
     Gauche = function(c, r) return "TOPLEFT", 0, -c, "BOTTOMLEFT", r, c end,
-    Droite = function(c, r) return "TOPRIGHT", -r, -c, "BOTTOMRIGHT", 0, 24 end,
+    Droite = function(c, r) return "TOPRIGHT", -r, -c, "BOTTOMRIGHT", 0, 0 end,
 }
 function R.LayEnemyBorder(page, faction)
     local corner, at = CORNER[faction] or CORNER.Alliance, RULE_AT[faction] or RULE_AT.Alliance
     local rule = corner * 96 / 288
-    local function out(side) return at[side] * corner / 288 + BOOK_RULE[side] end
+    local function out(side) return at[side] * corner / 288 + BOOK_RULE[side] - INSET[side] end
     page.border:ClearAllPoints()
     page.border:SetPoint("TOPLEFT", page.cloth, "TOPLEFT", -out("left"), out("top"))
     page.border:SetPoint("BOTTOMRIGHT", page.cloth, "BOTTOMRIGHT", out("right"), -out("bottom"))
     for _, piece in ipairs(page.corners) do
         if piece.edge then
-            local from, x1, y1, to, x2, y2 = EDGES[piece.edge](corner, rule)
+            -- Two units under each corner's own rule: no seam between the pieces.
+            local from, x1, y1, to, x2, y2 = EDGES[piece.edge](corner - 2, rule)
             piece:ClearAllPoints()
             piece:SetPoint("TOPLEFT", page.border, from, x1, y1)
             piece:SetPoint("BOTTOMRIGHT", page.border, to, x2, y2)
@@ -3638,8 +3643,8 @@ local function buildEnemies(host)
     -- head's rule to the foot's, so the book's gold rules stay over it and no parchment shows.
     page.cloth:SetPoint("TOPLEFT", -20, 7)
     page.cloth:SetPoint("BOTTOMRIGHT", 35, -12)
-    -- The border (owner, 27/11: part of the design): four flourishes in the corners and the kit's
-    -- gold rules linking them along the sides; R.LayEnemyBorder places them for the faction.
+    -- The border (owner, 27/11: part of the design): flourishes in the corners and the kit's gold
+    -- rules linking them along the four sides; R.LayEnemyBorder places them for the faction.
     page.corners = {}
     page.border = CreateFrame("Frame", nil, page)
     for i, at in ipairs({ { "TOPLEFT", "HG" }, { "TOPRIGHT", "HD" }, { "BOTTOMLEFT", "BG" }, { "BOTTOMRIGHT", "BD" } }) do
@@ -3651,6 +3656,13 @@ local function buildEnemies(host)
     for _, edge in ipairs({ "Haut", "Bas", "Gauche", "Droite" }) do
         local piece = page:CreateTexture(nil, "BACKGROUND", nil, 0)
         piece.corner, piece.edge = "Bord%s" .. edge, edge
+        -- The kit's edges end in clear pixels: stretched over a whole side, they left a gap in the
+        -- rule before each corner (owner, 28/11). Cut off, 4 of 64 at each end.
+        if edge == "Haut" or edge == "Bas" then
+            piece:SetTexCoord(0.0625, 0.9375, 0, 1)
+        else
+            piece:SetTexCoord(0, 1, 0.0625, 0.9375)
+        end
         page.corners[#page.corners + 1] = piece
     end
     -- The book's frame reaches over the page at the bottom right: its ornament drawn again over the
@@ -3671,7 +3683,7 @@ local function buildEnemies(host)
     -- of the corner and of the first poster; the title large in its faction's face; the two choices
     -- under it; a gold rule.
     page.banner = page:CreateTexture(nil, "ARTWORK")
-    page.banner:SetPoint("TOPLEFT", 58, 6)
+    page.banner:SetPoint("TOPLEFT", 58, 3)
     page.title = Panels.Text(page, 150, -8, 480, 30, true, CLOTH_IVORY)
     -- In a preview, its notice takes the legend's place at the foot.
     page.previewNote = Panels.Text(page, 112, -491, 440, 12, false, { 1, 0.82, 0.45 })
@@ -3975,13 +3987,15 @@ function R.TiltPoster(p, degrees)
             local w = region:GetWidth()
             -- A line shorter than its field: the game turns the line about its own middle, not the
             -- field's (owner's capture, 28/11: the words sat half a line off their pictogram, up or
-            -- down with the tilt's side). The field shrinks to the line, where the line is.
+            -- down with the tilt's side). The field shrinks to the line, where the line is. Not a
+            -- centred line, whose middle is its field's: a field a hair too narrow shows nothing
+            -- (the tall poster's heading, owner's capture, 28/11).
             local line = region.GetStringWidth and GL.Safe(region.GetStringWidth, region)
-            if type(line) == "number" and line > 0 and line + 2 < w then
-                local justify = GL.Safe(region.GetJustifyH, region)
-                local slack = (w - line - 2) / 2
-                x = x + (justify == "LEFT" and -slack or justify == "RIGHT" and slack or 0)
-                w = line + 2
+            local justify = GL.Safe(region.GetJustifyH, region)
+            if type(line) == "number" and line > 0 and line + 6 < w and (justify == "LEFT" or justify == "RIGHT") then
+                local slack = (w - line - 6) / 2
+                x = x + (justify == "LEFT" and -slack or slack)
+                w = line + 6
             end
             places[i] = { x - cx, cy - y, w, region:GetHeight() }
             distinct = distinct or math.abs(x - cx) > 0.5 or math.abs(y - cy) > 0.5
@@ -4020,9 +4034,9 @@ local function paintEnemies(page)
         mark:SetSize(math.floor(mark.side * RATIO["Filigrane" .. faction] + 0.5), mark.side)
     end
     page.banner:SetTexture(WANTED .. "Fanion" .. faction)
-    -- The validated banners (owner, 28/11) carry their arms painted in. 88 high or wide at most: the
-    -- banner ends above the posters.
-    local bannerH = math.min(88, math.floor(88 / RATIO["Fanion" .. faction] + 0.5))
+    -- The validated banners (owner, 28/11) carry their arms painted in. 85 high or wide at most: hung
+    -- from the border's rule, the banner ends above the posters.
+    local bannerH = math.min(85, math.floor(85 / RATIO["Fanion" .. faction] + 0.5))
     local bannerW = math.floor(bannerH * RATIO["Fanion" .. faction] + 0.5)
     page.banner:SetSize(bannerW, bannerH)
     -- The title, the choices and the rule start after the banner.
@@ -4031,6 +4045,14 @@ local function paintEnemies(page)
     page.title:SetPoint("TOPLEFT", page, "TOPLEFT", page.titleX, -8)
     page.title:SetWidth(640 - page.titleX)
     fit(page.title, L("Ennemis de la guilde"), 640 - page.titleX, 30, 18, true, 0.85, (R.Faces[faction] or R.Faces.Alliance).title)
+    -- A display font is read from its file when a text first takes it, and a text set before that
+    -- can stay empty (owner's capture, 28/11: no title on the page, none on the tall poster, just
+    -- after the game started): the page is painted once more, a moment after a faction's first.
+    page.warmed = page.warmed or {}
+    if not page.warmed[faction] and C_Timer and C_Timer.After then
+        page.warmed[faction] = true
+        C_Timer.After(0.4, function() if GL.Safe(page.IsVisible, page) then R.Refresh() end end)
+    end
     local ruleW = 640 - page.titleX
     page.rule:ClearAllPoints()
     page.rule:SetPoint("LEFT", page, "TOPLEFT", page.titleX - 4, -79)
